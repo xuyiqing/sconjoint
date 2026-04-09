@@ -24,7 +24,12 @@ Depends:
 Imports:
     torch (>= 0.13.0),
     stats,
-    parallel
+    utils,
+    parallel,
+    future,
+    future.apply,
+    parallelly,
+    withr
 Suggests:
     testthat (>= 3.0.0),
     knitr,
