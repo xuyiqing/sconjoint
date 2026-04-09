@@ -1,0 +1,36 @@
+---
+title: "Installation"
+---
+
+# Installation {#sec-installation}
+
+`sconjoint` depends on the `torch` R package for the deep-learning
+backend. `torch` in turn bundles its own copy of `libtorch` which is
+downloaded on first use. Before installing `sconjoint` itself,
+confirm that `torch` can load its native library:
+
+```r
+install.packages("torch")
+torch::install_torch()  # downloads libtorch the first time it is run
+torch::torch_is_installed()
+```
+
+On CPU-only machines the default installation is sufficient. On
+machines with a CUDA-enabled GPU, follow the instructions at
+<https://torch.mlverse.org> to install the CUDA build of `libtorch`;
+`sconjoint` will then pick up GPU acceleration automatically when you
+pass `device = "cuda"` to `scfit()`. Note that the package's
+bit-exact determinism guarantee — identical `sc_fit` output regardless
+of `n_cores` — applies only on CPU; on GPU, cuDNN introduces
+nondeterminism that the package cannot fully eliminate.
+
+Install `sconjoint` itself from GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("xuyiqing/structural-conjoint")
+```
+
+The package pulls in `ggplot2`, `ggridges`, and related plotting
+infrastructure as Imports; no extra setup is required for the
+visualization methods described in @sec-visualization.

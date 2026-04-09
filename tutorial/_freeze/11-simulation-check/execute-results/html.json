@@ -1,0 +1,15 @@
+{
+  "hash": "8016b18c47ee542fd6115dccbde15f7a",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"Simulation check\"\n---\n\n# Simulation check {#sec-simulation-check}\n\nThis chapter is a sanity check, not a simulation study. It builds a\nsmall synthetic data-generating process with known true\n$\\boldsymbol\\beta(\\mathbf Z)$, fits `scfit()`, and compares the\nrecovered per-respondent preference vector to the truth. The goal\nis pedagogical: to give readers confidence that the estimator works\non data whose ground truth they can inspect directly.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(sconjoint)\nset.seed(1)\n```\n:::\n\n\nThe DGP below draws 300 respondents, five tasks, three binary\nattributes, and two continuous covariates, and simulates\n$\\hat\\beta(\\mathbf Z)$ through a simple linear function of\n$\\mathbf Z$. Users who want a full simulation study — with Monte\nCarlo replications, coverage calculations, and DGPs that stress the\nestimator — should look instead at the private prototype scripts\nthat ship with the paper replication materials.\n\n\n::: {.cell}\n\n```{.r .cell-code}\ncat(\"simulation check\\n\")\n```\n:::\n\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

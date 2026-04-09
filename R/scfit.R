@@ -167,6 +167,8 @@ scfit <- function(formula, data,
   Z      <- enc$Z
   x_names <- enc$x_names
   z_names <- enc$z_names
+  factor_levels <- enc$factor_levels
+  attr_map_enc  <- enc$attr_map
 
   ## ---- 4. Build Delta X, task-level Z, respondent index ----
   built <- .sc_build_deltax(
@@ -305,6 +307,9 @@ scfit <- function(formula, data,
     call               = call,
     formula            = formula,
     attr_names         = x_names,
+    attr_vars          = attr_vars,
+    factor_levels      = factor_levels,
+    attr_map           = attr_map_enc,
     z_names            = z_names,
     respondent_id      = respondent_task,
     K                  = K,

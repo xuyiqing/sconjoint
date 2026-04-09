@@ -1,13 +1,30 @@
 project:
   type: book
   output-dir: _book
+  pre-render:
+    - Rscript _pre-render.R
 
 book:
-  title: "sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments"
+  title: "sconjoint: Structural Deep Learning for Conjoint Experiments"
   author: "Avidit Acharya, Jens Hainmueller, Yiqing Xu"
   chapters:
     - index.qmd
+    - 01-installation.qmd
+    - 02-quickstart.qmd
+    - 03-data-prep.qmd
+    - 04-fitting.qmd
+    - 05-interpreting.qmd
+    - 06-quantities.qmd
+    - 07-visualization.qmd
+    - 11-simulation-check.qmd
+    - 13-faq.qmd
 
 format:
   html:
     theme: cosmo
+    toc: true
+
+execute:
+  freeze: auto
+  cache: true
+  eval: false

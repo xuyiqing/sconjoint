@@ -1,0 +1,12 @@
+---
+title: "Case study: Saha-Weeks (2022)"
+---
+
+# Case study: Saha-Weeks (2022) {.unnumbered}
+
+::: {.callout-note}
+This chapter lands in milestone M5 together with the Saha-Weeks data
+bundle. It is not included in the rendered book in the current
+release; the file exists on disk only so that the chapter slot is
+reserved in git history.
+:::

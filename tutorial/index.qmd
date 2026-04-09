@@ -2,12 +2,26 @@
 title: "sconjoint"
 ---
 
-# Coming soon
+# Welcome {.unnumbered}
 
-This Quarto book will be the primary documentation for the `sconjoint`
-R package. The package is currently at milestone M1 (skeleton only);
-the book will be populated as the estimator, inference, and structural
-quantity functions land in later milestones.
+`sconjoint` is an R package implementing the *structural deep learning*
+estimator for forced-choice conjoint experiments developed by Acharya,
+Hainmueller, and Xu (2026). The estimator embeds a deep neural network
+inside a random-utility logit so that each respondent's preference
+vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
+smoothly and flexibly with her observed covariates, while double /
+debiased machine learning inference delivers honest clustered standard
+errors on population-level quantities.
 
-See the project [README](https://github.com/xuyiqing/structural-conjoint)
-for the development roadmap.
+This book is the primary user documentation for the package. It walks
+from installation through a five-minute quickstart, data preparation,
+fitting, and interpretation, and builds up to the full set of
+structural quantities of interest defined on the estimated
+$\hat{\boldsymbol\beta}(\mathbf Z)$. Case-study chapters using the
+Saha-Weeks, Graham-Svolik, and Bechtel-Scheve conjoint experiments
+follow in a later release; they are stubbed in this version of the
+book and will be filled in alongside the v0.2 data bundle.
+
+For a short API tour, start at @sec-quickstart. For the conceptual
+framing of the estimator and the direction-versus-intensity
+decomposition that motivates it, jump to @sec-interpreting.

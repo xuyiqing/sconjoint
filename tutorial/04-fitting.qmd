@@ -1,0 +1,50 @@
+---
+title: "Fitting scfit()"
+---
+
+# Fitting `scfit()` {#sec-fitting}
+
+`scfit()` is the single entry point to the structural estimator. It
+consumes a formula of the form
+
+$$ \text{choice} \sim \text{attr}_1 + \text{attr}_2 + \cdots \mid z_1 + z_2 + \cdots $$
+
+together with a long-format data frame and the column names of the
+respondent, task, and within-task profile identifiers. The left-hand
+side of `|` names the conjoint attributes; the right-hand side names
+the respondent-level moderators $\mathbf Z$ that enter the DNN's
+mapping to $\boldsymbol\beta$.
+
+Internally `scfit()` (i) dummy-encodes the attribute columns against
+their reference levels, (ii) builds the per-task $\Delta X$ matrix,
+(iii) assigns respondents to `K` cross-fit folds, (iv) trains a
+full-batch Adam DNN on each training fold and predicts
+$\hat\beta(Z_i)$ on the held-out fold, (v) estimates the $\Lambda(Z)$
+Hessian of the logit index, and (vi) assembles the DML influence
+function, point estimates, and respondent-clustered variance.
+
+## Bit-exact parallel determinism
+
+When `seed` is supplied, `scfit()` guarantees that the entire
+pipeline — including the cross-fitting step run in parallel across
+workers — produces *bit-identical* output regardless of `n_cores`.
+This property is enforced by L'Ecuyer-CMRG parallel streams and a
+save/restore of the top-level R and torch RNG states. The demo below
+(not evaluated on CI) confirms that `identical()` returns `TRUE`
+across a single-core and a two-core run.
+
+```{r}
+library(sconjoint)
+```
+
+Tuning `n_epochs`, `K`, and the `hidden` layer widths trades
+wall-clock time against the flexibility of the learned preference
+function. The `"auto"` default for `hidden` adapts the architecture
+to the number of observations and is a sensible starting point.
+
+```{r}
+cat("fitting guide\n")
+```
+
+See @sec-interpreting for how to read the resulting coefficient
+table.

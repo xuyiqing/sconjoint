@@ -1,0 +1,12 @@
+---
+title: "Advanced topics"
+---
+
+# Advanced topics {.unnumbered}
+
+::: {.callout-note}
+This chapter lands in milestone M6. It will cover Tier B/C
+quantities, custom DNN architectures, preference clustering, and the
+full `Λ(Z)` diagnostic surface. It is not included in the rendered
+book in the current release.
+:::

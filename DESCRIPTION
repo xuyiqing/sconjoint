@@ -29,12 +29,18 @@ Imports:
     future,
     future.apply,
     parallelly,
-    withr
+    withr,
+    ggplot2,
+    ggridges
 Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    covr
+    covr,
+    patchwork,
+    quarto,
+    scales,
+    viridisLite
 VignetteBuilder:
     knitr
 Encoding: UTF-8

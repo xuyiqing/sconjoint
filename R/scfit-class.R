@@ -59,3 +59,138 @@ coef.sc_fit <- function(object, ...) {
 vcov.sc_fit <- function(object, ...) {
   object$vcov
 }
+
+#' Summary method for `sc_fit`
+#'
+#' Returns a coefficient table with clustered SE, z-statistic,
+#' two-sided p-value, and normal-approx 95% CI, plus pipeline
+#' metadata and the DML/iid SE ratio diagnostic.
+#'
+#' @param object An `sc_fit`.
+#' @param ... Unused.
+#' @return An object of class `sc_fit_summary`.
+#' @export
+summary.sc_fit <- function(object, ...) {
+  theta <- object$theta
+  V <- object$vcov
+  se <- sqrt(diag(V))
+  z  <- theta / se
+  p_val <- 2 * stats::pnorm(-abs(z))
+  q <- stats::qnorm(0.975)
+  coef_tbl <- data.frame(
+    estimate  = as.numeric(theta),
+    std_error = se,
+    z_value   = z,
+    p_value   = p_val,
+    ci_lo     = theta - q * se,
+    ci_hi     = theta + q * se,
+    row.names = names(theta),
+    stringsAsFactors = FALSE
+  )
+  out <- list(
+    call             = object$call,
+    coefficients     = coef_tbl,
+    n_resp           = length(unique(object$respondent_id)),
+    n_obs            = nrow(object$beta_hat),
+    K                = object$K,
+    hidden           = object$hidden,
+    n_epochs         = object$n_epochs,
+    seed             = object$seed,
+    device           = object$device,
+    parallel         = object$parallel,
+    n_cores          = object$n_cores,
+    se_ratio_dml_iid = object$se_ratio_dml_iid
+  )
+  class(out) <- c("sc_fit_summary", "list")
+  out
+}
+
+#' Print method for `sc_fit_summary`
+#' @param x An `sc_fit_summary`.
+#' @param digits Significant digits.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.sc_fit_summary <- function(x, digits = 4L, ...) {
+  cat("sc_fit summary\n")
+  cat("Call: "); print(x$call); cat("\n")
+  cat(sprintf("%d respondents | %d observations | K = %d folds\n",
+              x$n_resp, x$n_obs, x$K))
+  cat(sprintf("hidden = %s | epochs = %d | seed = %s | device = %s",
+              paste(x$hidden, collapse = "-"),
+              x$n_epochs,
+              if (is.null(x$seed)) "NULL" else format(x$seed),
+              x$device))
+  if (isTRUE(x$parallel)) {
+    cat(sprintf(" | parallel (%s cores)",
+                if (is.null(x$n_cores)) "?" else format(x$n_cores)))
+  }
+  cat("\n\nCoefficients (DML, respondent-clustered SE):\n")
+  print(x$coefficients, digits = digits)
+  if (!is.null(x$se_ratio_dml_iid)) {
+    r <- x$se_ratio_dml_iid
+    r_val <- if (is.list(r) && !is.null(r$mean)) r$mean
+             else if (is.numeric(r)) mean(r) else NA_real_
+    if (!is.na(r_val)) {
+      cat(sprintf("\nDML/iid SE ratio (mean): %s\n",
+                  format(r_val, digits = digits)))
+    }
+  }
+  invisible(x)
+}
+
+#' Predict method for `sc_fit`
+#'
+#' Returns stored held-out per-respondent \eqn{\hat\beta(Z_i)}.  Full
+#' forward-pass evaluation on new `Z` data is deferred to sub-
+#' milestone M5.a (per-fold `state_dict`s are not persisted on the
+#' v0.1 `sc_fit` object).
+#'
+#' @param object An `sc_fit`.
+#' @param newdata Must be `NULL` in M4.  Passing non-NULL errors out
+#'   with a pointer to M5.a.
+#' @param ... Unused.
+#' @return The N x p matrix `object$beta_hat`.
+#' @export
+predict.sc_fit <- function(object, newdata = NULL, ...) {
+  if (!is.null(newdata)) {
+    stop("predict.sc_fit: newdata support is deferred to M5.a. Use newdata = NULL to retrieve the held-out per-respondent beta hat.")
+  }
+  object$beta_hat
+}
+
+#' Plot method for `sc_fit`
+#'
+#' Two variants: `"beta_ridgelines"` shows the per-respondent
+#' distributions of \eqn{\hat\beta_j(Z_i)} (one ridgeline per
+#' attribute dummy); `"loss_trace"` shows the per-fold training loss
+#' curves.
+#'
+#' @param x An `sc_fit`.
+#' @param which Either `"beta_ridgelines"` (default) or `"loss_trace"`.
+#' @param ... Unused.
+#' @return A `ggplot` object.
+#' @export
+plot.sc_fit <- function(x, which = c("beta_ridgelines", "loss_trace"), ...) {
+  which <- match.arg(which)
+  switch(
+    which,
+    beta_ridgelines = .sc_plot_ridgelines(x$beta_hat, x$attr_names),
+    loss_trace      = .sc_plot_loss_traces(x$loss_traces)
+  )
+}
+
+#' Autoplot method for `sc_fit`
+#'
+#' Default ggplot2 entry point; returns the ridgeline plot of
+#' `beta(Z)`.
+#'
+#' @param object An `sc_fit`.
+#' @param ... Passed to `plot.sc_fit()`.
+#' @return A `ggplot` object.
+#' @importFrom ggplot2 autoplot
+#' @export
+autoplot.sc_fit <- function(object, ...) {
+  plot.sc_fit(object, which = "beta_ridgelines", ...)
+}
+

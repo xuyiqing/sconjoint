@@ -1,0 +1,85 @@
+---
+title: "Interpreting the fit"
+---
+
+# Interpreting the fit {#sec-interpreting}
+
+Before walking through `summary.sc_fit()` it helps to spell out the
+conceptual frame this package operates in. The three paragraphs
+below are excerpted verbatim from Acharya, Hainmueller, and Xu
+(2026), §§2.3 and 3.1. They describe the headline contribution of
+the structural model over the standard AMCE and motivate the
+direction-versus-intensity decomposition that `sc_direction_intensity()`
+reports.
+
+> **The AMCE: one number per attribute.** The standard AMCE provides
+> a single number for each attribute level — the average effect on
+> the choice probability, pooled across all respondents and
+> marginalized over the randomization distribution of all other
+> attributes. For example, the AMCE might tell us that "being female
+> increases the probability of being chosen by 2 percentage points on
+> average." This is a useful summary, but it is one number describing
+> the entire population. An AMCE near zero is ambiguous: it could
+> mean that no one cares about the attribute, or that half the
+> population strongly favors it and the other half strongly opposes
+> it, with the effects canceling in the average.
+
+> **The preference vector: a personal profile for each respondent.**
+> Our structural model recovers $\hat{\boldsymbol\beta}(\mathbf Z_i)
+> \in \mathbb{R}^p$ for each respondent — the complete vector of
+> marginal utilities across all attribute levels simultaneously. The
+> DNN learns a smooth mapping from respondent characteristics
+> $\mathbf Z$ to preferences $\boldsymbol\beta$, capturing nonlinear
+> relationships, interactions (e.g., young Republicans may differ
+> from old Republicans in ways that young Democrats do not), and
+> threshold effects that linear interaction models would miss. The
+> key conceptual advance over AMCEs — both unconditional and
+> conditional — is that $\hat{\boldsymbol\beta}(\mathbf Z_i)$ gives
+> us the *joint* distribution of preferences across attributes for
+> each respondent, enabling the structural quantities defined below:
+> marginal rates of substitution, compensating differentials,
+> counterfactual choice probabilities, and preference polarization —
+> all of which require the full preference vector rather than
+> one-attribute-at-a-time marginal effects.
+
+> **Direction and intensity.** Polarization highlights a more general
+> limitation of the AMCE: it conflates the *direction* of a
+> preference (does the respondent favor or oppose the attribute?)
+> with its *intensity* (how strongly?). A near-zero AMCE is
+> three-ways ambiguous: (a) nobody cares, so there is low intensity
+> and no directional preference; (b) most respondents lean in one
+> direction but weakly; or (c) strong opposing preferences cancel in
+> the average. The structural $\beta_k(\mathbf Z_i)$ decomposes
+> these two dimensions: $\operatorname{sign}(\beta_k)$ gives
+> direction and $|\beta_k|$ gives intensity, for each respondent
+> individually. Preference polarization captures the direction
+> dimension; attribute importance captures the intensity dimension.
+> The structural model delivers both, and their interaction — for
+> instance, an attribute on which most respondents agree in
+> direction but a minority disagrees with unusual intensity.
+
+> — Acharya, Hainmueller, and Xu (2026), *Learning Preferences from
+> Conjoint Data: A Structural Deep Learning Approach*, §2.3 and §3.1.
+
+## The `summary.sc_fit()` output
+
+`summary(fit)` returns a coefficient table with the DML point
+estimate, respondent-clustered standard error, z-statistic,
+two-sided p-value, and 95% normal-approximation confidence interval
+for every dummy column. The print method also reports the
+**DML/iid SE-ratio diagnostic**: the ratio of the clustered SE to the
+iid SE. Values meaningfully larger than one indicate that
+within-respondent correlation is economically large; values near one
+indicate the clustering correction is not doing much work.
+
+```{r}
+library(sconjoint)
+```
+
+To decompose the population-level average into direction and
+intensity, pair the summary table with `sc_direction_intensity()`
+from @sec-quantities.
+
+```{r}
+cat("interpreting\n")
+```

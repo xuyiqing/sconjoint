@@ -1,0 +1,84 @@
+---
+title: "Structural quantities"
+---
+
+# Structural quantities {#sec-quantities}
+
+The Tier A structural quantities shipped in v0.1 are all defined as
+population averages of a per-respondent function of the estimated
+preference vector $\hat{\boldsymbol\beta}(\mathbf Z_i)$. Every
+quantity returns an `sc_quantity` object carrying a point estimate,
+a respondent-clustered standard error, a normal-approximation 95%
+confidence interval, and a per-function `details` list. All of the
+examples below are illustrative; they are not executed during book
+rendering.
+
+```{r}
+library(sconjoint)
+```
+
+## `sc_mrs()` — marginal rate of substitution
+
+The trimmed mean over respondents of
+$\hat\beta_j(Z_i) / \hat\beta_k(Z_i)$, clipped at the
+user-specified quantiles of the raw ratio. Intuitively: by how many
+units of attribute $k$ must we compensate a respondent so that she
+is indifferent to a one-unit increase in attribute $j$?
+
+## `sc_counterfactual()` — pairwise choice probability
+
+For two user-specified profiles $A$ and $B$, reports
+$|S|^{-1}\sum_{i\in S} G\!\bigl((X_A - X_B)^\top \hat\beta(Z_i)\bigr)$
+— the average probability that respondents in the subgroup choose
+$A$ over $B$.
+
+## `sc_wtp()` — willingness-to-pay
+
+A thin sign-flipped wrapper around `sc_mrs()` with a cost attribute
+playing the role of the denominator. Positive WTP when the cost
+attribute has negative average utility.
+
+## `sc_importance()` — attribute importance
+
+Per-respondent within-block variance decomposition
+$\mathrm{share}_{ia} = V_{ia} / \sum_{a'} V_{ia'}$, averaged across
+the subgroup. The shares sum to one by construction and answer
+"how much of respondent $i$'s preference variability is driven by
+attribute $a$?".
+
+## `sc_polarization()` — polarization index
+
+Per dummy, $1 - |\mathrm{frac}^+_j - \mathrm{frac}^-_j|$. Near 1 when
+the population is evenly split in direction (polarized); near 0 when
+respondents agree in direction.
+
+## `sc_fraction_preferring()` — tail probabilities
+
+Per dummy, $\Pr_{i\in S}\{\hat\beta_j(Z_i) > \tau\}$ and the
+symmetric lower-tail version. With the default $\tau = 0$ this is
+the fraction of respondents preferring each non-reference level.
+
+## `sc_optimal_profile()` — greedy argmax
+
+Greedy per-attribute argmax over subgroup-averaged
+$\hat\beta_{aj}$, assembled into a dummy vector $X^\star$, plus the
+mean choice probability of $X^\star$ against the all-reference
+profile.
+
+## `sc_direction_intensity()` — bivariate decomposition
+
+Per dummy, reports both $d_j = \overline{\mathrm{sign}(\hat\beta_j)}$
+(the direction) and $u_j = \overline{|\hat\beta_j|}$ (the
+intensity). The return object is an `sc_quantity_bivariate` carrying
+two `sc_quantity` sub-objects plus a scalar separation diagnostic.
+
+## `sc_heterogeneity_test()` — per-dummy variance test
+
+One-sided test of $\mathrm{Var}(\beta_j(\mathbf Z)) > 0$ per dummy
+with optional Holm or BH multiplicity correction; the test statistic
+and clustered SE of the variance estimator are taken from the
+prototype (`07_quantities_of_interest.R` L215–251).
+
+```{r}
+cat("quantities overview\n")
+```

@@ -1,0 +1,11 @@
+---
+title: "Case study: Graham-Svolik (2020)"
+---
+
+# Case study: Graham-Svolik (2020) {.unnumbered}
+
+::: {.callout-note}
+This chapter lands in milestone M5 together with the Graham-Svolik
+data bundle. It is not included in the rendered book in the current
+release.
+:::

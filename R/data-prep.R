@@ -146,14 +146,24 @@
   encode_one <- function(vars) {
     if (length(vars) == 0L) {
       return(list(mat = matrix(0, nrow = nrow(data), ncol = 0L),
-                  nms = character(0)))
+                  nms = character(0),
+                  levels_map = list(),
+                  attr_map = list()))
     }
-    parts <- lapply(vars, function(v) {
+    parts <- list()
+    levels_map <- list()
+    attr_map <- list()
+    col_offset <- 0L
+    for (v in vars) {
       col <- data[[v]]
       if (is.numeric(col)) {
         m <- matrix(as.numeric(col), ncol = 1L)
         colnames(m) <- v
-        return(m)
+        levels_map[[v]] <- NULL
+        attr_map[[v]] <- col_offset + 1L
+        col_offset <- col_offset + 1L
+        parts[[length(parts) + 1L]] <- m
+        next
       }
       col <- as.factor(col)
       if (!is.null(ref_levels) && !is.null(ref_levels[[v]])) {
@@ -165,20 +175,27 @@
       }
       m <- stats::model.matrix(~ col)[, -1L, drop = FALSE]
       colnames(m) <- paste0(v, lev[-1L])
-      m
-    })
+      levels_map[[v]] <- lev
+      n_dum <- ncol(m)
+      attr_map[[v]] <- col_offset + seq_len(n_dum)
+      col_offset <- col_offset + n_dum
+      parts[[length(parts) + 1L]] <- m
+    }
     mat <- do.call(cbind, parts)
-    list(mat = mat, nms = colnames(mat))
+    list(mat = mat, nms = colnames(mat),
+         levels_map = levels_map, attr_map = attr_map)
   }
 
   X <- encode_one(attr_vars)
   Z <- encode_one(z_vars)
 
   list(
-    X       = X$mat,
-    Z       = Z$mat,
-    x_names = X$nms,
-    z_names = Z$nms
+    X             = X$mat,
+    Z             = Z$mat,
+    x_names       = X$nms,
+    z_names       = Z$nms,
+    factor_levels = X$levels_map,
+    attr_map      = X$attr_map
   )
 }
 

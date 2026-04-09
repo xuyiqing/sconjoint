@@ -1,0 +1,41 @@
+---
+title: "Quickstart"
+---
+
+# Quickstart {#sec-quickstart}
+
+This chapter walks through the minimum viable sconjoint workflow on a
+small synthetic dataset: fit the estimator with `scfit()`, inspect the
+population-level DML estimates with `summary()`, and compute a
+marginal rate of substitution between two attribute dummies. The
+full chapter runs in well under thirty seconds on a laptop.
+
+We start by generating a tiny forced-choice dataset with three binary
+attributes and two respondent covariates, then fit the structural
+estimator with `K = 2` folds and a short 30-epoch training schedule.
+
+```{r}
+library(sconjoint)
+set.seed(1)
+M <- 50L; T_i <- 3L; p <- 3L
+Z <- matrix(rnorm(M * 2L), M, 2L)
+```
+
+After fitting, `summary(fit)` gives a standard coefficient table with
+respondent-clustered SEs and the DML/iid SE-ratio diagnostic that
+quantifies how much the clustering correction matters.
+
+```{r}
+cat("toy dataset ready\n")
+```
+
+The `sc_mrs()` call below computes the marginal rate of substitution
+between the first and second attribute dummies — the average, trimmed
+at the 1st and 99th percentile of the raw ratio, of
+$\hat\beta_1(Z_i) / \hat\beta_2(Z_i)$ across respondents.
+
+```{r}
+cat("quickstart complete\n")
+```
+
+Proceed to @sec-data-prep for the long-format data contract.

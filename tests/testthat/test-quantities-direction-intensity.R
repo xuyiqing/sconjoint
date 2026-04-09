@@ -1,0 +1,11 @@
+test_that("sc_direction_intensity matches reference impl", {
+  fit <- .get_toy_fit()
+  q <- sc_direction_intensity(fit)
+  ref <- .ref_direction_intensity(fit$beta_hat, fit$respondent_id)
+  expect_s3_class(q, "sc_quantity_bivariate")
+  expect_equal(q$direction$estimate$d, ref$direction$d, tolerance = 1e-12)
+  expect_equal(q$intensity$estimate$u, ref$intensity$u, tolerance = 1e-12)
+  expect_equal(q$direction$estimate$se_d, ref$direction$se, tolerance = 1e-6)
+  expect_equal(q$intensity$estimate$se_u, ref$intensity$se, tolerance = 1e-6)
+  expect_equal(q$details$separation$s_j, ref$separation, tolerance = 1e-12)
+})

@@ -1,0 +1,15 @@
+{
+  "hash": "498a49b7e6ac6aecf25db65d668d3ea5",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"Fitting scfit()\"\n---\n\n# Fitting `scfit()` {#sec-fitting}\n\n`scfit()` is the single entry point to the structural estimator. It\nconsumes a formula of the form\n\n$$ \\text{choice} \\sim \\text{attr}_1 + \\text{attr}_2 + \\cdots \\mid z_1 + z_2 + \\cdots $$\n\ntogether with a long-format data frame and the column names of the\nrespondent, task, and within-task profile identifiers. The left-hand\nside of `|` names the conjoint attributes; the right-hand side names\nthe respondent-level moderators $\\mathbf Z$ that enter the DNN's\nmapping to $\\boldsymbol\\beta$.\n\nInternally `scfit()` (i) dummy-encodes the attribute columns against\ntheir reference levels, (ii) builds the per-task $\\Delta X$ matrix,\n(iii) assigns respondents to `K` cross-fit folds, (iv) trains a\nfull-batch Adam DNN on each training fold and predicts\n$\\hat\\beta(Z_i)$ on the held-out fold, (v) estimates the $\\Lambda(Z)$\nHessian of the logit index, and (vi) assembles the DML influence\nfunction, point estimates, and respondent-clustered variance.\n\n## Bit-exact parallel determinism\n\nWhen `seed` is supplied, `scfit()` guarantees that the entire\npipeline — including the cross-fitting step run in parallel across\nworkers — produces *bit-identical* output regardless of `n_cores`.\nThis property is enforced by L'Ecuyer-CMRG parallel streams and a\nsave/restore of the top-level R and torch RNG states. The demo below\n(not evaluated on CI) confirms that `identical()` returns `TRUE`\nacross a single-core and a two-core run.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(sconjoint)\n```\n:::\n\n\nTuning `n_epochs`, `K`, and the `hidden` layer widths trades\nwall-clock time against the flexibility of the learned preference\nfunction. The `\"auto\"` default for `hidden` adapts the architecture\nto the number of observations and is a sensible starting point.\n\n\n::: {.cell}\n\n```{.r .cell-code}\ncat(\"fitting guide\\n\")\n```\n:::\n\n\nSee @sec-interpreting for how to read the resulting coefficient\ntable.\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

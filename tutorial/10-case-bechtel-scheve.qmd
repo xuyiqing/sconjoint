@@ -1,0 +1,11 @@
+---
+title: "Case study: Bechtel-Scheve (2013)"
+---
+
+# Case study: Bechtel-Scheve (2013) {.unnumbered}
+
+::: {.callout-note}
+This chapter lands in milestone M5 together with the Bechtel-Scheve
+data bundle. It is not included in the rendered book in the current
+release.
+:::
