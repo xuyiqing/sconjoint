@@ -1,0 +1,39 @@
+---
+title: "Getting started with sconjoint"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with sconjoint}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Overview
+
+`sconjoint` implements the structural deep-learning estimator of
+Acharya, Hainmueller, and Xu (2026) for forced-choice conjoint
+experiments. The package is under active development.
+
+This vignette will grow into a getting-started tour. At present
+(milestone M1) the package ships only the skeleton; statistical
+methods will land in subsequent releases.
+
+```{r setup}
+library(sconjoint)
+```
+
+# Coming soon
+
+- `scfit()`: fit the structural DNN model with DML inference.
+- A focused toolkit of structural quantities (MRS, counterfactuals,
+  attribute importance, preference polarization, consumer surplus).
+- Worked case studies bundled as small example datasets.
+
+See the project README for the development roadmap.

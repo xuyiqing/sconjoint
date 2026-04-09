@@ -1,0 +1,37 @@
+Package: sconjoint
+Title: Structural Deep-Learning Estimation for Conjoint Experiments
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Avidit", "Acharya", role = "aut"),
+    person("Jens", "Hainmueller", role = "aut"),
+    person("Yiqing", "Xu", , "yiqingxu@stanford.edu", role = c("aut", "cre")))
+Description: Implements the structural deep-learning estimator for
+    forced-choice conjoint experiments of Acharya, Hainmueller, and Xu
+    (2026), which embeds a deep neural network in a random utility logit
+    so that preference parameters vary flexibly with respondent
+    characteristics. Provides double/debiased machine-learning inference
+    with cross-fitting clustered at the respondent level, and a full set
+    of structural quantities including marginal rates of substitution,
+    counterfactual choice probabilities, compensating differentials,
+    consumer surplus, attribute importance, preference polarization, and
+    preference clustering. Builds on 'torch' for the deep-learning
+    backend.
+License: GPL (>= 3)
+URL: https://github.com/xuyiqing/structural-conjoint
+BugReports: https://github.com/xuyiqing/structural-conjoint/issues
+Depends:
+    R (>= 4.1)
+Suggests:
+    torch (>= 0.13.0),
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    withr,
+    covr
+VignetteBuilder:
+    knitr
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Config/testthat/edition: 3

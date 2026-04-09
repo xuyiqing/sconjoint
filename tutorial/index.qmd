@@ -1,0 +1,13 @@
+---
+title: "sconjoint"
+---
+
+# Coming soon
+
+This Quarto book will be the primary documentation for the `sconjoint`
+R package. The package is currently at milestone M1 (skeleton only);
+the book will be populated as the estimator, inference, and structural
+quantity functions land in later milestones.
+
+See the project [README](https://github.com/xuyiqing/structural-conjoint)
+for the development roadmap.

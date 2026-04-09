@@ -1,0 +1,9 @@
+url: https://xuyiqing.github.io/structural-conjoint/
+
+template:
+  bootstrap: 5
+
+reference:
+  - title: "Package"
+    contents:
+      - sconjoint-package

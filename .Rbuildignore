@@ -1,0 +1,16 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^_pkgdown\.yml$
+^docs$
+^README\.Rmd$
+^cran-comments\.md$
+^CLAUDE\.md$
+^\.claude$
+^tutorial$
+^tutorial/.*$
+^vignettes/rscript$
+^vignettes/rscript/.*$
+^data-raw$
+^_freeze$
+^LICENSE\.md$

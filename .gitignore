@@ -1,0 +1,15 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+docs/
+inst/doc/
+.DS_Store
+tutorial/_book/
+tutorial/.quarto/
+tutorial/*_cache/
+tutorial/*_files/
+/_freeze/
+*.tar.gz
+..Rcheck/

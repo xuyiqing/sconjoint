@@ -1,0 +1,32 @@
+---
+title: "Simulation sanity check"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simulation sanity check}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Purpose
+
+This vignette will demonstrate a short (<60 s) synthetic-DGP sanity
+check showing that `scfit()` recovers known structural parameters on a
+small simulated conjoint experiment. The demo is intended as a
+does-it-work smoke test, not as a finite-sample simulation study.
+
+Full Monte Carlo studies live in the private prototype materials and
+are not part of the package scope.
+
+# Status
+
+Milestone M1 (package skeleton): this vignette is a placeholder. The
+simulation sanity check will be implemented alongside the DNN backend
+in a later milestone.

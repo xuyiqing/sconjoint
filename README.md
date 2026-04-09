@@ -1,0 +1,66 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file. -->
+
+
+
+# sconjoint
+
+**Status:** under active development (milestone M1 — skeleton only).
+
+`sconjoint` is an R package for applying the structural deep-learning
+estimator of Acharya, Hainmueller, and Xu (2026) to forced-choice
+conjoint experiments. It embeds a deep neural network inside a random
+utility logit so that preference parameters vary flexibly with
+respondent characteristics, and provides double/debiased
+machine-learning inference with respondent-clustered cross-fitting.
+
+The package is designed for researchers with a **new** conjoint
+dataset who want to go beyond AMCEs and recover structural quantities
+such as marginal rates of substitution, counterfactual choice
+probabilities, compensating differentials, attribute importance,
+preference polarization, and preference clustering.
+
+## Repository vs package name
+
+The **package** is named `sconjoint`; the **GitHub repository** is
+`structural-conjoint`. This is intentional — the repository name is
+descriptive for discovery, while the package name follows Yiqing Xu's
+short-name convention (`fect`, `panelView`, `interflex`).
+
+## Installation
+
+`sconjoint` is not yet on CRAN. Install the development version from
+GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("xuyiqing/structural-conjoint")
+```
+
+When the deep-learning backend lands in a later milestone, the
+package will also require `torch`:
+
+```r
+install.packages("torch")
+torch::install_torch()
+```
+
+## Documentation
+
+Primary documentation will live in a Quarto book under `tutorial/`
+(published via GitHub Pages when milestone M6 lands). Two thin CRAN
+vignettes provide a getting-started tour and a simulation sanity
+check.
+
+## Roadmap
+
+Version 0.1 will ship the estimator, DML inference, and a focused
+toolkit of structural quantities. See the development planning
+artifacts in the private workspace for the milestone breakdown.
+
+## License
+
+GPL (>= 3).

@@ -1,0 +1,13 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments"
+  author: "Avidit Acharya, Jens Hainmueller, Yiqing Xu"
+  chapters:
+    - index.qmd
+
+format:
+  html:
+    theme: cosmo
