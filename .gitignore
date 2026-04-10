@@ -14,3 +14,5 @@ tutorial/*_files/
 *.tar.gz
 ..Rcheck/
 .claude/
+tests/testthat/_problems/
+tests/testthat/testthat-problems.rds
