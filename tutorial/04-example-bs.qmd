@@ -126,22 +126,7 @@ frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```{r}
 #| label: bs-amce-plot
 #| fig-height: 5
-theta_bs <- coef(fit_bs)
-se_bs <- sqrt(diag(vcov(fit_bs)))
-df_amce_bs <- data.frame(
-  dummy = names(theta_bs), estimate = theta_bs,
-  ci_lo = theta_bs - 1.96 * se_bs, ci_hi = theta_bs + 1.96 * se_bs,
-  row.names = NULL
-)
-
-ggplot(df_amce_bs, aes(x = estimate, y = dummy)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
-                  color = "#E41A1C", size = 0.4) +
-  labs(x = expression(hat(theta)[k]), y = NULL,
-       title = "Population-average AMCE") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank())
+plot_amce(fit_bs)
 ```
 
 ### Fraction favor / oppose
@@ -149,65 +134,34 @@ ggplot(df_amce_bs, aes(x = estimate, y = dummy)) +
 ```{r}
 #| label: bs-fraction-bar
 #| fig-height: 5
-df_frac_bs <- frac_bs$estimate
-df_long_bs <- rbind(
-  data.frame(dummy = df_frac_bs$dummy_name, value = df_frac_bs$frac_positive,
-             direction = "Favor", stringsAsFactors = FALSE),
-  data.frame(dummy = df_frac_bs$dummy_name, value = -df_frac_bs$frac_negative,
-             direction = "Oppose", stringsAsFactors = FALSE)
-)
+plot_fraction(fit_bs)
+```
 
-ggplot(df_long_bs, aes(x = value, y = dummy, fill = direction)) +
-  geom_col() +
-  geom_vline(xintercept = 0, color = "gray30") +
-  scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
-  labs(x = "Fraction of respondents", y = NULL, fill = NULL,
-       title = "Fraction favoring / opposing each level") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
+### Heterogeneity
+
+```{r}
+#| label: bs-het-bar
+#| fig-height: 5
+plot_heterogeneity(fit_bs)
 ```
 
 ### Subgroup AMCE by ideology
 
 Do respondents on the ideological left, center, and right value
-treaty features differently? We split by terciles of `resp_ideo` and
-compare subgroup-specific $\hat\theta$ with point ranges.
+treaty features differently?
 
 ```{r}
 #| label: bs-ideo-plot
 #| fig-height: 6
-ideo_col_plot <- fit_bs$Z[, "resp_ideo"]
-ideo_cuts <- quantile(ideo_col_plot, probs = c(1/3, 2/3))
-sub_ideo <- sc_subgroup(fit_bs, list(
-  Left   = ideo_col_plot <= ideo_cuts[1],
-  Center = ideo_col_plot > ideo_cuts[1] & ideo_col_plot <= ideo_cuts[2],
-  Right  = ideo_col_plot > ideo_cuts[2]
-))
-
-df_ideo <- do.call(rbind, lapply(names(sub_ideo), function(g) {
-  e <- sub_ideo[[g]]$estimate
-  data.frame(group = g, dummy = e$dummy_name,
-             theta = e$theta, se = e$se,
-             stringsAsFactors = FALSE, row.names = NULL)
-}))
-df_ideo$ci_lo <- df_ideo$theta - 1.96 * df_ideo$se
-df_ideo$ci_hi <- df_ideo$theta + 1.96 * df_ideo$se
-df_ideo$group <- factor(df_ideo$group,
-                        levels = c("Left", "Center", "Right"))
-
-ggplot(df_ideo, aes(x = theta, y = dummy, color = group)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
-                  position = position_dodge(width = 0.6), size = 0.3) +
-  scale_color_manual(values = c(Left = "#2166AC",
-                                Center = "gray50",
-                                Right = "#B2182B")) +
-  labs(x = expression(hat(theta)[k]), y = NULL, color = NULL,
-       title = "Subgroup AMCE by ideology tercile") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
+ideo_col <- fit_bs$Z[, "resp_ideo"]
+ideo_cuts <- quantile(ideo_col, probs = c(1/3, 2/3))
+plot_subgroup(
+  fit_bs,
+  subgroup = list(Left   = ideo_col <= ideo_cuts[1],
+                  Center = ideo_col > ideo_cuts[1] & ideo_col <= ideo_cuts[2],
+                  Right  = ideo_col > ideo_cuts[2]),
+  title = "Subgroup AMCE by ideology tercile"
+)
 ```
 
 ### Beta ridgelines
@@ -224,28 +178,3 @@ plot(fit_bs, "beta_ridgelines")
 #| label: bs-loss
 plot(fit_bs, "loss_trace")
 ```
-
-## Subgroup analysis by ideology
-
-Do respondents on the ideological left value different treaty features
-than those on the right? We split at the median of `resp_ideo`.
-
-```{r}
-#| label: bs-subgroup
-ideo_col <- fit_bs$Z[, "resp_ideo"]
-sub_left  <- sc_subgroup(fit_bs, ideo_col < 0)
-sub_right <- sc_subgroup(fit_bs, ideo_col >= 0)
-
-rbind(
-  data.frame(group = "left",  sub_left$estimate[,  c("dummy_name", "theta", "se")],
-             row.names = NULL),
-  data.frame(group = "right", sub_right$estimate[, c("dummy_name", "theta", "se")],
-             row.names = NULL)
-)
-```
-
-The structural model lets us read off subgroup-specific AMCEs from the
-same fit, without re-estimating on subsets. Ideological differences in
-the valuation of enforcement and cost are visible in the coefficient
-table above and can be further explored via per-subgroup ridgeline
-plots.

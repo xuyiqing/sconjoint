@@ -228,26 +228,7 @@ indexed by observable $\mathbf Z$.
 ```{r}
 #| label: sw-amce-plot
 #| fig-height: 5
-theta <- coef(fit_sw)
-se <- sqrt(diag(vcov(fit_sw)))
-df_amce <- data.frame(
-  dummy = names(theta), estimate = theta,
-  ci_lo = theta - 1.96 * se, ci_hi = theta + 1.96 * se,
-  row.names = NULL
-)
-## Extract attribute name from dummy for faceting
-df_amce$attribute <- sub("[A-Z_].*$", "", df_amce$dummy)
-df_amce$attribute <- gsub("([a-z])([A-Z])", "\\1_\\2", df_amce$dummy)
-df_amce$attribute <- sub("^([a-z_]+).*", "\\1", df_amce$attribute)
-
-ggplot(df_amce, aes(x = estimate, y = dummy)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
-                  color = "#E41A1C", size = 0.4) +
-  labs(x = expression(hat(theta)[k]), y = NULL,
-       title = "Population-average AMCE") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank())
+plot_amce(fit_sw)
 ```
 
 ### Fraction favor / oppose
@@ -255,52 +236,32 @@ ggplot(df_amce, aes(x = estimate, y = dummy)) +
 ```{r}
 #| label: sw-fraction-bar
 #| fig-height: 5
-frac_sw <- sc_fraction_preferring(fit_sw, threshold = 0)
-df_frac <- frac_sw$estimate
-df_frac$favor  <-  df_frac$frac_positive
-df_frac$oppose <- -df_frac$frac_negative
-
-df_long <- rbind(
-  data.frame(dummy = df_frac$dummy_name, value = df_frac$favor,
-             direction = "Favor", stringsAsFactors = FALSE),
-  data.frame(dummy = df_frac$dummy_name, value = df_frac$oppose,
-             direction = "Oppose", stringsAsFactors = FALSE)
-)
-
-ggplot(df_long, aes(x = value, y = dummy, fill = direction)) +
-  geom_col() +
-  geom_vline(xintercept = 0, color = "gray30") +
-  scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
-  labs(x = "Fraction of respondents", y = NULL, fill = NULL,
-       title = "Fraction favoring / opposing each level") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
+plot_fraction(fit_sw)
 ```
 
 ### Heterogeneity bar chart
 
 Which attributes exhibit significant preference heterogeneity across
-respondents? We plot $\mathrm{Var}(\hat\beta_k(\mathbf Z_i))$ per
-attribute dummy, coloring bars red when the heterogeneity test rejects
+respondents? Bars are colored red when the heterogeneity test rejects
 at the 5% level.
 
 ```{r}
 #| label: sw-het-bar
 #| fig-height: 5
-het_sw <- sc_heterogeneity_test(fit_sw, adjust = "bh")
-df_het <- het_sw$estimate
-df_het$significant <- df_het$p_adjusted < 0.05
+plot_heterogeneity(fit_sw)
+```
 
-ggplot(df_het, aes(x = var_beta, y = dummy_name, fill = significant)) +
-  geom_col() +
-  scale_fill_manual(values = c("TRUE" = "#E41A1C", "FALSE" = "gray70"),
-                    labels = c("TRUE" = "p < 0.05", "FALSE" = "n.s.")) +
-  labs(x = expression(Var(hat(beta)[k](Z))), y = NULL, fill = NULL,
-       title = "Preference heterogeneity by attribute dummy") +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
+### Subgroup AMCE: gender
+
+```{r}
+#| label: sw-subgroup-plot
+#| fig-height: 5
+plot_subgroup(
+  fit_sw,
+  subgroup = list(Female = fit_sw$Z[, "resp_female"] > 0.5,
+                  Male   = fit_sw$Z[, "resp_female"] <= 0.5),
+  title = "Subgroup AMCE: female vs male respondents"
+)
 ```
 
 ### Beta ridgelines

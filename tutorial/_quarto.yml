@@ -20,6 +20,11 @@ book:
 
 bibliography: references.bib
 
+nocite: |
+  @*
+
+suppress-bibliography: true
+
 format:
   html:
     theme: cosmo
