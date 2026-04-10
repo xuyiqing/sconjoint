@@ -5,55 +5,22 @@ torch::torch_manual_seed(42)
 library(sconjoint)
 library(ggplot2)
 
-M <- 100L
-TT <- 4L
-set.seed(42)
+data(simdata, package = "sconjoint")
+dim(simdata)
+head(simdata, 6)
 
-## Respondent-level moderators
-z1 <- rnorm(M)
-z2 <- rnorm(M)
-
-## True beta(Z) for each respondent (M x 3)
-beta_true <- cbind(
-  x1 = 0.5 + 0.3 * z1,
-  x2 = -0.8 + 0.2 * z2,
-  x3 = rep(0.3, M)
-)
-
-## Build long-format data frame
-rows <- vector("list", M * TT * 2L)
-idx <- 0L
-for (i in seq_len(M)) {
-  for (tt in seq_len(TT)) {
-    xA <- rbinom(3, 1, 0.5)
-    xB <- rbinom(3, 1, 0.5)
-    deltaX <- xA - xB
-    V <- sum(deltaX * beta_true[i, ])
-    choiceA <- rbinom(1, 1, plogis(V))
-    idx <- idx + 1L
-    rows[[idx]] <- data.frame(
-      respondent = i, task = tt, profile = 1L, choice = choiceA,
-      x1 = xA[1], x2 = xA[2], x3 = xA[3], z1 = z1[i], z2 = z2[i]
-    )
-    idx <- idx + 1L
-    rows[[idx]] <- data.frame(
-      respondent = i, task = tt, profile = 2L, choice = 1L - choiceA,
-      x1 = xB[1], x2 = xB[2], x3 = xB[3], z1 = z1[i], z2 = z2[i]
-    )
-  }
-}
-sim_data <- do.call(rbind, rows)
-dim(sim_data)
-head(sim_data, 6)
+## True beta matrix stored as attribute
+beta_true <- attr(simdata, "beta_true")
+dim(beta_true)
 
 fit_sim <- scfit(
   choice ~ x1 + x2 + x3 | z1 + z2,
-  data       = sim_data,
+  data       = simdata,
   respondent = "respondent",
   task       = "task",
   profile    = "profile",
-  K          = 3L,
-  n_epochs   = 100L,
+  K          = 5L,
+  n_epochs   = 200L,
   seed       = 42
 )
 summary(fit_sim)
@@ -75,10 +42,11 @@ beta_hat <- beta_hat_all[first_row, ]
 
 ## Correlation between true and estimated beta
 data.frame(
-  attribute   = c("x1", "x2"),
+  attribute   = c("x1", "x2", "x3"),
   correlation = round(c(
     cor(beta_true[, 1], beta_hat[, 1]),
-    cor(beta_true[, 2], beta_hat[, 2])
+    cor(beta_true[, 2], beta_hat[, 2]),
+    cor(beta_true[, 3], beta_hat[, 3])
   ), 3),
   row.names = NULL
 )
@@ -89,11 +57,11 @@ df_compare <- data.frame(
 )
 
 ggplot(df_compare, aes(x = true, y = estimated)) +
-  geom_point(alpha = 0.5, color = "#2166AC", size = 2) +
+  geom_point(alpha = 0.3, color = "#2166AC", size = 1.5) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed",
               color = "#E41A1C", linewidth = 0.8) +
   labs(x = expression("True " * beta[1](Z)),
-       y = expression("Estimated " * beta[1](Z)),
+       y = expression("Estimated " * hat(beta)[1](Z)),
        title = "Individual-level recovery: attribute x1") +
   theme_minimal(base_size = 12)
 
@@ -101,7 +69,6 @@ sc_direction_intensity(fit_sim)
 
 frac_sim <- sc_fraction_preferring(fit_sim)
 
-## Compare to DGP truth
 true_frac <- c(
   x1 = mean(beta_true[, 1] > 0),
   x2 = mean(beta_true[, 2] > 0),
@@ -124,9 +91,10 @@ sub_sim <- sc_subgroup(fit_sim, list(
   "z1 < 0" = z1_col < 0
 ))
 
-## Compare to true subgroup means
-true_high <- mean(beta_true[z1 > 0, 1])
-true_low  <- mean(beta_true[z1 < 0, 1])
+## z1 at respondent level (de-duplicated, same order as beta_true)
+z1_resp <- fit_sim$Z[first_row, "z1"]
+true_high <- mean(beta_true[z1_resp > 0, 1])
+true_low  <- mean(beta_true[z1_resp < 0, 1])
 
 data.frame(
   group     = c("z1 > 0", "z1 < 0"),

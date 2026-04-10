@@ -135,3 +135,43 @@
 #' data(bs2013)
 #' head(bs2013)
 "bs2013"
+
+#' Simulated conjoint with known ground truth
+#'
+#' A synthetic forced-choice conjoint dataset with known true
+#' preference parameters, designed for validating the estimator.
+#' The data-generating process uses three binary attributes and
+#' two continuous respondent moderators:
+#'
+#' \deqn{\beta_1(Z_i) = 0.5 + 0.3 z_{1i}}
+#' \deqn{\beta_2(Z_i) = -0.8 + 0.2 z_{2i}}
+#' \deqn{\beta_3(Z_i) = 0.3}
+#'
+#' Attributes \eqn{x_1} and \eqn{x_2} are heterogeneous (preference
+#' depends on respondent covariates); \eqn{x_3} is homogeneous.
+#'
+#' The true per-respondent \eqn{\beta} matrix is stored as
+#' \code{attr(simdata, "beta_true")} and the DGP specification as
+#' \code{attr(simdata, "dgp")}.
+#'
+#' @format A data frame with 6,000 rows (500 respondents x 6 tasks x 2
+#'   profiles) and the following columns:
+#' \describe{
+#'   \item{respondent}{Respondent id (integer 1..500).}
+#'   \item{task}{Task id within respondent (1..6).}
+#'   \item{profile}{Profile id within task (1..2).}
+#'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
+#'   \item{x1}{Binary attribute 1.}
+#'   \item{x2}{Binary attribute 2.}
+#'   \item{x3}{Binary attribute 3.}
+#'   \item{z1}{Continuous respondent moderator 1 (standard normal).}
+#'   \item{z2}{Continuous respondent moderator 2 (standard normal).}
+#' }
+#' @examples
+#' data(simdata)
+#' dim(simdata)
+#' head(simdata)
+#' ## True beta matrix:
+#' beta_true <- attr(simdata, "beta_true")
+#' dim(beta_true)
+"simdata"
