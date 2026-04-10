@@ -21,19 +21,27 @@
     stringsAsFactors = FALSE
   )
   if (requireNamespace("ggridges", quietly = TRUE)) {
-    ggplot2::ggplot(long, ggplot2::aes(x = .data$value, y = .data$dummy)) +
-      ggridges::geom_density_ridges(alpha = 0.7, scale = 1.1) +
-      ggplot2::geom_vline(xintercept = 0, linetype = 2, alpha = 0.6) +
+    ggplot2::ggplot(long, ggplot2::aes(x = .data$value, y = .data$dummy,
+                                       fill = ggplot2::after_stat(x))) +
+      ggridges::geom_density_ridges_gradient(
+        scale = 2.0, rel_min_height = 0.01,
+        quantile_lines = TRUE, quantiles = 2
+      ) +
+      ggplot2::scale_fill_viridis_c(option = "C") +
+      ggplot2::geom_vline(xintercept = 0, linetype = "dashed",
+                          color = "gray50") +
       ggplot2::labs(x = expression(hat(beta)(Z)), y = NULL,
                     title = "Per-respondent preference distributions") +
-      ggplot2::theme_minimal()
+      ggplot2::theme_minimal(base_size = 12) +
+      ggplot2::theme(legend.position = "none")
   } else {
     ## Fallback: boxplot if ggridges is unavailable.
     ggplot2::ggplot(long, ggplot2::aes(x = .data$value, y = .data$dummy)) +
       ggplot2::geom_boxplot() +
-      ggplot2::geom_vline(xintercept = 0, linetype = 2) +
+      ggplot2::geom_vline(xintercept = 0, linetype = "dashed",
+                          color = "gray50") +
       ggplot2::labs(x = expression(hat(beta)(Z)), y = NULL) +
-      ggplot2::theme_minimal()
+      ggplot2::theme_minimal(base_size = 12)
   }
 }
 
@@ -51,10 +59,17 @@
     data.frame(fold = factor(k), epoch = seq_along(v), loss = v)
   })
   long <- do.call(rbind, dfs)
+  n_folds <- length(loss_traces)
+  fold_cols <- if (requireNamespace("viridisLite", quietly = TRUE)) {
+    viridisLite::viridis(n_folds)
+  } else {
+    grDevices::hcl.colors(n_folds, palette = "viridis")
+  }
   ggplot2::ggplot(long, ggplot2::aes(x = .data$epoch, y = .data$loss,
                                      colour = .data$fold, group = .data$fold)) +
     ggplot2::geom_line() +
+    ggplot2::scale_colour_manual(values = fold_cols) +
     ggplot2::labs(x = "epoch", y = "training loss",
                   title = "Per-fold training loss trace") +
-    ggplot2::theme_minimal()
+    ggplot2::theme_minimal(base_size = 12)
 }

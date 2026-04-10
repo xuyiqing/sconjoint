@@ -1,0 +1,211 @@
+---
+title: "Climate Treaties"
+---
+
+```{r}
+#| label: setup-bs
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+library(ggplot2)
+```
+
+This chapter applies the structural estimator to a climate-treaty
+conjoint experiment whose design follows Bechtel and Scheve (2013).
+Respondents evaluate pairs of hypothetical international climate
+agreements varying on six attributes --- including a numeric cost
+attribute (`cost_usd`) --- and select the one they prefer. Because cost
+is numeric, this dataset is a natural showcase for willingness-to-pay
+(WTP) analysis via `sc_wtp()` and compensating differentials via
+`sc_compensating()`.
+
+::: {.callout-note}
+The `bs2013` dataset is a **seed-fixed synthetic fixture** for
+illustration. Do not use it to draw substantive inferences about the
+Bechtel--Scheve population.
+:::
+
+## Data preparation
+
+```{r}
+#| label: bs-load
+data(bs2013, package = "sconjoint")
+dim(bs2013)
+head(bs2013, 4)
+```
+
+```{r}
+#| label: bs-structure
+str(bs2013)
+```
+
+Each respondent contributes six forced-choice tasks with two treaty
+profiles each (12 rows per respondent). The respondent-level moderators
+are `resp_female` (binary), `age` (standardized), and `resp_ideo`
+(standardized ideology).
+
+## Fitting the structural model
+
+```{r}
+#| label: bs-fit
+fit_bs <- scfit(
+  choice ~ distribution + enforcement + monitoring + participation +
+           sanctions + cost_usd |
+           resp_female + age + resp_ideo,
+  data        = bs2013,
+  respondent  = "respondent",
+  task        = "task",
+  profile     = "profile",
+  K           = 3L,
+  n_epochs    = 60L,
+  seed        = 2024
+)
+summary(fit_bs)
+```
+
+## Structural quantities
+
+### Attribute importance
+
+```{r}
+#| label: bs-importance
+sc_importance(fit_bs)
+```
+
+### Direction and intensity
+
+```{r}
+#| label: bs-di
+sc_direction_intensity(fit_bs)
+```
+
+### Willingness to pay
+
+Because `cost_usd` is a single numeric attribute (one dummy column),
+`sc_wtp()` can compute the WTP for each non-cost attribute level. The
+WTP is the negative MRS against the cost column, expressed in the same
+units as `cost_usd`.
+
+```{r}
+#| label: bs-wtp
+## WTP for selected treaty features
+sc_wtp(fit_bs, attr = "distribution:ability_to_pay", cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "enforcement:trade_sanctions", cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "monitoring:international",    cost_attr = "cost_usd")
+```
+
+### Compensating differentials
+
+How much cost would respondents accept to gain a preferred treaty
+feature? `sc_compensating()` computes the per-respondent ratio and
+reports the trimmed mean.
+
+```{r}
+#| label: bs-compensating
+sc_compensating(fit_bs,
+                benefit = "distribution:ability_to_pay",
+                cost    = "cost_usd")
+sc_compensating(fit_bs,
+                benefit = "enforcement:trade_sanctions",
+                cost    = "cost_usd")
+```
+
+### Fraction preferring
+
+```{r}
+#| label: bs-fraction
+frac_bs <- sc_fraction_preferring(fit_bs, threshold = 0)
+frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
+```
+
+## Visualization
+
+### AMCE coefficient plot
+
+```{r}
+#| label: bs-amce-plot
+#| fig-height: 5
+theta_bs <- coef(fit_bs)
+se_bs <- sqrt(diag(vcov(fit_bs)))
+df_amce_bs <- data.frame(
+  dummy = names(theta_bs), estimate = theta_bs,
+  ci_lo = theta_bs - 1.96 * se_bs, ci_hi = theta_bs + 1.96 * se_bs,
+  row.names = NULL
+)
+
+ggplot(df_amce_bs, aes(x = estimate, y = dummy)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  color = "#E41A1C", size = 0.4) +
+  labs(x = expression(hat(theta)[k]), y = NULL,
+       title = "Population-average AMCE") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank())
+```
+
+### Fraction favor / oppose
+
+```{r}
+#| label: bs-fraction-bar
+#| fig-height: 5
+df_frac_bs <- frac_bs$estimate
+df_long_bs <- rbind(
+  data.frame(dummy = df_frac_bs$dummy_name, value = df_frac_bs$frac_positive,
+             direction = "Favor", stringsAsFactors = FALSE),
+  data.frame(dummy = df_frac_bs$dummy_name, value = -df_frac_bs$frac_negative,
+             direction = "Oppose", stringsAsFactors = FALSE)
+)
+
+ggplot(df_long_bs, aes(x = value, y = dummy, fill = direction)) +
+  geom_col() +
+  geom_vline(xintercept = 0, color = "gray30") +
+  scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
+  labs(x = "Fraction of respondents", y = NULL, fill = NULL,
+       title = "Fraction favoring / opposing each level") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+### Beta ridgelines
+
+```{r}
+#| label: bs-ridgelines
+#| fig-height: 6
+plot(fit_bs, "beta_ridgelines")
+```
+
+### Loss trace
+
+```{r}
+#| label: bs-loss
+plot(fit_bs, "loss_trace")
+```
+
+## Subgroup analysis by ideology
+
+Do respondents on the ideological left value different treaty features
+than those on the right? We split at the median of `resp_ideo`.
+
+```{r}
+#| label: bs-subgroup
+ideo_col <- fit_bs$Z[, "resp_ideo"]
+sub_left  <- sc_subgroup(fit_bs, ideo_col < 0)
+sub_right <- sc_subgroup(fit_bs, ideo_col >= 0)
+
+rbind(
+  data.frame(group = "left",  sub_left$estimate[,  c("dummy_name", "theta", "se")],
+             row.names = NULL),
+  data.frame(group = "right", sub_right$estimate[, c("dummy_name", "theta", "se")],
+             row.names = NULL)
+)
+```
+
+The structural model lets us read off subgroup-specific AMCEs from the
+same fit, without re-estimating on subsets. Ideological differences in
+the valuation of enforcement and cost are visible in the coefficient
+table above and can be further explored via per-subgroup ridgeline
+plots.

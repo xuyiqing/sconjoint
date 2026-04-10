@@ -12,9 +12,10 @@ book:
     - 01-installation.qmd
     - 02-example-sw.qmd
     - 03-example-gs.qmd
-    - 04-simulation.qmd
-    - 05-plot-options.qmd
-    - 06-faq.qmd
+    - 04-example-bs.qmd
+    - 05-simulation.qmd
+    - 06-plot-options.qmd
+    - 07-faq.qmd
 
 format:
   html:

@@ -1,5 +1,5 @@
 ---
-title: "Example: Democratic Norms (GS)"
+title: "Democratic Norms"
 ---
 
 ```{r}
@@ -10,6 +10,7 @@ options(width = 78)
 set.seed(2024)
 torch::torch_manual_seed(2024)
 library(sconjoint)
+library(ggplot2)
 ```
 
 This chapter applies the structural estimator to a candidate-choice
@@ -132,11 +133,63 @@ round(cl_gs$estimate$centers, 2)
 
 ## Visualization
 
+### AMCE coefficient plot
+
+```{r}
+#| label: gs-amce-plot
+#| fig-height: 5
+theta_gs <- coef(fit_gs)
+se_gs <- sqrt(diag(vcov(fit_gs)))
+df_amce_gs <- data.frame(
+  dummy = names(theta_gs), estimate = theta_gs,
+  ci_lo = theta_gs - 1.96 * se_gs, ci_hi = theta_gs + 1.96 * se_gs,
+  row.names = NULL
+)
+
+ggplot(df_amce_gs, aes(x = estimate, y = dummy)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  color = "#E41A1C", size = 0.4) +
+  labs(x = expression(hat(theta)[k]), y = NULL,
+       title = "Population-average AMCE") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank())
+```
+
+### Fraction favor / oppose
+
+```{r}
+#| label: gs-fraction-bar
+#| fig-height: 5
+frac_gs <- sc_fraction_preferring(fit_gs, threshold = 0)
+df_frac_gs <- frac_gs$estimate
+df_long_gs <- rbind(
+  data.frame(dummy = df_frac_gs$dummy_name, value = df_frac_gs$frac_positive,
+             direction = "Favor", stringsAsFactors = FALSE),
+  data.frame(dummy = df_frac_gs$dummy_name, value = -df_frac_gs$frac_negative,
+             direction = "Oppose", stringsAsFactors = FALSE)
+)
+
+ggplot(df_long_gs, aes(x = value, y = dummy, fill = direction)) +
+  geom_col() +
+  geom_vline(xintercept = 0, color = "gray30") +
+  scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
+  labs(x = "Fraction of respondents", y = NULL, fill = NULL,
+       title = "Fraction favoring / opposing each level") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+### Beta ridgelines
+
 ```{r}
 #| label: gs-ridgelines
 #| fig-height: 6
 plot(fit_gs, "beta_ridgelines")
 ```
+
+### Loss trace
 
 ```{r}
 #| label: gs-loss
