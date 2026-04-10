@@ -10,30 +10,60 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>",
-  eval = FALSE
+  comment = "#>"
 )
 ```
 
-# Overview
-
 `sconjoint` implements the structural deep-learning estimator of
 Acharya, Hainmueller, and Xu (2026) for forced-choice conjoint
-experiments. The package is under active development.
+experiments.
+This vignette walks through a minimal example; for a full tutorial see
+the [online Quarto book](https://xuyiqing.github.io/sconjoint/).
 
-This vignette will grow into a getting-started tour. At present
-(milestone M1) the package ships only the skeleton; statistical
-methods will land in subsequent releases.
+## Setup
 
 ```{r setup}
 library(sconjoint)
+data(sw2022)
 ```
 
-# Coming soon
+`sw2022` is a small synthetic candidate-choice conjoint dataset
+(200 respondents, 3 tasks, 5 attributes, 3 moderators).
 
-- `scfit()`: fit the structural DNN model with DML inference.
-- A focused toolkit of structural quantities (MRS, counterfactuals,
-  attribute importance, preference polarization, consumer surplus).
-- Worked case studies bundled as small example datasets.
+## Fit the model
 
-See the project README for the development roadmap.
+```{r fit}
+fit <- scfit(
+  choice ~ agenda + talent + children + cand_gender + prior_office |
+           resp_female + age + pid,
+  data        = sw2022,
+  respondent  = "respondent",
+  task        = "task",
+  profile     = "profile",
+  K           = 2L,
+  n_epochs    = 20L,
+  seed        = 42L,
+  verbose     = FALSE
+)
+```
+
+## Inspect results
+
+```{r summary}
+summary(fit)
+```
+
+```{r coef}
+head(coef(fit))
+```
+
+## Structural quantity: attribute importance
+
+```{r importance}
+imp <- sc_importance(fit)
+imp
+```
+
+See `?sc_importance` and the companion quantities (`sc_mrs`, `sc_wtp`,
+`sc_counterfactual`, `sc_polarization`, etc.) for the full toolkit.
+The Quarto book provides detailed case studies with each quantity.

@@ -10,23 +10,94 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>",
-  eval = FALSE
+  comment = "#>"
 )
 ```
 
-# Purpose
+This vignette runs a quick synthetic-DGP sanity check to verify that
+`scfit()` recovers the direction of known structural parameters.
+It is a smoke test, not a formal simulation study.
 
-This vignette will demonstrate a short (<60 s) synthetic-DGP sanity
-check showing that `scfit()` recovers known structural parameters on a
-small simulated conjoint experiment. The demo is intended as a
-does-it-work smoke test, not as a finite-sample simulation study.
+## Generate synthetic data
 
-Full Monte Carlo studies live in the private prototype materials and
-are not part of the package scope.
+```{r dgp}
+set.seed(101)
+N_resp <- 50L
+N_task <- 3L
 
-# Status
+resp <- data.frame(
+  respondent = seq_len(N_resp),
+  z1         = rnorm(N_resp)
+)
 
-Milestone M1 (package skeleton): this vignette is a placeholder. The
-simulation sanity check will be implemented alongside the DNN backend
-in a later milestone.
+rows <- expand.grid(
+  respondent = seq_len(N_resp),
+  task       = seq_len(N_task),
+  profile    = 1:2
+)
+rows <- merge(rows, resp, by = "respondent")
+
+## Two binary attributes with uniform randomisation
+rows$x1 <- sample(0:1, nrow(rows), replace = TRUE)
+rows$x2 <- sample(0:1, nrow(rows), replace = TRUE)
+
+## True beta(z): linear in moderator z1
+## beta1(z) =  0.8 + 0.5 * z1   (positive main effect)
+## beta2(z) = -0.6 + 0.3 * z1   (negative main effect)
+beta1 <- 0.8 + 0.5 * rows$z1
+beta2 <- -0.6 + 0.3 * rows$z1
+
+logit <- beta1 * rows$x1 + beta2 * rows$x2
+prob  <- 1 / (1 + exp(-logit))
+
+## Generate choices within each task (exactly one chosen per pair)
+rows$choice <- 0L
+task_ids <- paste(rows$respondent, rows$task, sep = "_")
+for (tid in unique(task_ids)) {
+  idx <- which(task_ids == tid)
+  p <- prob[idx]
+  ## softmax across the two profiles
+  ep <- exp(logit[idx])
+  pr <- ep / sum(ep)
+  chosen <- sample(idx, 1, prob = pr)
+  rows$choice[chosen] <- 1L
+}
+
+## Convert attributes to factors for scfit
+rows$x1 <- factor(rows$x1, levels = 0:1, labels = c("a", "b"))
+rows$x2 <- factor(rows$x2, levels = 0:1, labels = c("lo", "hi"))
+```
+
+## Fit the model
+
+```{r fit}
+library(sconjoint)
+
+fit <- scfit(
+  choice ~ x1 + x2 | z1,
+  data       = rows,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 2L,
+  n_epochs   = 20L,
+  seed       = 101L,
+  verbose    = FALSE
+)
+```
+
+## Check recovered signs
+
+The true main effects are positive for `x1` and negative for `x2`.
+We verify the average theta direction matches.
+
+```{r check}
+theta <- coef(fit)
+cat("Recovered average theta:\n")
+print(colMeans(theta))
+```
+
+With only 20 epochs on 50 respondents the magnitudes will be noisy,
+but the sign pattern should broadly align with the DGP.
+A full Monte Carlo study with proper coverage analysis is beyond the
+scope of this smoke test.
