@@ -10,10 +10,10 @@ book:
   chapters:
     - index.qmd
     - 01-installation.qmd
-    - 02-example-sw.qmd
-    - 03-example-gs.qmd
-    - 04-example-bs.qmd
-    - 05-simulation.qmd
+    - 02-sanity-check.qmd
+    - 03-example-sw.qmd
+    - 04-example-gs.qmd
+    - 05-example-bs.qmd
     - 06-plot-options.qmd
     - references.qmd
 

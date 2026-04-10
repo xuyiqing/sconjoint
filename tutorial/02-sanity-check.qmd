@@ -1,0 +1,332 @@
+# Sanity Check {#sec-sanity}
+
+```{r}
+#| label: setup-sim
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(42)
+torch::torch_manual_seed(42)
+library(sconjoint)
+library(ggplot2)
+```
+
+Before applying the structural estimator to real data, this chapter
+runs the full workflow on a synthetic conjoint experiment with
+**known ground truth**. Because we control the data-generating process,
+every quantity the package produces can be checked against its
+analytically correct value. This builds confidence that the estimator,
+the DML correction, and the downstream structural quantities all work
+as intended.
+
+## Data-generating process
+
+We simulate $M = 100$ respondents, $T = 4$ tasks per respondent, and
+two profiles per task (800 rows). Three binary attributes
+$x_1, x_2, x_3$ are drawn independently as Bernoulli(0.5). Two
+continuous moderators $z_1, z_2 \sim N(0,1)$ determine each
+respondent's preference vector through a simple linear map:
+
+$$
+\beta_1(\mathbf Z_i) = 0.5 + 0.3\,z_{1i}, \quad
+\beta_2(\mathbf Z_i) = -0.8 + 0.2\,z_{2i}, \quad
+\beta_3(\mathbf Z_i) = 0.3.
+$$
+
+Key features of this DGP:
+
+- $\beta_1$ and $\beta_2$ depend on respondent covariates
+  (**heterogeneous**); $\beta_3$ is constant (**homogeneous**).
+- $\beta_1 > 0$ for most respondents (positive preference);
+  $\beta_2 < 0$ for most respondents (negative preference).
+- The true population-average AMCE is $E[\beta_1] = 0.5$,
+  $E[\beta_2] = -0.8$, $E[\beta_3] = 0.3$.
+
+```{r}
+#| label: sim-dgp
+M <- 100L
+TT <- 4L
+set.seed(42)
+
+## Respondent-level moderators
+z1 <- rnorm(M)
+z2 <- rnorm(M)
+
+## True beta(Z) for each respondent (M x 3)
+beta_true <- cbind(
+  x1 = 0.5 + 0.3 * z1,
+  x2 = -0.8 + 0.2 * z2,
+  x3 = rep(0.3, M)
+)
+
+## Build long-format data frame
+rows <- vector("list", M * TT * 2L)
+idx <- 0L
+for (i in seq_len(M)) {
+  for (tt in seq_len(TT)) {
+    xA <- rbinom(3, 1, 0.5)
+    xB <- rbinom(3, 1, 0.5)
+    deltaX <- xA - xB
+    V <- sum(deltaX * beta_true[i, ])
+    choiceA <- rbinom(1, 1, plogis(V))
+    idx <- idx + 1L
+    rows[[idx]] <- data.frame(
+      respondent = i, task = tt, profile = 1L, choice = choiceA,
+      x1 = xA[1], x2 = xA[2], x3 = xA[3], z1 = z1[i], z2 = z2[i]
+    )
+    idx <- idx + 1L
+    rows[[idx]] <- data.frame(
+      respondent = i, task = tt, profile = 2L, choice = 1L - choiceA,
+      x1 = xB[1], x2 = xB[2], x3 = xB[3], z1 = z1[i], z2 = z2[i]
+    )
+  }
+}
+sim_data <- do.call(rbind, rows)
+dim(sim_data)
+head(sim_data, 6)
+```
+
+## Fitting
+
+```{r}
+#| label: sim-fit
+fit_sim <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data       = sim_data,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 3L,
+  n_epochs   = 100L,
+  seed       = 42
+)
+summary(fit_sim)
+```
+
+## Population-average recovery
+
+The DML point estimates $\hat\theta$ should approximate the true
+population means $E[\beta_1] = 0.5$, $E[\beta_2] = -0.8$,
+$E[\beta_3] = 0.3$.
+
+```{r}
+#| label: sim-theta
+theta_hat <- coef(fit_sim)
+theta_true <- c(x1 = 0.5, x2 = -0.8, x3 = 0.3)
+data.frame(
+  attribute  = names(theta_hat),
+  true       = theta_true,
+  estimated  = round(unname(theta_hat), 3),
+  row.names  = NULL
+)
+```
+
+Signs and rough magnitudes should line up. Exact recovery is not
+expected with only 100 respondents and 4 tasks each.
+
+## Individual-level recovery
+
+The structural payoff is the per-respondent $\hat\beta(\mathbf Z_i)$
+matrix. We compare estimated values to the true DGP values.
+
+```{r}
+#| label: sim-beta-recovery
+beta_hat_all <- predict(fit_sim)
+
+## De-duplicate to respondent level
+first_row <- !duplicated(fit_sim$respondent_id)
+beta_hat <- beta_hat_all[first_row, ]
+
+## Correlation between true and estimated beta
+data.frame(
+  attribute   = c("x1", "x2"),
+  correlation = round(c(
+    cor(beta_true[, 1], beta_hat[, 1]),
+    cor(beta_true[, 2], beta_hat[, 2])
+  ), 3),
+  row.names = NULL
+)
+```
+
+Attribute $x_3$ has constant $\beta_3 = 0.3$ (no heterogeneity across
+respondents), so per-respondent correlation is not informative for it.
+
+```{r}
+#| label: sim-scatter
+#| fig-height: 5
+df_compare <- data.frame(
+  true      = beta_true[, 1],
+  estimated = beta_hat[, 1]
+)
+
+ggplot(df_compare, aes(x = true, y = estimated)) +
+  geom_point(alpha = 0.5, color = "#2166AC", size = 2) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              color = "#E41A1C", linewidth = 0.8) +
+  labs(x = expression("True " * beta[1](Z)),
+       y = expression("Estimated " * beta[1](Z)),
+       title = "Individual-level recovery: attribute x1") +
+  theme_minimal(base_size = 12)
+```
+
+Points clustering around the 45-degree line confirm that the estimator
+recovers individual-level heterogeneity. Dispersion around the line
+reflects the inherent noise from only $M = 100$ respondents with
+$T = 4$ tasks.
+
+## Direction and intensity
+
+The direction--intensity decomposition should reflect the DGP:
+$x_1$ has strong positive direction, $x_2$ has strong negative
+direction, $x_3$ has moderate positive direction.
+
+```{r}
+#| label: sim-di
+sc_direction_intensity(fit_sim)
+```
+
+## Fraction preferring
+
+We can verify this against the DGP analytically. For $x_1$:
+$\Pr(\beta_1 > 0) = \Pr(0.5 + 0.3 z_1 > 0) = \Pr(z_1 > -5/3)
+\approx 0.95$. For $x_2$:
+$\Pr(\beta_2 > 0) = \Pr(-0.8 + 0.2 z_2 > 0) = \Pr(z_2 > 4)
+\approx 0$. For $x_3$: $\beta_3 = 0.3 > 0$ always, so the fraction
+is 1.
+
+```{r}
+#| label: sim-fraction
+frac_sim <- sc_fraction_preferring(fit_sim)
+
+## Compare to DGP truth
+true_frac <- c(
+  x1 = mean(beta_true[, 1] > 0),
+  x2 = mean(beta_true[, 2] > 0),
+  x3 = mean(beta_true[, 3] > 0)
+)
+
+data.frame(
+  attribute     = names(true_frac),
+  true_fraction = true_frac,
+  estimated     = round(frac_sim$estimate$frac_positive, 3),
+  row.names     = NULL
+)
+```
+
+## Heterogeneity test
+
+The test should flag $x_1$ and $x_2$ as **significant** (their
+$\beta$ varies with $Z$) and $x_3$ as **non-significant** (constant
+across respondents). This is the key validation: the test correctly
+distinguishes structural heterogeneity from homogeneity.
+
+```{r}
+#| label: sim-het
+het_sim <- sc_heterogeneity_test(fit_sim, adjust = "bh")
+het_sim$estimate[, c("dummy_name", "var_beta", "p_adjusted", "sig")]
+```
+
+## Subgroup analysis
+
+By construction, respondents with $z_1 > 0$ have $\beta_1 > 0.5$
+while those with $z_1 < 0$ have $\beta_1 < 0.5$. The subgroup
+comparison should recover this split.
+
+```{r}
+#| label: sim-subgroup
+z1_col <- fit_sim$Z[, "z1"]
+sub_sim <- sc_subgroup(fit_sim, list(
+  "z1 > 0" = z1_col > 0,
+  "z1 < 0" = z1_col < 0
+))
+
+## Compare to true subgroup means
+true_high <- mean(beta_true[z1 > 0, 1])
+true_low  <- mean(beta_true[z1 < 0, 1])
+
+data.frame(
+  group     = c("z1 > 0", "z1 < 0"),
+  true_b1   = round(c(true_high, true_low), 3),
+  est_b1    = round(c(
+    sub_sim[["z1 > 0"]]$estimate$theta[1],
+    sub_sim[["z1 < 0"]]$estimate$theta[1]
+  ), 3),
+  row.names = NULL
+)
+```
+
+## Visualization
+
+### AMCE coefficient plot
+
+```{r}
+#| label: sim-amce
+#| fig-height: 4
+plot_amce(fit_sim)
+```
+
+### Fraction favor / oppose
+
+```{r}
+#| label: sim-fraction-bar
+#| fig-height: 4
+plot_fraction(fit_sim)
+```
+
+### Heterogeneity
+
+The bar chart should show $x_1$ and $x_2$ in red (significant
+heterogeneity) and $x_3$ in gray (homogeneous) --- matching our DGP
+design.
+
+```{r}
+#| label: sim-het-bar
+#| fig-height: 4
+plot_hetero(fit_sim)
+```
+
+### Subgroup comparison
+
+```{r}
+#| label: sim-subgroup-plot
+#| fig-height: 4
+z1_col <- fit_sim$Z[, "z1"]
+plot_subgroup(
+  fit_sim,
+  subgroup = list("z1 > 0" = z1_col > 0, "z1 < 0" = z1_col < 0),
+  title = "Subgroup AMCE: high-z1 vs low-z1 respondents"
+)
+```
+
+### Beta ridgelines
+
+```{r}
+#| label: sim-ridgelines
+#| fig-height: 4
+plot(fit_sim, "beta_ridgelines")
+```
+
+### Loss trace
+
+```{r}
+#| label: sim-loss
+plot(fit_sim, "loss_trace")
+```
+
+## Summary
+
+Every check aligns with the ground truth:
+
+- **Population-average** $\hat\theta$ recovers the sign and
+  approximate magnitude of the true $E[\beta]$.
+- **Individual-level** $\hat\beta(\mathbf Z_i)$ correlates positively
+  with the true per-respondent preference vector.
+- **Heterogeneity test** correctly flags $x_1$ and $x_2$
+  (Z-dependent) as heterogeneous and $x_3$ (constant) as homogeneous.
+- **Subgroup analysis** recovers the known direction: high-$z_1$
+  respondents have higher $\beta_1$ than low-$z_1$ respondents.
+- **Visualizations** produce the expected patterns: ridgelines for
+  $x_1$ and $x_2$ are wide (heterogeneity), $x_3$ is narrow
+  (homogeneity).
+
+With these checks in hand, we proceed to real-data applications.

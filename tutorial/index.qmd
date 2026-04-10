@@ -94,6 +94,9 @@ The user guide is structured into the following chapters:
 -   [Chapter @sec-start]\
     Installation instructions for `torch` and `sconjoint`.
 
+-   [Chapter @sec-sanity]\
+    Sanity check on simulated data with known ground truth. Walks through the entire workflow --- fitting, recovery, structural quantities, and visualization --- verifying each step against the true DGP.
+
 -   [Chapter @sec-sw]\
     Full pipeline on the @saha2022welfare candidate-choice conjoint: data preparation, model fitting, interpretation, all structural quantities, and visualization.
 
@@ -102,9 +105,6 @@ The user guide is structured into the following chapters:
 
 -   [Chapter @sec-bs]\
     Third worked example on the @bechtel_scheve_2013 climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
-
--   [Chapter @sec-sim]\
-    Synthetic-DGP sanity check confirming the estimator recovers known preference parameters at both the population and individual level.
 
 -   [Chapter @sec-plots]\
     Customizing ridgeline density plots and training loss traces with `ggplot2`.
