@@ -14,7 +14,7 @@ library(ggplot2)
 ```
 
 This chapter applies the structural estimator to a climate-treaty
-conjoint experiment whose design follows Bechtel and Scheve (2013).
+conjoint experiment whose design follows @bechtel_scheve_2013.
 Respondents evaluate pairs of hypothetical international climate
 agreements varying on six attributes --- including a numeric cost
 attribute (`cost_usd`) --- and select the one they prefer. Because cost

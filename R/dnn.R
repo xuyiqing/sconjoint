@@ -110,7 +110,7 @@
 #'
 #' Convenience wrapper that calls the module's `forward()` method
 #' (which returns the logit index) and applies a sigmoid to return
-#' choice probabilities on the [0, 1] scale.
+#' choice probabilities on the \eqn{[0, 1]} scale.
 #'
 #' @param net A network produced by `.sc_build_network()`.
 #' @param Z,deltaX torch tensors of type float32.

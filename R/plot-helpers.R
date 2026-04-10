@@ -3,6 +3,9 @@
 ## These return `ggplot` objects.  They are intentionally small
 ## wrappers — the user-facing entry point is `plot.sc_fit()` below.
 
+## Silence R CMD check NOTE for ggridges computed aesthetic
+utils::globalVariables("x")
+
 #' Ridgeline plot of per-respondent beta(Z) distributions
 #'
 #' @param beta_hat N x p matrix of held-out beta(Z) rows.

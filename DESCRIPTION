@@ -34,15 +34,11 @@ Imports:
     ggridges
 Suggests:
     testthat (>= 3.0.0),
-    knitr,
-    rmarkdown,
     covr,
     patchwork,
     quarto,
     scales,
     viridisLite
-VignetteBuilder:
-    knitr
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)

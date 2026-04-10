@@ -14,7 +14,7 @@ library(ggplot2)
 ```
 
 This chapter applies the structural estimator to a candidate-choice
-conjoint whose design follows Graham and Svolik (2020). Respondents
+conjoint whose design follows @graham2020democracy. Respondents
 choose between pairs of hypothetical U.S. candidates; one attribute
 captures the candidate's willingness to engage in undemocratic behavior
 (ignoring a court ruling, restricting the opposition press, or banning

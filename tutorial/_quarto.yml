@@ -16,6 +16,9 @@ book:
     - 05-simulation.qmd
     - 06-plot-options.qmd
     - 07-faq.qmd
+    - references.qmd
+
+bibliography: references.bib
 
 format:
   html:

@@ -15,7 +15,7 @@ library(ggplot2)
 
 This chapter walks through a complete `sconjoint` analysis of a
 candidate-choice conjoint experiment whose design follows
-Saha and Weeks (2022). Respondents evaluate pairs of hypothetical
+@saha2022welfare. Respondents evaluate pairs of hypothetical
 political candidates varying on five attributes and select one. The
 structural decomposition into direction and intensity lets us ask
 whether a near-zero AMCE for candidate gender masks genuine
