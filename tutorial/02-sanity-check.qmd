@@ -19,9 +19,9 @@ analytically correct value.
 
 ## Data-generating process
 
-The package ships `simdata`, a synthetic conjoint with $M = 500$
+The package ships `simdata`, a synthetic conjoint with $M = 1{,}000$
 respondents, $T = 6$ tasks per respondent, and two profiles per task
-(6,000 rows). Three binary attributes $x_1, x_2, x_3$ are drawn
+(12,000 rows). Three binary attributes $x_1, x_2, x_3$ are drawn
 independently as Bernoulli(0.5). Two continuous moderators
 $z_1, z_2 \sim N(0,1)$ determine each respondent's preference vector:
 
@@ -50,9 +50,20 @@ beta_true <- attr(simdata, "beta_true")
 dim(beta_true)
 ```
 
+::: {.callout-note}
+### Why does `scfit()` require at least one Z column?
+
+The DML estimator is defined in terms of a nuisance function
+$\hat\beta(\mathbf Z)$ that maps respondent-level covariates into
+preference vectors. Without any moderators the mapping is trivial and
+the DML correction degenerates to a plain plug-in estimator. Users who
+truly want a homogeneous model should fit a standard
+`glm(choice ~ deltaX, family = binomial)` instead.
+:::
+
 ## Fitting
 
-With 500 respondents and 6 tasks each, the estimator has enough signal
+With 1,000 respondents and 6 tasks each, the estimator has enough signal
 to recover both population-level and individual-level parameters
 cleanly.
 
@@ -70,6 +81,30 @@ fit_sim <- scfit(
 )
 summary(fit_sim)
 ```
+
+::: {.callout-tip}
+### How do I know my `sc_fit` is well-trained?
+
+Check two things: (1) `summary(fit)` reports the DML/iid SE ratio ---
+values close to one mean the clustering correction is small and the
+DNN's per-respondent $\hat\beta$ has little additional
+within-respondent information beyond the population mean.
+(2) `plot(fit, "loss_trace")` shows per-fold training loss curves ---
+they should visually level off before the last epoch. If they are
+still descending, increase `n_epochs`.
+:::
+
+::: {.callout-tip}
+### Performance tips
+
+- Set `device = "cuda"` on a GPU machine; bit-exact determinism is
+  lost but wall-clock time drops substantially.
+- Use `parallel = TRUE` with `n_cores = parallelly::availableCores()`
+  on CPU for large datasets --- the package guarantees bit-exact
+  identity between parallel and sequential runs.
+- Prefer `hidden = "auto"` as a starting point and tune only when
+  clearly needed.
+:::
 
 ## Population-average recovery
 

@@ -154,10 +154,10 @@
 #' \code{attr(simdata, "beta_true")} and the DGP specification as
 #' \code{attr(simdata, "dgp")}.
 #'
-#' @format A data frame with 6,000 rows (500 respondents x 6 tasks x 2
+#' @format A data frame with 12,000 rows (1,000 respondents x 6 tasks x 2
 #'   profiles) and the following columns:
 #' \describe{
-#'   \item{respondent}{Respondent id (integer 1..500).}
+#'   \item{respondent}{Respondent id (integer 1..1000).}
 #'   \item{task}{Task id within respondent (1..6).}
 #'   \item{profile}{Profile id within task (1..2).}
 #'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
