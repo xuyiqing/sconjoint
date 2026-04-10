@@ -5,7 +5,7 @@ if (requireNamespace("torch", quietly = TRUE)) {
   torch::torch_manual_seed(20260409)
 }
 library(sconjoint)
-data(bs2013)
+data(bs2013, package = "sconjoint")
 head(bs2013, 4)
 dim(bs2013)
 range(bs2013$cost_usd)

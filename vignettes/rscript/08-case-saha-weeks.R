@@ -5,7 +5,7 @@ if (requireNamespace("torch", quietly = TRUE)) {
   torch::torch_manual_seed(20260409)
 }
 library(sconjoint)
-data(sw2022)
+data(sw2022, package = "sconjoint")
 head(sw2022, 4)
 dim(sw2022)
 table(table(sw2022$respondent))  # tasks per respondent (x2 profiles)

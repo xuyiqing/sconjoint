@@ -5,7 +5,7 @@ if (requireNamespace("torch", quietly = TRUE)) {
   torch::torch_manual_seed(20260409)
 }
 library(sconjoint)
-data(gs2020)
+data(gs2020, package = "sconjoint")
 head(gs2020, 4)
 dim(gs2020)
 fit_gs <- scfit(

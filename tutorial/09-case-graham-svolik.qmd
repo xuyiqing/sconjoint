@@ -32,7 +32,7 @@ library(sconjoint)
 ## The bundled data
 
 ```{r gs-head}
-data(gs2020)
+data(gs2020, package = "sconjoint")
 head(gs2020, 4)
 dim(gs2020)
 ```

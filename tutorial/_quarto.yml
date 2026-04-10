@@ -30,4 +30,7 @@ format:
 execute:
   freeze: auto
   cache: true
-  eval: false
+  eval: true
+  echo: true
+  warning: false
+  message: false
