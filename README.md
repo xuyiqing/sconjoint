@@ -26,8 +26,7 @@ preference polarization, and preference clustering.
 ## Repository vs package name
 
 The **package** is named `sconjoint`; the **GitHub repository** is
-`structural-conjoint`. This is intentional — the repository name is
-descriptive for discovery, while the package name follows Yiqing Xu's
+`sconjoint`. The package name follows Yiqing Xu's
 short-name convention (`fect`, `panelView`, `interflex`).
 
 ## Installation
@@ -37,7 +36,7 @@ GitHub:
 
 ```r
 # install.packages("remotes")
-remotes::install_github("xuyiqing/structural-conjoint")
+remotes::install_github("xuyiqing/sconjoint")
 ```
 
 When the deep-learning backend lands in a later milestone, the

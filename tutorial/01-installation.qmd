@@ -28,7 +28,7 @@ Install `sconjoint` itself from GitHub:
 
 ```r
 # install.packages("remotes")
-remotes::install_github("xuyiqing/structural-conjoint")
+remotes::install_github("xuyiqing/sconjoint")
 ```
 
 The package pulls in `ggplot2`, `ggridges`, and related plotting

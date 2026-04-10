@@ -17,8 +17,8 @@ Description: Implements the structural deep-learning estimator for
     preference clustering. Builds on 'torch' for the deep-learning
     backend.
 License: GPL (>= 3)
-URL: https://github.com/xuyiqing/structural-conjoint
-BugReports: https://github.com/xuyiqing/structural-conjoint/issues
+URL: https://github.com/xuyiqing/sconjoint
+BugReports: https://github.com/xuyiqing/sconjoint/issues
 Depends:
     R (>= 4.1)
 Imports:

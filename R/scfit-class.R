@@ -139,24 +139,90 @@ print.sc_fit_summary <- function(x, digits = 4L, ...) {
   invisible(x)
 }
 
-#' Predict method for `sc_fit`
+#' Predict method for \code{sc_fit}
 #'
-#' Returns stored held-out per-respondent \eqn{\hat\beta(Z_i)}.  Full
-#' forward-pass evaluation on new `Z` data is deferred to sub-
-#' milestone M5.a (per-fold `state_dict`s are not persisted on the
-#' v0.1 `sc_fit` object).
+#' When \code{newdata = NULL}, returns stored held-out predictions from
+#' the cross-fit.  When \code{newdata} is supplied (a data frame or
+#' numeric matrix of respondent moderators \eqn{Z}), performs a
+#' forward-pass through the stored per-fold neural networks and averages
+#' across folds.
 #'
-#' @param object An `sc_fit`.
-#' @param newdata Must be `NULL` in M4.  Passing non-NULL errors out
-#'   with a pointer to M5.a.
+#' @param object An \code{sc_fit} object.
+#' @param newdata Either \code{NULL} (default — use stored predictions)
+#'   or a data frame / numeric matrix of new respondent moderators.
+#'   For a data frame, columns matching \code{object$z_names} are
+#'   extracted and converted to a numeric matrix.  For a matrix,
+#'   \code{ncol} must equal \code{length(object$z_names)}.
+#' @param type Character; one of \code{"beta"} (default), \code{"logit"},
+#'   or \code{"prob"}.  When \code{newdata} is non-NULL, only
+#'   \code{"beta"} is supported (logit and prob require task-level
+#'   deltaX which is unavailable for new respondents).
 #' @param ... Unused.
-#' @return The N x p matrix `object$beta_hat`.
+#' @return When \code{type = "beta"}: an \eqn{N \times p} numeric matrix
+#'   of preference parameters.
+#'   When \code{type = "logit"} (only \code{newdata = NULL}): a numeric
+#'   vector of length \eqn{N}.
+#'   When \code{type = "prob"} (only \code{newdata = NULL}): a numeric
+#'   vector of probabilities of length \eqn{N}.
 #' @export
-predict.sc_fit <- function(object, newdata = NULL, ...) {
-  if (!is.null(newdata)) {
-    stop("predict.sc_fit: newdata support is deferred to M5.a. Use newdata = NULL to retrieve the held-out per-respondent beta hat.")
+predict.sc_fit <- function(object, newdata = NULL, type = c("beta", "logit", "prob"), ...) {
+  type <- match.arg(type)
+
+  if (is.null(newdata)) {
+    ## ---- Stored predictions (backward-compatible) ----
+    switch(type,
+      beta  = object$beta_hat,
+      logit = as.numeric(rowSums(object$deltaX * object$beta_hat)),
+      prob  = as.numeric(stats::plogis(rowSums(object$deltaX * object$beta_hat)))
+    )
+  } else {
+    ## ---- Forward-pass on new Z ----
+    if (type != "beta") {
+      stop("predict.sc_fit: type = \"", type, "\" requires task-level deltaX, ",
+           "which is not available for new respondents. ",
+           "Use type = \"beta\" with newdata.", call. = FALSE)
+    }
+    if (is.null(object$nets)) {
+      stop("predict.sc_fit: per-fold modules were not stored. ",
+           "Refit with scfit(..., keep_modules = TRUE).", call. = FALSE)
+    }
+
+    ## Coerce newdata to numeric matrix
+    if (is.data.frame(newdata)) {
+      missing_z <- setdiff(object$z_names, names(newdata))
+      if (length(missing_z) > 0L) {
+        stop("predict.sc_fit: newdata is missing Z columns: ",
+             paste(missing_z, collapse = ", "), call. = FALSE)
+      }
+      Z_new <- as.matrix(newdata[, object$z_names, drop = FALSE])
+      storage.mode(Z_new) <- "double"
+    } else if (is.matrix(newdata)) {
+      if (ncol(newdata) != length(object$z_names)) {
+        stop("predict.sc_fit: newdata matrix has ", ncol(newdata),
+             " columns but expected ", length(object$z_names),
+             " (length of z_names).", call. = FALSE)
+      }
+      Z_new <- newdata
+      if (!is.numeric(Z_new)) {
+        stop("predict.sc_fit: newdata matrix must be numeric.", call. = FALSE)
+      }
+    } else {
+      stop("predict.sc_fit: newdata must be a data.frame or numeric matrix.",
+           call. = FALSE)
+    }
+
+    ## Forward-pass: average across K folds
+    K <- length(object$nets)
+    beta_sum <- .sc_predict_beta(object$nets[[1L]], Z_new)
+    if (K > 1L) {
+      for (k in 2L:K) {
+        beta_sum <- beta_sum + .sc_predict_beta(object$nets[[k]], Z_new)
+      }
+    }
+    beta_avg <- beta_sum / K
+    colnames(beta_avg) <- object$attr_names
+    beta_avg
   }
-  object$beta_hat
 }
 
 #' Plot method for `sc_fit`

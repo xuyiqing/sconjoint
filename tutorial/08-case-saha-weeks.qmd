@@ -4,7 +4,7 @@ title: "Case study: Saha-Weeks candidate choice"
 
 # Case study: Saha-Weeks candidate choice {#sec-case-sw}
 
-This chapter walks through a structural-conjoint analysis of a
+This chapter walks through a sconjoint analysis of a
 candidate-choice experiment whose design follows
 @saha_weeks_2022. Respondents evaluate pairs of hypothetical
 political candidates varying on five attributes — the candidate's

@@ -21,8 +21,8 @@ See the GitHub repository for the development roadmap.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/xuyiqing/structural-conjoint}
-  \item Report bugs at \url{https://github.com/xuyiqing/structural-conjoint/issues}
+  \item \url{https://github.com/xuyiqing/sconjoint}
+  \item Report bugs at \url{https://github.com/xuyiqing/sconjoint/issues}
 }
 
 }

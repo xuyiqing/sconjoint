@@ -48,6 +48,12 @@
 #'   `parallel = TRUE`).  Defaults to 2.
 #' @param device Character `"cpu"` (default) or `"cuda"`.  The
 #'   bit-exact determinism guarantee applies only on CPU.
+#' @param keep_modules Logical. If \code{TRUE} (the default), the
+#'   per-fold trained torch \code{nn_module} objects are stored on the
+#'   returned \code{sc_fit} object, enabling
+#'   \code{predict(fit, newdata = ...)} forward-pass on new moderator
+#'   data.  Set to \code{FALSE} to reduce object size when forward-pass
+#'   prediction is not needed.
 #' @param verbose Logical, print per-epoch training progress.
 #' @return An object of class `sc_fit` -- see Details.  Key components
 #'   include the DML point estimates `theta`, the full `p x p`
@@ -121,6 +127,7 @@ scfit <- function(formula, data,
                   parallel = FALSE,
                   n_cores = NULL,
                   device = "cpu",
+                  keep_modules = TRUE,
                   verbose = FALSE) {
   call <- match.call()
 
@@ -320,7 +327,9 @@ scfit <- function(formula, data,
     device             = device,
     parallel           = isTRUE(parallel),
     n_cores            = n_cores,
-    loss_traces        = cf$loss_traces
+    loss_traces        = cf$loss_traces,
+    nets               = if (isTRUE(keep_modules)) cf$nets else NULL,
+    keep_modules       = isTRUE(keep_modules)
   )
   class(fit) <- c("sc_fit", "list")
   fit
