@@ -1,0 +1,144 @@
+---
+title: "Example: Democratic Norms (GS)"
+---
+
+```{r}
+#| label: setup-gs
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+```
+
+This chapter applies the structural estimator to a candidate-choice
+conjoint whose design follows Graham and Svolik (2020). Respondents
+choose between pairs of hypothetical U.S. candidates; one attribute
+captures the candidate's willingness to engage in undemocratic behavior
+(ignoring a court ruling, restricting the opposition press, or banning
+an opposition rally). The original study asks how much voters penalize
+co-partisan candidates for violating democratic norms, and whether
+strong partisanship leads to tolerance of such violations.
+
+The structural model adds value here because it decomposes the
+population-average penalty for undemocratic behavior into direction and
+intensity, and traces the heterogeneity back to respondent-level
+partisanship --- without re-estimating on subsets.
+
+::: {.callout-note}
+The `gs2020` dataset is a **seed-fixed synthetic fixture** for
+illustration. Do not use it to draw substantive conclusions about the
+Graham--Svolik population.
+:::
+
+## Data preparation
+
+```{r}
+#| label: gs-load
+data(gs2020, package = "sconjoint")
+dim(gs2020)
+head(gs2020, 4)
+str(gs2020)
+```
+
+Each respondent sees eight tasks with two candidate profiles each,
+yielding 16 rows per respondent. The respondent-level moderators are
+`resp_pid` (-1/0/+1 partisanship), `resp_ideo` (standardized ideology),
+and standardized `age`.
+
+## Fitting the structural model
+
+```{r}
+#| label: gs-fit
+fit_gs <- scfit(
+  choice ~ federal + immigration + tax + abortion + undem + cand_party |
+           resp_pid + resp_ideo + age,
+  data        = gs2020,
+  respondent  = "respondent",
+  task        = "task",
+  profile     = "profile",
+  K           = 3L,
+  n_epochs    = 60L,
+  seed        = 2024
+)
+summary(fit_gs)
+```
+
+## Heterogeneity test
+
+Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
+what sampling noise alone would explain? A significant result for
+`undem` levels would confirm that the penalty for undemocratic behavior
+varies meaningfully across respondents.
+
+```{r}
+#| label: gs-het
+het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
+het_gs$estimate
+```
+
+## Direction and intensity
+
+The undemocratic levels should show a large negative average direction
+(voters penalize them) coupled with high intensity. The structural
+question is whether the *dispersion* of those coefficients concentrates
+on co-partisans, as Graham and Svolik argue.
+
+```{r}
+#| label: gs-di
+sc_direction_intensity(fit_gs)
+```
+
+## Subgroup analysis by partisanship
+
+We re-average the held-out $\hat\beta(\mathbf Z_i)$ separately for
+Democrats, Independents, and Republicans using `sc_subgroup()`. The
+`resp_pid` column on the standardized $\mathbf Z$ matrix preserves the
+sign of the underlying -1/0/+1 encoding.
+
+```{r}
+#| label: gs-subgroup
+pid_col <- fit_gs$Z[, "resp_pid"]
+sub <- sc_subgroup(fit_gs, list(
+  dem = pid_col < -0.5,
+  ind = abs(pid_col) <= 0.5,
+  rep = pid_col >  0.5
+))
+do.call(rbind, lapply(names(sub), function(g) {
+  e <- sub[[g]]$estimate
+  rows <- grepl("^undem", e$dummy_name)
+  data.frame(group = g, e[rows, c("dummy_name", "theta", "se")],
+             row.names = NULL)
+}))
+```
+
+The ability to read subgroup-specific $\hat\theta$ off the same fit
+--- without re-estimating on subsets --- is the operational advantage
+of the structural model over stacked subgroup AMCE regressions.
+
+## Preference clustering
+
+A complementary view on latent preference types: run k-means on the
+per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
+respondents with similar preference profiles.
+
+```{r}
+#| label: gs-clusters
+cl_gs <- sc_clusters(fit_gs, k = 3L, seed = 2024)
+cl_gs$estimate$sizes
+round(cl_gs$estimate$centers, 2)
+```
+
+## Visualization
+
+```{r}
+#| label: gs-ridgelines
+#| fig-height: 6
+plot(fit_gs, "beta_ridgelines")
+```
+
+```{r}
+#| label: gs-loss
+plot(fit_gs, "loss_trace")
+```

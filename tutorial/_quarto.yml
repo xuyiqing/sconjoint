@@ -10,17 +10,11 @@ book:
   chapters:
     - index.qmd
     - 01-installation.qmd
-    - 02-quickstart.qmd
-    - 03-data-prep.qmd
-    - 04-fitting.qmd
-    - 05-interpreting.qmd
-    - 06-quantities.qmd
-    - 07-visualization.qmd
-    - 08-case-saha-weeks.qmd
-    - 09-case-graham-svolik.qmd
-    - 10-case-bechtel-scheve.qmd
-    - 11-simulation-check.qmd
-    - 13-faq.qmd
+    - 02-example-sw.qmd
+    - 03-example-gs.qmd
+    - 04-simulation.qmd
+    - 05-plot-options.qmd
+    - 06-faq.qmd
 
 format:
   html:

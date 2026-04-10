@@ -1,0 +1,82 @@
+---
+title: "Plot Options"
+---
+
+The `plot.sc_fit()` method ships two plot types. Both return plain
+`ggplot` objects, so users can layer additional geoms, facets, or themes
+on top.
+
+## Beta ridgelines
+
+The default `"beta_ridgelines"` draws one density ridgeline per
+attribute dummy over the held-out per-respondent
+$\hat\beta_j(\mathbf Z_i)$. It is the most compact visual summary of
+the direction-versus-intensity decomposition: a ridgeline centered away
+from zero indicates directional consensus; a wide ridgeline indicates
+high intensity heterogeneity.
+
+```{r}
+#| label: setup-plot
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+
+data(sw2022, package = "sconjoint")
+fit_sw <- scfit(
+  choice ~ agenda + talent + children + cand_gender + prior_office |
+           resp_female + age + pid,
+  data       = sw2022,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 3L,
+  n_epochs   = 60L,
+  seed       = 2024
+)
+```
+
+```{r}
+#| label: plot-ridgelines
+#| fig-height: 6
+plot(fit_sw, "beta_ridgelines")
+```
+
+The ridgeline layer is drawn by `ggridges::geom_density_ridges` when
+`ggridges` is available; a boxplot fallback kicks in otherwise so the
+plot method works in minimal installations.
+
+## Loss trace
+
+`"loss_trace"` plots the per-fold training loss curves. The curves
+should visually level off before the last epoch; if they are still
+descending, increase `n_epochs`.
+
+```{r}
+#| label: plot-loss
+plot(fit_sw, "loss_trace")
+```
+
+## Customization with ggplot2
+
+Since both plot types return `ggplot` objects, standard `ggplot2`
+modifications apply directly.
+
+```{r}
+#| label: plot-custom
+library(ggplot2)
+plot(fit_sw, "beta_ridgelines") +
+  labs(title = "Per-respondent preference distributions",
+       subtitle = "Saha-Weeks candidate choice") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+#| label: plot-loss-custom
+plot(fit_sw, "loss_trace") +
+  labs(title = "Training convergence") +
+  theme_bw()
+```

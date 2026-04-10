@@ -1,17 +1,16 @@
 ---
-title: "Simulation check"
+title: "Simulation Check"
 ---
-
-# Simulation check {#sec-simulation-check}
 
 This chapter is a sanity check, not a simulation study. It builds a
 small synthetic data-generating process with known true
 $\boldsymbol\beta(\mathbf Z)$, fits `scfit()`, and compares the
-recovered per-respondent preference vector to the truth. The goal
-is pedagogical: to give readers confidence that the estimator works
-on data whose ground truth they can inspect directly.
+recovered per-respondent preference vector to the truth. The goal is
+pedagogical: to give readers confidence that the estimator works on data
+whose ground truth they can inspect directly.
 
 ```{r}
+#| label: setup-sim
 library(sconjoint)
 set.seed(1)
 ```
@@ -19,11 +18,12 @@ set.seed(1)
 The DGP below draws 300 respondents, five tasks, three binary
 attributes, and two continuous covariates, and simulates
 $\hat\beta(\mathbf Z)$ through a simple linear function of
-$\mathbf Z$. Users who want a full simulation study — with Monte
+$\mathbf Z$. Users who want a full simulation study --- with Monte
 Carlo replications, coverage calculations, and DGPs that stress the
-estimator — should look instead at the private prototype scripts
+estimator --- should look instead at the private prototype scripts
 that ship with the paper replication materials.
 
 ```{r}
+#| label: sim-check
 cat("simulation check\n")
 ```

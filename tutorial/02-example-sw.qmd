@@ -1,0 +1,234 @@
+---
+title: "Example: Candidate Choice (SW)"
+---
+
+```{r}
+#| label: setup-sw
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+```
+
+This chapter walks through a complete `sconjoint` analysis of a
+candidate-choice conjoint experiment whose design follows
+Saha and Weeks (2022). Respondents evaluate pairs of hypothetical
+political candidates varying on five attributes and select one. The
+structural decomposition into direction and intensity lets us ask
+whether a near-zero AMCE for candidate gender masks genuine
+heterogeneity --- half the sample preferring women, half preferring men.
+
+::: {.callout-note}
+The `sw2022` dataset is a **seed-fixed synthetic fixture** for
+illustration. Do not use it to draw substantive inferences about the
+Saha--Weeks population.
+:::
+
+## Data preparation
+
+```{r}
+#| label: sw-load
+data(sw2022, package = "sconjoint")
+dim(sw2022)
+head(sw2022, 4)
+```
+
+The data are in long format: one row per respondent--task--profile. Each
+respondent contributes three forced-choice tasks; within a task two
+candidate profiles are presented and exactly one is chosen
+(`choice == 1`).
+
+```{r}
+#| label: sw-structure
+str(sw2022)
+table(table(sw2022$respondent))
+```
+
+The respondent-level moderators available in $\mathbf Z$ are
+`resp_female` (binary), `age` (standardized), and `pid` (3-level
+partisanship index). The formula interface puts conjoint attributes to
+the left of `|` and moderators to the right:
+
+```
+choice ~ agenda + talent + children + cand_gender + prior_office |
+         resp_female + age + pid
+```
+
+## Fitting the structural model
+
+We fit a small, fast configuration (`K = 3` folds, 60 Adam epochs)
+suitable for pedagogy. Production analyses would use more folds and more
+epochs.
+
+```{r}
+#| label: sw-fit
+fit_sw <- scfit(
+  choice ~ agenda + talent + children + cand_gender + prior_office |
+           resp_female + age + pid,
+  data        = sw2022,
+  respondent  = "respondent",
+  task        = "task",
+  profile     = "profile",
+  K           = 3L,
+  n_epochs    = 60L,
+  seed        = 2024
+)
+summary(fit_sw)
+```
+
+The summary table reports the DML point estimate ($\hat\theta$),
+respondent-clustered standard error, z-statistic, p-value, and 95%
+confidence interval for every attribute dummy. The **DML/iid SE ratio**
+diagnostic quantifies how much the clustering correction matters: values
+meaningfully above one indicate economically large within-respondent
+correlation.
+
+## Interpretation
+
+The `coef()` method extracts the population-average $\hat\theta$ vector.
+`predict()` returns the $N \times p$ matrix of per-respondent
+$\hat\beta(\mathbf Z_i)$ --- the complete preference vector for each
+respondent.
+
+```{r}
+#| label: sw-coef
+coef(fit_sw)
+```
+
+```{r}
+#| label: sw-beta
+beta <- predict(fit_sw)
+dim(beta)
+head(beta, 3)
+```
+
+Each row of the $\hat\beta$ matrix is a respondent's full marginal
+utility vector across all attribute dummies. The structural model's
+payoff is that all downstream quantities are functions of this matrix.
+
+## Structural quantities
+
+### Attribute importance
+
+Which attributes drive choice, on average? `sc_importance()` returns
+the respondent-averaged share of predicted-utility variance contributed
+by each attribute block. Shares sum to one by construction.
+
+```{r}
+#| label: sw-importance
+sc_importance(fit_sw)
+```
+
+### Direction and intensity
+
+The structural decomposition separates *direction*
+($\overline{\operatorname{sign}(\beta_k)}$) from *intensity*
+($\overline{|\beta_k|}$). For `cand_gender` a near-zero AMCE could
+either mean "no one cares" or "half the sample strongly prefers women,
+half strongly prefers men and they cancel." The direction/intensity
+decomposition resolves the ambiguity.
+
+```{r}
+#| label: sw-di
+sc_direction_intensity(fit_sw)
+```
+
+### Fraction preferring
+
+The fraction of respondents whose $\hat\beta_k(\mathbf Z_i)$ exceeds
+zero --- i.e., who prefer each non-reference level, holding other
+attributes fixed.
+
+```{r}
+#| label: sw-fraction
+frac <- sc_fraction_preferring(fit_sw, threshold = 0)
+frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
+```
+
+### Marginal rate of substitution
+
+The trimmed mean of $\hat\beta_j(\mathbf Z_i) / \hat\beta_k(\mathbf Z_i)$
+across respondents: by how many units of attribute $k$ must we
+compensate a respondent to offset a one-unit change in attribute $j$?
+
+```{r}
+#| label: sw-mrs
+sc_mrs(fit_sw, numerator = 1L, denominator = 2L)
+```
+
+### Counterfactual choice probability
+
+For two user-specified profiles $A$ and $B$, report the average
+probability that respondents choose $A$ over $B$.
+
+```{r}
+#| label: sw-counterfactual
+prof_a <- sc_profile(fit_sw, agenda = "economy", talent = "high",
+                     children = "yes", cand_gender = "female",
+                     prior_office = "state")
+prof_b <- sc_profile(fit_sw, agenda = "security", talent = "low",
+                     children = "no", cand_gender = "male",
+                     prior_office = "none")
+sc_counterfactual(fit_sw, profile_a = prof_a, profile_b = prof_b)
+```
+
+### Optimal profile
+
+The greedy per-attribute argmax over subgroup-averaged $\hat\beta$,
+assembled into the profile that maximizes average predicted utility.
+
+```{r}
+#| label: sw-optimal
+sc_optimal_profile(fit_sw)
+```
+
+### Heterogeneity test
+
+Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
+what sampling noise alone would explain? A significant result indicates
+genuine preference heterogeneity along $\mathbf Z$.
+
+```{r}
+#| label: sw-het
+sc_heterogeneity_test(fit_sw, adjust = "bh")
+```
+
+### Subgroup analysis
+
+Do women respondents weight candidate gender differently from men?
+`sc_subgroup()` re-averages $\hat\beta(\mathbf Z_i)$ over a
+user-specified subset of respondents.
+
+```{r}
+#| label: sw-subgroup
+fem <- fit_sw$Z[, "resp_female"] > 0.5
+sub_fem  <- sc_subgroup(fit_sw, fem)
+sub_male <- sc_subgroup(fit_sw, !fem)
+rbind(
+  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderfemale",
+                            c("theta", "se")],
+  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderfemale",
+                            c("theta", "se")]
+)
+```
+
+On this fixture the *direction* of the `cand_genderfemale` coefficient
+splits along respondent gender lines even when its average AMCE is
+small. This is the headline interpretive payoff of the structural
+framework: one number becomes an entire distribution over respondents,
+indexed by observable $\mathbf Z$.
+
+## Visualization
+
+```{r}
+#| label: sw-ridgelines
+#| fig-height: 6
+plot(fit_sw, "beta_ridgelines")
+```
+
+```{r}
+#| label: sw-loss
+plot(fit_sw, "loss_trace")
+```
