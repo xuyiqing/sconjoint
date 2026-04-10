@@ -13,3 +13,4 @@ tutorial/*_files/
 /_freeze/
 *.tar.gz
 ..Rcheck/
+.claude/
