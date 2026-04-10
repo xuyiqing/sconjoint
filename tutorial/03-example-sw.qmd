@@ -232,6 +232,60 @@ small. This is the headline interpretive payoff of the structural
 framework: one number becomes an entire distribution over respondents,
 indexed by observable $\mathbf Z$.
 
+## Advanced quantities
+
+### Average marginal effects (probability scale)
+
+Converting the logit-scale $\hat\theta$ to probability-scale AMEs
+accounts for the nonlinearity of the logistic link.
+
+```{r}
+#| label: sw-ame-prob
+sc_average(fit_sw, scale = "probability")
+```
+
+The probability-scale AMEs are attenuated relative to the logit-scale
+coefficients because the logistic CDF compresses effects away from the
+linear region. Attributes with large logit-scale effects show the
+largest attenuation.
+
+### Preference inequality
+
+Which attributes generate the most disagreement across respondents?
+
+```{r}
+#| label: sw-inequality
+sc_inequality(fit_sw, measure = "variance")
+```
+
+Higher variance indicates more heterogeneous preferences. Attributes
+where the heterogeneity test is significant should also show large
+variance here --- the two diagnostics measure the same phenomenon
+from different angles.
+
+### Baseline logit comparison
+
+The homogeneous logit baseline should agree with the structural model
+on population-average $\hat\theta$ while lacking the ability to
+decompose heterogeneity.
+
+```{r}
+#| label: sw-baseline
+bl_sw <- sc_baseline_logit(fit_sw)
+data.frame(
+  dummy     = fit_sw$attr_names,
+  structural = round(coef(fit_sw), 3),
+  logit      = round(coef(bl_sw), 3),
+  row.names  = NULL
+)
+```
+
+The structural and baseline logit estimates agree on population
+averages. The structural model's advantage is the per-respondent
+$\hat\beta(\mathbf Z_i)$ matrix that enables all the heterogeneity,
+subgroup, and counterfactual analyses above --- the logit baseline
+cannot provide any of those.
+
 ## Visualization
 
 ### AMCE coefficient plot

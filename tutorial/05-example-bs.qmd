@@ -119,6 +119,78 @@ frac_bs <- sc_fraction_preferring(fit_bs, threshold = 0)
 frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```
 
+## Advanced quantities
+
+Because `bs2013` includes a numeric cost attribute (`cost_usd`), it is
+a natural showcase for surplus, welfare, and demand analysis.
+
+### Consumer surplus
+
+Compare the surplus from a cheap treaty versus an expensive one.
+
+```{r}
+#| label: bs-surplus
+sc_surplus(fit_bs, profiles = list(
+  list(cost_usd = 10),
+  list(cost_usd = 50)
+))
+```
+
+The log-sum surplus over the two-profile choice set reflects the
+aggregate welfare respondents derive. The cheap treaty ($10) dominates
+for most respondents (since $\hat\beta_{\mathrm{cost}} < 0$), but the
+surplus captures the option value of having both alternatives available.
+
+### Welfare change
+
+What is the welfare gain from replacing an expensive treaty with a
+cheaper one that also includes international monitoring?
+
+```{r}
+#| label: bs-welfare
+sc_welfare_change(
+  fit_bs,
+  old_set = list(list(cost_usd = 50)),
+  new_set = list(list(cost_usd = 10, monitoring = "international"))
+)
+```
+
+The positive welfare change confirms that respondents prefer cheaper
+treaties with international monitoring. The magnitude combines the
+cost savings ($\hat\beta_{\mathrm{cost}} \times (-40)$) and the
+monitoring premium ($\hat\beta_{\mathrm{monitoring:international}}$).
+
+### Demand curve
+
+The aggregate demand curve traces the average choice probability as a
+function of the cost attribute, holding other attributes at reference
+levels.
+
+```{r}
+#| label: bs-demand
+demand <- sc_demand_curve(fit_bs, cost_attr = "cost_usd")
+demand
+```
+
+```{r}
+#| label: bs-demand-plot
+#| fig-height: 4
+demand_df <- demand$estimate
+ggplot(demand_df, aes(x = cost, y = demand)) +
+  geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.2,
+              fill = "#2166AC") +
+  geom_line(color = "#2166AC", linewidth = 1) +
+  labs(x = "Cost (USD per household per month)",
+       y = "Average choice probability",
+       title = "Aggregate demand curve for climate treaties") +
+  theme_minimal(base_size = 12)
+```
+
+The downward-sloping demand curve is consistent with $\hat\beta_{\mathrm{cost}} < 0$:
+as the cost of a treaty rises, fewer respondents choose it over the
+reference alternative. The confidence band widens at the extremes of
+the cost grid where fewer observations anchor the estimate.
+
 ## Visualization
 
 ### AMCE coefficient plot

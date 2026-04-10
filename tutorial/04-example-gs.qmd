@@ -129,6 +129,44 @@ cl_gs$estimate$sizes
 round(cl_gs$estimate$centers, 2)
 ```
 
+## Advanced quantities
+
+### Decisiveness
+
+How decisively do voters reject a candidate who ignores a court ruling
+compared to one who does not engage in undemocratic behavior?
+
+```{r}
+#| label: gs-decisiveness
+sc_decisiveness(fit_gs,
+  A = list(undem = "none"),
+  B = list(undem = "ignore_court")
+)
+```
+
+The decisiveness index measures how clearly respondents prefer candidate
+A (no undemocratic behavior) over candidate B (ignores a court ruling).
+A high value indicates broad consensus that democratic norm violations
+are penalized; a low value would indicate that many respondents are
+near-indifferent --- potentially because partisan loyalty offsets the
+norm-violation penalty.
+
+### Preference inequality (Gini)
+
+The Gini coefficient of $|\hat\beta_k(Z_i)|$ across respondents
+captures how concentrated preference intensity is.
+
+```{r}
+#| label: gs-inequality
+sc_inequality(fit_gs, measure = "gini")
+```
+
+Higher Gini values indicate that a small fraction of respondents hold
+much stronger preferences than the rest. For the undemocratic-behavior
+dummies, a moderate Gini suggests that most respondents penalize
+violations but some penalize them far more intensely than others ---
+consistent with the partisan heterogeneity documented above.
+
 ## Visualization
 
 ### AMCE coefficient plot
