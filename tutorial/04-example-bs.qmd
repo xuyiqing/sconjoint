@@ -142,7 +142,7 @@ plot_fraction(fit_bs)
 ```{r}
 #| label: bs-het-bar
 #| fig-height: 5
-plot_heterogeneity(fit_bs)
+plot_hetero(fit_bs)
 ```
 
 ### Subgroup AMCE by ideology

@@ -248,7 +248,7 @@ at the 5% level.
 ```{r}
 #| label: sw-het-bar
 #| fig-height: 5
-plot_heterogeneity(fit_sw)
+plot_hetero(fit_sw)
 ```
 
 ### Subgroup AMCE: gender

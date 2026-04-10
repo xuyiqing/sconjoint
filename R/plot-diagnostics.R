@@ -135,7 +135,7 @@ plot_fraction <- function(object, threshold = 0,
 #' @param ... Unused.
 #' @return A \code{ggplot} object.
 #' @export
-plot_heterogeneity <- function(object, alpha = 0.05, adjust = "bh",
+plot_hetero <- function(object, alpha = 0.05, adjust = "bh",
                                colors = c("TRUE" = "#E41A1C",
                                           "FALSE" = "gray70"),
                                title = NULL, ...) {
