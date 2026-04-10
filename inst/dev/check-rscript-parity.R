@@ -25,6 +25,9 @@ mirrors <- c(
   "05-interpreting",
   "06-quantities",
   "07-visualization",
+  "08-case-saha-weeks",
+  "09-case-graham-svolik",
+  "10-case-bechtel-scheve",
   "11-simulation-check"
 )
 

@@ -16,6 +16,9 @@ book:
     - 05-interpreting.qmd
     - 06-quantities.qmd
     - 07-visualization.qmd
+    - 08-case-saha-weeks.qmd
+    - 09-case-graham-svolik.qmd
+    - 10-case-bechtel-scheve.qmd
     - 11-simulation-check.qmd
     - 13-faq.qmd
 

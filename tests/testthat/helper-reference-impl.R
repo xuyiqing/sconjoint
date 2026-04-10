@@ -174,6 +174,82 @@
              stringsAsFactors = FALSE, row.names = NULL)
 }
 
+## ---- Tier B reference implementations (M5) --------------------------------
+
+.ref_subgroup <- function(B, resp, subset_idx) {
+  Bs <- B[subset_idx, , drop = FALSE]
+  rs <- resp[subset_idx]
+  p <- ncol(B)
+  theta <- colMeans(Bs)
+  se <- numeric(p)
+  for (j in seq_len(p)) {
+    se[j] <- .ref_cluster_se(Bs[, j], rs)
+  }
+  data.frame(dummy = seq_len(p), theta = unname(theta), se = se,
+             stringsAsFactors = FALSE, row.names = NULL)
+}
+
+.ref_compensating <- function(B, resp, benefit_idx, cost_idx,
+                              trim = c(0.01, 0.99), subset_idx = NULL) {
+  if (is.null(subset_idx)) subset_idx <- seq_len(nrow(B))
+  b_ben <- B[subset_idx, benefit_idx]
+  b_cost <- B[subset_idx, cost_idx]
+  rs <- resp[subset_idx]
+  ratio <- -b_ben / b_cost
+  ratio[!is.finite(ratio)] <- NA_real_
+  ok <- !is.na(ratio)
+  r <- ratio[ok]
+  rsub <- rs[ok]
+  q_lo <- stats::quantile(r, trim[1], names = FALSE)
+  q_hi <- stats::quantile(r, trim[2], names = FALSE)
+  rt <- pmin(pmax(r, q_lo), q_hi)
+  list(estimate = mean(rt),
+       se = .ref_cluster_se(rt, rsub),
+       frac_compensated = mean((b_ben + b_cost) >= 0),
+       n = length(rt))
+}
+
+.ref_clusters <- function(B, k, scale = TRUE, nstart = 25L, seed = NULL) {
+  if (isTRUE(scale)) {
+    col_sd <- apply(B, 2L, stats::sd)
+    col_sd[col_sd == 0] <- 1
+    col_mean <- colMeans(B)
+    X <- sweep(sweep(B, 2L, col_mean, "-"), 2L, col_sd, "/")
+  } else {
+    X <- B
+  }
+  old_rng <- if (exists(".Random.seed", envir = .GlobalEnv))
+    .GlobalEnv$.Random.seed else NULL
+  on.exit({
+    if (is.null(old_rng)) {
+      if (exists(".Random.seed", envir = .GlobalEnv)) {
+        rm(".Random.seed", envir = .GlobalEnv)
+      }
+    } else {
+      assign(".Random.seed", old_rng, envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+  if (!is.null(seed)) set.seed(as.integer(seed))
+  km <- stats::kmeans(X, centers = k, nstart = nstart, iter.max = 50L)
+  list(assignment = as.integer(km$cluster),
+       sizes = as.integer(table(factor(km$cluster, levels = seq_len(k)))),
+       within_ss = as.numeric(km$withinss),
+       total_within_ss = sum(km$withinss))
+}
+
+## Partition equivalence: two integer vectors represent the same
+## partition if there exists a permutation of labels mapping one to
+## the other.  We check by comparing the sorted table of co-membership
+## counts.
+.partition_equal <- function(a, b) {
+  if (length(a) != length(b)) return(FALSE)
+  tab <- table(a, b)
+  ## Each row (each a-label) must have exactly one nonzero column.
+  rows_ok <- all(apply(tab, 1L, function(r) sum(r > 0) == 1L))
+  cols_ok <- all(apply(tab, 2L, function(cc) sum(cc > 0) == 1L))
+  rows_ok && cols_ok
+}
+
 ## Build a cached sc_fit on small synthetic data for all quantity
 ## tests.  Skips tests when torch is unavailable.  The cache lives
 ## in a testthat-local environment to avoid refitting.

@@ -82,3 +82,69 @@ prototype (`07_quantities_of_interest.R` L215–251).
 ```{r}
 cat("quantities overview\n")
 ```
+
+## Tier B quantities
+
+The Tier B quantities are advanced summaries of the per-respondent
+$\hat\beta(\mathbf Z_i)$ matrix that users routinely reach for once
+they are comfortable with the Tier A tool-set.
+
+### `sc_subgroup()` — subgroup-conditional estimates
+
+Re-averages $\hat\beta(\mathbf Z_i)$ over a user-specified subset
+of respondents and returns respondent-clustered SEs computed on
+that subset. The `subgroup` argument accepts a logical vector, a
+row index, a length-1 character naming a $\mathbf Z$ column (the
+greater-than-median half is selected), a function of $\mathbf Z$,
+or a named list of any of the above.
+
+$$
+\hat\theta^{\text{sub}}_j = \frac{1}{|S|} \sum_{i\in S} \hat\beta_j(\mathbf Z_i),
+\qquad
+\hat{\mathrm{se}}^{\text{sub}}_j = \mathrm{cluster\_se}\big\{\hat\beta_j(\mathbf Z_i)\big\}_{i\in S}.
+$$
+
+```{r tierb-subgroup, eval=FALSE}
+sc_subgroup(fit, subgroup = list(female = fit$Z[, "resp_female"] > 0.5,
+                                 male   = fit$Z[, "resp_female"] < 0.5))
+```
+
+### `sc_compensating()` — compensating differentials
+
+For a benefit dummy $j$ and a cost dummy $k$, the compensating
+differential is the trimmed respondent-mean of $-\hat\beta_j(\mathbf
+Z_i)/\hat\beta_k(\mathbf Z_i)$ (trimmed at the empirical 1% and 99%
+quantiles to guard against division by small cost coefficients).
+The returned object also reports `frac_compensated` — the share
+of respondents for whom $\hat\beta_j + \hat\beta_k \ge 0$.
+
+$$
+\widehat{\mathrm{comp}}_{j,k} = \mathrm{trimmed\_mean}\!\left\{
+  -\hat\beta_j(\mathbf Z_i)/\hat\beta_k(\mathbf Z_i)
+\right\}_{i=1}^N.
+$$
+
+```{r tierb-compensating, eval=FALSE}
+sc_compensating(fit, benefit = "benefit_attr:level",
+                     cost    = "cost_attr:level")
+```
+
+When the cost attribute is numeric (as in the Bechtel-Scheve case
+study) the compensating differential is reported on the original
+scale of the cost attribute.
+
+### `sc_clusters()` — preference clustering
+
+Runs k-means on the (optionally column-standardized) $\hat\beta$
+matrix and returns the length-$N$ cluster assignment, the
+$k\times p$ matrix of cluster centers on the original $\hat\beta$
+scale, the per-cluster within sum of squares, and the sizes. The
+partition is reproducible whenever `seed` is supplied; `nstart`
+controls the number of k-means restarts used to protect against
+local optima. Hierarchical clustering (`method = "hclust"`) is
+available as an alternative.
+
+```{r tierb-clusters, eval=FALSE}
+sc_clusters(fit, k = 3L, seed = 1L)
+```
+
