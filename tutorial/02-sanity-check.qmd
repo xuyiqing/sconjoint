@@ -106,6 +106,14 @@ still descending, increase `n_epochs`.
   clearly needed.
 :::
 
+```{r}
+#| label: sim-loss
+plot(fit_sim, "loss_trace")
+```
+
+All folds converge to a similar loss level, confirming that 200 epochs
+is sufficient for this dataset.
+
 ## Population-average recovery
 
 The DML point estimates $\hat\theta$ should approximate the true
@@ -123,9 +131,14 @@ data.frame(
 )
 ```
 
-All three signs match and the magnitudes are close. The small
-discrepancy is expected: the DNN does not impose the linear-in-$Z$
-structure of the DGP, so it needs to learn it from data.
+All three signs match and the magnitudes are close. The AMCE coefficient
+plot makes the pattern visual:
+
+```{r}
+#| label: sim-amce
+#| fig-height: 4
+plot_amce(fit_sim)
+```
 
 ## Individual-level recovery
 
@@ -154,9 +167,8 @@ data.frame(
 
 High correlations for $x_1$ and $x_2$ confirm that the DNN recovers
 the individual-level mapping $\beta(Z)$. The correlation for $x_3$ is
-low because $\beta_3$ is constant across respondents --- there is no
-heterogeneity to recover, so the correlation reflects sampling noise
-rather than a failure of the estimator.
+low because $\beta_3$ is constant --- there is no heterogeneity to
+recover.
 
 ```{r}
 #| label: sim-scatter
@@ -176,16 +188,25 @@ ggplot(df_compare, aes(x = true, y = estimated)) +
   theme_minimal(base_size = 12)
 ```
 
-The point cloud tracks the 45-degree line, confirming that the
-structural estimator recovers both the **direction** and **magnitude**
-of individual-level preference heterogeneity.
+The point cloud tracks the 45-degree line, confirming recovery of both
+**direction** and **magnitude**. The beta ridgelines below show the
+full distribution:
+
+```{r}
+#| label: sim-ridgelines
+#| fig-height: 4
+plot(fit_sim, "beta_ridgelines")
+```
+
+The ridgeline for $x_1$ is wide and centered above zero (heterogeneous,
+positive); $x_2$ is wide and centered below zero (heterogeneous,
+negative); $x_3$ is narrow and centered at 0.3 (homogeneous).
 
 ## Direction and intensity
 
-The direction--intensity decomposition should show: $x_1$ has strong
-positive direction (most $\beta_1 > 0$), $x_2$ has strong negative
-direction (most $\beta_2 < 0$), and $x_3$ has perfect positive
-direction ($\beta_3 = 0.3$ always).
+The decomposition should show: $x_1$ has strong positive direction,
+$x_2$ has strong negative direction, $x_3$ has moderate positive
+direction.
 
 ```{r}
 #| label: sim-di
@@ -193,15 +214,13 @@ sc_direction_intensity(fit_sim)
 ```
 
 This matches the DGP: $x_1$ and $x_3$ both have positive mean
-direction, while $x_2$ has negative mean direction. The intensity
-column captures the average magnitude $\overline{|\beta_k|}$.
+direction, while $x_2$ has negative mean direction.
 
 ## Fraction preferring
 
 We can verify against closed-form DGP values. For $x_1$:
 $\Pr(\beta_1 > 0) = \Pr(z_1 > -5/3) \approx 0.95$. For $x_2$:
-$\Pr(\beta_2 > 0) = \Pr(z_2 > 4) \approx 0$. For $x_3$: $\beta_3 =
-0.3 > 0$ always, so the fraction is 1.
+$\Pr(\beta_2 > 0) = \Pr(z_2 > 4) \approx 0$. For $x_3$: always 1.
 
 ```{r}
 #| label: sim-fraction
@@ -221,16 +240,19 @@ data.frame(
 )
 ```
 
-The estimated fractions closely match the DGP truth. Nearly all
-respondents favor $x_1$ and $x_3$; nearly all oppose $x_2$.
+The diverging bar chart makes the asymmetry vivid:
+
+```{r}
+#| label: sim-fraction-bar
+#| fig-height: 4
+plot_fraction(fit_sim)
+```
 
 ## Heterogeneity test
 
 This is the most important validation. The test should flag $x_1$ and
 $x_2$ as **significant** (their $\beta$ varies with $Z$) and $x_3$ as
-**non-significant** (constant across respondents). Getting this
-distinction right confirms that the test correctly separates structural
-heterogeneity from sampling noise.
+**non-significant** (constant across respondents).
 
 ```{r}
 #| label: sim-het
@@ -238,15 +260,20 @@ het_sim <- sc_heterogeneity_test(fit_sim, adjust = "bh")
 het_sim$estimate[, c("dummy_name", "var_beta", "p_adjusted", "sig")]
 ```
 
-The variance of $\hat\beta$ for $x_1$ and $x_2$ is large and highly
-significant, while $x_3$ has near-zero variance and a non-significant
-p-value --- exactly as the DGP predicts.
+The heterogeneity bar chart confirms this visually --- $x_1$ and $x_2$
+are dark blue with diamond markers (significant), $x_3$ is pale
+(homogeneous):
+
+```{r}
+#| label: sim-het-bar
+#| fig-height: 4
+plot_hetero(fit_sim)
+```
 
 ## Subgroup analysis
 
 By construction, respondents with $z_1 > 0$ have $\beta_1 > 0.5$
-while those with $z_1 < 0$ have $\beta_1 < 0.5$. The subgroup analysis
-should recover this split without re-estimating the model.
+while those with $z_1 < 0$ have $\beta_1 < 0.5$.
 
 ```{r}
 #| label: sim-subgroup
@@ -256,7 +283,6 @@ sub_sim <- sc_subgroup(fit_sim, list(
   "z1 < 0" = z1_col < 0
 ))
 
-## z1 at respondent level (de-duplicated, same order as beta_true)
 z1_resp <- fit_sim$Z[first_row, "z1"]
 true_high <- mean(beta_true[z1_resp > 0, 1])
 true_low  <- mean(beta_true[z1_resp < 0, 1])
@@ -272,167 +298,12 @@ data.frame(
 )
 ```
 
-The estimated subgroup AMCEs track the true subgroup means, confirming
-that the structural model recovers group-level differences from the
-same fit.
-
-## Baseline comparison
-
-The package provides a standard logit baseline for comparison with the
-structural model. Because the DGP has $E[\beta(Z)] = \theta$ in both
-the structural and logit specifications, the two should agree on
-population-average coefficients.
-
-```{r}
-#| label: sim-baseline
-bl <- sc_baseline_logit(fit_sim)
-summary(bl)
-```
-
-The homogeneous logit recovers the same population-average $\hat\theta$
-as the structural model. The difference is that the structural model
-also gives per-respondent $\hat\beta(\mathbf Z_i)$, enabling all the
-heterogeneity analyses above. The logit baseline is a useful sanity
-check: if the two diverge substantially, something is wrong with the
-DNN training.
-
-## Average marginal effects (probability scale)
-
-The logit-scale coefficients $\hat\theta$ can be converted to
-probability-scale average marginal effects (AMEs). These are attenuated
-relative to $\hat\theta$ because the logistic link compresses effects
-near the tails.
-
-```{r}
-#| label: sim-ame-prob
-sc_average(fit_sim, scale = "probability")
-```
-
-Probability-scale AMEs are attenuated relative to logit-scale
-$\hat\theta$ because the logistic link function
-$G'(x) = G(x)(1 - G(x))$ is bounded above by 0.25. In the
-population average, this compression factor is roughly
-$\overline{G'(\Delta X_i^\top \hat\beta)} < 0.25$, so the AMEs are
-smaller in absolute value than the logit coefficients.
-
-## Consumer surplus
-
-The log-sum consumer surplus summarizes the aggregate welfare from a
-specified choice set.
-
-```{r}
-#| label: sim-surplus
-sc_surplus(fit_sim, profiles = list(
-  list(x1 = 1, x2 = 0, x3 = 1),
-  list(x1 = 0, x2 = 1, x3 = 0)
-))
-```
-
-The log-sum surplus is the inclusive value
-$\mathrm{CS}_i = \log(\sum_j \exp(V_{ij}))$ averaged across
-respondents. The first profile (x1=1, x3=1) is preferred by most
-respondents (both coefficients are positive), so the surplus reflects
-predominantly the utility of that profile.
-
-## Welfare change
-
-Upgrading $x_1$ from 0 to 1 should increase welfare, consistent with
-$\beta_1 > 0$ in the DGP.
-
-```{r}
-#| label: sim-welfare
-sc_welfare_change(
-  fit_sim,
-  old_set = list(list(x1 = 0)),
-  new_set = list(list(x1 = 1))
-)
-```
-
-The positive welfare change confirms that adding $x_1 = 1$ to the
-choice set increases the inclusive value. The magnitude is approximately
-$E[\beta_1] = 0.5$, as expected from the DGP.
-
-## Decisiveness
-
-The decisiveness index measures how clearly respondents prefer profile A
-over profile B. A value of 1 means all respondents are certain; 0 means
-indifferent.
-
-```{r}
-#| label: sim-decisiveness
-sc_decisiveness(fit_sim,
-  A = list(x1 = 1, x3 = 1),
-  B = list(x2 = 1)
-)
-```
-
-Profile A has $x_1 = 1$ ($\beta_1 \approx 0.5$) and $x_3 = 1$
-($\beta_3 = 0.3$), while profile B has $x_2 = 1$
-($\beta_2 \approx -0.8$). The utility difference
-$\Delta V \approx 0.5 + 0.3 - (-0.8) = 1.6$ is large, so most
-respondents are decisive in favoring A.
-
-## Inequality
-
-Preference inequality measures how heterogeneous $\hat\beta_k(Z_i)$ is
-across respondents.
-
-```{r}
-#| label: sim-inequality
-ineq <- sc_inequality(fit_sim, measure = "variance")
-ineq
-```
-
-Attributes $x_1$ and $x_2$ show higher variance (their $\beta$ depends
-on $Z$: $\mathrm{Var}(\beta_1) = 0.09$, $\mathrm{Var}(\beta_2) = 0.04$
-from the DGP). Attribute $x_3$ shows near-zero variance because
-$\beta_3 = 0.3$ is constant across all respondents. This pattern agrees
-with the heterogeneity test results above.
-
-## Visualization
-
-### AMCE coefficient plot
-
-```{r}
-#| label: sim-amce
-#| fig-height: 4
-plot_amce(fit_sim)
-```
-
-The coefficient plot shows the expected pattern: $x_1$ and $x_3$ are
-positive, $x_2$ is negative, with confidence intervals comfortably
-excluding zero.
-
-### Fraction favor / oppose
-
-```{r}
-#| label: sim-fraction-bar
-#| fig-height: 4
-plot_fraction(fit_sim)
-```
-
-The diverging bar chart makes the asymmetry vivid: nearly all
-respondents favor $x_1$ and $x_3$, while nearly all oppose $x_2$.
-
-### Heterogeneity
-
-```{r}
-#| label: sim-het-bar
-#| fig-height: 4
-plot_hetero(fit_sim)
-```
-
-The gradient shading reflects strength of evidence. $x_1$ and $x_2$
-are dark blue with diamond markers (significant heterogeneity);
-$x_3$ is pale (no heterogeneity). This is the cleanest visual
-confirmation that the test works.
-
-### Subgroup comparison
+The subgroup comparison plot shows the split clearly --- the high-$z_1$
+group has a larger $\hat\theta_{x_1}$, exactly as the DGP prescribes:
 
 ```{r}
 #| label: sim-subgroup-plot
 #| fig-height: 4
-z1_col <- fit_sim$Z[, "z1"]
 plot_subgroup(
   fit_sim,
   subgroup = list("z1 > 0" = z1_col > 0, "z1 < 0" = z1_col < 0),
@@ -440,32 +311,24 @@ plot_subgroup(
 )
 ```
 
-The high-$z_1$ group shows a larger $\hat\theta_{x_1}$ than the
-low-$z_1$ group, exactly as the DGP prescribes ($\beta_1 = 0.5 +
-0.3 z_1$). The other attributes show little or no subgroup difference,
-which is correct: $\beta_2$ depends on $z_2$ (not $z_1$) and $\beta_3$
-is constant.
+## Advanced quantities
 
-### Beta ridgelines
+### Baseline comparison
+
+The homogeneous logit baseline should agree with the structural model
+on population averages while lacking per-respondent heterogeneity.
 
 ```{r}
-#| label: sim-ridgelines
-#| fig-height: 4
-plot(fit_sim, "beta_ridgelines")
+#| label: sim-baseline
+bl <- sc_baseline_logit(fit_sim)
+summary(bl)
 ```
-
-The ridgeline for $x_1$ is wide and centered above zero (heterogeneous,
-positive); $x_2$ is wide and centered below zero (heterogeneous,
-negative); $x_3$ is narrow and centered at 0.3 (homogeneous). This
-matches the DGP perfectly.
-
-### Baseline vs structural AMCE comparison
 
 ```{r}
 #| label: sim-baseline-compare
 #| fig-height: 4
 theta_struct <- coef(fit_sim)
-theta_logit  <- coef(sc_baseline_logit(fit_sim))
+theta_logit  <- coef(bl)
 df_comp <- data.frame(
   dummy = rep(names(theta_struct), 2),
   estimate = c(theta_struct, theta_logit),
@@ -482,20 +345,67 @@ ggplot(df_comp, aes(x = estimate, y = dummy, color = model)) +
   theme(legend.position = "bottom")
 ```
 
-On the simulated DGP, both estimators recover the same population
-average --- they agree because $E[\beta(Z)]$ is the same quantity
-under both models. The structural model's advantage is the
-per-respondent heterogeneity decomposition, not the population average.
+Both estimators agree on population averages --- the structural model's
+advantage is the per-respondent $\hat\beta(\mathbf Z_i)$ that enables
+all the heterogeneity analyses above.
 
-### Loss trace
+### Average marginal effects (probability scale)
 
 ```{r}
-#| label: sim-loss
-plot(fit_sim, "loss_trace")
+#| label: sim-ame-prob
+sc_average(fit_sim, scale = "probability")
 ```
 
-All folds converge to a similar loss level, confirming that 200 epochs
-is sufficient for this dataset.
+Probability-scale AMEs are attenuated relative to logit-scale
+$\hat\theta$ because $G'(x) = G(x)(1 - G(x)) \leq 0.25$.
+
+### Consumer surplus and welfare change
+
+```{r}
+#| label: sim-surplus
+sc_surplus(fit_sim, profiles = list(
+  list(x1 = 1, x2 = 0, x3 = 1),
+  list(x1 = 0, x2 = 1, x3 = 0)
+))
+```
+
+Upgrading $x_1$ from 0 to 1 should increase welfare ($\beta_1 > 0$):
+
+```{r}
+#| label: sim-welfare
+sc_welfare_change(fit_sim,
+  old_set = list(list(x1 = 0)),
+  new_set = list(list(x1 = 1))
+)
+```
+
+The positive welfare change confirms that $x_1 = 1$ is valued, with
+magnitude approximately $E[\beta_1] = 0.5$.
+
+### Decisiveness
+
+```{r}
+#| label: sim-decisiveness
+sc_decisiveness(fit_sim,
+  A = list(x1 = 1, x3 = 1),
+  B = list(x2 = 1)
+)
+```
+
+Profile A ($\beta_1 + \beta_3 \approx 0.8$) vs profile B
+($\beta_2 \approx -0.8$) gives $\Delta V \approx 1.6$, so most
+respondents are decisive.
+
+### Preference inequality
+
+```{r}
+#| label: sim-inequality
+sc_inequality(fit_sim, measure = "variance")
+```
+
+$x_1$ and $x_2$ show higher variance ($\beta$ depends on $Z$);
+$x_3$ has near-zero variance (constant $\beta_3 = 0.3$). This agrees
+with the heterogeneity test above.
 
 ## Summary
 
@@ -506,9 +416,10 @@ Every check aligns with the ground truth:
   with the true preference vector for heterogeneous attributes.
 - **Heterogeneity test** correctly flags $x_1$, $x_2$ (Z-dependent)
   as heterogeneous and $x_3$ (constant) as homogeneous.
-- **Subgroup analysis** recovers the known $z_1$-driven split in
-  $\beta_1$.
-- **Visualizations** produce the expected patterns across all six
-  plot types.
+- **Subgroup analysis** recovers the known $z_1$-driven split.
+- **Baseline logit** agrees on population averages while lacking
+  heterogeneity decomposition.
+- **Advanced quantities** (AME, surplus, welfare, decisiveness,
+  inequality) all produce results consistent with the DGP.
 
 With these checks in hand, we proceed to real-data applications.
