@@ -10,8 +10,7 @@
 ^\.git$
 ^tutorial$
 ^tutorial/.*$
-^vignettes/rscript$
-^vignettes/rscript/.*$
+^vignettes$
 ^data-raw$
 ^_freeze$
 ^LICENSE\.md$
