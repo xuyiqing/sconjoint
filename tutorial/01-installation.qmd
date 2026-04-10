@@ -1,5 +1,5 @@
 ---
-title: "Installation"
+title: "Get Started"
 ---
 
 `sconjoint` depends on the `torch` R package for the deep-learning
@@ -31,4 +31,4 @@ remotes::install_github("xuyiqing/sconjoint")
 
 The package pulls in `ggplot2`, `ggridges`, and related plotting
 infrastructure as Imports; no extra setup is required for the
-visualization methods described in @sec-plot-options.
+visualization methods described in the Plot Options chapter.

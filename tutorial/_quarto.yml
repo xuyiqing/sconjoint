@@ -24,6 +24,7 @@ format:
   html:
     theme: cosmo
     toc: true
+    number-sections: true
 
 execute:
   freeze: auto

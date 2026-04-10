@@ -1,5 +1,5 @@
 ---
-title: "Democratic Norms"
+title: "Example: Democratic Norms"
 ---
 
 ```{r}
@@ -176,6 +176,48 @@ ggplot(df_long_gs, aes(x = value, y = dummy, fill = direction)) +
   scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
   labs(x = "Fraction of respondents", y = NULL, fill = NULL,
        title = "Fraction favoring / opposing each level") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+### Subgroup AMCE comparison
+
+How does the penalty for undemocratic behavior differ across partisan
+groups? We plot subgroup-specific $\hat\theta$ for the `undem` dummies,
+with point ranges showing 95% confidence intervals.
+
+```{r}
+#| label: gs-subgroup-plot
+#| fig-height: 5
+pid_col_plot <- fit_gs$Z[, "resp_pid"]
+sub_plot <- sc_subgroup(fit_gs, list(
+  Democrat     = pid_col_plot < -0.5,
+  Independent  = abs(pid_col_plot) <= 0.5,
+  Republican   = pid_col_plot > 0.5
+))
+
+df_sub <- do.call(rbind, lapply(names(sub_plot), function(g) {
+  e <- sub_plot[[g]]$estimate
+  rows <- grepl("^undem", e$dummy_name)
+  data.frame(group = g, dummy = e$dummy_name[rows],
+             theta = e$theta[rows], se = e$se[rows],
+             stringsAsFactors = FALSE, row.names = NULL)
+}))
+df_sub$ci_lo <- df_sub$theta - 1.96 * df_sub$se
+df_sub$ci_hi <- df_sub$theta + 1.96 * df_sub$se
+df_sub$group <- factor(df_sub$group,
+                       levels = c("Democrat", "Independent", "Republican"))
+
+ggplot(df_sub, aes(x = theta, y = dummy, color = group)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5), size = 0.4) +
+  scale_color_manual(values = c(Democrat = "#2166AC",
+                                Independent = "gray50",
+                                Republican = "#B2182B")) +
+  labs(x = expression(hat(theta)[k]), y = NULL, color = NULL,
+       title = "Subgroup AMCE: undemocratic behavior dummies") +
   theme_minimal(base_size = 12) +
   theme(panel.grid.major.y = element_blank(),
         legend.position = "bottom")

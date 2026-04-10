@@ -11,19 +11,173 @@ whose ground truth they can inspect directly.
 
 ```{r}
 #| label: setup-sim
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(42)
+torch::torch_manual_seed(42)
 library(sconjoint)
-set.seed(1)
+library(ggplot2)
 ```
 
-The DGP below draws 300 respondents, five tasks, three binary
-attributes, and two continuous covariates, and simulates
-$\hat\beta(\mathbf Z)$ through a simple linear function of
-$\mathbf Z$. Users who want a full simulation study --- with Monte
-Carlo replications, coverage calculations, and DGPs that stress the
-estimator --- should look instead at the private prototype scripts
-that ship with the paper replication materials.
+## Data-generating process
+
+We simulate a conjoint experiment with $M = 100$ respondents, $T = 4$
+tasks per respondent, and two profiles per task (800 rows total). Three
+binary attributes $x_1, x_2, x_3$ are drawn independently as
+Bernoulli(0.5). Two continuous moderators $z_1, z_2 \sim N(0,1)$
+determine each respondent's preference vector through a simple linear
+map:
+
+$$
+\beta_1(\mathbf Z_i) = 0.5 + 0.3\,z_{1i}, \quad
+\beta_2(\mathbf Z_i) = -0.8 + 0.2\,z_{2i}, \quad
+\beta_3(\mathbf Z_i) = 0.3.
+$$
+
+For each task, the respondent sees two profiles $A$ and $B$. The
+probability of choosing $A$ over $B$ is
+$\Lambda(\Delta\mathbf X \cdot \boldsymbol\beta(\mathbf Z_i))$
+where $\Delta\mathbf X = \mathbf X_A - \mathbf X_B$ and $\Lambda$
+is the logistic CDF.
 
 ```{r}
-#| label: sim-check
-cat("simulation check\n")
+#| label: sim-dgp
+M <- 100L     # respondents
+TT <- 4L     # tasks per respondent
+set.seed(42)
+
+## Respondent-level moderators
+z1 <- rnorm(M)
+z2 <- rnorm(M)
+
+## True beta(Z) for each respondent
+beta_true <- cbind(
+  b1 = 0.5 + 0.3 * z1,
+  b2 = -0.8 + 0.2 * z2,
+  b3 = rep(0.3, M)
+)
+
+## Build long-format data frame
+rows <- vector("list", M * TT * 2L)
+idx <- 0L
+for (i in seq_len(M)) {
+  for (tt in seq_len(TT)) {
+    ## Draw attribute profiles
+    xA <- rbinom(3, 1, 0.5)
+    xB <- rbinom(3, 1, 0.5)
+    deltaX <- xA - xB
+    V <- sum(deltaX * beta_true[i, ])
+    choiceA <- rbinom(1, 1, plogis(V))
+    ## Profile A
+    idx <- idx + 1L
+    rows[[idx]] <- data.frame(
+      respondent = i, task = tt, profile = 1L,
+      choice = choiceA,
+      x1 = xA[1], x2 = xA[2], x3 = xA[3],
+      z1 = z1[i], z2 = z2[i]
+    )
+    ## Profile B
+    idx <- idx + 1L
+    rows[[idx]] <- data.frame(
+      respondent = i, task = tt, profile = 2L,
+      choice = 1L - choiceA,
+      x1 = xB[1], x2 = xB[2], x3 = xB[3],
+      z1 = z1[i], z2 = z2[i]
+    )
+  }
+}
+sim_data <- do.call(rbind, rows)
+dim(sim_data)
+head(sim_data, 8)
+```
+
+## Fitting the structural model
+
+```{r}
+#| label: sim-fit
+fit_sim <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data       = sim_data,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 3L,
+  n_epochs   = 100L,
+  seed       = 42
+)
+summary(fit_sim)
+```
+
+## Population-average recovery
+
+The DML point estimates $\hat\theta$ should approximate the
+population-average of the true $\beta(\mathbf Z)$: $E[\beta_1] = 0.5$,
+$E[\beta_2] = -0.8$, $E[\beta_3] = 0.3$.
+
+```{r}
+#| label: sim-theta
+theta_hat <- coef(fit_sim)
+theta_true <- c(x1 = 0.5, x2 = -0.8, x3 = 0.3)
+data.frame(
+  attribute  = names(theta_hat),
+  true_theta = theta_true,
+  estimated  = round(unname(theta_hat), 3)
+)
+```
+
+Signs and rough magnitudes should line up. Exact recovery is not
+expected with only $M = 100$ respondents and $T = 4$ tasks.
+
+## Individual-level recovery
+
+The structural payoff is the per-respondent $\hat\beta(\mathbf Z_i)$
+matrix. We compare the estimated values to the true DGP values.
+
+```{r}
+#| label: sim-beta-recovery
+beta_hat <- predict(fit_sim)
+dim(beta_hat)
+
+## Correlation between true and estimated beta for each attribute
+cor_b1 <- cor(beta_true[, 1], beta_hat[, 1])
+cor_b2 <- cor(beta_true[, 2], beta_hat[, 2])
+data.frame(
+  attribute   = c("x1 (beta1)", "x2 (beta2)"),
+  correlation = round(c(cor_b1, cor_b2), 3)
+)
+```
+
+Attribute $x_3$ has constant $\beta_3 = 0.3$ (no heterogeneity), so
+per-respondent correlation is not informative for it.
+
+## Scatter plot: true vs estimated $\beta_1(\mathbf Z)$
+
+```{r}
+#| label: sim-scatter
+#| fig-height: 5
+df_compare <- data.frame(
+  true      = beta_true[, 1],
+  estimated = beta_hat[, 1]
+)
+
+ggplot(df_compare, aes(x = true, y = estimated)) +
+  geom_point(alpha = 0.5, color = "#2166AC") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              color = "#E41A1C") +
+  labs(x = expression("True " * beta[1](Z)),
+       y = expression("Estimated " * beta[1](Z)),
+       title = "Individual-level recovery: attribute x1") +
+  theme_minimal(base_size = 12)
+```
+
+Points clustering around the 45-degree line confirm that the structural
+estimator recovers the direction and magnitude of individual-level
+heterogeneity in $\beta_1(\mathbf Z)$.
+
+## Loss trace
+
+```{r}
+#| label: sim-loss
+plot(fit_sim, "loss_trace")
 ```

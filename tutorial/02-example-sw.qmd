@@ -1,5 +1,5 @@
 ---
-title: "Candidate Choice"
+title: "Example: Candidate Choice"
 ---
 
 ```{r}
@@ -275,6 +275,31 @@ ggplot(df_long, aes(x = value, y = dummy, fill = direction)) +
   scale_fill_manual(values = c(Favor = "#377EB8", Oppose = "#E41A1C")) +
   labs(x = "Fraction of respondents", y = NULL, fill = NULL,
        title = "Fraction favoring / opposing each level") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
+### Heterogeneity bar chart
+
+Which attributes exhibit significant preference heterogeneity across
+respondents? We plot $\mathrm{Var}(\hat\beta_k(\mathbf Z_i))$ per
+attribute dummy, coloring bars red when the heterogeneity test rejects
+at the 5% level.
+
+```{r}
+#| label: sw-het-bar
+#| fig-height: 5
+het_sw <- sc_heterogeneity_test(fit_sw, adjust = "bh")
+df_het <- het_sw$estimate
+df_het$significant <- df_het$p_adjusted < 0.05
+
+ggplot(df_het, aes(x = var_beta, y = dummy_name, fill = significant)) +
+  geom_col() +
+  scale_fill_manual(values = c("TRUE" = "#E41A1C", "FALSE" = "gray70"),
+                    labels = c("TRUE" = "p < 0.05", "FALSE" = "n.s.")) +
+  labs(x = expression(Var(hat(beta)[k](Z))), y = NULL, fill = NULL,
+       title = "Preference heterogeneity by attribute dummy") +
   theme_minimal(base_size = 12) +
   theme(panel.grid.major.y = element_blank(),
         legend.position = "bottom")
