@@ -4,14 +4,7 @@
 \alias{plot_hetero}
 \title{Preference heterogeneity bar chart}
 \usage{
-plot_hetero(
-  object,
-  alpha = 0.05,
-  adjust = "bh",
-  colors = c(`TRUE` = "#E41A1C", `FALSE` = "gray70"),
-  title = NULL,
-  ...
-)
+plot_hetero(object, alpha = 0.05, adjust = "bh", title = NULL, ...)
 }
 \arguments{
 \item{object}{An \code{sc_fit} object.}
@@ -20,9 +13,6 @@ plot_hetero(
 
 \item{adjust}{P-value adjustment method passed to
 \code{\link{sc_heterogeneity_test}} (default \code{"bh"}).}
-
-\item{colors}{Named character vector of length 2.  Defaults to
-\code{c("TRUE" = "#E41A1C", "FALSE" = "gray70")}.}
 
 \item{title}{Plot title.  \code{NULL} for a sensible default.}
 

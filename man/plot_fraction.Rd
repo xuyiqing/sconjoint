@@ -7,7 +7,7 @@
 plot_fraction(
   object,
   threshold = 0,
-  colors = c(Favor = "#377EB8", Oppose = "#E41A1C"),
+  colors = c(Favor = "#4393C3", Oppose = "#D6604D"),
   title = NULL,
   ...
 )

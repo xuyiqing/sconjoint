@@ -5,7 +5,7 @@
 
 ## Silence R CMD check NOTE for ggplot2 non-standard evaluation
 utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
-                         "significant", "direction", "group"))
+                         "significant", "neg_log_p", "direction", "group"))
 
 # ============================================================================
 # 1. AMCE coefficient plot
@@ -75,7 +75,7 @@ plot_amce <- function(object, level = 0.95, color = "#E41A1C",
 #' @return A \code{ggplot} object.
 #' @export
 plot_fraction <- function(object, threshold = 0,
-                          colors = c(Favor = "#377EB8", Oppose = "#E41A1C"),
+                          colors = c(Favor = "#4393C3", Oppose = "#D6604D"),
                           title = NULL, ...) {
   stopifnot(inherits(object, "sc_fit"))
   frac <- sc_fraction_preferring(object, threshold = threshold)
@@ -98,8 +98,8 @@ plot_fraction <- function(object, threshold = 0,
   ggplot2::ggplot(long,
                   ggplot2::aes(x = .data$value, y = dummy_name,
                                fill = direction)) +
-    ggplot2::geom_col(width = 0.7) +
-    ggplot2::geom_vline(xintercept = 0, color = "gray30", linewidth = 0.4) +
+    ggplot2::geom_col(width = 0.65, alpha = 0.85) +
+    ggplot2::geom_vline(xintercept = 0, color = "gray40", linewidth = 0.4) +
     ggplot2::scale_fill_manual(values = colors) +
     ggplot2::scale_x_continuous(
       labels = function(x) paste0(abs(round(x * 100)), "%"),
@@ -129,39 +129,42 @@ plot_fraction <- function(object, threshold = 0,
 #' @param alpha Significance level for coloring (default 0.05).
 #' @param adjust P-value adjustment method passed to
 #'   \code{\link{sc_heterogeneity_test}} (default \code{"bh"}).
-#' @param colors Named character vector of length 2.  Defaults to
-#'   \code{c("TRUE" = "#E41A1C", "FALSE" = "gray70")}.
 #' @param title Plot title.  \code{NULL} for a sensible default.
 #' @param ... Unused.
 #' @return A \code{ggplot} object.
 #' @export
 plot_hetero <- function(object, alpha = 0.05, adjust = "bh",
-                               colors = c("TRUE" = "#E41A1C",
-                                          "FALSE" = "gray70"),
-                               title = NULL, ...) {
+                        title = NULL, ...) {
   stopifnot(inherits(object, "sc_fit"))
   het <- sc_heterogeneity_test(object, adjust = adjust)
   df <- het$estimate
-  df$significant <- as.character(df$p_adjusted < alpha)
+  df$significant <- df$p_adjusted < alpha
+  df$neg_log_p <- pmin(-log10(df$p_adjusted + 1e-300), 20)
   df$dummy_name <- factor(df$dummy_name, levels = rev(df$dummy_name))
   if (is.null(title)) title <- "Preference heterogeneity by attribute"
   ggplot2::ggplot(df,
-                  ggplot2::aes(x = var_beta, y = dummy_name,
-                               fill = significant)) +
-    ggplot2::geom_col(width = 0.7) +
-    ggplot2::scale_fill_manual(
-      values = colors,
-      labels = c("TRUE" = paste0("p < ", alpha), "FALSE" = "n.s.")
+                  ggplot2::aes(x = var_beta, y = dummy_name)) +
+    ggplot2::geom_col(ggplot2::aes(fill = .data$neg_log_p),
+                      width = 0.65, alpha = 0.85) +
+    ggplot2::geom_point(
+      data = df[df$significant, , drop = FALSE],
+      ggplot2::aes(x = var_beta, y = dummy_name),
+      shape = 18, size = 2.5, color = "#B2182B"
+    ) +
+    ggplot2::scale_fill_gradient(
+      low = "#D1E5F0", high = "#2166AC",
+      name = expression(-log[10](p))
     ) +
     ggplot2::labs(
       x = expression(Var(hat(beta)[k](Z))),
-      y = NULL, fill = NULL,
+      y = NULL,
       title = title
     ) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       panel.grid.major.y = ggplot2::element_blank(),
-      legend.position = "bottom"
+      legend.position = "right",
+      legend.key.height = ggplot2::unit(0.8, "cm")
     )
 }
 
