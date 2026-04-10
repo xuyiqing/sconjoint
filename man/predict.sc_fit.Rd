@@ -4,22 +4,36 @@
 \alias{predict.sc_fit}
 \title{Predict method for \code{sc_fit}}
 \usage{
-\method{predict}{sc_fit}(object, newdata = NULL, ...)
+\method{predict}{sc_fit}(object, newdata = NULL, type = c("beta", "logit", "prob"), ...)
 }
 \arguments{
-\item{object}{An \code{sc_fit}.}
+\item{object}{An \code{sc_fit} object.}
 
-\item{newdata}{Must be \code{NULL} in M4.  Passing non-NULL errors out
-with a pointer to M5.a.}
+\item{newdata}{Either \code{NULL} (default — use stored predictions)
+or a data frame / numeric matrix of new respondent moderators.
+For a data frame, columns matching \code{object$z_names} are
+extracted and converted to a numeric matrix.  For a matrix,
+\code{ncol} must equal \code{length(object$z_names)}.}
+
+\item{type}{Character; one of \code{"beta"} (default), \code{"logit"},
+or \code{"prob"}.  When \code{newdata} is non-NULL, only
+\code{"beta"} is supported (logit and prob require task-level
+deltaX which is unavailable for new respondents).}
 
 \item{...}{Unused.}
 }
 \value{
-The N x p matrix \code{object$beta_hat}.
+When \code{type = "beta"}: an \eqn{N \times p} numeric matrix
+of preference parameters.
+When \code{type = "logit"} (only \code{newdata = NULL}): a numeric
+vector of length \eqn{N}.
+When \code{type = "prob"} (only \code{newdata = NULL}): a numeric
+vector of probabilities of length \eqn{N}.
 }
 \description{
-Returns stored held-out per-respondent \eqn{\hat\beta(Z_i)}.  Full
-forward-pass evaluation on new \code{Z} data is deferred to sub-
-milestone M5.a (per-fold \code{state_dict}s are not persisted on the
-v0.1 \code{sc_fit} object).
+When \code{newdata = NULL}, returns stored held-out predictions from
+the cross-fit.  When \code{newdata} is supplied (a data frame or
+numeric matrix of respondent moderators \eqn{Z}), performs a
+forward-pass through the stored per-fold neural networks and averages
+across folds.
 }

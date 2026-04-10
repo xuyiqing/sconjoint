@@ -15,11 +15,11 @@ test_that("predict.sc_fit(newdata = NULL) returns beta_hat", {
   expect_identical(p0, fit$beta_hat)
 })
 
-test_that("predict.sc_fit errors cleanly on non-NULL newdata", {
+test_that("predict.sc_fit errors on empty newdata (missing Z columns)", {
   fit <- .get_toy_fit()
   expect_error(
     predict(fit, newdata = data.frame()),
-    "M5\\.a"
+    "missing|column"
   )
 })
 

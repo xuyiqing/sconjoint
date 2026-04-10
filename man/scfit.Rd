@@ -20,6 +20,7 @@ scfit(
   parallel = FALSE,
   n_cores = NULL,
   device = "cpu",
+  keep_modules = TRUE,
   verbose = FALSE
 )
 }
@@ -71,6 +72,13 @@ L'Ecuyer-CMRG streams.}
 
 \item{device}{Character \code{"cpu"} (default) or \code{"cuda"}.  The
 bit-exact determinism guarantee applies only on CPU.}
+
+\item{keep_modules}{Logical. If \code{TRUE} (the default), the
+per-fold trained torch \code{nn_module} objects are stored on the
+returned \code{sc_fit} object, enabling
+\code{predict(fit, newdata = ...)} forward-pass on new moderator
+data.  Set to \code{FALSE} to reduce object size when forward-pass
+prediction is not needed.}
 
 \item{verbose}{Logical, print per-epoch training progress.}
 }
