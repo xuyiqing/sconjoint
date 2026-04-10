@@ -16,19 +16,14 @@ conjoint whose design follows @graham2020democracy. Respondents
 choose between pairs of hypothetical U.S. candidates; one attribute
 captures the candidate's willingness to engage in undemocratic behavior
 (ignoring a court ruling, restricting the opposition press, or banning
-an opposition rally). The original study asks how much voters penalize
-co-partisan candidates for violating democratic norms, and whether
-strong partisanship leads to tolerance of such violations.
-
-The structural model adds value here because it decomposes the
+an opposition rally). The structural model decomposes the
 population-average penalty for undemocratic behavior into direction and
 intensity, and traces the heterogeneity back to respondent-level
 partisanship --- without re-estimating on subsets.
 
 ::: {.callout-note}
 The `gs2020` dataset is a **seed-fixed synthetic fixture** for
-illustration. Do not use it to draw substantive conclusions about the
-Graham--Svolik population.
+illustration.
 :::
 
 ## Data preparation
@@ -38,15 +33,9 @@ Graham--Svolik population.
 data(gs2020, package = "sconjoint")
 dim(gs2020)
 head(gs2020, 4)
-str(gs2020)
 ```
 
-Each respondent sees eight tasks with two candidate profiles each,
-yielding 16 rows per respondent. The respondent-level moderators are
-`resp_pid` (-1/0/+1 partisanship), `resp_ideo` (standardized ideology),
-and standardized `age`.
-
-## Fitting the structural model
+## Fitting
 
 ```{r}
 #| label: gs-fit
@@ -64,12 +53,45 @@ fit_gs <- scfit(
 summary(fit_gs)
 ```
 
-## Heterogeneity test
+```{r}
+#| label: gs-loss
+plot(fit_gs, "loss_trace")
+```
 
-Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
-what sampling noise alone would explain? A significant result for
-`undem` levels would confirm that the penalty for undemocratic behavior
-varies meaningfully across respondents.
+## Population-average estimates
+
+```{r}
+#| label: gs-amce-plot
+#| fig-height: 5
+plot_amce(fit_gs)
+```
+
+## Individual-level preferences
+
+```{r}
+#| label: gs-ridgelines
+#| fig-height: 6
+plot(fit_gs, "beta_ridgelines")
+```
+
+## Structural quantities
+
+### Direction and intensity
+
+```{r}
+#| label: gs-di
+sc_direction_intensity(fit_gs)
+```
+
+### Fraction preferring
+
+```{r}
+#| label: gs-fraction-bar
+#| fig-height: 5
+plot_fraction(fit_gs)
+```
+
+### Heterogeneity test
 
 ```{r}
 #| label: gs-het
@@ -77,24 +99,13 @@ het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
 het_gs$estimate
 ```
 
-## Direction and intensity
-
-The undemocratic levels should show a large negative average direction
-(voters penalize them) coupled with high intensity. The structural
-question is whether the *dispersion* of those coefficients concentrates
-on co-partisans, as Graham and Svolik argue.
-
 ```{r}
-#| label: gs-di
-sc_direction_intensity(fit_gs)
+#| label: gs-het-bar
+#| fig-height: 5
+plot_hetero(fit_gs)
 ```
 
-## Subgroup analysis by partisanship
-
-We re-average the held-out $\hat\beta(\mathbf Z_i)$ separately for
-Democrats, Independents, and Republicans using `sc_subgroup()`. The
-`resp_pid` column on the standardized $\mathbf Z$ matrix preserves the
-sign of the underlying -1/0/+1 encoding.
+### Subgroup analysis by partisanship
 
 ```{r}
 #| label: gs-subgroup
@@ -112,15 +123,20 @@ do.call(rbind, lapply(names(sub), function(g) {
 }))
 ```
 
-The ability to read subgroup-specific $\hat\theta$ off the same fit
---- without re-estimating on subsets --- is the operational advantage
-of the structural model over stacked subgroup AMCE regressions.
+```{r}
+#| label: gs-subgroup-plot
+#| fig-height: 5
+plot_subgroup(
+  fit_gs,
+  subgroup = list(Democrat    = pid_col < -0.5,
+                  Independent = abs(pid_col) <= 0.5,
+                  Republican  = pid_col > 0.5),
+  dummies = grep("^undem", fit_gs$attr_names, value = TRUE),
+  title = "Subgroup AMCE: undemocratic behavior"
+)
+```
 
-## Preference clustering
-
-A complementary view on latent preference types: run k-means on the
-per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
-respondents with similar preference profiles.
+### Preference clustering
 
 ```{r}
 #| label: gs-clusters
@@ -133,8 +149,7 @@ round(cl_gs$estimate$centers, 2)
 
 ### Decisiveness
 
-How decisively do voters reject a candidate who ignores a court ruling
-compared to one who does not engage in undemocratic behavior?
+How decisively do voters reject a candidate who ignores a court ruling?
 
 ```{r}
 #| label: gs-decisiveness
@@ -144,17 +159,7 @@ sc_decisiveness(fit_gs,
 )
 ```
 
-The decisiveness index measures how clearly respondents prefer candidate
-A (no undemocratic behavior) over candidate B (ignores a court ruling).
-A high value indicates broad consensus that democratic norm violations
-are penalized; a low value would indicate that many respondents are
-near-indifferent --- potentially because partisan loyalty offsets the
-norm-violation penalty.
-
-### Preference inequality (Gini)
-
-The Gini coefficient of $|\hat\beta_k(Z_i)|$ across respondents
-captures how concentrated preference intensity is.
+### Preference inequality
 
 ```{r}
 #| label: gs-inequality
@@ -162,59 +167,4 @@ sc_inequality(fit_gs, measure = "gini")
 ```
 
 Higher Gini values indicate that a small fraction of respondents hold
-much stronger preferences than the rest. For the undemocratic-behavior
-dummies, a moderate Gini suggests that most respondents penalize
-violations but some penalize them far more intensely than others ---
-consistent with the partisan heterogeneity documented above.
-
-## Visualization
-
-### AMCE coefficient plot
-
-```{r}
-#| label: gs-amce-plot
-#| fig-height: 5
-plot_amce(fit_gs)
-```
-
-### Fraction favor / oppose
-
-```{r}
-#| label: gs-fraction-bar
-#| fig-height: 5
-plot_fraction(fit_gs)
-```
-
-### Subgroup AMCE comparison
-
-How does the penalty for undemocratic behavior differ across partisan
-groups? We plot subgroup-specific $\hat\theta$ for the `undem` dummies.
-
-```{r}
-#| label: gs-subgroup-plot
-#| fig-height: 5
-pid_col <- fit_gs$Z[, "resp_pid"]
-plot_subgroup(
-  fit_gs,
-  subgroup = list(Democrat    = pid_col < -0.5,
-                  Independent = abs(pid_col) <= 0.5,
-                  Republican  = pid_col > 0.5),
-  dummies = grep("^undem", fit_gs$attr_names, value = TRUE),
-  title = "Subgroup AMCE: undemocratic behavior"
-)
-```
-
-### Beta ridgelines
-
-```{r}
-#| label: gs-ridgelines
-#| fig-height: 6
-plot(fit_gs, "beta_ridgelines")
-```
-
-### Loss trace
-
-```{r}
-#| label: gs-loss
-plot(fit_gs, "loss_trace")
-```
+much stronger preferences than the rest.

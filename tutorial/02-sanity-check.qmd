@@ -1,4 +1,4 @@
-# Sanity Check {#sec-sanity}
+# Simulated Example {#sec-sanity}
 
 ```{r}
 #| label: setup-sim
