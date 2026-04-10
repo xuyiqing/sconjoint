@@ -108,6 +108,3 @@ The user guide is structured into the following chapters:
 
 -   [Chapter @sec-plots]\
     Customizing ridgeline density plots and training loss traces with `ggplot2`.
-
--   [Chapter @sec-faq]\
-    Troubleshooting and frequently asked questions.
