@@ -1,6 +1,4 @@
----
-title: "Plot Options"
----
+# Plot Options {#sec-plots}
 
 The `plot.sc_fit()` method ships two plot types. Both return plain
 `ggplot` objects, so users can layer additional geoms, facets, or themes

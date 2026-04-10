@@ -1,6 +1,4 @@
----
-title: "Get Started"
----
+# Get Started {#sec-start}
 
 `sconjoint` depends on the `torch` R package for the deep-learning
 backend. `torch` in turn bundles its own copy of `libtorch` which is

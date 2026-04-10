@@ -1,6 +1,4 @@
----
-title: "Example: Candidate Choice"
----
+# Example: Candidate Choice {#sec-sw}
 
 ```{r}
 #| label: setup-sw

@@ -1,6 +1,4 @@
----
-title: "FAQ"
----
+# FAQ {#sec-faq}
 
 ## Why does `scfit()` require at least one Z column?
 

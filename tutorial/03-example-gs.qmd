@@ -1,6 +1,4 @@
----
-title: "Example: Democratic Norms"
----
+# Example: Democratic Norms {#sec-gs}
 
 ```{r}
 #| label: setup-gs

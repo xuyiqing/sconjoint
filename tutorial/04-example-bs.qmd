@@ -1,6 +1,4 @@
----
-title: "Example: Climate Treaties"
----
+# Example: Climate Treaties {#sec-bs}
 
 ```{r}
 #| label: setup-bs

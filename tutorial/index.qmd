@@ -1,7 +1,4 @@
----
-title: "Welcome"
-number-sections: false
----
+# Welcome {.unnumbered}
 
 `sconjoint` is an R package implementing the *structural deep learning*
 estimator for forced-choice conjoint experiments developed by @acharya2026structural. The estimator embeds a deep neural network
@@ -90,12 +87,27 @@ used to draw substantive conclusions about the original studies.
 | `age` | Moderator ($\mathbf Z$) | continuous (standardized) |
 | `resp_ideo` | Moderator ($\mathbf Z$) | continuous (standardized) |
 
-## Book overview
+## Organization
 
-1. **Get Started** --- Install `torch` and `sconjoint`.
-2. **Example: Candidate Choice** --- Full pipeline on the Saha--Weeks candidate-choice conjoint: data preparation, model fitting, interpretation, structural quantities, and visualization.
-3. **Example: Democratic Norms** --- Second worked example on the Graham--Svolik democratic-norms conjoint, emphasizing heterogeneity testing, partisan subgroup analysis, and preference clustering.
-4. **Example: Climate Treaties** --- Third worked example on the Bechtel--Scheve climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
-5. **Simulation Check** --- Synthetic-DGP sanity check confirming the estimator recovers known preference parameters.
-6. **Plot Options** --- Customizing ridgeline density plots and training loss traces with `ggplot2`.
-7. **FAQ** --- Troubleshooting and frequently asked questions.
+The user guide is structured into the following chapters:
+
+-   [Chapter @sec-start]\
+    Installation instructions for `torch` and `sconjoint`.
+
+-   [Chapter @sec-sw]\
+    Full pipeline on the @saha2022welfare candidate-choice conjoint: data preparation, model fitting, interpretation, all structural quantities, and visualization.
+
+-   [Chapter @sec-gs]\
+    Second worked example on the @graham2020democracy democratic-norms conjoint, emphasizing heterogeneity testing, partisan subgroup analysis, and preference clustering.
+
+-   [Chapter @sec-bs]\
+    Third worked example on the @bechtel_scheve_2013 climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
+
+-   [Chapter @sec-sim]\
+    Synthetic-DGP sanity check confirming the estimator recovers known preference parameters at both the population and individual level.
+
+-   [Chapter @sec-plots]\
+    Customizing ridgeline density plots and training loss traces with `ggplot2`.
+
+-   [Chapter @sec-faq]\
+    Troubleshooting and frequently asked questions.

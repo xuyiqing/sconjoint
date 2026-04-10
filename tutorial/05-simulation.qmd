@@ -1,6 +1,4 @@
----
-title: "Simulation Check"
----
+# Simulation Check {#sec-sim}
 
 This chapter is a sanity check, not a simulation study. It builds a
 small synthetic data-generating process with known true

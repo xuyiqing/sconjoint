@@ -1,0 +1,15 @@
+{
+  "hash": "aee25470da248adf267b23998df54640",
+  "result": {
+    "engine": "knitr",
+    "markdown": "# Plot Options {#sec-plots}\n\nThe `plot.sc_fit()` method ships two plot types. Both return plain\n`ggplot` objects, so users can layer additional geoms, facets, or themes\non top.\n\n## Beta ridgelines\n\nThe default `\"beta_ridgelines\"` draws one density ridgeline per\nattribute dummy over the held-out per-respondent\n$\\hat\\beta_j(\\mathbf Z_i)$. It is the most compact visual summary of\nthe direction-versus-intensity decomposition: a ridgeline centered away\nfrom zero indicates directional consensus; a wide ridgeline indicates\nhigh intensity heterogeneity.\n\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\nplot(fit_sw, \"beta_ridgelines\")\n```\n\n::: {.cell-output-display}\n![](06-plot-options_files/figure-html/plot-ridgelines-1.png){width=672}\n:::\n:::\n\n\nThe ridgeline layer is drawn by `ggridges::geom_density_ridges` when\n`ggridges` is available; a boxplot fallback kicks in otherwise so the\nplot method works in minimal installations.\n\n## Loss trace\n\n`\"loss_trace\"` plots the per-fold training loss curves. The curves\nshould visually level off before the last epoch; if they are still\ndescending, increase `n_epochs`.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nplot(fit_sw, \"loss_trace\")\n```\n\n::: {.cell-output-display}\n![](06-plot-options_files/figure-html/plot-loss-1.png){width=672}\n:::\n:::\n\n\n## Customization with ggplot2\n\nSince both plot types return `ggplot` objects, standard `ggplot2`\nmodifications apply directly.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(ggplot2)\nplot(fit_sw, \"beta_ridgelines\") +\n  labs(title = \"Per-respondent preference distributions\",\n       subtitle = \"Saha-Weeks candidate choice\") +\n  theme_minimal() +\n  theme(plot.title = element_text(face = \"bold\"))\n```\n\n::: {.cell-output-display}\n![](06-plot-options_files/figure-html/plot-custom-1.png){width=672}\n:::\n:::\n\n\n\n::: {.cell}\n\n```{.r .cell-code}\nplot(fit_sw, \"loss_trace\") +\n  labs(title = \"Training convergence\") +\n  theme_bw()\n```\n\n::: {.cell-output-display}\n![](06-plot-options_files/figure-html/plot-loss-custom-1.png){width=672}\n:::\n:::\n\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}
