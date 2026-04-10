@@ -136,8 +136,12 @@ matrix. We compare the estimated values to the true DGP values.
 
 ```{r}
 #| label: sim-beta-recovery
-beta_hat <- predict(fit_sim)
-dim(beta_hat)
+beta_hat_all <- predict(fit_sim)
+dim(beta_hat_all)
+
+## De-duplicate to respondent level (beta depends only on Z_i)
+first_row <- !duplicated(fit_sim$respondent_id)
+beta_hat <- beta_hat_all[first_row, ]
 
 ## Correlation between true and estimated beta for each attribute
 cor_b1 <- cor(beta_true[, 1], beta_hat[, 1])
