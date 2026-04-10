@@ -6,22 +6,64 @@
 \usage{
 plot_fraction(
   object,
+  dummies = NULL,
+  labels = NULL,
   threshold = 0,
   colors = c(Favor = "#4393C3", Oppose = "#D6604D"),
+  alpha = 0.85,
+  bar.width = 0.65,
   title = NULL,
+  xlab = NULL,
+  ylab = NULL,
+  xlim = NULL,
+  theme.bw = FALSE,
+  gridOff = FALSE,
+  cex.main = NULL,
+  cex.axis = NULL,
+  cex.lab = NULL,
+  legendOff = FALSE,
+  legend.pos = NULL,
   ...
 )
 }
 \arguments{
 \item{object}{An \code{sc_fit} object.}
 
+\item{dummies}{Optional character vector of dummy names to include.}
+
+\item{labels}{Optional named character vector to rename dummies for display.}
+
 \item{threshold}{Threshold for positive/negative classification
 (default 0).}
 
 \item{colors}{Named character vector of length 2 for Favor and Oppose
-bars.  Defaults to \code{c(Favor = "#377EB8", Oppose = "#E41A1C")}.}
+bars.  Defaults to \code{c(Favor = "#4393C3", Oppose = "#D6604D")}.}
+
+\item{alpha}{Bar transparency (default 0.85).}
+
+\item{bar.width}{Bar width (default 0.65).}
 
 \item{title}{Plot title.  \code{NULL} for a sensible default.}
+
+\item{xlab}{X-axis label.  \code{NULL} for a sensible default.}
+
+\item{ylab}{Y-axis label.  \code{NULL} keeps no label.}
+
+\item{xlim}{Numeric vector of length 2 for x-axis limits.}
+
+\item{theme.bw}{If \code{TRUE}, use \code{theme_bw}.}
+
+\item{gridOff}{If \code{TRUE}, remove grid lines.}
+
+\item{cex.main}{Scaling factor for the plot title.}
+
+\item{cex.axis}{Scaling factor for axis tick labels.}
+
+\item{cex.lab}{Scaling factor for axis titles.}
+
+\item{legendOff}{If \code{TRUE}, hide the legend.}
+
+\item{legend.pos}{Legend position.}
 
 \item{...}{Unused.}
 }

@@ -4,16 +4,67 @@
 \alias{plot_amce}
 \title{AMCE coefficient plot}
 \usage{
-plot_amce(object, level = 0.95, color = "#E41A1C", title = NULL, ...)
+plot_amce(
+  object,
+  dummies = NULL,
+  labels = NULL,
+  level = 0.95,
+  color = "#E41A1C",
+  size = 0.4,
+  fatten = 2,
+  title = NULL,
+  xlab = NULL,
+  ylab = NULL,
+  xlim = NULL,
+  theme.bw = FALSE,
+  gridOff = FALSE,
+  cex.main = NULL,
+  cex.axis = NULL,
+  cex.lab = NULL,
+  legendOff = FALSE,
+  legend.pos = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit} object.}
+
+\item{dummies}{Optional character vector of dummy names to include.
+If non-\code{NULL}, only these dummies are shown in the specified order.}
+
+\item{labels}{Optional named character vector to rename dummies for display
+(e.g., \code{c(agendaprogressive = "Progressive Agenda")}).}
 
 \item{level}{Confidence level for intervals (default 0.95).}
 
 \item{color}{Point/line color (default \code{"#E41A1C"}).}
 
+\item{size}{Size of the point-range line (default 0.4).}
+
+\item{fatten}{Fatten multiplier for the point (default 2).}
+
 \item{title}{Plot title.  \code{NULL} for a sensible default.}
+
+\item{xlab}{X-axis label.  \code{NULL} for a sensible default.}
+
+\item{ylab}{Y-axis label.  \code{NULL} keeps no label.}
+
+\item{xlim}{Numeric vector of length 2 for x-axis limits.}
+
+\item{theme.bw}{If \code{TRUE}, use \code{theme_bw} instead of
+\code{theme_minimal}.}
+
+\item{gridOff}{If \code{TRUE}, remove grid lines.}
+
+\item{cex.main}{Scaling factor for the plot title.}
+
+\item{cex.axis}{Scaling factor for axis tick labels.}
+
+\item{cex.lab}{Scaling factor for axis titles.}
+
+\item{legendOff}{If \code{TRUE}, hide the legend.}
+
+\item{legend.pos}{Legend position (e.g., \code{"bottom"}, \code{"right"}).}
 
 \item{...}{Unused.}
 }
@@ -22,6 +73,6 @@ A \code{ggplot} object.
 }
 \description{
 Horizontal point-range plot of the DML population-average estimates
-\eqn{\hat\theta_k} with 95\\% confidence intervals, one row per
+\eqn{\hat\theta_k} with confidence intervals, one row per
 attribute dummy.
 }

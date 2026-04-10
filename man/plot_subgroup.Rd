@@ -8,9 +8,23 @@ plot_subgroup(
   object,
   subgroup,
   dummies = NULL,
+  labels = NULL,
   colors = NULL,
   level = 0.95,
+  dodge.width = 0.6,
+  size = 0.35,
+  fatten = 2,
   title = NULL,
+  xlab = NULL,
+  ylab = NULL,
+  xlim = NULL,
+  theme.bw = FALSE,
+  gridOff = FALSE,
+  cex.main = NULL,
+  cex.axis = NULL,
+  cex.lab = NULL,
+  legendOff = FALSE,
+  legend.pos = NULL,
   ...
 )
 }
@@ -24,12 +38,40 @@ subgroup.  Example:
 \item{dummies}{Optional character vector of dummy names to include.
 If \code{NULL} (default), all dummies are plotted.}
 
+\item{labels}{Optional named character vector to rename dummies for display.}
+
 \item{colors}{Named character vector of colors, one per group name.
 If \code{NULL}, a default palette is used.}
 
 \item{level}{Confidence level (default 0.95).}
 
+\item{dodge.width}{Width for position dodging (default 0.6).}
+
+\item{size}{Size of the point-range line (default 0.35).}
+
+\item{fatten}{Fatten multiplier for the point (default 2).}
+
 \item{title}{Plot title.  \code{NULL} for a sensible default.}
+
+\item{xlab}{X-axis label.  \code{NULL} for a sensible default.}
+
+\item{ylab}{Y-axis label.  \code{NULL} keeps no label.}
+
+\item{xlim}{Numeric vector of length 2 for x-axis limits.}
+
+\item{theme.bw}{If \code{TRUE}, use \code{theme_bw}.}
+
+\item{gridOff}{If \code{TRUE}, remove grid lines.}
+
+\item{cex.main}{Scaling factor for the plot title.}
+
+\item{cex.axis}{Scaling factor for axis tick labels.}
+
+\item{cex.lab}{Scaling factor for axis titles.}
+
+\item{legendOff}{If \code{TRUE}, hide the legend.}
+
+\item{legend.pos}{Legend position.}
 
 \item{...}{Unused.}
 }

@@ -4,17 +4,69 @@
 \alias{plot_hetero}
 \title{Preference heterogeneity bar chart}
 \usage{
-plot_hetero(object, alpha = 0.05, adjust = "bh", title = NULL, ...)
+plot_hetero(
+  object,
+  dummies = NULL,
+  labels = NULL,
+  alpha = 0.05,
+  adjust = "bh",
+  gradient = c(low = "#D1E5F0", high = "#2166AC"),
+  sig.color = "#B2182B",
+  sig.shape = 18,
+  title = NULL,
+  xlab = NULL,
+  ylab = NULL,
+  xlim = NULL,
+  theme.bw = FALSE,
+  gridOff = FALSE,
+  cex.main = NULL,
+  cex.axis = NULL,
+  cex.lab = NULL,
+  legendOff = FALSE,
+  legend.pos = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit} object.}
+
+\item{dummies}{Optional character vector of dummy names to include.}
+
+\item{labels}{Optional named character vector to rename dummies for display.}
 
 \item{alpha}{Significance level for coloring (default 0.05).}
 
 \item{adjust}{P-value adjustment method passed to
 \code{\link{sc_heterogeneity_test}} (default \code{"bh"}).}
 
+\item{gradient}{Named character vector of length 2 with \code{low} and
+\code{high} colors for the fill gradient (defaults to blue scale).}
+
+\item{sig.color}{Color for the significance marker (default \code{"#B2182B"}).}
+
+\item{sig.shape}{Shape for the significance marker (default 18).}
+
 \item{title}{Plot title.  \code{NULL} for a sensible default.}
+
+\item{xlab}{X-axis label.  \code{NULL} for a sensible default.}
+
+\item{ylab}{Y-axis label.  \code{NULL} keeps no label.}
+
+\item{xlim}{Numeric vector of length 2 for x-axis limits.}
+
+\item{theme.bw}{If \code{TRUE}, use \code{theme_bw}.}
+
+\item{gridOff}{If \code{TRUE}, remove grid lines.}
+
+\item{cex.main}{Scaling factor for the plot title.}
+
+\item{cex.axis}{Scaling factor for axis tick labels.}
+
+\item{cex.lab}{Scaling factor for axis titles.}
+
+\item{legendOff}{If \code{TRUE}, hide the legend.}
+
+\item{legend.pos}{Legend position.}
 
 \item{...}{Unused.}
 }

@@ -241,8 +241,8 @@ plot.sc_fit <- function(x, which = c("beta_ridgelines", "loss_trace"), ...) {
   which <- match.arg(which)
   switch(
     which,
-    beta_ridgelines = .sc_plot_ridgelines(x$beta_hat, x$attr_names),
-    loss_trace      = .sc_plot_loss_traces(x$loss_traces)
+    beta_ridgelines = .sc_plot_ridgelines(x$beta_hat, x$attr_names, ...),
+    loss_trace      = .sc_plot_loss_traces(x$loss_traces, ...)
   )
 }
 
