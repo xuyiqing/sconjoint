@@ -5,7 +5,9 @@
 
 ## Silence R CMD check NOTE for ggplot2 non-standard evaluation
 utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
-                         "significant", "neg_log_p", "direction", "group"))
+                         "significant", "neg_log_p", "direction", "group",
+                         "attribute", "importance", "mean_imp",
+                         "attr_group"))
 
 # ============================================================================
 # Internal helpers
@@ -65,6 +67,26 @@ utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
   df
 }
 
+#' Add group column to a data frame based on a named character mapping
+#' @keywords internal
+#' @noRd
+.sc_apply_group_column <- function(df, groups, name_col = "dummy_name") {
+  if (is.null(groups)) return(df)
+  df$group <- factor(groups[as.character(df[[name_col]])],
+                     levels = unique(groups))
+  df
+}
+
+#' Apply group faceting to a ggplot object
+#' @keywords internal
+#' @noRd
+.sc_apply_groups <- function(p, df, groups) {
+  if (is.null(groups)) return(p)
+  p + ggplot2::facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+    ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0,
+                                                         face = "bold"))
+}
+
 # ============================================================================
 # 1. AMCE coefficient plot
 # ============================================================================
@@ -80,6 +102,9 @@ utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
 #'   If non-\code{NULL}, only these dummies are shown in the specified order.
 #' @param labels Optional named character vector to rename dummies for display
 #'   (e.g., \code{c(agendaprogressive = "Progressive Agenda")}).
+#' @param groups Optional named character vector mapping dummy names to
+#'   group labels for faceting.  When non-\code{NULL}, a
+#'   \code{facet_grid(group ~ .)} is added.
 #' @param level Confidence level for intervals (default 0.95).
 #' @param color Point/line color (default \code{"#E41A1C"}).
 #' @param size Size of the point-range line (default 0.4).
@@ -100,7 +125,7 @@ utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
 #' @return A \code{ggplot} object.
 #' @export
 plot_amce <- function(object, dummies = NULL, labels = NULL,
-                      level = 0.95, color = "#E41A1C",
+                      groups = NULL, level = 0.95, color = "#E41A1C",
                       size = 0.4, fatten = 2,
                       title = NULL, xlab = NULL, ylab = NULL,
                       xlim = NULL, theme.bw = FALSE, gridOff = FALSE,
@@ -123,6 +148,7 @@ plot_amce <- function(object, dummies = NULL, labels = NULL,
     df$dummy_name <- factor(df$dummy_name, levels = rev(dummies))
   }
   df <- .sc_apply_labels(df, labels)
+  df <- .sc_apply_group_column(df, groups)
   default_title <- "Population-average AMCE"
   default_xlab <- expression(hat(theta)[k] ~ "(logit scale)")
   p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$estimate,
@@ -140,6 +166,7 @@ plot_amce <- function(object, dummies = NULL, labels = NULL,
     ) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(panel.grid.major.y = ggplot2::element_blank())
+  p <- .sc_apply_groups(p, df, groups)
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,
                  cex.main = cex.main, cex.axis = cex.axis,
@@ -161,6 +188,8 @@ plot_amce <- function(object, dummies = NULL, labels = NULL,
 #' @param object An \code{sc_fit} object.
 #' @param dummies Optional character vector of dummy names to include.
 #' @param labels Optional named character vector to rename dummies for display.
+#' @param groups Optional named character vector mapping dummy names to
+#'   group labels for faceting.
 #' @param threshold Threshold for positive/negative classification
 #'   (default 0).
 #' @param colors Named character vector of length 2 for Favor and Oppose
@@ -182,7 +211,7 @@ plot_amce <- function(object, dummies = NULL, labels = NULL,
 #' @return A \code{ggplot} object.
 #' @export
 plot_fraction <- function(object, dummies = NULL, labels = NULL,
-                          threshold = 0,
+                          groups = NULL, threshold = 0,
                           colors = c(Favor = "#4393C3", Oppose = "#D6604D"),
                           alpha = 0.85, bar.width = 0.65,
                           title = NULL, xlab = NULL, ylab = NULL,
@@ -213,6 +242,7 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
     )
   )
   long <- .sc_apply_labels(long, labels)
+  long <- .sc_apply_group_column(long, groups)
   default_title <- "Fraction favoring / opposing each level"
   default_xlab <- "Fraction of respondents"
   p <- ggplot2::ggplot(long,
@@ -233,6 +263,7 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
       panel.grid.major.y = ggplot2::element_blank(),
       legend.position = "bottom"
     )
+  p <- .sc_apply_groups(p, long, groups)
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,
                  cex.main = cex.main, cex.axis = cex.axis,
@@ -254,6 +285,8 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
 #' @param object An \code{sc_fit} object.
 #' @param dummies Optional character vector of dummy names to include.
 #' @param labels Optional named character vector to rename dummies for display.
+#' @param groups Optional named character vector mapping dummy names to
+#'   group labels for faceting.
 #' @param alpha Significance level for coloring (default 0.05).
 #' @param adjust P-value adjustment method passed to
 #'   \code{\link{sc_heterogeneity_test}} (default \code{"bh"}).
@@ -276,7 +309,7 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
 #' @return A \code{ggplot} object.
 #' @export
 plot_hetero <- function(object, dummies = NULL, labels = NULL,
-                        alpha = 0.05, adjust = "bh",
+                        groups = NULL, alpha = 0.05, adjust = "bh",
                         gradient = c(low = "#D1E5F0", high = "#2166AC"),
                         sig.color = "#B2182B", sig.shape = 18,
                         title = NULL, xlab = NULL, ylab = NULL,
@@ -295,6 +328,7 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
     df$dummy_name <- factor(df$dummy_name, levels = rev(df$dummy_name))
   }
   df <- .sc_apply_labels(df, labels)
+  df <- .sc_apply_group_column(df, groups)
   default_title <- "Preference heterogeneity by attribute"
   default_xlab <- expression(Var(hat(beta)[k](Z)))
   p <- ggplot2::ggplot(df,
@@ -321,6 +355,7 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
       legend.position = "right",
       legend.key.height = ggplot2::unit(0.8, "cm")
     )
+  p <- .sc_apply_groups(p, df, groups)
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,
                  cex.main = cex.main, cex.axis = cex.axis,
@@ -345,6 +380,8 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
 #' @param dummies Optional character vector of dummy names to include.
 #'   If \code{NULL} (default), all dummies are plotted.
 #' @param labels Optional named character vector to rename dummies for display.
+#' @param groups Optional named character vector mapping dummy names to
+#'   group labels for faceting.
 #' @param colors Named character vector of colors, one per group name.
 #'   If \code{NULL}, a default palette is used.
 #' @param level Confidence level (default 0.95).
@@ -366,7 +403,7 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
 #' @return A \code{ggplot} object.
 #' @export
 plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
-                          colors = NULL, level = 0.95,
+                          groups = NULL, colors = NULL, level = 0.95,
                           dodge.width = 0.6, size = 0.35, fatten = 2,
                           title = NULL, xlab = NULL, ylab = NULL,
                           xlim = NULL, theme.bw = FALSE, gridOff = FALSE,
@@ -397,6 +434,10 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
                             levels = rev(unique(df$dummy_name)))
   }
   df <- .sc_apply_labels(df, labels)
+  if (!is.null(groups)) {
+    df$attr_group <- factor(groups[as.character(df$dummy_name)],
+                            levels = unique(groups))
+  }
   df$group <- factor(df$group, levels = names(subgroup))
   if (is.null(colors)) {
     ng <- length(subgroup)
@@ -437,9 +478,243 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
       panel.grid.major.y = ggplot2::element_blank(),
       legend.position = "bottom"
     )
+  if (!is.null(groups)) {
+    p <- p +
+      ggplot2::facet_grid(attr_group ~ ., scales = "free_y", space = "free_y") +
+      ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0,
+                                                           face = "bold"))
+  }
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,
                  cex.main = cex.main, cex.axis = cex.axis,
                  cex.lab = cex.lab, legendOff = legendOff,
                  legend.pos = legend.pos, xlim = xlim)
+}
+
+
+# ============================================================================
+# 5. Attribute importance ridgeline plot
+# ============================================================================
+
+#' Attribute importance ridgeline plot
+#'
+#' Ridgeline density plot of per-respondent attribute importance shares,
+#' with mean annotations.
+#'
+#' @param object An \code{sc_fit} object.
+#' @param labels Optional named character vector to rename attribute names.
+#' @param title Plot title.
+#' @param ... Additional arguments passed to \code{.sc_plot_theme()}.
+#' @return A \code{ggplot} object.
+#' @export
+plot_importance <- function(object, labels = NULL, title = NULL, ...) {
+  stopifnot(inherits(object, "sc_fit"))
+  if (!requireNamespace("ggridges", quietly = TRUE)) {
+    stop("plot_importance() requires the 'ggridges' package.")
+  }
+  imp <- sc_importance(object)
+  share_mat <- imp$details$per_row_shares
+  ## De-duplicate to respondent level
+  keep <- !duplicated(object$respondent_id)
+  share_mat <- share_mat[keep, , drop = FALSE]
+  ## Convert to percentage
+  share_mat <- share_mat * 100
+  attr_names <- imp$estimate$attribute
+  ## Compute means for annotation
+  means <- colMeans(share_mat, na.rm = TRUE)
+  ## Order by mean importance (ascending so largest at top in ridgeline)
+  ord <- order(means)
+  attr_names <- attr_names[ord]
+  means <- means[ord]
+  share_mat <- share_mat[, ord, drop = FALSE]
+  ## Build long data frame
+  long <- data.frame(
+    attribute  = factor(rep(attr_names, each = nrow(share_mat)),
+                        levels = attr_names),
+    importance = as.numeric(share_mat),
+    stringsAsFactors = FALSE
+  )
+  ## Apply labels
+  if (!is.null(labels)) {
+    lvls <- levels(long$attribute)
+    new_lvls <- ifelse(lvls %in% names(labels), labels[lvls], lvls)
+    levels(long$attribute) <- new_lvls
+    names(means) <- new_lvls
+  } else {
+    names(means) <- attr_names
+  }
+  ## Mean annotation data
+  ann <- data.frame(
+    attribute = factor(names(means), levels = levels(long$attribute)),
+    mean_imp  = as.numeric(means),
+    stringsAsFactors = FALSE
+  )
+  default_title <- "Attribute importance"
+  p <- ggplot2::ggplot(long, ggplot2::aes(x = importance, y = attribute,
+                                           fill = ggplot2::after_stat(x))) +
+    ggridges::geom_density_ridges_gradient(
+      scale = 1.8, quantile_lines = TRUE, quantiles = 2
+    ) +
+    ggplot2::scale_fill_viridis_c(option = "D") +
+    ggplot2::geom_segment(
+      data = ann,
+      ggplot2::aes(x = mean_imp, xend = mean_imp,
+                   y = as.numeric(attribute),
+                   yend = as.numeric(attribute) + 0.9),
+      linetype = "dashed", color = "gray30", linewidth = 0.4,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_text(
+      data = ann,
+      ggplot2::aes(x = mean_imp, y = as.numeric(attribute) + 0.9,
+                   label = sprintf("%.1f%%", mean_imp)),
+      hjust = -0.1, size = 3, color = "gray20",
+      inherit.aes = FALSE
+    ) +
+    ggplot2::labs(
+      x = "Importance share (%)",
+      y = NULL,
+      title = if (is.null(title)) default_title else title
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "none")
+  .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL, ...)
+}
+
+
+# ============================================================================
+# 6. Two-panel AMCE + fraction favor/oppose
+# ============================================================================
+
+#' Two-panel AMCE + fraction favor/oppose plot
+#'
+#' Produces a publication-quality two-panel figure with the AMCE
+#' coefficient plot on the left and the fraction favor/oppose
+#' diverging bar chart on the right.  Both panels share the same
+#' y-axis ordering, labels, and facet structure, ensuring vertical
+#' alignment for easy comparison.
+#'
+#' @param object An \code{sc_fit} object.
+#' @param dummies,labels,groups Passed to both panels.
+#' @param level Confidence level for AMCE panel (default 0.95).
+#' @param amce.color Color for AMCE pointrange.
+#' @param fraction.colors Colors for fraction bars.
+#' @param title.left,title.right Panel titles.
+#' @param ... Additional arguments passed to \code{.sc_plot_theme()}.
+#' @return A \code{gtable} object (from \pkg{gridExtra}).
+#' @export
+plot_amce_fraction <- function(object, dummies = NULL, labels = NULL,
+                                groups = NULL, level = 0.95,
+                                amce.color = "#E41A1C",
+                                fraction.colors = c(Favor = "#4393C3",
+                                                    Oppose = "#D6604D"),
+                                title.left = NULL, title.right = NULL,
+                                ...) {
+  stopifnot(inherits(object, "sc_fit"))
+  if (!requireNamespace("gridExtra", quietly = TRUE)) {
+    stop("plot_amce_fraction() requires the 'gridExtra' package.")
+  }
+
+  ## ---------- shared dummy ordering ----------
+  theta <- stats::coef(object)
+  all_dummies <- names(theta)
+  if (!is.null(dummies)) {
+    all_dummies <- dummies
+  }
+  shared_levels <- rev(all_dummies)
+
+  ## ---------- AMCE data ----------
+  se <- sqrt(diag(stats::vcov(object)))
+  q <- stats::qnorm(1 - (1 - level) / 2)
+  df_amce <- data.frame(
+    dummy_name = factor(names(theta), levels = shared_levels),
+    estimate   = as.numeric(theta),
+    ci_lo      = as.numeric(theta - q * se),
+    ci_hi      = as.numeric(theta + q * se),
+    row.names  = NULL,
+    stringsAsFactors = FALSE
+  )
+  if (!is.null(dummies)) {
+    df_amce <- df_amce[df_amce$dummy_name %in% dummies, , drop = FALSE]
+    df_amce$dummy_name <- factor(df_amce$dummy_name, levels = shared_levels)
+  }
+  df_amce <- .sc_apply_labels(df_amce, labels)
+  df_amce <- .sc_apply_group_column(df_amce, groups)
+
+  ## ---------- Fraction data ----------
+  frac <- sc_fraction_preferring(object, threshold = 0)
+  df_frac <- frac$estimate
+  if (!is.null(dummies)) {
+    df_frac <- df_frac[df_frac$dummy_name %in% dummies, , drop = FALSE]
+  }
+  long_frac <- rbind(
+    data.frame(
+      dummy_name = factor(df_frac$dummy_name, levels = shared_levels),
+      value      = df_frac$frac_positive,
+      direction  = "Favor",
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      dummy_name = factor(df_frac$dummy_name, levels = shared_levels),
+      value      = -df_frac$frac_negative,
+      direction  = "Oppose",
+      stringsAsFactors = FALSE
+    )
+  )
+  long_frac <- .sc_apply_labels(long_frac, labels)
+  long_frac <- .sc_apply_group_column(long_frac, groups)
+
+  ## ---------- Default titles ----------
+  if (is.null(title.left)) {
+    title.left <- expression(bold("A.") ~ "Average preferences")
+  }
+  if (is.null(title.right)) {
+    title.right <- expression(bold("B.") ~ "Fraction favor/oppose")
+  }
+
+  ## ---------- Left panel (AMCE) ----------
+  p_left <- ggplot2::ggplot(df_amce, ggplot2::aes(x = .data$estimate,
+                                                     y = .data$dummy_name)) +
+    ggplot2::geom_vline(xintercept = 0, linetype = "dashed",
+                        color = "gray50") +
+    ggplot2::geom_pointrange(
+      ggplot2::aes(xmin = ci_lo, xmax = ci_hi),
+      color = amce.color, size = 0.4, fatten = 2
+    ) +
+    ggplot2::labs(
+      x = expression(hat(theta)[k] ~ "(logit scale)"),
+      y = NULL,
+      title = title.left
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(panel.grid.major.y = ggplot2::element_blank())
+  p_left <- .sc_apply_groups(p_left, df_amce, groups)
+  p_left <- .sc_plot_theme(p_left, title = NULL, xlab = NULL, ylab = NULL, ...)
+
+  ## ---------- Right panel (Fraction) ----------
+  p_right <- ggplot2::ggplot(long_frac,
+                  ggplot2::aes(x = .data$value, y = dummy_name,
+                               fill = direction)) +
+    ggplot2::geom_col(width = 0.65, alpha = 0.85) +
+    ggplot2::geom_vline(xintercept = 0, color = "gray40", linewidth = 0.4) +
+    ggplot2::scale_fill_manual(values = fraction.colors) +
+    ggplot2::scale_x_continuous(
+      labels = function(x) paste0(abs(round(x * 100)), "%"),
+      breaks = seq(-1, 1, 0.25)
+    ) +
+    ggplot2::labs(x = "Fraction of respondents",
+                  y = NULL, fill = NULL,
+                  title = title.right) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      panel.grid.major.y = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_blank(),
+      legend.position = "bottom"
+    )
+  p_right <- .sc_apply_groups(p_right, long_frac, groups)
+  p_right <- .sc_plot_theme(p_right, title = NULL, xlab = NULL, ylab = NULL, ...)
+
+  ## ---------- Arrange ----------
+  gridExtra::grid.arrange(p_left, p_right, ncol = 2, widths = c(1, 1.1))
 }

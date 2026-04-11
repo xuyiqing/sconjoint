@@ -8,6 +8,7 @@ plot_fraction(
   object,
   dummies = NULL,
   labels = NULL,
+  groups = NULL,
   threshold = 0,
   colors = c(Favor = "#4393C3", Oppose = "#D6604D"),
   alpha = 0.85,
@@ -32,6 +33,9 @@ plot_fraction(
 \item{dummies}{Optional character vector of dummy names to include.}
 
 \item{labels}{Optional named character vector to rename dummies for display.}
+
+\item{groups}{Optional named character vector mapping dummy names to
+group labels for faceting.}
 
 \item{threshold}{Threshold for positive/negative classification
 (default 0).}

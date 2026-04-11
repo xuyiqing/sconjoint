@@ -8,6 +8,7 @@ plot_amce(
   object,
   dummies = NULL,
   labels = NULL,
+  groups = NULL,
   level = 0.95,
   color = "#E41A1C",
   size = 0.4,
@@ -34,6 +35,10 @@ If non-\code{NULL}, only these dummies are shown in the specified order.}
 
 \item{labels}{Optional named character vector to rename dummies for display
 (e.g., \code{c(agendaprogressive = "Progressive Agenda")}).}
+
+\item{groups}{Optional named character vector mapping dummy names to
+group labels for faceting.  When non-\code{NULL}, a
+\code{facet_grid(group ~ .)} is added.}
 
 \item{level}{Confidence level for intervals (default 0.95).}
 

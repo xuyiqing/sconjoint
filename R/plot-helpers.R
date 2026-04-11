@@ -4,7 +4,7 @@
 ## wrappers — the user-facing entry point is `plot.sc_fit()` below.
 
 ## Silence R CMD check NOTE for ggridges computed aesthetic
-utils::globalVariables("x")
+utils::globalVariables(c("x", "group"))
 
 #' Ridgeline plot of per-respondent beta(Z) distributions
 #'
@@ -12,6 +12,8 @@ utils::globalVariables("x")
 #' @param attr_names Character p-vector of dummy names.
 #' @param dummies Optional character vector of dummy names to include.
 #' @param labels Optional named character vector to rename dummies for display.
+#' @param groups Optional named character vector mapping attr_names to
+#'   group labels for faceting.
 #' @param title Plot title. \code{NULL} for a sensible default.
 #' @param xlab X-axis label. \code{NULL} for a sensible default.
 #' @param ylab Y-axis label. \code{NULL} keeps no label.
@@ -27,7 +29,8 @@ utils::globalVariables("x")
 #' @keywords internal
 #' @noRd
 .sc_plot_ridgelines <- function(beta_hat, attr_names, dummies = NULL,
-                                labels = NULL, title = NULL, xlab = NULL,
+                                labels = NULL, groups = NULL,
+                                title = NULL, xlab = NULL,
                                 ylab = NULL, theme.bw = FALSE,
                                 gridOff = FALSE, cex.main = NULL,
                                 cex.axis = NULL, cex.lab = NULL,
@@ -56,6 +59,11 @@ utils::globalVariables("x")
     new_lvls <- ifelse(lvls %in% names(labels), labels[lvls], lvls)
     levels(long$dummy) <- new_lvls
   }
+  ## Apply groups (faceting by attribute group)
+  if (!is.null(groups)) {
+    long$group <- factor(groups[as.character(long$dummy)],
+                         levels = unique(groups))
+  }
   default_title <- "Per-respondent preference distributions"
   default_xlab <- expression(hat(beta)(Z))
   if (requireNamespace("ggridges", quietly = TRUE)) {
@@ -83,6 +91,13 @@ utils::globalVariables("x")
                     y = ylab,
                     title = if (is.null(title)) default_title else title) +
       ggplot2::theme_minimal(base_size = 12)
+  }
+  ## Apply group faceting
+  if (!is.null(groups)) {
+    pl <- pl +
+      ggplot2::facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+      ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0,
+                                                           face = "bold"))
   }
   ## Use the shared theme helper from plot-diagnostics.R
   if (exists(".sc_plot_theme", mode = "function")) {

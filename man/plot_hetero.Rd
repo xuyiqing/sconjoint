@@ -8,6 +8,7 @@ plot_hetero(
   object,
   dummies = NULL,
   labels = NULL,
+  groups = NULL,
   alpha = 0.05,
   adjust = "bh",
   gradient = c(low = "#D1E5F0", high = "#2166AC"),
@@ -33,6 +34,9 @@ plot_hetero(
 \item{dummies}{Optional character vector of dummy names to include.}
 
 \item{labels}{Optional named character vector to rename dummies for display.}
+
+\item{groups}{Optional named character vector mapping dummy names to
+group labels for faceting.}
 
 \item{alpha}{Significance level for coloring (default 0.05).}
 
