@@ -598,8 +598,10 @@ plot_importance <- function(object, labels = NULL, title = NULL, ...) {
       y = NULL,
       title = if (is.null(title)) default_title else title
     ) +
+    ggplot2::coord_cartesian(clip = "off") +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(legend.position = "none")
+    ggplot2::theme(legend.position = "none",
+                   plot.margin = ggplot2::margin(t = 20, r = 10, b = 5, l = 5))
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL, ...)
 }
 
