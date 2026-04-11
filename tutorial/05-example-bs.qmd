@@ -55,12 +55,6 @@ is numeric, this dataset is a natural showcase for willingness-to-pay
 (WTP) analysis via `sc_wtp()` and compensating differentials via
 `sc_compensating()`.
 
-::: {.callout-note}
-The `bs2013` dataset is a **seed-fixed synthetic fixture** for
-illustration. Do not use it to draw substantive inferences about the
-Bechtel--Scheve population.
-:::
-
 ## Data preparation
 
 ```{r}
@@ -97,6 +91,27 @@ fit_bs <- scfit(
   seed        = 2024
 )
 summary(fit_bs)
+```
+
+```{r}
+#| label: bs-loss
+plot(fit_bs, "loss_trace")
+```
+
+## Population-average estimates
+
+```{r}
+#| label: bs-amce-plot
+#| fig-height: 6
+plot_amce(fit_bs, groups = bs_groups, labels = bs_labels)
+```
+
+## Individual-level preferences
+
+```{r}
+#| label: bs-ridgelines
+#| fig-height: 8
+plot(fit_bs, "beta_ridgelines", groups = bs_groups, labels = bs_labels)
 ```
 
 ## Structural quantities
@@ -162,36 +177,21 @@ frac_bs <- sc_fraction_preferring(fit_bs, threshold = 0)
 frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```
 
-## Visualization
-
-### AMCE coefficient plot
-
-```{r}
-#| label: bs-amce-plot
-#| fig-height: 5
-plot_amce(fit_bs, groups = bs_groups, labels = bs_labels)
-```
-
-### Fraction favor / oppose
-
 ```{r}
 #| label: bs-fraction-bar
-#| fig-height: 5
+#| fig-height: 6
 plot_fraction(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
-### Heterogeneity
+### Heterogeneity test
 
 ```{r}
 #| label: bs-het-bar
-#| fig-height: 5
+#| fig-height: 6
 plot_hetero(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
 ### Subgroup AMCE by ideology
-
-Do respondents on the ideological left, center, and right value
-treaty features differently?
 
 ```{r}
 #| label: bs-ideo-plot
@@ -206,19 +206,4 @@ plot_subgroup(
   groups = bs_groups, labels = bs_labels,
   title = "Subgroup AMCE by ideology tercile"
 )
-```
-
-### Beta ridgelines
-
-```{r}
-#| label: bs-ridgelines
-#| fig-height: 6
-plot(fit_bs, "beta_ridgelines", groups = bs_groups, labels = bs_labels)
-```
-
-### Loss trace
-
-```{r}
-#| label: bs-loss
-plot(fit_bs, "loss_trace")
 ```

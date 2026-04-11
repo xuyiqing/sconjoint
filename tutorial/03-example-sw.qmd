@@ -152,17 +152,20 @@ still descending, increase `n_epochs`.
   clearly needed.
 :::
 
-## Interpretation
-
-The `coef()` method extracts the population-average $\hat\theta$ vector.
-`predict()` returns the $N \times p$ matrix of per-respondent
-$\hat\beta(\mathbf Z_i)$ --- the complete preference vector for each
-respondent.
+## Population-average estimates
 
 ```{r}
 #| label: sw-coef
 coef(fit_sw)
 ```
+
+```{r}
+#| label: sw-amce-plot
+#| fig-height: 6
+plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
+```
+
+## Individual-level preferences
 
 ```{r}
 #| label: sw-beta
@@ -171,17 +174,15 @@ dim(beta)
 head(beta, 3)
 ```
 
-Each row of the $\hat\beta$ matrix is a respondent's full marginal
-utility vector across all attribute dummies. The structural model's
-payoff is that all downstream quantities are functions of this matrix.
+```{r}
+#| label: sw-ridgelines
+#| fig-height: 8
+plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
+```
 
 ## Structural quantities
 
 ### Attribute importance
-
-Which attributes drive choice, on average? `sc_importance()` returns
-the respondent-averaged share of predicted-utility variance contributed
-by each attribute block. Shares sum to one by construction.
 
 ```{r}
 #| label: sw-importance
@@ -197,13 +198,6 @@ plot_importance(fit_sw, labels = c(agenda = "Agenda", talent = "Talent",
 
 ### Direction and intensity
 
-The structural decomposition separates *direction*
-($\overline{\operatorname{sign}(\beta_k)}$) from *intensity*
-($\overline{|\beta_k|}$). For `cand_gender` a near-zero AMCE could
-either mean "no one cares" or "half the sample strongly prefers women,
-half strongly prefers men and they cancel." The direction/intensity
-decomposition resolves the ambiguity.
-
 ```{r}
 #| label: sw-di
 sc_direction_intensity(fit_sw)
@@ -211,21 +205,19 @@ sc_direction_intensity(fit_sw)
 
 ### Fraction preferring
 
-The fraction of respondents whose $\hat\beta_k(\mathbf Z_i)$ exceeds
-zero --- i.e., who prefer each non-reference level, holding other
-attributes fixed.
-
 ```{r}
 #| label: sw-fraction
 frac <- sc_fraction_preferring(fit_sw, threshold = 0)
 frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```
 
-### Marginal rate of substitution
+```{r}
+#| label: sw-fraction-bar
+#| fig-height: 6
+plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
+```
 
-The trimmed mean of $\hat\beta_j(\mathbf Z_i) / \hat\beta_k(\mathbf Z_i)$
-across respondents: by how many units of attribute $k$ must we
-compensate a respondent to offset a one-unit change in attribute $j$?
+### Marginal rate of substitution
 
 ```{r}
 #| label: sw-mrs
@@ -236,17 +228,11 @@ sc_mrs(fit_sw, numerator = 1L, denominator = 2L)
 ### Large trimmed mean?
 
 The ratio $\hat\beta_j / \hat\beta_k$ is unbounded when the
-denominator is near zero. The default trimming at the 1st and 99th
-percentiles handles ordinary outliers, but a pathological fit can
-still produce a large trimmed mean. Inspect
-`plot(fit, "beta_ridgelines")` to confirm the denominator column is
-well-separated from zero before interpreting the MRS quantitatively.
+denominator is near zero. Inspect the ridgelines above to confirm the
+denominator column is well-separated from zero.
 :::
 
 ### Counterfactual choice probability
-
-For two user-specified profiles $A$ and $B$, report the average
-probability that respondents choose $A$ over $B$.
 
 ```{r}
 #| label: sw-counterfactual
@@ -263,9 +249,6 @@ sc_counterfactual(
 
 ### Optimal profile
 
-The greedy per-attribute argmax over subgroup-averaged $\hat\beta$,
-assembled into the profile that maximizes average predicted utility.
-
 ```{r}
 #| label: sw-optimal
 sc_optimal_profile(fit_sw)
@@ -273,20 +256,18 @@ sc_optimal_profile(fit_sw)
 
 ### Heterogeneity test
 
-Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
-what sampling noise alone would explain? A significant result indicates
-genuine preference heterogeneity along $\mathbf Z$.
-
 ```{r}
 #| label: sw-het
 sc_heterogeneity_test(fit_sw, adjust = "bh")
 ```
 
-### Subgroup analysis
+```{r}
+#| label: sw-het-bar
+#| fig-height: 6
+plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
+```
 
-Do women respondents weight candidate gender differently from men?
-`sc_subgroup()` re-averages $\hat\beta(\mathbf Z_i)$ over a
-user-specified subset of respondents.
+### Subgroup analysis
 
 ```{r}
 #| label: sw-subgroup
@@ -301,47 +282,9 @@ rbind(
 )
 ```
 
-On this fixture the *direction* of the `cand_genderFemale` coefficient
-splits along respondent gender lines even when its average AMCE is
-small. This is the headline interpretive payoff of the structural
-framework: one number becomes an entire distribution over respondents,
-indexed by observable $\mathbf Z$.
-
-## Visualization
-
-### AMCE coefficient plot
-
-```{r}
-#| label: sw-amce-plot
-#| fig-height: 5
-plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
-```
-
-### Fraction favor / oppose
-
-```{r}
-#| label: sw-fraction-bar
-#| fig-height: 5
-plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
-```
-
-### Heterogeneity bar chart
-
-Which attributes exhibit significant preference heterogeneity across
-respondents? Bars are colored red when the heterogeneity test rejects
-at the 5% level.
-
-```{r}
-#| label: sw-het-bar
-#| fig-height: 5
-plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
-```
-
-### Subgroup AMCE: gender
-
 ```{r}
 #| label: sw-subgroup-plot
-#| fig-height: 5
+#| fig-height: 6
 plot_subgroup(
   fit_sw,
   subgroup = list(Female = fit_sw$Z[, "resp_female"] > 0.5,
@@ -349,14 +292,6 @@ plot_subgroup(
   groups = sw_groups, labels = sw_labels,
   title = "Subgroup AMCE: female vs male respondents"
 )
-```
-
-### Beta ridgelines
-
-```{r}
-#| label: sw-ridgelines
-#| fig-height: 6
-plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
 ```
 
 ### Loss trace

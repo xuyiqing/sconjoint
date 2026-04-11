@@ -113,7 +113,30 @@ fit_gs <- scfit(
 summary(fit_gs)
 ```
 
-## Attribute importance
+```{r}
+#| label: gs-loss
+plot(fit_gs, "loss_trace")
+```
+
+## Population-average estimates
+
+```{r}
+#| label: gs-amce-plot
+#| fig-height: 8
+plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+## Individual-level preferences
+
+```{r}
+#| label: gs-ridgelines
+#| fig-height: 10
+plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
+```
+
+## Structural quantities
+
+### Attribute importance
 
 ```{r}
 #| label: gs-importance
@@ -138,6 +161,20 @@ varies meaningfully across respondents.
 #| label: gs-het
 het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
 het_gs$estimate
+```
+
+```{r}
+#| label: gs-het-bar
+#| fig-height: 8
+plot_hetero(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+### Fraction preferring
+
+```{r}
+#| label: gs-fraction-bar
+#| fig-height: 8
+plot_fraction(fit_gs, groups = gs_groups, labels = gs_labels)
 ```
 
 ## Direction and intensity
@@ -175,46 +212,6 @@ do.call(rbind, lapply(names(sub), function(g) {
 }))
 ```
 
-The ability to read subgroup-specific $\hat\theta$ off the same fit
---- without re-estimating on subsets --- is the operational advantage
-of the structural model over stacked subgroup AMCE regressions.
-
-## Preference clustering
-
-A complementary view on latent preference types: run k-means on the
-per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
-respondents with similar preference profiles.
-
-```{r}
-#| label: gs-clusters
-cl_gs <- sc_clusters(fit_gs, k = 3L, seed = 2024)
-cl_gs$estimate$sizes
-round(cl_gs$estimate$centers, 2)
-```
-
-## Visualization
-
-### AMCE coefficient plot
-
-```{r}
-#| label: gs-amce-plot
-#| fig-height: 5
-plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
-```
-
-### Fraction favor / oppose
-
-```{r}
-#| label: gs-fraction-bar
-#| fig-height: 5
-plot_fraction(fit_gs, groups = gs_groups, labels = gs_labels)
-```
-
-### Subgroup AMCE comparison
-
-How does the penalty for undemocratic behavior differ across partisan
-groups? We plot subgroup-specific $\hat\theta$ for the `undem` dummies.
-
 ```{r}
 #| label: gs-subgroup-plot
 #| fig-height: 5
@@ -230,17 +227,16 @@ plot_subgroup(
 )
 ```
 
-### Beta ridgelines
+## Preference clustering
+
+A complementary view on latent preference types: run k-means on the
+per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
+respondents with similar preference profiles.
 
 ```{r}
-#| label: gs-ridgelines
-#| fig-height: 6
-plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
+#| label: gs-clusters
+cl_gs <- sc_clusters(fit_gs, k = 3L, seed = 2024)
+cl_gs$estimate$sizes
+round(cl_gs$estimate$centers, 2)
 ```
 
-### Loss trace
-
-```{r}
-#| label: gs-loss
-plot(fit_gs, "loss_trace")
-```
