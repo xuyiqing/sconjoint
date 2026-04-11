@@ -111,7 +111,9 @@ sc_importance(fit_bs)
 ```{r}
 #| label: bs-importance-plot
 #| fig-height: 5
-plot_importance(fit_bs)
+plot_importance(fit_bs, labels = c(cost_usd = "Cost", distribution = "Distribution",
+  participation = "Participation", emissions = "Emissions",
+  sanctions = "Sanctions", monitoring = "Monitoring"))
 ```
 
 ### Direction and intensity
@@ -211,7 +213,7 @@ plot_subgroup(
 ```{r}
 #| label: bs-ridgelines
 #| fig-height: 6
-plot(fit_bs, "beta_ridgelines")
+plot(fit_bs, "beta_ridgelines", groups = bs_groups, labels = bs_labels)
 ```
 
 ### Loss trace

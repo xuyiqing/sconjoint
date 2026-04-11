@@ -191,7 +191,8 @@ sc_importance(fit_sw)
 ```{r}
 #| label: sw-importance-plot
 #| fig-height: 5
-plot_importance(fit_sw)
+plot_importance(fit_sw, labels = c(agenda = "Agenda", talent = "Talent",
+  children = "Children", cand_gender = "Gender", prior_office = "Prior Office"))
 ```
 
 ### Direction and intensity
@@ -355,7 +356,7 @@ plot_subgroup(
 ```{r}
 #| label: sw-ridgelines
 #| fig-height: 6
-plot(fit_sw, "beta_ridgelines")
+plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
 ```
 
 ### Loss trace

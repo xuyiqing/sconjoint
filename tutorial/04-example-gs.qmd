@@ -123,7 +123,8 @@ sc_importance(fit_gs)
 ```{r}
 #| label: gs-importance-plot
 #| fig-height: 5
-plot_importance(fit_gs)
+plot_importance(fit_gs, labels = c(cand_party = "Party", dem_code = "Democracy",
+  cand_sex = "Sex", cand_race = "Race", policy_prox = "Policy"))
 ```
 
 ## Heterogeneity test
@@ -234,7 +235,7 @@ plot_subgroup(
 ```{r}
 #| label: gs-ridgelines
 #| fig-height: 6
-plot(fit_gs, "beta_ridgelines")
+plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
 ```
 
 ### Loss trace
