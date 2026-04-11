@@ -25,6 +25,8 @@ fit_sim <- scfit(
 )
 summary(fit_sim)
 
+plot(fit_sim, "loss_trace")
+
 theta_hat <- coef(fit_sim)
 theta_true <- c(x1 = 0.5, x2 = -0.8, x3 = 0.3)
 data.frame(
@@ -33,6 +35,8 @@ data.frame(
   estimated  = round(unname(theta_hat), 3),
   row.names  = NULL
 )
+
+plot_amce(fit_sim)
 
 beta_hat_all <- predict(fit_sim)
 
@@ -65,6 +69,8 @@ ggplot(df_compare, aes(x = true, y = estimated)) +
        title = "Individual-level recovery: attribute x1") +
   theme_minimal(base_size = 12)
 
+plot(fit_sim, "beta_ridgelines")
+
 sc_direction_intensity(fit_sim)
 
 frac_sim <- sc_fraction_preferring(fit_sim)
@@ -82,8 +88,12 @@ data.frame(
   row.names     = NULL
 )
 
+plot_fraction(fit_sim)
+
 het_sim <- sc_heterogeneity_test(fit_sim, adjust = "bh")
 het_sim$estimate[, c("dummy_name", "var_beta", "p_adjusted", "sig")]
+
+plot_hetero(fit_sim)
 
 z1_col <- fit_sim$Z[, "z1"]
 sub_sim <- sc_subgroup(fit_sim, list(
@@ -91,7 +101,6 @@ sub_sim <- sc_subgroup(fit_sim, list(
   "z1 < 0" = z1_col < 0
 ))
 
-## z1 at respondent level (de-duplicated, same order as beta_true)
 z1_resp <- fit_sim$Z[first_row, "z1"]
 true_high <- mean(beta_true[z1_resp > 0, 1])
 true_low  <- mean(beta_true[z1_resp < 0, 1])
@@ -106,19 +115,47 @@ data.frame(
   row.names = NULL
 )
 
-plot_amce(fit_sim)
-
-plot_fraction(fit_sim)
-
-plot_hetero(fit_sim)
-
-z1_col <- fit_sim$Z[, "z1"]
 plot_subgroup(
   fit_sim,
   subgroup = list("z1 > 0" = z1_col > 0, "z1 < 0" = z1_col < 0),
   title = "Subgroup AMCE: high-z1 vs low-z1 respondents"
 )
 
-plot(fit_sim, "beta_ridgelines")
+bl <- sc_baseline_logit(fit_sim)
+summary(bl)
 
-plot(fit_sim, "loss_trace")
+theta_struct <- coef(fit_sim)
+theta_logit  <- coef(bl)
+df_comp <- data.frame(
+  dummy = rep(names(theta_struct), 2),
+  estimate = c(theta_struct, theta_logit),
+  model = rep(c("Structural (DML)", "Logit"), each = length(theta_struct))
+)
+ggplot(df_comp, aes(x = estimate, y = dummy, color = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(position = position_dodge(0.4), size = 3) +
+  scale_color_manual(values = c("Structural (DML)" = "#E41A1C",
+                                "Logit" = "#2166AC")) +
+  labs(x = expression(hat(theta)), y = NULL, color = NULL,
+       title = "Structural vs baseline logit") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+sc_average(fit_sim, scale = "probability")
+
+sc_surplus(fit_sim, profiles = list(
+  list(x1 = 1, x2 = 0, x3 = 1),
+  list(x1 = 0, x2 = 1, x3 = 0)
+))
+
+sc_welfare_change(fit_sim,
+  old_set = list(list(x1 = 0)),
+  new_set = list(list(x1 = 1))
+)
+
+sc_decisiveness(fit_sim,
+  A = list(x1 = 1, x3 = 1),
+  B = list(x2 = 1)
+)
+
+sc_inequality(fit_sim, measure = "variance")
