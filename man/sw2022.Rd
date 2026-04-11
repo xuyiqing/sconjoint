@@ -3,55 +3,53 @@
 \docType{data}
 \name{sw2022}
 \alias{sw2022}
-\title{Saha-Weeks (2022) candidate-choice conjoint (synthetic)}
+\title{Saha-Weeks (2022) candidate-choice conjoint}
 \format{
-A data frame with 1,200 rows (200 respondents x 3 tasks x 2
-profiles) and the following columns:
+A data frame with 7,146 rows (1,191 respondents x 3 tasks x
+2 profiles) and the following columns:
 \describe{
-\item{respondent}{Respondent id (integer 1..200).}
-\item{task}{Task id within respondent (1..3).}
-\item{profile}{Profile id within task (1..2).}
+\item{respondent}{Respondent id (character).}
+\item{task}{Task id within respondent (integer).}
+\item{profile}{Profile id within task (1 or 2).}
 \item{choice}{Binary outcome (1 = this profile was chosen in the
 task, 0 = not chosen).}
 \item{agenda}{Factor: candidate's policy agenda
-(\code{status_quo}, \code{progressive}, \code{conservative}).}
+(ref: \verb{Very Few Changes}, \verb{Moderate Changes}, \verb{Complete Overhaul}).}
 \item{talent}{Factor: candidate's talent description
-(\code{average}, \code{hard_working}, \code{experienced}).}
+(ref: \code{Assertive}, \code{Collaborative}, \verb{Determined to Succeed},
+\code{Empathetic}, \verb{Good Communicator}, \code{Hard-Working},
+\verb{Tough Negotiator}).}
 \item{children}{Factor: candidate has children
-(\code{no_children}, \code{has_children}).}
-\item{cand_gender}{Factor: candidate gender (\code{male}, \code{female}).}
+(ref: \verb{No children}, \verb{1 child}, \verb{2 children}, \verb{3 children}).}
+\item{cand_gender}{Factor: candidate gender (ref: \code{Male}, \code{Female}).}
 \item{prior_office}{Factor: candidate's prior elected office
-(\code{none}, \code{state_leg}, \code{us_house}).}
-\item{resp_female}{Integer 0/1: respondent gender (1 = female).}
-\item{age}{Numeric: respondent age, standardized.}
-\item{pid}{Integer in -1/0/+1: party identification
-(-1 = Democrat, 0 = Independent, +1 = Republican).}
+(ref: \code{No}, \code{Yes}).}
+\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
+\item{age}{Numeric: respondent age in years.}
+\item{pid}{Factor: party identification
+(\code{Democrat}, \code{Republican (GOP)}, \code{Independent}).}
 }
 }
 \source{
 Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
 Women: Gender and Voter Perceptions of Candidate Ambition."
 \emph{Political Behavior} 44(2):779-805.
+Data from published replication materials (SSI survey).
 }
 \usage{
 sw2022
 }
 \description{
-A small long-format forced-choice candidate-conjoint dataset whose
-design mirrors Saha and Weeks (2022).  Respondents see three
-forced-choice tasks, each showing a pair of hypothetical political
-candidates varying on five attributes.  The goal of the original
-study was to understand voter perceptions of women candidates'
-ambition.
+A long-format forced-choice candidate-conjoint dataset from the
+replication materials of Saha and Weeks (2022).  Respondents see
+three forced-choice tasks, each showing a pair of hypothetical
+political candidates varying on five attributes.  The goal of the
+original study was to understand voter perceptions of women
+candidates' ambition.
 }
 \details{
-\strong{Note (synthetic).} This dataset is a seed-fixed synthetic
-fixture built by \code{data-raw/build_sw2022.R} with design constants
-drawn from the published paper.  It is intended for package
-examples and the Quarto book case-study chapter -- it is NOT the
-original SSI sample and should not be used for substantive
-replication.  The \code{synthetic} attribute is set to \code{TRUE} on the
-loaded object.
+The data is cleaned from the original SSI survey: respondents with
+fewer than 3 elections or invalid demographics are dropped.
 }
 \examples{
 data(sw2022)

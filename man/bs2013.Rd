@@ -3,22 +3,31 @@
 \docType{data}
 \name{bs2013}
 \alias{bs2013}
-\title{Bechtel-Scheve (2013) climate-treaty conjoint (synthetic)}
+\title{Bechtel-Scheve (2013) climate-treaty conjoint}
 \format{
-A data frame with 2,400 rows (200 respondents x 6 tasks x 2
-profiles) and the following columns:
+A data frame with 20,000 rows (2,500 respondents x 4 tasks x
+2 profiles) and the following columns:
 \describe{
-\item{respondent, task, profile, choice}{Same role as in \code{sw2022}.}
-\item{distribution}{Factor: burden-sharing principle.}
-\item{enforcement}{Factor: enforcement mechanism.}
-\item{monitoring}{Factor: monitoring level.}
-\item{participation}{Factor: participation threshold.}
-\item{sanctions}{Factor: sanctions for non-compliance.}
-\item{cost_usd}{Numeric: estimated monthly cost per household
-in USD.  Supports dollar-scale WTP via \code{sc_wtp(fit, cost = "cost_usd", ...)}.}
-\item{resp_female}{Integer 0/1: respondent gender.}
-\item{age}{Numeric: respondent age, standardized.}
-\item{resp_ideo}{Numeric: respondent ideology, standardized.}
+\item{respondent}{Respondent id (character).}
+\item{task}{Task id within respondent (1..4).}
+\item{profile}{Profile id within task (1 or 2).}
+\item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
+\item{cost_usd}{Numeric: monthly cost per household in USD
+(28, 56, 84, 113, or 141).  Supports dollar-scale WTP via
+\code{sc_wtp(fit, cost = "cost_usd", ...)}.}
+\item{distribution}{Factor: burden-sharing principle
+(ref: \verb{Only rich pay}).}
+\item{participation}{Factor: number of participating countries
+(ref: \verb{20 countries}).}
+\item{emissions}{Factor: emissions reduction target
+(ref: \verb{40\% reduction}).}
+\item{sanctions}{Factor: sanctions for non-compliance
+(ref: \verb{No sanctions}).}
+\item{monitoring}{Factor: monitoring body
+(ref: \verb{Your government}).}
+\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
+\item{resp_age}{Numeric: respondent age in years.}
+\item{resp_ideo}{Numeric 0-10: respondent ideology.}
 }
 }
 \source{
@@ -26,24 +35,23 @@ Bechtel, Michael M. and Kenneth F. Scheve. 2013. "Mass
 Support for Global Climate Agreements Depends on Institutional
 Design." \emph{Proceedings of the National Academy of Sciences}
 110(34):13763-13768.
+Data from published replication materials.
 }
 \usage{
 bs2013
 }
 \description{
-A small long-format forced-choice climate-treaty conjoint dataset
-whose design mirrors Bechtel and Scheve (2013).  Respondents see
-six tasks, each showing a pair of hypothetical climate agreements
-varying on distribution, enforcement, monitoring, participation,
-sanctions, and a numeric cost attribute (USD per household per
-month).  The numeric cost attribute enables dollar-scale
-willingness-to-pay (WTP) analysis via \code{sc_wtp()}, which is the
-headline quantity of the companion Quarto case-study chapter.
+A long-format forced-choice climate-treaty conjoint dataset from
+the replication materials of Bechtel and Scheve (2013), US
+subsample.  Respondents see four tasks, each showing a pair of
+hypothetical climate agreements varying on cost, distribution,
+participation, emissions, sanctions, and monitoring.  The numeric
+cost attribute enables dollar-scale willingness-to-pay (WTP)
+analysis via \code{sc_wtp()}.
 }
 \details{
-\strong{Note (synthetic).} This dataset is a seed-fixed synthetic
-fixture built by \code{data-raw/build_bs2013.R}.  See the note on
-\code{sw2022} for context.  The \code{synthetic} attribute is set to \code{TRUE}.
+The data is filtered to US respondents (country == 4) with exactly
+8 rows (4 tasks x 2 profiles).
 }
 \examples{
 data(bs2013)

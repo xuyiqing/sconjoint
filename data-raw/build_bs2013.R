@@ -1,127 +1,122 @@
 ###############################################################################
 # data-raw/build_bs2013.R
 #
-# Build the bundled `bs2013` example dataset.
+# Build the bundled `bs2013` dataset from Bechtel-Scheve (2013) replication data.
 #
 # Provenance: Bechtel, Michael M. and Kenneth F. Scheve. 2013.
 #   "Mass Support for Global Climate Agreements Depends on
 #   Institutional Design." PNAS 110(34):13763-13768.
 #
-# Note (M5): See build_sw2022.R for the rationale -- this script
-#   produces a SEED-FIXED SYNTHETIC dataset that mirrors the published
-#   climate-treaty conjoint structure.  It is a drop-in example
-#   fixture for the WTP-flagship case-study chapter
-#   (tutorial/10-case-bechtel-scheve.qmd).
-#
-# Design (approximating Bechtel-Scheve 2013 Table 1):
-#   - 6 attributes: distribution, enforcement, monitoring,
-#       participation, sanctions, cost_usd (numeric, "cost" attribute)
-#   - 6 tasks per respondent
-#   - 2 profiles per task
-#   - Respondent moderators Z: resp_female, age (standardized),
-#       resp_ideo (ideology continuous)
-#
-# Downsampling seed: 20260409
+# Source: Stata .dta file from published replication materials (US subsample).
 ###############################################################################
 
-set.seed(20260409)
+library(data.table)
+library(haven)
 
-M <- 200L
-T_tasks <- 6L
-P <- 2L
+# --- Load raw data -----------------------------------------------------------
 
-dist_lv   <- c("equal_share", "ability_to_pay", "historical_polluter")
-enforce_lv<- c("none", "trade_sanctions", "fines")
-monitor_lv<- c("none", "national", "international")
-part_lv   <- c("50pct", "75pct", "90pct")
-sanct_lv  <- c("none", "trade", "aid_cut")
+data_path <- file.path("~", "Dropbox", "Projects", "ConjointStructural",
+                        "data", "bechtel_scheve_2013",
+                        "bechtel_scheve_pnas.dta")
+bs_raw <- as.data.table(read_dta(data_path))
 
-n_rows <- M * T_tasks * P
-rid <- rep(seq_len(M), each = T_tasks * P)
-tid <- rep(rep(seq_len(T_tasks), each = P), M)
-pos <- rep(c(1L, 2L), M * T_tasks)
+cat("Raw rows:", nrow(bs_raw), "\n")
+cat("Unique respondents:", uniqueN(bs_raw$ID), "\n")
 
-distribution  <- factor(sample(dist_lv,    n_rows, replace = TRUE), levels = dist_lv)
-enforcement   <- factor(sample(enforce_lv, n_rows, replace = TRUE), levels = enforce_lv)
-monitoring    <- factor(sample(monitor_lv, n_rows, replace = TRUE), levels = monitor_lv)
-participation <- factor(sample(part_lv,    n_rows, replace = TRUE), levels = part_lv)
-sanctions     <- factor(sample(sanct_lv,   n_rows, replace = TRUE), levels = sanct_lv)
-## Cost levels are drawn from a small numeric grid (USD per
-## household per month).  Numeric so we can compute a WTP on a
-## dollar scale via sc_wtp.
-cost_grid <- c(5, 15, 30, 50, 85, 130)
-cost_usd <- sample(cost_grid, n_rows, replace = TRUE)
+# --- Filter to US respondents (country == 4) ---------------------------------
 
-resp_female <- rbinom(M, 1L, 0.51)
-age_std     <- as.numeric(scale(round(runif(M, 18, 82))))
-resp_ideo   <- as.numeric(scale(rnorm(M)))
+bs <- bs_raw[country == 4]
+cat("US rows:", nrow(bs), "\n")
 
-attr_df <- data.frame(distribution, enforcement, monitoring,
-                      participation, sanctions, cost_usd)
-X <- stats::model.matrix(~ distribution + enforcement + monitoring +
-                         participation + sanctions + cost_usd,
-                         data = attr_df)[, -1L, drop = FALSE]
-colnames(X) <- make.names(colnames(X))
+# --- Keep respondents with exactly 8 rows (4 tasks x 2 profiles) ------------
 
-p <- ncol(X)
-beta_base <- setNames(numeric(p), colnames(X))
-beta_base[grepl("distributionability_to_pay",      names(beta_base))] <-  0.25
-beta_base[grepl("distributionhistorical_polluter", names(beta_base))] <-  0.15
-beta_base[grepl("enforcementtrade_sanctions",      names(beta_base))] <-  0.20
-beta_base[grepl("enforcementfines",                names(beta_base))] <-  0.30
-beta_base[grepl("monitoringnational",              names(beta_base))] <-  0.10
-beta_base[grepl("monitoringinternational",         names(beta_base))] <-  0.30
-beta_base[grepl("participation75pct",              names(beta_base))] <-  0.30
-beta_base[grepl("participation90pct",              names(beta_base))] <-  0.60
-beta_base[grepl("sanctionstrade",                  names(beta_base))] <-  0.15
-beta_base[grepl("sanctionsaid_cut",                names(beta_base))] <-  0.10
-beta_base[grepl("cost_usd",                        names(beta_base))] <- -0.015
+tasks_per <- bs[, .(n_rows = .N), by = ID]
+keep_ids <- tasks_per[n_rows == 8, ID]
+bs <- bs[ID %in% keep_ids]
+cat("After keeping 8-row respondents:", nrow(bs), "rows,",
+    uniqueN(bs$ID), "respondents\n")
 
-beta_true <- matrix(0, M, p, dimnames = list(NULL, colnames(X)))
-for (j in seq_len(p)) beta_true[, j] <- beta_base[j]
-## Heterogeneity: more-liberal respondents (resp_ideo < 0) are less
-## price-sensitive and more supportive of ambitious participation.
-beta_true[, "cost_usd"] <- beta_true[, "cost_usd"] - 0.005 * resp_ideo
-if ("participation90pct" %in% colnames(beta_true)) {
-  beta_true[, "participation90pct"] <- beta_true[, "participation90pct"] -
-    0.30 * resp_ideo
-}
+# --- Cost dollar mapping (US) -----------------------------------------------
 
-beta_row <- beta_true[rid, , drop = FALSE]
-U <- rowSums(X * beta_row)
+COST_DOLLARS <- c(28, 56, 84, 113, 141)  # cost_cj 1-5 -> $/month
+cost_map <- setNames(COST_DOLLARS, 1:5)
+bs[, cost_usd := cost_map[as.character(cost_cj)]]
 
-choice <- integer(n_rows)
-for (i in seq_len(M)) {
-  for (t in seq_len(T_tasks)) {
-    idx <- which(rid == i & tid == t)
-    u <- U[idx] + -log(-log(runif(length(idx))))
-    pick <- which.max(u)
-    choice[idx] <- 0L
-    choice[idx[pick]] <- 1L
-  }
-}
+# --- Encode conjoint attributes as factors -----------------------------------
 
-bs2013 <- data.frame(
-  respondent = rid,
-  task = tid,
-  profile = pos,
-  choice = choice,
-  distribution = distribution,
-  enforcement = enforcement,
-  monitoring = monitoring,
-  participation = participation,
-  sanctions = sanctions,
-  cost_usd = cost_usd,
-  resp_female = resp_female[rid],
-  age = age_std[rid],
-  resp_ideo = resp_ideo[rid],
+# Distribution (ref: "Only rich pay")
+distrib_levels <- c("Only rich pay", "Prop. current emissions",
+                    "Prop. hist. emissions", "Rich pay more, shared")
+distrib_map <- setNames(distrib_levels, 1:4)
+bs[, distribution := factor(distrib_map[as.character(distrib_cj)],
+                            levels = distrib_levels)]
+
+# Countries participating (ref: "20 countries")
+ctries_levels <- c("20 countries", "80 countries", "160 countries")
+ctries_map <- setNames(ctries_levels, 1:3)
+bs[, participation := factor(ctries_map[as.character(ctries_cj)],
+                             levels = ctries_levels)]
+
+# Emissions target (ref: "40% reduction")
+emis_levels <- c("40% reduction", "60% reduction", "80% reduction")
+emis_map <- setNames(emis_levels, 1:3)
+bs[, emissions := factor(emis_map[as.character(emissions_cj)],
+                         levels = emis_levels)]
+
+# Sanctions (ref: "No sanctions")
+sanctions_levels <- c("No sanctions", "$6/mo sanctions",
+                      "$17/mo sanctions", "$23/mo sanctions")
+sanctions_map <- setNames(sanctions_levels, 1:4)
+bs[, sanctions := factor(sanctions_map[as.character(sanctions_cj)],
+                         levels = sanctions_levels)]
+
+# Monitoring (ref: "Your government")
+monitor_levels <- c("Your government", "Independent commission",
+                    "United Nations", "Greenpeace")
+monitor_map <- setNames(monitor_levels, 1:4)
+bs[, monitoring := factor(monitor_map[as.character(monitoring_cj)],
+                          levels = monitor_levels)]
+
+# --- Respondent-level covariates --------------------------------------------
+
+bs[, resp_female := as.numeric(female)]
+bs[, resp_age := as.numeric(age)]
+bs[, resp_ideo := as.numeric(ideology)]  # 0-10 scale
+
+# --- Create long format for sconjoint ---------------------------------------
+
+# Each conjoint task has 2 profiles (cj_order distinguishes them within task)
+bs[, profile := seq_len(.N), by = .(ID, conjoint)]
+stopifnot(all(bs[, .N, by = .(ID, conjoint)]$N == 2))
+
+dat <- data.frame(
+  respondent    = as.character(bs$ID),
+  task          = as.integer(bs$conjoint),
+  profile       = as.integer(bs$profile),
+  choice        = as.integer(bs$choice_cj),
+  cost_usd      = bs$cost_usd,
+  distribution  = bs$distribution,
+  participation = bs$participation,
+  emissions     = bs$emissions,
+  sanctions     = bs$sanctions,
+  monitoring    = bs$monitoring,
+  resp_female   = bs$resp_female,
+  resp_age      = bs$resp_age,
+  resp_ideo     = bs$resp_ideo,
   stringsAsFactors = FALSE
 )
 
-attr(bs2013, "synthetic") <- TRUE
-attr(bs2013, "source") <- "Bechtel & Scheve (2013) design; synthetic data with matching structure."
+# Drop rows with NA in choice or key attributes
+dat <- dat[complete.cases(dat), ]
 
-out_path <- file.path("data", "bs2013.rda")
-save(bs2013, file = out_path, compress = "xz", version = 2L)
-cat(sprintf("Wrote %s (%.1f KB)\n", out_path,
-            file.info(out_path)$size / 1024))
+bs2013 <- dat
+
+# --- Summary ----------------------------------------------------------------
+
+cat("Final dataset:", nrow(bs2013), "rows\n")
+cat("Respondents:", length(unique(bs2013$respondent)), "\n")
+cat("Tasks:", nrow(bs2013) / 2, "\n")
+
+# --- Save -------------------------------------------------------------------
+
+usethis::use_data(bs2013, overwrite = TRUE)
