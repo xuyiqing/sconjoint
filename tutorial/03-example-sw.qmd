@@ -19,12 +19,6 @@ structural decomposition into direction and intensity lets us ask
 whether a near-zero AMCE for candidate gender masks genuine
 heterogeneity --- half the sample preferring women, half preferring men.
 
-::: {.callout-note}
-The `sw2022` dataset is a **seed-fixed synthetic fixture** for
-illustration. Do not use it to draw substantive inferences about the
-Saha--Weeks population.
-:::
-
 ## Data preparation
 
 ```{r}

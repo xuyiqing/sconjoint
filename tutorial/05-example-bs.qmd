@@ -18,11 +18,6 @@ agreements varying on six attributes --- including a numeric cost
 attribute (`cost_usd`). Because cost is numeric, this dataset is a
 natural showcase for willingness-to-pay and demand analysis.
 
-::: {.callout-note}
-The `bs2013` dataset is a **seed-fixed synthetic fixture** for
-illustration.
-:::
-
 ## Data preparation
 
 ```{r}
@@ -37,9 +32,9 @@ head(bs2013, 4)
 ```{r}
 #| label: bs-fit
 fit_bs <- scfit(
-  choice ~ distribution + enforcement + monitoring + participation +
-           sanctions + cost_usd |
-           resp_female + age + resp_ideo,
+  choice ~ cost_usd + distribution + participation + emissions +
+           sanctions + monitoring |
+           resp_female + resp_age + resp_ideo,
   data        = bs2013,
   respondent  = "respondent",
   task        = "task",
@@ -110,9 +105,9 @@ the same units as `cost_usd`.
 
 ```{r}
 #| label: bs-wtp
-sc_wtp(fit_bs, attr = "distribution:ability_to_pay", cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "enforcement:trade_sanctions", cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "monitoring:international",    cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "distribution:Rich pay more",    cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "emissions:80% reduction",      cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "monitoring:United Nations",     cost_attr = "cost_usd")
 ```
 
 ### Compensating differentials
@@ -120,7 +115,7 @@ sc_wtp(fit_bs, attr = "monitoring:international",    cost_attr = "cost_usd")
 ```{r}
 #| label: bs-compensating
 sc_compensating(fit_bs,
-                benefit = "distribution:ability_to_pay",
+                benefit = "distribution:Rich pay more",
                 cost    = "cost_usd")
 ```
 
@@ -175,7 +170,7 @@ cheaper one that includes international monitoring?
 sc_welfare_change(
   fit_bs,
   old_set = list(list(cost_usd = 50)),
-  new_set = list(list(cost_usd = 10, monitoring = "international"))
+  new_set = list(list(cost_usd = 10, monitoring = "United Nations"))
 )
 ```
 

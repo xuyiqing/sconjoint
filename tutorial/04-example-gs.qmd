@@ -13,18 +13,13 @@ library(ggplot2)
 
 This chapter applies the structural estimator to a candidate-choice
 conjoint whose design follows @graham2020democracy. Respondents
-choose between pairs of hypothetical U.S. candidates; one attribute
-captures the candidate's willingness to engage in undemocratic behavior
-(ignoring a court ruling, restricting the opposition press, or banning
-an opposition rally). The structural model decomposes the
-population-average penalty for undemocratic behavior into direction and
-intensity, and traces the heterogeneity back to respondent-level
-partisanship --- without re-estimating on subsets.
-
-::: {.callout-note}
-The `gs2020` dataset is a **seed-fixed synthetic fixture** for
-illustration.
-:::
+choose between pairs of hypothetical U.S. candidates; attributes include
+candidate party, sex, race, policy proximity, and a 16-level democratic
+norms attribute (`dem_code`) that captures good governance practices,
+undemocratic behavior, and valence signals. The structural model
+decomposes the population-average penalty for undemocratic behavior into
+direction and intensity, and traces the heterogeneity back to
+respondent-level partisanship --- without re-estimating on subsets.
 
 ## Data preparation
 
@@ -40,8 +35,8 @@ head(gs2020, 4)
 ```{r}
 #| label: gs-fit
 fit_gs <- scfit(
-  choice ~ federal + immigration + tax + abortion + undem + cand_party |
-           resp_pid + resp_ideo + age,
+  choice ~ cand_party + dem_code + cand_sex + cand_race + policy_prox |
+           resp_ideo + resp_pid + resp_age,
   data        = gs2020,
   respondent  = "respondent",
   task        = "task",
@@ -117,7 +112,7 @@ sub <- sc_subgroup(fit_gs, list(
 ))
 do.call(rbind, lapply(names(sub), function(g) {
   e <- sub[[g]]$estimate
-  rows <- grepl("^undem", e$dummy_name)
+  rows <- grepl("^dem_codeu_", e$dummy_name)
   data.frame(group = g, e[rows, c("dummy_name", "theta", "se")],
              row.names = NULL)
 }))
@@ -131,7 +126,7 @@ plot_subgroup(
   subgroup = list(Democrat    = pid_col < -0.5,
                   Independent = abs(pid_col) <= 0.5,
                   Republican  = pid_col > 0.5),
-  dummies = grep("^undem", fit_gs$attr_names, value = TRUE),
+  dummies = grep("^dem_codeu_", fit_gs$attr_names, value = TRUE),
   title = "Subgroup AMCE: undemocratic behavior"
 )
 ```
@@ -149,13 +144,15 @@ round(cl_gs$estimate$centers, 2)
 
 ### Decisiveness
 
-How decisively do voters reject a candidate who ignores a court ruling?
+How decisively do voters reject a candidate who ignores a court ruling
+compared to one who supports elected school boards (a good-governance
+baseline)?
 
 ```{r}
 #| label: gs-decisiveness
 sc_decisiveness(fit_gs,
-  A = list(undem = "none"),
-  B = list(undem = "ignore_court")
+  A = list(dem_code = "g_boardElect"),
+  B = list(dem_code = "u_court")
 )
 ```
 
