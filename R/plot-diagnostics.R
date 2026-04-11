@@ -39,7 +39,12 @@ utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
   if (isTRUE(legendOff)) {
     theme_args$legend.position <- "none"
   } else if (!is.null(legend.pos)) {
-    theme_args$legend.position <- legend.pos
+    if (is.numeric(legend.pos) && length(legend.pos) == 2L) {
+      theme_args$legend.position <- "inside"
+      theme_args$legend.position.inside <- legend.pos
+    } else {
+      theme_args$legend.position <- legend.pos
+    }
   }
   if (!is.null(cex.main)) {
     theme_args$plot.title <- ggplot2::element_text(size = 14 * cex.main)
@@ -261,7 +266,11 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
       panel.grid.major.y = ggplot2::element_blank(),
-      legend.position = "bottom"
+      legend.position = "inside",
+      legend.position.inside = c(0.85, 0.15),
+      legend.background = ggplot2::element_rect(fill = grDevices::adjustcolor("white", 0.9),
+                                                 color = "gray80", linewidth = 0.3),
+      legend.key.size = ggplot2::unit(0.4, "cm")
     )
   p <- .sc_apply_groups(p, long, groups)
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
