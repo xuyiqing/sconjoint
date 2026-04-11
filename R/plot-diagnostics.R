@@ -73,12 +73,21 @@ utils::globalVariables(c("ci_lo", "ci_hi", "dummy_name", "var_beta",
 }
 
 #' Add group column to a data frame based on a named character mapping
+#'
+#' @param df Data frame with a \code{dummy_name} factor column.
+#' @param groups Named character vector mapping original dummy names to
+#'   group labels.
+#' @param name_col Column name to use for the lookup.
+#' @param orig_names Optional character vector of original (pre-label)
+#'   dummy names.  When labels have already been applied, pass the
+#'   original names so the group lookup still works.
 #' @keywords internal
 #' @noRd
-.sc_apply_group_column <- function(df, groups, name_col = "dummy_name") {
+.sc_apply_group_column <- function(df, groups, name_col = "dummy_name",
+                                   orig_names = NULL) {
   if (is.null(groups)) return(df)
-  df$group <- factor(groups[as.character(df[[name_col]])],
-                     levels = unique(groups))
+  keys <- if (!is.null(orig_names)) orig_names else as.character(df[[name_col]])
+  df$group <- factor(groups[keys], levels = unique(groups))
   df
 }
 
@@ -152,8 +161,9 @@ plot_amce <- function(object, dummies = NULL, labels = NULL,
     df <- df[df$dummy_name %in% dummies, , drop = FALSE]
     df$dummy_name <- factor(df$dummy_name, levels = rev(dummies))
   }
+  orig_names <- as.character(df$dummy_name)
   df <- .sc_apply_labels(df, labels)
-  df <- .sc_apply_group_column(df, groups)
+  df <- .sc_apply_group_column(df, groups, orig_names = orig_names)
   default_title <- "Population-average AMCE"
   default_xlab <- expression(hat(theta)[k] ~ "(logit scale)")
   p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$estimate,
@@ -246,8 +256,9 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
       stringsAsFactors = FALSE
     )
   )
+  orig_names_long <- as.character(long$dummy_name)
   long <- .sc_apply_labels(long, labels)
-  long <- .sc_apply_group_column(long, groups)
+  long <- .sc_apply_group_column(long, groups, orig_names = orig_names_long)
   default_title <- "Fraction favoring / opposing each level"
   default_xlab <- "Fraction of respondents"
   p <- ggplot2::ggplot(long,
@@ -336,8 +347,9 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
   } else {
     df$dummy_name <- factor(df$dummy_name, levels = rev(df$dummy_name))
   }
+  orig_names_het <- as.character(df$dummy_name)
   df <- .sc_apply_labels(df, labels)
-  df <- .sc_apply_group_column(df, groups)
+  df <- .sc_apply_group_column(df, groups, orig_names = orig_names_het)
   default_title <- "Preference heterogeneity by attribute"
   default_xlab <- expression(Var(hat(beta)[k](Z)))
   p <- ggplot2::ggplot(df,
@@ -442,9 +454,10 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
     df$dummy_name <- factor(df$dummy_name,
                             levels = rev(unique(df$dummy_name)))
   }
+  orig_names_sub <- as.character(df$dummy_name)
   df <- .sc_apply_labels(df, labels)
   if (!is.null(groups)) {
-    df$attr_group <- factor(groups[as.character(df$dummy_name)],
+    df$attr_group <- factor(groups[orig_names_sub],
                             levels = unique(groups))
   }
   df$group <- factor(df$group, levels = names(subgroup))

@@ -53,15 +53,16 @@ utils::globalVariables(c("x", "group"))
     value = as.numeric(beta_hat),
     stringsAsFactors = FALSE
   )
-  ## Apply labels
+  ## Save original names for group lookup, then apply labels
+  orig_dummy_names <- as.character(long$dummy)
   if (!is.null(labels)) {
     lvls <- levels(long$dummy)
     new_lvls <- ifelse(lvls %in% names(labels), labels[lvls], lvls)
     levels(long$dummy) <- new_lvls
   }
-  ## Apply groups (faceting by attribute group)
+  ## Apply groups (faceting by attribute group) using original names
   if (!is.null(groups)) {
-    long$group <- factor(groups[as.character(long$dummy)],
+    long$group <- factor(groups[orig_dummy_names],
                          levels = unique(groups))
   }
   default_title <- "Per-respondent preference distributions"
