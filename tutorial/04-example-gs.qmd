@@ -9,17 +9,76 @@ set.seed(2024)
 torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
+
+## Groups and labels for plot annotations --------------------------------
+gs_groups <- c(
+  "cand_partyRepublican"      = "Party",
+  "dem_codeg_committee"       = "Good Governance",
+  "dem_codeg_officestructure" = "Good Governance",
+  "dem_codeg_procedure"       = "Good Governance",
+  "dem_codeg_progEval"        = "Good Governance",
+  "dem_codeg_record"          = "Good Governance",
+  "dem_codeg_schedule"        = "Good Governance",
+  "dem_codeu_banProtest"      = "Undemocratic",
+  "dem_codeu_court"           = "Undemocratic",
+  "dem_codeu_execRule"        = "Undemocratic",
+  "dem_codeu_gerry2"          = "Undemocratic",
+  "dem_codeu_gerry10"         = "Undemocratic",
+  "dem_codeu_journalists"     = "Undemocratic",
+  "dem_codeu_limitVote"       = "Undemocratic",
+  "dem_codev_affair"          = "Valence",
+  "dem_codev_tax"             = "Valence",
+  "cand_sexFemale"            = "Sex",
+  "cand_raceBlack"            = "Race",
+  "cand_raceHispanic"         = "Race",
+  "cand_raceAsian"            = "Race",
+  "policy_prox"               = "Policy"
+)
+
+gs_labels <- c(
+  "cand_partyRepublican"      = "Republican",
+  "dem_codeg_committee"       = "Committee oversight",
+  "dem_codeg_officestructure" = "Office structure",
+  "dem_codeg_procedure"       = "Procedure",
+  "dem_codeg_progEval"        = "Program evaluation",
+  "dem_codeg_record"          = "Record-keeping",
+  "dem_codeg_schedule"        = "Schedule",
+  "dem_codeu_banProtest"      = "Ban protest",
+  "dem_codeu_court"           = "Ignore court",
+  "dem_codeu_execRule"        = "Executive rule",
+  "dem_codeu_gerry2"          = "Gerrymander (2%)",
+  "dem_codeu_gerry10"         = "Gerrymander (10%)",
+  "dem_codeu_journalists"     = "Restrict journalists",
+  "dem_codeu_limitVote"       = "Limit voting",
+  "dem_codev_affair"          = "Affair",
+  "dem_codev_tax"             = "Tax evasion",
+  "cand_sexFemale"            = "Female",
+  "cand_raceBlack"            = "Black",
+  "cand_raceHispanic"         = "Hispanic",
+  "cand_raceAsian"            = "Asian",
+  "policy_prox"               = "Policy proximity"
+)
 ```
 
 This chapter applies the structural estimator to a candidate-choice
 conjoint whose design follows @graham2020democracy. Respondents
-choose between pairs of hypothetical U.S. candidates; attributes include
-candidate party, sex, race, policy proximity, and a 16-level democratic
-norms attribute (`dem_code`) that captures good governance practices,
-undemocratic behavior, and valence signals. The structural model
-decomposes the population-average penalty for undemocratic behavior into
-direction and intensity, and traces the heterogeneity back to
-respondent-level partisanship --- without re-estimating on subsets.
+choose between pairs of hypothetical U.S. candidates; one attribute
+captures the candidate's willingness to engage in undemocratic behavior
+(ignoring a court ruling, restricting the opposition press, or banning
+an opposition rally). The original study asks how much voters penalize
+co-partisan candidates for violating democratic norms, and whether
+strong partisanship leads to tolerance of such violations.
+
+The structural model adds value here because it decomposes the
+population-average penalty for undemocratic behavior into direction and
+intensity, and traces the heterogeneity back to respondent-level
+partisanship --- without re-estimating on subsets.
+
+::: {.callout-note}
+The `gs2020` dataset is a **seed-fixed synthetic fixture** for
+illustration. Do not use it to draw substantive conclusions about the
+Graham--Svolik population.
+:::
 
 ## Data preparation
 
@@ -28,9 +87,15 @@ respondent-level partisanship --- without re-estimating on subsets.
 data(gs2020, package = "sconjoint")
 dim(gs2020)
 head(gs2020, 4)
+str(gs2020)
 ```
 
-## Fitting
+Each respondent sees eight tasks with two candidate profiles each,
+yielding 16 rows per respondent. The respondent-level moderators are
+`resp_pid` (-1/0/+1 partisanship), `resp_ideo` (standardized ideology),
+and standardized `age`.
+
+## Fitting the structural model
 
 ```{r}
 #| label: gs-fit
@@ -48,45 +113,25 @@ fit_gs <- scfit(
 summary(fit_gs)
 ```
 
+## Attribute importance
+
 ```{r}
-#| label: gs-loss
-plot(fit_gs, "loss_trace")
+#| label: gs-importance
+sc_importance(fit_gs)
 ```
 
-## Population-average estimates
-
 ```{r}
-#| label: gs-amce-plot
+#| label: gs-importance-plot
 #| fig-height: 5
-plot_amce(fit_gs)
+plot_importance(fit_gs)
 ```
 
-## Individual-level preferences
+## Heterogeneity test
 
-```{r}
-#| label: gs-ridgelines
-#| fig-height: 6
-plot(fit_gs, "beta_ridgelines")
-```
-
-## Structural quantities
-
-### Direction and intensity
-
-```{r}
-#| label: gs-di
-sc_direction_intensity(fit_gs)
-```
-
-### Fraction preferring
-
-```{r}
-#| label: gs-fraction-bar
-#| fig-height: 5
-plot_fraction(fit_gs)
-```
-
-### Heterogeneity test
+Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
+what sampling noise alone would explain? A significant result for
+`undem` levels would confirm that the penalty for undemocratic behavior
+varies meaningfully across respondents.
 
 ```{r}
 #| label: gs-het
@@ -94,13 +139,24 @@ het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
 het_gs$estimate
 ```
 
+## Direction and intensity
+
+The undemocratic levels should show a large negative average direction
+(voters penalize them) coupled with high intensity. The structural
+question is whether the *dispersion* of those coefficients concentrates
+on co-partisans, as Graham and Svolik argue.
+
 ```{r}
-#| label: gs-het-bar
-#| fig-height: 5
-plot_hetero(fit_gs)
+#| label: gs-di
+sc_direction_intensity(fit_gs)
 ```
 
-### Subgroup analysis by partisanship
+## Subgroup analysis by partisanship
+
+We re-average the held-out $\hat\beta(\mathbf Z_i)$ separately for
+Democrats, Independents, and Republicans using `sc_subgroup()`. The
+`resp_pid` column on the standardized $\mathbf Z$ matrix preserves the
+sign of the underlying -1/0/+1 encoding.
 
 ```{r}
 #| label: gs-subgroup
@@ -118,20 +174,15 @@ do.call(rbind, lapply(names(sub), function(g) {
 }))
 ```
 
-```{r}
-#| label: gs-subgroup-plot
-#| fig-height: 5
-plot_subgroup(
-  fit_gs,
-  subgroup = list(Democrat    = pid_col < -0.5,
-                  Independent = abs(pid_col) <= 0.5,
-                  Republican  = pid_col > 0.5),
-  dummies = grep("^dem_codeu_", fit_gs$attr_names, value = TRUE),
-  title = "Subgroup AMCE: undemocratic behavior"
-)
-```
+The ability to read subgroup-specific $\hat\theta$ off the same fit
+--- without re-estimating on subsets --- is the operational advantage
+of the structural model over stacked subgroup AMCE regressions.
 
-### Preference clustering
+## Preference clustering
+
+A complementary view on latent preference types: run k-means on the
+per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
+respondents with similar preference profiles.
 
 ```{r}
 #| label: gs-clusters
@@ -140,28 +191,55 @@ cl_gs$estimate$sizes
 round(cl_gs$estimate$centers, 2)
 ```
 
-## Advanced quantities
+## Visualization
 
-### Decisiveness
-
-How decisively do voters reject a candidate who ignores a court ruling
-compared to one who supports elected school boards (a good-governance
-baseline)?
+### AMCE coefficient plot
 
 ```{r}
-#| label: gs-decisiveness
-sc_decisiveness(fit_gs,
-  A = list(dem_code = "g_boardElect"),
-  B = list(dem_code = "u_court")
+#| label: gs-amce-plot
+#| fig-height: 5
+plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+### Fraction favor / oppose
+
+```{r}
+#| label: gs-fraction-bar
+#| fig-height: 5
+plot_fraction(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+### Subgroup AMCE comparison
+
+How does the penalty for undemocratic behavior differ across partisan
+groups? We plot subgroup-specific $\hat\theta$ for the `undem` dummies.
+
+```{r}
+#| label: gs-subgroup-plot
+#| fig-height: 5
+pid_col <- fit_gs$Z[, "resp_pid"]
+plot_subgroup(
+  fit_gs,
+  subgroup = list(Democrat    = pid_col < -0.5,
+                  Independent = abs(pid_col) <= 0.5,
+                  Republican  = pid_col > 0.5),
+  dummies = grep("^dem_codeu_", fit_gs$attr_names, value = TRUE),
+  groups = gs_groups, labels = gs_labels,
+  title = "Subgroup AMCE: undemocratic behavior"
 )
 ```
 
-### Preference inequality
+### Beta ridgelines
 
 ```{r}
-#| label: gs-inequality
-sc_inequality(fit_gs, measure = "gini")
+#| label: gs-ridgelines
+#| fig-height: 6
+plot(fit_gs, "beta_ridgelines")
 ```
 
-Higher Gini values indicate that a small fraction of respondents hold
-much stronger preferences than the rest.
+### Loss trace
+
+```{r}
+#| label: gs-loss
+plot(fit_gs, "loss_trace")
+```

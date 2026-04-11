@@ -9,14 +9,57 @@ set.seed(2024)
 torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
+
+## Groups and labels for plot annotations --------------------------------
+bs_groups <- c(
+  "cost_usd"                             = "Cost",
+  "distributionProp. current emissions"   = "Distribution",
+  "distributionProp. hist. emissions"     = "Distribution",
+  "distributionRich pay more, shared"     = "Distribution",
+  "participation80 countries"             = "Participation",
+  "participation160 countries"            = "Participation",
+  "emissions60% reduction"               = "Emissions",
+  "emissions80% reduction"               = "Emissions",
+  "sanctions$6/mo sanctions"             = "Sanctions",
+  "sanctions$17/mo sanctions"            = "Sanctions",
+  "sanctions$23/mo sanctions"            = "Sanctions",
+  "monitoringIndependent commission"      = "Monitoring",
+  "monitoringUnited Nations"              = "Monitoring",
+  "monitoringGreenpeace"                  = "Monitoring"
+)
+
+bs_labels <- c(
+  "cost_usd"                             = "Cost (USD)",
+  "distributionProp. current emissions"   = "Prop. current emissions",
+  "distributionProp. hist. emissions"     = "Prop. hist. emissions",
+  "distributionRich pay more, shared"     = "Rich pay more, shared",
+  "participation80 countries"             = "80 countries",
+  "participation160 countries"            = "160 countries",
+  "emissions60% reduction"               = "60% reduction",
+  "emissions80% reduction"               = "80% reduction",
+  "sanctions$6/mo sanctions"             = "$6/mo sanctions",
+  "sanctions$17/mo sanctions"            = "$17/mo sanctions",
+  "sanctions$23/mo sanctions"            = "$23/mo sanctions",
+  "monitoringIndependent commission"      = "Independent commission",
+  "monitoringUnited Nations"              = "United Nations",
+  "monitoringGreenpeace"                  = "Greenpeace"
+)
 ```
 
 This chapter applies the structural estimator to a climate-treaty
 conjoint experiment whose design follows @bechtel_scheve_2013.
 Respondents evaluate pairs of hypothetical international climate
 agreements varying on six attributes --- including a numeric cost
-attribute (`cost_usd`). Because cost is numeric, this dataset is a
-natural showcase for willingness-to-pay and demand analysis.
+attribute (`cost_usd`) --- and select the one they prefer. Because cost
+is numeric, this dataset is a natural showcase for willingness-to-pay
+(WTP) analysis via `sc_wtp()` and compensating differentials via
+`sc_compensating()`.
+
+::: {.callout-note}
+The `bs2013` dataset is a **seed-fixed synthetic fixture** for
+illustration. Do not use it to draw substantive inferences about the
+Bechtel--Scheve population.
+:::
 
 ## Data preparation
 
@@ -27,7 +70,17 @@ dim(bs2013)
 head(bs2013, 4)
 ```
 
-## Fitting
+```{r}
+#| label: bs-structure
+str(bs2013)
+```
+
+Each respondent contributes six forced-choice tasks with two treaty
+profiles each (12 rows per respondent). The respondent-level moderators
+are `resp_female` (binary), `age` (standardized), and `resp_ideo`
+(standardized ideology).
+
+## Fitting the structural model
 
 ```{r}
 #| label: bs-fit
@@ -46,27 +99,6 @@ fit_bs <- scfit(
 summary(fit_bs)
 ```
 
-```{r}
-#| label: bs-loss
-plot(fit_bs, "loss_trace")
-```
-
-## Population-average estimates
-
-```{r}
-#| label: bs-amce-plot
-#| fig-height: 5
-plot_amce(fit_bs)
-```
-
-## Individual-level preferences
-
-```{r}
-#| label: bs-ridgelines
-#| fig-height: 6
-plot(fit_bs, "beta_ridgelines")
-```
-
 ## Structural quantities
 
 ### Attribute importance
@@ -76,11 +108,48 @@ plot(fit_bs, "beta_ridgelines")
 sc_importance(fit_bs)
 ```
 
+```{r}
+#| label: bs-importance-plot
+#| fig-height: 5
+plot_importance(fit_bs)
+```
+
 ### Direction and intensity
 
 ```{r}
 #| label: bs-di
 sc_direction_intensity(fit_bs)
+```
+
+### Willingness to pay
+
+Because `cost_usd` is a single numeric attribute (one dummy column),
+`sc_wtp()` can compute the WTP for each non-cost attribute level. The
+WTP is the negative MRS against the cost column, expressed in the same
+units as `cost_usd`.
+
+```{r}
+#| label: bs-wtp
+## WTP for selected treaty features
+sc_wtp(fit_bs, attr = "distributionRich pay more, shared", cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "emissions80% reduction",            cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "monitoringUnited Nations",          cost_attr = "cost_usd")
+```
+
+### Compensating differentials
+
+How much cost would respondents accept to gain a preferred treaty
+feature? `sc_compensating()` computes the per-respondent ratio and
+reports the trimmed mean.
+
+```{r}
+#| label: bs-compensating
+sc_compensating(fit_bs,
+                benefit = "distributionRich pay more, shared",
+                cost    = "cost_usd")
+sc_compensating(fit_bs,
+                benefit = "emissions80% reduction",
+                cost    = "cost_usd")
 ```
 
 ### Fraction preferring
@@ -91,48 +160,36 @@ frac_bs <- sc_fraction_preferring(fit_bs, threshold = 0)
 frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```
 
+## Visualization
+
+### AMCE coefficient plot
+
+```{r}
+#| label: bs-amce-plot
+#| fig-height: 5
+plot_amce(fit_bs, groups = bs_groups, labels = bs_labels)
+```
+
+### Fraction favor / oppose
+
 ```{r}
 #| label: bs-fraction-bar
 #| fig-height: 5
-plot_fraction(fit_bs)
+plot_fraction(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
-### Willingness to pay
-
-Because `cost_usd` is numeric, `sc_wtp()` computes the WTP for each
-non-cost attribute level --- the negative MRS against cost, expressed in
-the same units as `cost_usd`.
-
-```{r}
-#| label: bs-wtp
-sc_wtp(fit_bs, attr = "distribution:Rich pay more, shared",    cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "emissions:60% reduction",      cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "monitoring:Independent commission",     cost_attr = "cost_usd")
-```
-
-### Compensating differentials
-
-```{r}
-#| label: bs-compensating
-sc_compensating(fit_bs,
-                benefit = "distribution:Rich pay more, shared",
-                cost    = "cost_usd")
-```
-
-### Heterogeneity test
-
-```{r}
-#| label: bs-het
-sc_heterogeneity_test(fit_bs, adjust = "bh")
-```
+### Heterogeneity
 
 ```{r}
 #| label: bs-het-bar
 #| fig-height: 5
-plot_hetero(fit_bs)
+plot_hetero(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
-### Subgroup analysis by ideology
+### Subgroup AMCE by ideology
+
+Do respondents on the ideological left, center, and right value
+treaty features differently?
 
 ```{r}
 #| label: bs-ideo-plot
@@ -144,57 +201,22 @@ plot_subgroup(
   subgroup = list(Left   = ideo_col <= ideo_cuts[1],
                   Center = ideo_col > ideo_cuts[1] & ideo_col <= ideo_cuts[2],
                   Right  = ideo_col > ideo_cuts[2]),
+  groups = bs_groups, labels = bs_labels,
   title = "Subgroup AMCE by ideology tercile"
 )
 ```
 
-## Advanced quantities
-
-### Consumer surplus
+### Beta ridgelines
 
 ```{r}
-#| label: bs-surplus
-sc_surplus(fit_bs, profiles = list(
-  list(cost_usd = 10),
-  list(cost_usd = 50)
-))
+#| label: bs-ridgelines
+#| fig-height: 6
+plot(fit_bs, "beta_ridgelines")
 ```
 
-### Welfare change
-
-What is the welfare gain from replacing an expensive treaty with a
-cheaper one that includes international monitoring?
+### Loss trace
 
 ```{r}
-#| label: bs-welfare
-sc_welfare_change(
-  fit_bs,
-  old_set = list(list(cost_usd = 50)),
-  new_set = list(list(cost_usd = 10, monitoring = "United Nations"))
-)
+#| label: bs-loss
+plot(fit_bs, "loss_trace")
 ```
-
-### Demand curve
-
-```{r}
-#| label: bs-demand
-demand <- sc_demand_curve(fit_bs, cost_attr = "cost_usd")
-```
-
-```{r}
-#| label: bs-demand-plot
-#| fig-height: 4
-demand_df <- demand$estimate
-ggplot(demand_df, aes(x = cost, y = demand)) +
-  geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.2,
-              fill = "#2166AC") +
-  geom_line(color = "#2166AC", linewidth = 1) +
-  labs(x = "Cost (USD/month)",
-       y = "Average choice probability",
-       title = "Aggregate demand curve") +
-  theme_minimal(base_size = 12)
-```
-
-The downward-sloping demand curve is consistent with
-$\hat\beta_{\mathrm{cost}} < 0$: as treaty cost rises, fewer
-respondents choose it over the reference alternative.
