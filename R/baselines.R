@@ -19,11 +19,17 @@ sc_baseline_logit <- function(object) {
   dX <- object$deltaX
   y  <- object$y
   df <- as.data.frame(dX)
+  ## Make column names syntactically valid for formula
+  safe_names <- make.names(names(df))
+  names(df) <- safe_names
   df$.y <- y
-  fml <- stats::as.formula(paste(".y ~", paste(names(df)[seq_len(ncol(dX))],
+  fml <- stats::as.formula(paste(".y ~", paste(safe_names,
                                                collapse = " + "), "- 1"))
   fit <- stats::glm(fml, data = df, family = stats::binomial())
+  ## Restore original names on coefficients
+  names(fit$coefficients) <- colnames(dX)
   vcov_cl <- .sc_baseline_vcov(fit, object$respondent_id)
+  rownames(vcov_cl) <- colnames(vcov_cl) <- colnames(dX)
   .sc_baseline(
     coefficients = stats::coef(fit),
     vcov         = vcov_cl,
@@ -54,10 +60,13 @@ sc_baseline_lpm <- function(object) {
   dX <- object$deltaX
   y  <- object$y
   df <- as.data.frame(dX)
+  safe_names <- make.names(names(df))
+  names(df) <- safe_names
   df$.y <- y
-  fml <- stats::as.formula(paste(".y ~", paste(names(df)[seq_len(ncol(dX))],
+  fml <- stats::as.formula(paste(".y ~", paste(safe_names,
                                                collapse = " + "), "- 1"))
   fit <- stats::lm(fml, data = df)
+  names(fit$coefficients) <- colnames(dX)
   vcov_cl <- .sc_baseline_vcov(fit, object$respondent_id)
   .sc_baseline(
     coefficients = stats::coef(fit),

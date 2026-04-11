@@ -40,16 +40,18 @@ object.
 | `plot_fraction(fit)` | Fraction favor / oppose diverging bar chart |
 | `plot_hetero(fit)` | Preference heterogeneity bar chart |
 | `plot_subgroup(fit, subgroup)` | Subgroup AMCE comparison |
+| `plot_importance(fit)` | Attribute importance ridgelines |
 
 ## Parameter Reference
 
-All six functions share a common set of customization parameters.
+All functions share a common set of customization parameters.
 Function-specific parameters are noted in parentheses.
 
 | Parameter | Applies to | Purpose | Default |
 |-----------|-----------|---------|---------|
 | `dummies` | all | Character vector: which dummies to show and in what order | `NULL` (all) |
 | `labels` | all | Named character vector: display names for dummies | `NULL` (raw names) |
+| `groups` | all | Named character vector: attribute group for faceting | `NULL` (no facets) |
 | `title` | all | Main title | sensible default |
 | `xlab` / `ylab` | all | Custom axis labels | `NULL` |
 | `xlim` | all | Numeric(2): x-axis limits | `NULL` |
@@ -76,8 +78,9 @@ order follows the order of the `dummies` vector.
 ```{r}
 #| label: plot-select-vars
 #| fig-height: 3.5
-plot_amce(fit, dummies = c("cand_genderfemale", "agendaprogressive",
-                            "prior_officeus_house"))
+plot_amce(fit, dummies = c("cand_genderFemale",
+                            "agendaComplete Overhaul",
+                            "prior_officeYes"))
 ```
 
 This works identically across all plot functions:
@@ -85,7 +88,8 @@ This works identically across all plot functions:
 ```{r}
 #| label: plot-select-fraction
 #| fig-height: 3
-plot_fraction(fit, dummies = c("cand_genderfemale", "agendaprogressive"))
+plot_fraction(fit, dummies = c("cand_genderFemale",
+                                "agendaComplete Overhaul"))
 ```
 
 ## Custom Labels
@@ -96,12 +100,14 @@ name.
 
 ```{r}
 #| label: plot-labels
-#| fig-height: 4
+#| fig-height: 5
 my_labels <- c(
-  agendaprogressive  = "Progressive agenda",
-  agendaconservative = "Conservative agenda",
-  cand_genderfemale  = "Female candidate",
-  prior_officeus_house = "U.S. House experience"
+  "agendaModerate Changes"   = "Moderate Changes",
+  "agendaComplete Overhaul"  = "Complete Overhaul",
+  "cand_genderFemale"        = "Female candidate",
+  "prior_officeYes"          = "Prior office",
+  "talentHard-Working"       = "Hard-Working",
+  "talentCollaborative"      = "Collaborative"
 )
 
 plot_amce(fit, labels = my_labels)
@@ -113,10 +119,45 @@ Combined with `dummies` for a focused, publication-ready figure:
 #| label: plot-labels-focused
 #| fig-height: 3
 plot_amce(fit,
-          dummies = c("cand_genderfemale", "agendaprogressive"),
-          labels = c(cand_genderfemale = "Female candidate",
-                     agendaprogressive = "Progressive agenda"),
+          dummies = c("cand_genderFemale", "agendaComplete Overhaul"),
+          labels = c("cand_genderFemale" = "Female candidate",
+                     "agendaComplete Overhaul" = "Complete Overhaul"),
           title = "Key attributes")
+```
+
+## Attribute Groups
+
+Use `groups` to facet the plot by attribute groups --- essential for
+publication-quality figures.
+
+```{r}
+#| label: plot-groups
+#| fig-height: 5
+sw_groups <- c(
+  "agendaModerate Changes"  = "Agenda",
+  "agendaComplete Overhaul" = "Agenda",
+  "talentCollaborative"     = "Talent",
+  "talentDetermined to Succeed" = "Talent",
+  "talentEmpathetic"        = "Talent",
+  "talentGood Communicator" = "Talent",
+  "talentHard-Working"      = "Talent",
+  "talentTough Negotiator"  = "Talent",
+  "children1 child"         = "Children",
+  "children2 children"      = "Children",
+  "children3 children"      = "Children",
+  "cand_genderFemale"       = "Gender",
+  "prior_officeYes"         = "Prior Office"
+)
+
+plot_amce(fit, groups = sw_groups)
+```
+
+The same `groups` vector works across all plot functions:
+
+```{r}
+#| label: plot-groups-fraction
+#| fig-height: 5
+plot_fraction(fit, groups = sw_groups)
 ```
 
 ## Colors
@@ -229,6 +270,14 @@ plot_fraction(fit, legendOff = TRUE)
 plot_amce(fit, xlim = c(-1.5, 1.5))
 ```
 
+## Importance
+
+```{r}
+#| label: plot-importance-demo
+#| fig-height: 4
+plot_importance(fit)
+```
+
 ## Ridgelines and Loss Trace
 
 The `plot.sc_fit()` method accepts the same customization parameters
@@ -238,11 +287,11 @@ via `...`.
 #| label: plot-ridge-custom
 #| fig-height: 5
 plot(fit, "beta_ridgelines",
-     dummies = c("agendaprogressive", "cand_genderfemale",
-                  "prior_officeus_house"),
-     labels = c(agendaprogressive = "Progressive",
-                cand_genderfemale = "Female",
-                prior_officeus_house = "U.S. House"),
+     dummies = c("agendaComplete Overhaul", "cand_genderFemale",
+                  "prior_officeYes"),
+     labels = c("agendaComplete Overhaul" = "Complete Overhaul",
+                "cand_genderFemale" = "Female",
+                "prior_officeYes" = "Prior Office"),
      title = "Selected attributes")
 ```
 
@@ -264,6 +313,15 @@ plot_amce(fit) +
   theme(plot.subtitle = element_text(color = "gray40", size = 10))
 ```
 
-This lets users add annotations, change coordinate systems, facet, or
-compose multiple plots with `patchwork` without modifying the plot
-functions themselves.
+For side-by-side AMCE and fraction panels, use `gridExtra`:
+
+```{r}
+#| label: plot-side-by-side
+#| fig-height: 5
+library(gridExtra)
+p1 <- plot_amce(fit, groups = sw_groups,
+                title = expression(bold("A.") ~ "Average preferences"))
+p2 <- plot_fraction(fit, groups = sw_groups,
+                    title = expression(bold("B.") ~ "Fraction favor/oppose"))
+grid.arrange(p1, p2, ncol = 2, widths = c(1, 1.1))
+```

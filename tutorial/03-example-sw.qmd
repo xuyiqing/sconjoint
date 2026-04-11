@@ -159,12 +159,12 @@ confirm the denominator column is well-separated from zero.
 #| label: sw-counterfactual
 sc_counterfactual(
   fit_sw,
-  A = list(agenda = "progressive", talent = "experienced",
-           children = "has_children", cand_gender = "female",
-           prior_office = "us_house"),
-  B = list(agenda = "conservative", talent = "average",
-           children = "no_children", cand_gender = "male",
-           prior_office = "none")
+  A = list(agenda = "Complete Overhaul", talent = "Hard-Working",
+           children = "2 children", cand_gender = "Female",
+           prior_office = "Yes"),
+  B = list(agenda = "Very Few Changes", talent = "Assertive",
+           children = "No children", cand_gender = "Male",
+           prior_office = "No")
 )
 ```
 

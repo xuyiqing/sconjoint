@@ -105,9 +105,9 @@ the same units as `cost_usd`.
 
 ```{r}
 #| label: bs-wtp
-sc_wtp(fit_bs, attr = "distribution:Rich pay more",    cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "emissions:80% reduction",      cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "monitoring:United Nations",     cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "distribution:Rich pay more, shared",    cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "emissions:60% reduction",      cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "monitoring:Independent commission",     cost_attr = "cost_usd")
 ```
 
 ### Compensating differentials
@@ -115,7 +115,7 @@ sc_wtp(fit_bs, attr = "monitoring:United Nations",     cost_attr = "cost_usd")
 ```{r}
 #| label: bs-compensating
 sc_compensating(fit_bs,
-                benefit = "distribution:Rich pay more",
+                benefit = "distribution:Rich pay more, shared",
                 cost    = "cost_usd")
 ```
 
