@@ -80,7 +80,9 @@ p1 <- cand1[, .(
   task        = matchNum,
   profile     = 1L,
   choice      = as.integer(c_win),
-  cand_party  = factor(c_Party, levels = c("Democrat", "Republican")),
+  copartisan  = factor(ifelse(
+    (c_Party == "Democrat" & pid7 < 0) | (c_Party == "Republican" & pid7 > 0),
+    "Co-partisan", "Not"), levels = c("Not", "Co-partisan")),
   dem_code    = factor(c_dem_code, levels = dem_levels),
   cand_sex    = factor(c_sex, levels = c("Male", "Female")),
   cand_race   = factor(c_race, levels = c("White", "Black", "Hispanic", "Asian")),
@@ -96,7 +98,9 @@ p2 <- cand1[, .(
   task        = matchNum,
   profile     = 2L,
   choice      = 1L - as.integer(c_win),
-  cand_party  = factor(o_Party, levels = c("Democrat", "Republican")),
+  copartisan  = factor(ifelse(
+    (o_Party == "Democrat" & pid7 < 0) | (o_Party == "Republican" & pid7 > 0),
+    "Co-partisan", "Not"), levels = c("Not", "Co-partisan")),
   dem_code    = factor(o_dem_code, levels = dem_levels),
   cand_sex    = factor(o_sex, levels = c("Male", "Female")),
   cand_race   = factor(o_race, levels = c("White", "Black", "Hispanic", "Asian")),

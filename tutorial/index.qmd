@@ -54,7 +54,7 @@ treaties.
 
 | Column | Role | Levels |
 |--------|------|--------|
-| `cand_party` | Attribute | Democrat, Republican |
+| `copartisan` | Attribute | Not, Co-partisan |
 | `dem_code` | Attribute | 16-level factor (good governance, undemocratic, valence) |
 | `cand_sex` | Attribute | Male, Female |
 | `cand_race` | Attribute | White, Black, Hispanic, Asian |

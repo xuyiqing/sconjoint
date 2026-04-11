@@ -22,7 +22,7 @@ test_that("sw2022 runs scfit() + a few quantities", {
 test_that("gs2020 runs scfit() + a few quantities", {
   data(gs2020, package = "sconjoint")
   fit <- sconjoint::scfit(
-    choice ~ cand_party + dem_code + cand_sex + cand_race + policy_prox |
+    choice ~ copartisan + dem_code + cand_sex + cand_race + policy_prox |
              resp_ideo + resp_pid + resp_age,
     data = gs2020, respondent = "respondent",
     task = "task", profile = "profile",

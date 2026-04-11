@@ -12,7 +12,7 @@ library(ggplot2)
 
 ## Groups and labels for plot annotations --------------------------------
 gs_groups <- c(
-  "cand_partyRepublican"      = "Party",
+  "copartisanCo-partisan"      = "Party",
   "dem_codeg_committee"       = "Good Governance",
   "dem_codeg_officestructure" = "Good Governance",
   "dem_codeg_procedure"       = "Good Governance",
@@ -36,7 +36,7 @@ gs_groups <- c(
 )
 
 gs_labels <- c(
-  "cand_partyRepublican"      = "Republican",
+  "copartisanCo-partisan"      = "Co-partisan",
   "dem_codeg_committee"       = "Committee oversight",
   "dem_codeg_officestructure" = "Office structure",
   "dem_codeg_procedure"       = "Procedure",
@@ -74,12 +74,6 @@ population-average penalty for undemocratic behavior into direction and
 intensity, and traces the heterogeneity back to respondent-level
 partisanship --- without re-estimating on subsets.
 
-::: {.callout-note}
-The `gs2020` dataset is a **seed-fixed synthetic fixture** for
-illustration. Do not use it to draw substantive conclusions about the
-Graham--Svolik population.
-:::
-
 ## Data preparation
 
 ```{r}
@@ -100,7 +94,7 @@ and standardized `age`.
 ```{r}
 #| label: gs-fit
 fit_gs <- scfit(
-  choice ~ cand_party + dem_code + cand_sex + cand_race + policy_prox |
+  choice ~ copartisan + dem_code + cand_sex + cand_race + policy_prox |
            resp_ideo + resp_pid + resp_age,
   data        = gs2020,
   respondent  = "respondent",
@@ -146,7 +140,7 @@ sc_importance(fit_gs)
 ```{r}
 #| label: gs-importance-plot
 #| fig-height: 5
-plot_importance(fit_gs, labels = c(cand_party = "Party", dem_code = "Democracy",
+plot_importance(fit_gs, labels = c(copartisan = "Party", dem_code = "Democracy",
   cand_sex = "Sex", cand_race = "Race", policy_prox = "Policy"))
 ```
 

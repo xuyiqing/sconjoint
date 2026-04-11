@@ -75,7 +75,7 @@
 #'   \item{task}{Matchup number within respondent (integer).}
 #'   \item{profile}{Profile id within matchup (1 or 2).}
 #'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-#'   \item{cand_party}{Factor: candidate's party (ref: `Democrat`, `Republican`).}
+#'   \item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
 #'   \item{dem_code}{Factor: democracy behavior code -- 7 good-governance
 #'     codes (`g_*`), 7 undemocratic codes (`u_*`), 2 valence codes (`v_*`).
 #'     Reference: `g_boardElect`.}
