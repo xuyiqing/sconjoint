@@ -251,12 +251,12 @@ probability that respondents choose $A$ over $B$.
 #| label: sw-counterfactual
 sc_counterfactual(
   fit_sw,
-  A = list(agenda = "progressive", talent = "experienced",
-           children = "has_children", cand_gender = "female",
-           prior_office = "us_house"),
-  B = list(agenda = "conservative", talent = "average",
-           children = "no_children", cand_gender = "male",
-           prior_office = "none")
+  A = list(agenda = "Complete Overhaul", talent = "Hard-Working",
+           children = "2 children", cand_gender = "Female",
+           prior_office = "Yes"),
+  B = list(agenda = "Very Few Changes", talent = "Assertive",
+           children = "No children", cand_gender = "Male",
+           prior_office = "No")
 )
 ```
 
@@ -293,14 +293,14 @@ fem <- fit_sw$Z[, "resp_female"] > 0.5
 sub_fem  <- sc_subgroup(fit_sw, fem)
 sub_male <- sc_subgroup(fit_sw, !fem)
 rbind(
-  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderfemale",
+  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderFemale",
                             c("theta", "se")],
-  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderfemale",
+  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderFemale",
                             c("theta", "se")]
 )
 ```
 
-On this fixture the *direction* of the `cand_genderfemale` coefficient
+On this fixture the *direction* of the `cand_genderFemale` coefficient
 splits along respondent gender lines even when its average AMCE is
 small. This is the headline interpretive payoff of the structural
 framework: one number becomes an entire distribution over respondents,
