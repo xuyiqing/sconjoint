@@ -9,6 +9,41 @@ set.seed(2024)
 torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
+
+## Groups and labels for plot annotations --------------------------------
+bs_groups <- c(
+  "cost_usd"                             = "Cost",
+  "distributionProp. current emissions"   = "Distribution",
+  "distributionProp. hist. emissions"     = "Distribution",
+  "distributionRich pay more, shared"     = "Distribution",
+  "participation80 countries"             = "Participation",
+  "participation160 countries"            = "Participation",
+  "emissions60% reduction"               = "Emissions",
+  "emissions80% reduction"               = "Emissions",
+  "sanctions$6/mo sanctions"             = "Sanctions",
+  "sanctions$17/mo sanctions"            = "Sanctions",
+  "sanctions$23/mo sanctions"            = "Sanctions",
+  "monitoringIndependent commission"      = "Monitoring",
+  "monitoringUnited Nations"              = "Monitoring",
+  "monitoringGreenpeace"                  = "Monitoring"
+)
+
+bs_labels <- c(
+  "cost_usd"                             = "Cost (USD)",
+  "distributionProp. current emissions"   = "Prop. current emissions",
+  "distributionProp. hist. emissions"     = "Prop. hist. emissions",
+  "distributionRich pay more, shared"     = "Rich pay more, shared",
+  "participation80 countries"             = "80 countries",
+  "participation160 countries"            = "160 countries",
+  "emissions60% reduction"               = "60% reduction",
+  "emissions80% reduction"               = "80% reduction",
+  "sanctions$6/mo sanctions"             = "$6/mo sanctions",
+  "sanctions$17/mo sanctions"            = "$17/mo sanctions",
+  "sanctions$23/mo sanctions"            = "$23/mo sanctions",
+  "monitoringIndependent commission"      = "Independent commission",
+  "monitoringUnited Nations"              = "United Nations",
+  "monitoringGreenpeace"                  = "Greenpeace"
+)
 ```
 
 This chapter applies the structural estimator to a climate-treaty
@@ -50,9 +85,9 @@ are `resp_female` (binary), `age` (standardized), and `resp_ideo`
 ```{r}
 #| label: bs-fit
 fit_bs <- scfit(
-  choice ~ distribution + enforcement + monitoring + participation +
-           sanctions + cost_usd |
-           resp_female + age + resp_ideo,
+  choice ~ cost_usd + distribution + participation + emissions +
+           sanctions + monitoring |
+           resp_female + resp_age + resp_ideo,
   data        = bs2013,
   respondent  = "respondent",
   task        = "task",
@@ -73,6 +108,12 @@ summary(fit_bs)
 sc_importance(fit_bs)
 ```
 
+```{r}
+#| label: bs-importance-plot
+#| fig-height: 5
+plot_importance(fit_bs)
+```
+
 ### Direction and intensity
 
 ```{r}
@@ -90,9 +131,9 @@ units as `cost_usd`.
 ```{r}
 #| label: bs-wtp
 ## WTP for selected treaty features
-sc_wtp(fit_bs, attr = "distribution:ability_to_pay", cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "enforcement:trade_sanctions", cost_attr = "cost_usd")
-sc_wtp(fit_bs, attr = "monitoring:international",    cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "distributionRich pay more, shared", cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "emissions80% reduction",            cost_attr = "cost_usd")
+sc_wtp(fit_bs, attr = "monitoringUnited Nations",          cost_attr = "cost_usd")
 ```
 
 ### Compensating differentials
@@ -104,10 +145,10 @@ reports the trimmed mean.
 ```{r}
 #| label: bs-compensating
 sc_compensating(fit_bs,
-                benefit = "distribution:ability_to_pay",
+                benefit = "distributionRich pay more, shared",
                 cost    = "cost_usd")
 sc_compensating(fit_bs,
-                benefit = "enforcement:trade_sanctions",
+                benefit = "emissions80% reduction",
                 cost    = "cost_usd")
 ```
 
@@ -126,7 +167,7 @@ frac_bs$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 ```{r}
 #| label: bs-amce-plot
 #| fig-height: 5
-plot_amce(fit_bs)
+plot_amce(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
 ### Fraction favor / oppose
@@ -134,7 +175,7 @@ plot_amce(fit_bs)
 ```{r}
 #| label: bs-fraction-bar
 #| fig-height: 5
-plot_fraction(fit_bs)
+plot_fraction(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
 ### Heterogeneity
@@ -142,7 +183,7 @@ plot_fraction(fit_bs)
 ```{r}
 #| label: bs-het-bar
 #| fig-height: 5
-plot_hetero(fit_bs)
+plot_hetero(fit_bs, groups = bs_groups, labels = bs_labels)
 ```
 
 ### Subgroup AMCE by ideology
@@ -160,6 +201,7 @@ plot_subgroup(
   subgroup = list(Left   = ideo_col <= ideo_cuts[1],
                   Center = ideo_col > ideo_cuts[1] & ideo_col <= ideo_cuts[2],
                   Right  = ideo_col > ideo_cuts[2]),
+  groups = bs_groups, labels = bs_labels,
   title = "Subgroup AMCE by ideology tercile"
 )
 ```

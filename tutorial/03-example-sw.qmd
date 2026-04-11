@@ -9,6 +9,39 @@ set.seed(2024)
 torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
+
+## Groups and labels for plot annotations --------------------------------
+sw_groups <- c(
+  "agendaModerate Changes"      = "Agenda",
+  "agendaComplete Overhaul"     = "Agenda",
+  "talentCollaborative"         = "Talent",
+  "talentDetermined to Succeed" = "Talent",
+  "talentEmpathetic"            = "Talent",
+  "talentGood Communicator"     = "Talent",
+  "talentHard-Working"          = "Talent",
+  "talentTough Negotiator"      = "Talent",
+  "children1 child"             = "Children",
+  "children2 children"          = "Children",
+  "children3 children"          = "Children",
+  "cand_genderFemale"           = "Gender",
+  "prior_officeYes"             = "Prior Office"
+)
+
+sw_labels <- c(
+  "agendaModerate Changes"      = "Moderate Changes",
+  "agendaComplete Overhaul"     = "Complete Overhaul",
+  "talentCollaborative"         = "Collaborative",
+  "talentDetermined to Succeed" = "Determined to Succeed",
+  "talentEmpathetic"            = "Empathetic",
+  "talentGood Communicator"     = "Good Communicator",
+  "talentHard-Working"          = "Hard-Working",
+  "talentTough Negotiator"      = "Tough Negotiator",
+  "children1 child"             = "1 child",
+  "children2 children"          = "2 children",
+  "children3 children"          = "3 children",
+  "cand_genderFemale"           = "Female",
+  "prior_officeYes"             = "Yes"
+)
 ```
 
 This chapter walks through a complete `sconjoint` analysis of a
@@ -155,6 +188,12 @@ by each attribute block. Shares sum to one by construction.
 sc_importance(fit_sw)
 ```
 
+```{r}
+#| label: sw-importance-plot
+#| fig-height: 5
+plot_importance(fit_sw)
+```
+
 ### Direction and intensity
 
 The structural decomposition separates *direction*
@@ -274,7 +313,7 @@ indexed by observable $\mathbf Z$.
 ```{r}
 #| label: sw-amce-plot
 #| fig-height: 5
-plot_amce(fit_sw)
+plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
 ### Fraction favor / oppose
@@ -282,7 +321,7 @@ plot_amce(fit_sw)
 ```{r}
 #| label: sw-fraction-bar
 #| fig-height: 5
-plot_fraction(fit_sw)
+plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
 ### Heterogeneity bar chart
@@ -294,7 +333,7 @@ at the 5% level.
 ```{r}
 #| label: sw-het-bar
 #| fig-height: 5
-plot_hetero(fit_sw)
+plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
 ### Subgroup AMCE: gender
@@ -306,6 +345,7 @@ plot_subgroup(
   fit_sw,
   subgroup = list(Female = fit_sw$Z[, "resp_female"] > 0.5,
                   Male   = fit_sw$Z[, "resp_female"] <= 0.5),
+  groups = sw_groups, labels = sw_labels,
   title = "Subgroup AMCE: female vs male respondents"
 )
 ```
