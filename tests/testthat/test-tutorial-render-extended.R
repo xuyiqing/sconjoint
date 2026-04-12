@@ -1,4 +1,4 @@
-test_that("extended Quarto book includes 13 chapters (stub 12 excluded)", {
+test_that("Quarto book includes all chapters", {
   skip_on_cran()
   root <- tryCatch(testthat::test_path("..", ".."), error = function(e) NULL)
   if (is.null(root)) testthat::skip("cannot locate package root")
@@ -8,16 +8,17 @@ test_that("extended Quarto book includes 13 chapters (stub 12 excluded)", {
   if (!file.exists(yml)) testthat::skip("_quarto.yml missing")
   lines <- readLines(yml, warn = FALSE)
   chapters <- grep("\\.qmd\\s*$", lines, value = TRUE)
-  ## Every listed chapter (index + 01..11 + 13 = 13 entries; 12 stub excluded)
-  expect_equal(length(chapters), 13L,
+  ## 9 entries: index + 01-installation + 02-sanity + 03-sw + 04-gs +
+  ##            05-br + 06-bs + 07-plot-options + references
+  expect_equal(length(chapters), 9L,
                info = paste(chapters, collapse = "\n"))
-  expect_true(any(grepl("08-case-saha-weeks", chapters)))
-  expect_true(any(grepl("09-case-graham-svolik", chapters)))
-  expect_true(any(grepl("10-case-bechtel-scheve", chapters)))
-  expect_false(any(grepl("12-advanced", chapters)))
+  expect_true(any(grepl("03-example-sw", chapters)))
+  expect_true(any(grepl("04-example-gs", chapters)))
+  expect_true(any(grepl("05-example-br", chapters)))
+  expect_true(any(grepl("06-example-bs", chapters)))
 })
 
-test_that("full extended book renders (skipped without quarto)", {
+test_that("full book renders (skipped without quarto)", {
   skip_on_cran()
   skip_if_not_installed("quarto")
   qbin <- tryCatch(quarto::quarto_path(), error = function(e) NULL)
@@ -34,6 +35,6 @@ test_that("full extended book renders (skipped without quarto)", {
   bookdir <- file.path(tut, "_book")
   if (dir.exists(bookdir)) {
     htmls <- list.files(bookdir, pattern = "\\.html$")
-    expect_true(length(htmls) >= 13L)
+    expect_true(length(htmls) >= 9L)
   }
 })
