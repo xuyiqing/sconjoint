@@ -6,7 +6,6 @@ project:
 
 book:
   title: "sconjoint: Structural Deep Learning for Conjoint Experiments"
-  author: "Avidit Acharya, Jens Hainmueller, Yiqing Xu"
   chapters:
     - index.qmd
     - 01-installation.qmd
@@ -17,6 +16,7 @@ book:
     - 06-example-bs.qmd
     - 07-plot-options.qmd
     - references.qmd
+    - changelog.qmd
 
 bibliography: references.bib
 
