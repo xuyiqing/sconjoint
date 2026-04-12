@@ -3,12 +3,12 @@
 **Structural Deep-Learning Estimation for Conjoint Experiments**
 
 `sconjoint` implements the structural deep-learning estimator of
-Acharya, Hainmueller, and Xu (2026) for forced-choice conjoint
-experiments. The estimator embeds a deep neural network inside a
-random utility logit so that each respondent's preference vector
-varies flexibly with observed covariates. Double/debiased
-machine-learning (DML) inference delivers respondent-clustered
-standard errors on all quantities.
+[Acharya, Hainmueller, and Xu (2026)](https://bit.ly/sconjoint) for
+forced-choice conjoint experiments. The estimator embeds a deep neural
+network inside a random utility logit so that each respondent's
+preference vector varies flexibly with observed covariates.
+Double/debiased machine-learning (DML) inference delivers
+respondent-clustered standard errors on all quantities.
 
 ## Installation
 
@@ -74,25 +74,28 @@ All plot functions accept `dummies`, `labels`, `groups` for
 customization. See the Plot Options chapter in the tutorial.
 
 **Bundled datasets**: `sw2022` (Saha & Weeks 2022), `gs2020`
-(Graham & Svolik 2020), `bs2013` (Bechtel & Scheve 2013), `simdata`
-(known-DGP sanity check).
+(Graham & Svolik 2020), `br2017` (Ballard-Rosa, Martin & Scheve 2017),
+`bs2013` (Bechtel & Scheve 2013), `simdata` (known-DGP sanity check).
 
 ## Documentation
 
-The primary documentation is a Quarto book under `tutorial/`:
+The primary documentation is a [Quarto book](tutorial/) with
+worked examples:
 
 1. **Get Started** --- installation
 2. **Simulated Example** --- full workflow with ground-truth verification
 3. **Example: Candidate Choice** --- Saha & Weeks (2022)
 4. **Example: Democratic Norms** --- Graham & Svolik (2020)
-5. **Example: Climate Treaties** --- Bechtel & Scheve (2013)
-6. **Plot Options** --- parameter-first reference for customization
+5. **Example: Tax Preferences** --- Ballard-Rosa, Martin & Scheve (2017)
+6. **Example: Climate Treaties** --- Bechtel & Scheve (2013)
+7. **Plot Options** --- parameter-first reference for customization
+
+## Reference
+
+Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
+"[A Structural Deep-Learning Estimator for Conjoint Experiments](https://bit.ly/sconjoint)."
+Working paper.
 
 ## License
 
-GPL (>= 3).
-
-## Citation
-
-Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026. "A Structural
-Deep-Learning Estimator for Conjoint Experiments." Working paper.
+MIT.

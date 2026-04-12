@@ -1,7 +1,8 @@
 # Welcome {.unnumbered}
 
 `sconjoint` is an R package implementing the *structural deep learning*
-estimator for forced-choice conjoint experiments developed by @acharya2026structural. The estimator embeds a deep neural network
+estimator for forced-choice conjoint experiments developed by @acharya2026structural
+([paper](https://bit.ly/sconjoint)). The estimator embeds a deep neural network
 inside a random-utility logit so that each respondent's preference
 vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
 smoothly and flexibly with her observed covariates $\mathbf Z$. Double /
@@ -17,8 +18,8 @@ willingness to pay --- that require the full preference vector rather
 than one-attribute-at-a-time marginal effects.
 
 This book is the primary user documentation for the package. It walks
-from installation through two complete worked examples, a simulation
-sanity check, visualization options, and frequently asked questions.
+from installation through four complete worked examples, a simulation
+sanity check, and visualization options.
 
 ```{r}
 #| label: welcome-load
@@ -40,10 +41,10 @@ and climate treaties.
 | Column | Role | Levels |
 |--------|------|--------|
 | `agenda` | Attribute | 3 levels |
-| `talent` | Attribute | 3 levels |
-| `children` | Attribute | 2 levels |
+| `talent` | Attribute | 7 levels |
+| `children` | Attribute | 4 levels |
 | `cand_gender` | Attribute | 2 levels |
-| `prior_office` | Attribute | 3 levels |
+| `prior_office` | Attribute | 2 levels |
 | `resp_female` | Moderator ($\mathbf Z$) | binary |
 | `age` | Moderator ($\mathbf Z$) | age in years |
 | `pid` | Moderator ($\mathbf Z$) | factor: Democrat, Republican (GOP), Independent |
@@ -63,16 +64,7 @@ and climate treaties.
 | `cand_pro` | Attribute | 9-level factor (profession) |
 | `resp_ideo` | Moderator ($\mathbf Z$) | 1--7 ideology |
 | `resp_pid` | Moderator ($\mathbf Z$) | party ID (-3 to 3) |
-| `resp_trump` | Moderator ($\mathbf Z$) | Trump approval (1--4) |
-| `resp_age` | Moderator ($\mathbf Z$) | age in years |
-| `resp_female` | Moderator ($\mathbf Z$) | binary |
-| `resp_race_black` | Moderator ($\mathbf Z$) | binary |
-| `resp_race_asian` | Moderator ($\mathbf Z$) | binary |
-| `resp_race_other` | Moderator ($\mathbf Z$) | binary |
-| `resp_educ` | Moderator ($\mathbf Z$) | 1--6 education |
-| `resp_income` | Moderator ($\mathbf Z$) | 1--24 household income |
-| `resp_auth` | Moderator ($\mathbf Z$) | 0--4 authoritarianism |
-| `resp_knowledge` | Moderator ($\mathbf Z$) | 0--8 political knowledge |
+| + 10 more | Moderator ($\mathbf Z$) | Trump approval, demographics, attitudes |
 
 ### `br2017` --- @ballard2017structure: tax preferences
 
@@ -80,25 +72,10 @@ and climate treaties.
 
 | Column | Role | Levels |
 |--------|------|--------|
-| `rate_L10` | Attribute | numeric (tax rate %) |
-| `rate_10_35` | Attribute | numeric (tax rate %) |
-| `rate_35_85` | Attribute | numeric (tax rate %) |
-| `rate_85_175` | Attribute | numeric (tax rate %) |
-| `rate_175_375` | Attribute | numeric (tax rate %) |
-| `rate_375P` | Attribute | numeric (tax rate %) |
+| `rate_L10` ... `rate_375P` | Attribute | numeric (tax rate %) |
 | `revenue_score` | Attribute | numeric ($-2$ to $+2$) |
-| `resp_age` | Moderator ($\mathbf Z$) | age in years |
-| `resp_female` | Moderator ($\mathbf Z$) | binary |
 | `resp_pid7` | Moderator ($\mathbf Z$) | 1--7 party ID |
-| `resp_educ` | Moderator ($\mathbf Z$) | 1--6 education |
-| `resp_race_white` | Moderator ($\mathbf Z$) | binary |
-| `resp_income` | Moderator ($\mathbf Z$) | 1--13 household income |
-| `resp_ineq_averse` | Moderator ($\mathbf Z$) | binary |
-| `resp_work_vs_luck` | Moderator ($\mathbf Z$) | ordinal |
-| `resp_taxes_harm` | Moderator ($\mathbf Z$) | ordinal |
-| `resp_hardwork` | Moderator ($\mathbf Z$) | binary |
-| `resp_high_econ_know` | Moderator ($\mathbf Z$) | binary |
-| `resp_employed_ft` | Moderator ($\mathbf Z$) | binary |
+| + 11 more | Moderator ($\mathbf Z$) | demographics, beliefs, attitudes |
 
 ### `bs2013` --- @bechtel_scheve_2013: climate treaties
 
@@ -124,19 +101,61 @@ The user guide is structured into the following chapters:
     Installation instructions for `torch` and `sconjoint`.
 
 -   [Chapter @sec-sanity]\
-    Full workflow on simulated data with known ground truth. Walks through fitting, recovery, structural quantities, and visualization --- verifying each step against the true DGP.
+    Full workflow on simulated data with known ground truth, verifying
+    each step against the true DGP.
 
 -   [Chapter @sec-sw]\
-    Full pipeline on the @saha2022welfare candidate-choice conjoint: data preparation, model fitting, interpretation, all structural quantities, and visualization.
+    Full pipeline on the @saha2022welfare candidate-choice conjoint.
 
 -   [Chapter @sec-gs]\
-    Second worked example on the @graham2020democracy democratic-norms conjoint, emphasizing heterogeneity testing, partisan subgroup analysis, and preference clustering.
+    @graham2020democracy democratic-norms conjoint, emphasizing
+    heterogeneity testing, partisan subgroup analysis, and preference
+    clustering.
 
 -   [Chapter @sec-br]\
-    Fourth worked example on the @ballard2017structure tax-plan conjoint, showcasing all-numeric (continuous) attributes and partisan tax-schedule preferences.
+    @ballard2017structure tax-plan conjoint, showcasing all-numeric
+    (continuous) attributes and partisan tax-schedule preferences.
 
 -   [Chapter @sec-bs]\
-    Tutorial example on the @bechtel_scheve_2013 climate-treaty conjoint (not in main paper), showcasing willingness-to-pay analysis with a numeric cost attribute.
+    @bechtel_scheve_2013 climate-treaty conjoint (tutorial example),
+    showcasing willingness-to-pay analysis with a numeric cost attribute.
 
 -   [Chapter @sec-plots]\
-    Customizing ridgeline density plots and training loss traces with `ggplot2`.
+    Customizing plots with `dummies`, `labels`, `groups`, and `ggplot2`.
+
+## Authors
+
+-   [Avidit Acharya](https://aviditacharya.humsci.stanford.edu/)
+-   [Jens Hainmueller](https://j-hai.github.io/)
+-   [Yiqing Xu](https://yiqingxu.org/)
+-   [StatsClaw](https://statsclaw.ai/) (Agentic System for Statistical Software Development)
+
+## How to Cite
+
+> Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
+> *sconjoint: Structural Deep-Learning Estimation for Conjoint
+> Experiments --- User Manual (v0.1.0).*
+> <https://github.com/xuyiqing/sconjoint>
+
+```bibtex
+@manual{sconjoint2026,
+  title = {sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments --- User Manual},
+  author = {Acharya, Avidit and Hainmueller, Jens and Xu, Yiqing},
+  year = {2026},
+  note = {R package version 0.1.0},
+  url = {https://github.com/xuyiqing/sconjoint}
+}
+```
+
+## Report Bugs
+
+Please report any bugs by submitting an issue on
+[GitHub](https://github.com/xuyiqing/sconjoint/issues) or emailing
+Yiqing Xu (yiqingxu [at] stanford.edu). Please include a minimally
+reproducible example and your `sessionInfo()` output.
+
+<!-- badges: start -->
+
+**sconjoint**: [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+<!-- badges: end -->

@@ -1,0 +1,39 @@
+# Changelog {#sec-changelog .unnumbered}
+
+## v0.1.0
+
+(2026-04-12) Initial release.
+
+**Estimator**
+
+* `scfit()`: structural deep-learning estimator with DML inference, respondent-clustered cross-fitting, and bit-exact determinism across core counts.
+* `predict.sc_fit()`: forward-pass on new moderator data via `newdata` and `type` arguments.
+* `keep_modules` argument to persist per-fold torch modules for forward-pass prediction.
+
+**Structural quantities (21 functions)**
+
+* Tier A (9): `sc_mrs`, `sc_counterfactual`, `sc_wtp`, `sc_importance`, `sc_polarization`, `sc_fraction_preferring`, `sc_optimal_profile`, `sc_direction_intensity`, `sc_heterogeneity_test`.
+* Tier B (3): `sc_subgroup`, `sc_compensating`, `sc_clusters`.
+* Tier C (7): `sc_surplus`, `sc_welfare_change`, `sc_average`, `sc_indifference`, `sc_demand_curve`, `sc_decisiveness`, `sc_inequality`.
+
+**Baselines**
+
+* `sc_baseline_logit`, `sc_baseline_lpm` for side-by-side comparison with the structural model.
+
+**Plots (7 functions)**
+
+* `plot_amce`, `plot_fraction`, `plot_hetero`, `plot_subgroup`, `plot_importance`: publication-quality diagnostic plots.
+* All accept `dummies`, `labels`, `groups` for customization (variable selection, display names, attribute-group faceting).
+* `plot.sc_fit`: beta ridgelines (`"beta_ridgelines"`) and training loss trace (`"loss_trace"`).
+
+**Bundled datasets**
+
+* `sw2022` (Saha & Weeks 2022): 1,191 respondents, candidate choice, 5 factor attributes, 3 moderators.
+* `gs2020` (Graham & Svolik 2020): 1,605 respondents, democratic norms, 30 attribute levels (7 groups), 12 moderators.
+* `br2017` (Ballard-Rosa, Martin & Scheve 2017): 2,000 respondents, tax preferences, 7 numeric attributes, 12 moderators.
+* `bs2013` (Bechtel & Scheve 2013): 2,500 respondents, climate treaties, 6 attributes (including numeric cost), 3 moderators.
+* `simdata`: 1,000 synthetic respondents with known ground truth for validation.
+
+**Tutorial**
+
+* 9-chapter Quarto book: installation, simulated example, four real-data worked examples (SW, GS, BR, BS), plot options reference, references, changelog.
