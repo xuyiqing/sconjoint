@@ -146,6 +146,45 @@
 #' head(bs2013)
 "bs2013"
 
+#' Ballard-Rosa, Martin & Scheve (2017) tax-plan conjoint
+#'
+#' A long-format forced-choice tax-plan conjoint dataset from the
+#' replication materials of Ballard-Rosa, Martin, and Scheve (2017).
+#' Respondents see eight tasks comparing two tax-plan proposals.
+#' Each plan specifies marginal tax rates for six income brackets
+#' plus a revenue impact indicator. All attributes are numeric
+#' (continuous), unlike the other bundled datasets which use factors.
+#'
+#' The sample is restricted to respondents who saw the revenue
+#' column (saw_revenue == 1).
+#'
+#' @format A data frame with 32,000 rows (2,000 respondents x 8 tasks x
+#'   2 profiles) and the following columns:
+#' \describe{
+#'   \item{respondent}{Respondent id (character).}
+#'   \item{task}{Task id within respondent (1..8).}
+#'   \item{profile}{Profile id within task (1 or 2).}
+#'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
+#'   \item{rate_L10}{Marginal tax rate (percent) for under-$10k bracket.}
+#'   \item{rate_10_35}{Rate for $10-35k bracket.}
+#'   \item{rate_35_85}{Rate for $35-85k bracket.}
+#'   \item{rate_85_175}{Rate for $85-175k bracket.}
+#'   \item{rate_175_375}{Rate for $175-375k bracket.}
+#'   \item{rate_375P}{Rate for over-$375k bracket.}
+#'   \item{revenue_score}{Revenue impact: -2 (much less) to +2 (much more).}
+#'   \item{resp_pid7}{Respondent party ID (1=Strong Dem to 7=Strong Rep).}
+#'   \item{resp_age}{Respondent age in years.}
+#'   \item{resp_female}{Respondent gender (0/1, 1 = female).}
+#' }
+#' @source Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
+#'   "The Structure of American Income Tax Policy Preferences."
+#'   *Journal of Politics* 79(1):1-16.
+#'   Data from published replication materials.
+#' @examples
+#' data(br2017)
+#' head(br2017)
+"br2017"
+
 #' Simulated conjoint with known ground truth
 #'
 #' A synthetic forced-choice conjoint dataset with known true

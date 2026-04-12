@@ -1,0 +1,238 @@
+# Example: Tax Preferences {#sec-br}
+
+```{r}
+#| label: setup-br
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+library(ggplot2)
+
+## Labels and groups for plot annotations -----------------------------------
+br_labels <- c(
+  "rate_L10"      = "Under $10k",
+  "rate_10_35"    = "$10-35k",
+  "rate_35_85"    = "$35-85k",
+  "rate_85_175"   = "$85-175k",
+  "rate_175_375"  = "$175-375k",
+  "rate_375P"     = "Over $375k",
+  "revenue_score" = "Revenue impact"
+)
+
+br_groups <- c(
+  "rate_L10"      = "Tax Rates",
+  "rate_10_35"    = "Tax Rates",
+  "rate_35_85"    = "Tax Rates",
+  "rate_85_175"   = "Tax Rates",
+  "rate_175_375"  = "Tax Rates",
+  "rate_375P"     = "Tax Rates",
+  "revenue_score" = "Revenue"
+)
+```
+
+This chapter applies the structural estimator to a tax-plan conjoint
+experiment from @ballard2017structure. Respondents evaluate pairs of
+hypothetical income tax plans varying on **six marginal tax rates** (one
+per income bracket) plus a **revenue impact** indicator, and select the
+plan they prefer.
+
+What makes this dataset unique among the bundled examples is that
+**every attribute is numeric** (continuous). There are no factor
+attributes --- the six bracket rates are percentages and the revenue
+score is a centered integer scale. This showcases how `sconjoint`
+handles all-numeric attribute designs.
+
+## Data preparation
+
+```{r}
+#| label: br-load
+data(br2017, package = "sconjoint")
+dim(br2017)
+head(br2017, 4)
+```
+
+```{r}
+#| label: br-structure
+str(br2017)
+```
+
+Each respondent contributes eight forced-choice tasks with two tax-plan
+profiles each (16 rows per respondent). The respondent-level moderators
+are `resp_pid7` (party identification, 1--7+ scale), `resp_age` (years),
+and `resp_female` (binary).
+
+## Fitting the structural model
+
+```{r}
+#| label: br-fit
+fit_br <- scfit(
+  choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
+           rate_175_375 + rate_375P + revenue_score |
+           resp_pid7 + resp_age + resp_female,
+  data        = br2017,
+  respondent  = "respondent",
+  task        = "task",
+  profile     = "profile",
+  K           = 3L,
+  n_epochs    = 60L,
+  seed        = 2024
+)
+summary(fit_br)
+```
+
+```{r}
+#| label: br-loss
+plot(fit_br, "loss_trace")
+```
+
+## Population-average estimates
+
+```{r}
+#| label: br-amce-plot
+#| fig-height: 5
+plot_amce(fit_br, groups = br_groups, labels = br_labels)
+```
+
+## Individual-level preferences
+
+```{r}
+#| label: br-ridgelines
+#| fig-height: 6
+plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels)
+```
+
+## Structural quantities
+
+### Attribute importance
+
+```{r}
+#| label: br-importance
+sc_importance(fit_br)
+```
+
+```{r}
+#| label: br-importance-plot
+#| fig-height: 4
+plot_importance(fit_br, labels = c(
+  rate_L10 = "Under $10k", rate_10_35 = "$10-35k",
+  rate_35_85 = "$35-85k", rate_85_175 = "$85-175k",
+  rate_175_375 = "$175-375k", rate_375P = "Over $375k",
+  revenue_score = "Revenue"
+))
+```
+
+### Direction and intensity
+
+```{r}
+#| label: br-di
+sc_direction_intensity(fit_br)
+```
+
+### Fraction preferring
+
+```{r}
+#| label: br-fraction
+#| fig-height: 5
+plot_fraction(fit_br, groups = br_groups, labels = br_labels)
+```
+
+### Heterogeneity test
+
+```{r}
+#| label: br-het-test
+sc_heterogeneity_test(fit_br, adjust = "bh")
+```
+
+```{r}
+#| label: br-het-bar
+#| fig-height: 5
+plot_hetero(fit_br, groups = br_groups, labels = br_labels)
+```
+
+### Subgroup analysis by party
+
+```{r}
+#| label: br-subgroup
+#| fig-height: 6
+pid_col <- fit_br$Z[, "resp_pid7"]
+plot_subgroup(
+  fit_br,
+  subgroup = list(
+    Democrat    = pid_col <= 3,
+    Independent = pid_col >= 4 & pid_col <= 4,
+    Republican  = pid_col >= 5
+  ),
+  groups = br_groups, labels = br_labels,
+  title = "Subgroup AMCE by party"
+)
+```
+
+### Tax schedule preferences by party
+
+This plot is unique to the tax-plan conjoint. It extracts the six
+bracket coefficients $\hat\beta_k(\mathbf Z_i)$ and plots them as a
+continuous "tax schedule" curve, colored by partisan affiliation. The
+ribbons show the interquartile range (dark) and 10th--90th percentile
+range (light) across respondents within each party.
+
+```{r}
+#| label: br-schedule
+#| fig-height: 5
+#| fig-width: 8
+
+## Extract respondent-level beta
+beta_hat <- predict(fit_br)
+first_row <- !duplicated(fit_br$respondent_id)
+beta_resp <- beta_hat[first_row, ]
+
+## Party assignment from moderator
+pid <- fit_br$Z[first_row, "resp_pid7"]
+party <- ifelse(pid <= 3, "Democrat",
+         ifelse(pid >= 5, "Republican", "Independent"))
+
+## Build schedule data: 6 brackets as x-axis, beta as y-axis
+brackets <- c("Under $10k", "$10-35k", "$35-85k",
+              "$85-175k", "$175-375k", "Over $375k")
+rate_cols <- c("rate_L10", "rate_10_35", "rate_35_85",
+               "rate_85_175", "rate_175_375", "rate_375P")
+
+## Compute quantiles by party x bracket
+quant_data <- do.call(rbind, lapply(unique(party), function(p) {
+  do.call(rbind, lapply(seq_along(brackets), function(j) {
+    vals <- beta_resp[party == p, rate_cols[j]]
+    data.frame(
+      bracket = brackets[j],
+      party   = p,
+      median  = median(vals),
+      q25     = quantile(vals, 0.25),
+      q75     = quantile(vals, 0.75),
+      q10     = quantile(vals, 0.10),
+      q90     = quantile(vals, 0.90)
+    )
+  }))
+}))
+quant_data$bracket <- factor(quant_data$bracket, levels = brackets)
+quant_data$party   <- factor(quant_data$party,
+                              levels = c("Democrat", "Independent", "Republican"))
+
+## Plot
+ggplot(quant_data, aes(x = bracket, color = party, fill = party, group = party)) +
+  geom_ribbon(aes(ymin = q10, ymax = q90), alpha = 0.1, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.2, color = NA) +
+  geom_line(aes(y = median), linewidth = 1.2) +
+  geom_point(aes(y = median), size = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  scale_color_manual(values = c(Democrat = "#2166AC", Independent = "gray50",
+                                Republican = "#B2182B")) +
+  scale_fill_manual(values = c(Democrat = "#2166AC", Independent = "gray50",
+                               Republican = "#B2182B")) +
+  labs(x = "Income bracket",
+       y = expression(hat(beta)[k](Z) ~ "(utility per % point)"),
+       title = "Tax schedule preferences by party",
+       color = NULL, fill = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1),
+        legend.position = "bottom")
+```

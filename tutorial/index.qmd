@@ -29,9 +29,9 @@ data(package = "sconjoint")$results[, c("Item", "Title")]
 
 ## Bundled datasets
 
-The package ships three conjoint datasets from published replication
-materials, covering candidate choice, democratic norms, and climate
-treaties.
+The package ships four conjoint datasets from published replication
+materials, covering candidate choice, democratic norms, tax preferences,
+and climate treaties.
 
 ### `sw2022` --- @saha2022welfare: candidate choice
 
@@ -62,6 +62,23 @@ treaties.
 | `resp_ideo` | Moderator ($\mathbf Z$) | 1--7 ideology |
 | `resp_pid` | Moderator ($\mathbf Z$) | party ID (7-point) |
 | `resp_age` | Moderator ($\mathbf Z$) | age in years |
+
+### `br2017` --- @ballard2017structure: tax preferences
+
+2,000 respondents $\times$ 8 tasks $\times$ 2 profiles = 32,000 rows.
+
+| Column | Role | Levels |
+|--------|------|--------|
+| `rate_L10` | Attribute | numeric (tax rate %) |
+| `rate_10_35` | Attribute | numeric (tax rate %) |
+| `rate_35_85` | Attribute | numeric (tax rate %) |
+| `rate_85_175` | Attribute | numeric (tax rate %) |
+| `rate_175_375` | Attribute | numeric (tax rate %) |
+| `rate_375P` | Attribute | numeric (tax rate %) |
+| `revenue_score` | Attribute | numeric ($-2$ to $+2$) |
+| `resp_pid7` | Moderator ($\mathbf Z$) | 1--7+ party ID |
+| `resp_age` | Moderator ($\mathbf Z$) | age in years |
+| `resp_female` | Moderator ($\mathbf Z$) | binary |
 
 ### `bs2013` --- @bechtel_scheve_2013: climate treaties
 
@@ -95,8 +112,11 @@ The user guide is structured into the following chapters:
 -   [Chapter @sec-gs]\
     Second worked example on the @graham2020democracy democratic-norms conjoint, emphasizing heterogeneity testing, partisan subgroup analysis, and preference clustering.
 
+-   [Chapter @sec-br]\
+    Fourth worked example on the @ballard2017structure tax-plan conjoint, showcasing all-numeric (continuous) attributes and partisan tax-schedule preferences.
+
 -   [Chapter @sec-bs]\
-    Third worked example on the @bechtel_scheve_2013 climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
+    Fifth worked example on the @bechtel_scheve_2013 climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
 
 -   [Chapter @sec-plots]\
     Customizing ridgeline density plots and training loss traces with `ggplot2`.
