@@ -16,7 +16,7 @@ Description: Implements the structural deep-learning estimator for
     consumer surplus, attribute importance, preference polarization, and
     preference clustering. Builds on 'torch' for the deep-learning
     backend.
-License: GPL (>= 3)
+License: MIT + file LICENSE
 URL: https://github.com/xuyiqing/sconjoint
 BugReports: https://github.com/xuyiqing/sconjoint/issues
 Depends:

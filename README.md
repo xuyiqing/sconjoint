@@ -98,4 +98,4 @@ Working paper.
 
 ## License
 
-GPL (>= 3).
+MIT.
