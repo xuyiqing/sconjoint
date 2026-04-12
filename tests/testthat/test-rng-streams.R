@@ -17,6 +17,8 @@ test_that(".sc_make_seed_streams is deterministic and distinct", {
 })
 
 test_that(".sc_with_torch_seed restores R RNG state", {
+  skip_if_not_installed("torch")
+  skip_if(!torch::torch_is_installed(), "libtorch not installed")
   set.seed(99)
   before <- .Random.seed
   sconjoint:::.sc_with_torch_seed(11L, {
