@@ -36,11 +36,11 @@ gs_groups <- c(
   "p2"                        = "Policy",
   "cand_proFarmer"            = "Profession",
   "cand_proLawyer"            = "Profession",
-  "cand_proLegislative_staffer" = "Profession",
-  "cand_proPolice_officer"    = "Profession",
-  "cand_proServed_in_the_army" = "Profession",
-  "cand_proServed_in_the_navy" = "Profession",
-  "cand_proSmall_business_owner" = "Profession",
+  "cand_proLegislative staffer" = "Profession",
+  "cand_proPolice officer"    = "Profession",
+  "cand_proServed in the army" = "Profession",
+  "cand_proServed in the navy" = "Profession",
+  "cand_proSmall business owner" = "Profession",
   "cand_proTeacher"           = "Profession"
 )
 
@@ -69,11 +69,11 @@ gs_labels <- c(
   "p2"                        = "Social policy (conservative)",
   "cand_proFarmer"            = "Farmer",
   "cand_proLawyer"            = "Lawyer",
-  "cand_proLegislative_staffer" = "Legislative staffer",
-  "cand_proPolice_officer"    = "Police officer",
-  "cand_proServed_in_the_army" = "Army veteran",
-  "cand_proServed_in_the_navy" = "Navy veteran",
-  "cand_proSmall_business_owner" = "Small business owner",
+  "cand_proLegislative staffer" = "Legislative staffer",
+  "cand_proPolice officer"    = "Police officer",
+  "cand_proServed in the army" = "Army veteran",
+  "cand_proServed in the navy" = "Navy veteran",
+  "cand_proSmall business owner" = "Small business owner",
   "cand_proTeacher"           = "Teacher"
 )
 ```

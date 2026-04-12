@@ -86,10 +86,10 @@ hhi_levels <- c(
 hhi_map <- setNames(seq_along(hhi_levels), hhi_levels)
 
 # Profession levels
-pro_levels <- c("Business_executive", "Farmer", "Lawyer",
-                "Legislative_staffer", "Police_officer",
-                "Served_in_the_army", "Served_in_the_navy",
-                "Small_business_owner", "Teacher")
+pro_levels <- c("Business executive", "Farmer", "Lawyer",
+                "Legislative staffer", "Police officer",
+                "Served in the army", "Served in the navy",
+                "Small business owner", "Teacher")
 
 # Democracy behavior levels (reference = g_boardElect)
 dem_levels <- c("g_boardElect",
