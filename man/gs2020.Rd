@@ -3,22 +3,43 @@
 \docType{data}
 \name{gs2020}
 \alias{gs2020}
-\title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms (synthetic)}
+\title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms}
 \format{
-A data frame with 3,200 rows (200 respondents x 8 tasks x 2
-profiles) and the following columns:
+A data frame with 41,314 rows (1,605 respondents, ~20,657
+matchups x 2 profiles) and the following columns:
 \describe{
-\item{respondent, task, profile, choice}{Same role as in \code{sw2022}.}
-\item{federal}{Factor: federal program spending direction.}
-\item{immigration}{Factor: immigration policy direction.}
-\item{tax}{Factor: tax policy.}
-\item{abortion}{Factor: abortion policy stance.}
-\item{undem}{Factor: undemocratic behavior level -- \code{none},
-\code{ignore_court}, \code{close_press}, \code{ban_opposition_rally}.}
-\item{cand_party}{Factor: candidate's party (\code{Dem}, \code{Rep}, \code{Ind}).}
-\item{resp_pid}{Integer -1/0/+1: respondent partisanship.}
-\item{resp_ideo}{Numeric: respondent ideology, standardized.}
-\item{age}{Numeric: respondent age, standardized.}
+\item{respondent}{Respondent id (character).}
+\item{task}{Matchup number within respondent (integer).}
+\item{profile}{Profile id within matchup (1 or 2).}
+\item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
+\item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
+\item{p1}{Numeric 1-4: economic policy position (1 = most liberal,
+4 = most conservative).}
+\item{p2}{Numeric 1-4: social policy position (1 = most liberal,
+4 = most conservative).}
+\item{dem_code}{Factor: democracy behavior code -- 7 good-governance
+codes (\verb{g_*}), 7 undemocratic codes (\verb{u_*}), 2 valence codes (\verb{v_*}).
+Reference: \code{g_boardElect}.}
+\item{cand_sex}{Factor: candidate sex (ref: \code{Male}, \code{Female}).}
+\item{cand_race}{Factor: candidate race (ref: \code{White}, \code{Black},
+\code{Hispanic}, \code{Asian}).}
+\item{cand_pro}{Factor: candidate profession (9 levels; ref:
+\code{Business_executive}).}
+\item{resp_ideo}{Numeric 1-7: respondent ideology (1 = extremely liberal,
+7 = extremely conservative).}
+\item{resp_pid}{Numeric: respondent party ID (-3 to 3).}
+\item{resp_trump}{Numeric 1-4: Trump approval (1 = strongly disapprove,
+4 = strongly approve).}
+\item{resp_age}{Numeric: respondent age in years.}
+\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
+\item{resp_race_black}{Numeric 0/1: respondent is Black.}
+\item{resp_race_asian}{Numeric 0/1: respondent is Asian.}
+\item{resp_race_other}{Numeric 0/1: respondent is other race.}
+\item{resp_educ}{Numeric 1-6: respondent education (1 = no HS,
+6 = graduate degree).}
+\item{resp_income}{Numeric 1-24: household income bracket (ordinal).}
+\item{resp_auth}{Numeric 0-4: authoritarianism score.}
+\item{resp_knowledge}{Numeric 0-8: political knowledge score.}
 }
 }
 \source{
@@ -26,23 +47,22 @@ Graham, Matthew H. and Milan W. Svolik. 2020. "Democracy
 in America?  Partisanship, Polarization, and the Robustness of
 Support for Democracy in the United States." \emph{American Political
 Science Review} 114(2):392-409.
+Data from published replication materials.
 }
 \usage{
 gs2020
 }
 \description{
-A small long-format forced-choice candidate-conjoint dataset whose
-design mirrors Graham and Svolik (2020).  Respondents see eight
-tasks, each showing a pair of hypothetical candidates described by
-five policy attributes and one candidate-party attribute, as well
-as an "undemocratic behavior" attribute.  The original study
-measures the extent to which U.S. voters tolerate democratic
-backsliding by co-partisan candidates.
+A long-format forced-choice candidate-conjoint dataset from the
+replication materials of Graham and Svolik (2020).  Respondents see
+up to 13 matchups, each showing a pair of hypothetical candidates
+described by party, democracy behavior, policy positions, sex, race,
+and profession.  The original study measures the extent to which U.S.
+voters tolerate democratic backsliding by co-partisan candidates.
 }
 \details{
-\strong{Note (synthetic).} This dataset is a seed-fixed synthetic
-fixture built by \code{data-raw/build_gs2020.R}.  See the note on
-\code{sw2022} for context.  The \code{synthetic} attribute is set to \code{TRUE}.
+The data is cleaned from the original experiment file: respondents
+with incomplete matchups or missing moderator variables are dropped.
 }
 \examples{
 data(gs2020)

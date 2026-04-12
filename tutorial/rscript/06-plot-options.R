@@ -18,25 +18,49 @@ fit <- scfit(
   seed       = 2024
 )
 
-plot_amce(fit, dummies = c("cand_genderfemale", "agendaprogressive",
-                            "prior_officeus_house"))
+plot_amce(fit, dummies = c("cand_genderFemale",
+                            "agendaComplete Overhaul",
+                            "prior_officeYes"))
 
-plot_fraction(fit, dummies = c("cand_genderfemale", "agendaprogressive"))
+plot_fraction(fit, dummies = c("cand_genderFemale",
+                                "agendaComplete Overhaul"))
 
 my_labels <- c(
-  agendaprogressive  = "Progressive agenda",
-  agendaconservative = "Conservative agenda",
-  cand_genderfemale  = "Female candidate",
-  prior_officeus_house = "U.S. House experience"
+  "agendaModerate Changes"   = "Moderate Changes",
+  "agendaComplete Overhaul"  = "Complete Overhaul",
+  "cand_genderFemale"        = "Female candidate",
+  "prior_officeYes"          = "Prior office",
+  "talentHard-Working"       = "Hard-Working",
+  "talentCollaborative"      = "Collaborative"
 )
 
 plot_amce(fit, labels = my_labels)
 
 plot_amce(fit,
-          dummies = c("cand_genderfemale", "agendaprogressive"),
-          labels = c(cand_genderfemale = "Female candidate",
-                     agendaprogressive = "Progressive agenda"),
+          dummies = c("cand_genderFemale", "agendaComplete Overhaul"),
+          labels = c("cand_genderFemale" = "Female candidate",
+                     "agendaComplete Overhaul" = "Complete Overhaul"),
           title = "Key attributes")
+
+sw_groups <- c(
+  "agendaModerate Changes"  = "Agenda",
+  "agendaComplete Overhaul" = "Agenda",
+  "talentCollaborative"     = "Talent",
+  "talentDetermined to Succeed" = "Talent",
+  "talentEmpathetic"        = "Talent",
+  "talentGood Communicator" = "Talent",
+  "talentHard-Working"      = "Talent",
+  "talentTough Negotiator"  = "Talent",
+  "children1 child"         = "Children",
+  "children2 children"      = "Children",
+  "children3 children"      = "Children",
+  "cand_genderFemale"       = "Gender",
+  "prior_officeYes"         = "Prior Office"
+)
+
+plot_amce(fit, groups = sw_groups)
+
+plot_fraction(fit, groups = sw_groups)
 
 plot_amce(fit, color = "#2166AC", title = "AMCE (blue)")
 
@@ -75,12 +99,14 @@ plot_fraction(fit, legendOff = TRUE)
 
 plot_amce(fit, xlim = c(-1.5, 1.5))
 
+plot_importance(fit)
+
 plot(fit, "beta_ridgelines",
-     dummies = c("agendaprogressive", "cand_genderfemale",
-                  "prior_officeus_house"),
-     labels = c(agendaprogressive = "Progressive",
-                cand_genderfemale = "Female",
-                prior_officeus_house = "U.S. House"),
+     dummies = c("agendaComplete Overhaul", "cand_genderFemale",
+                  "prior_officeYes"),
+     labels = c("agendaComplete Overhaul" = "Complete Overhaul",
+                "cand_genderFemale" = "Female",
+                "prior_officeYes" = "Prior Office"),
      title = "Selected attributes")
 
 plot(fit, "loss_trace", title = "Training convergence", theme.bw = TRUE)
@@ -88,3 +114,10 @@ plot(fit, "loss_trace", title = "Training convergence", theme.bw = TRUE)
 plot_amce(fit) +
   labs(subtitle = "Saha-Weeks (2022) candidate choice") +
   theme(plot.subtitle = element_text(color = "gray40", size = 10))
+
+library(gridExtra)
+p1 <- plot_amce(fit, groups = sw_groups,
+                title = expression(bold("A.") ~ "Average preferences"))
+p2 <- plot_fraction(fit, groups = sw_groups,
+                    title = expression(bold("B.") ~ "Fraction favor/oppose"))
+grid.arrange(p1, p2, ncol = 2, widths = c(1, 1.1))

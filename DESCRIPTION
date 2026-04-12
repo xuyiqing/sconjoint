@@ -1,6 +1,6 @@
 Package: sconjoint
 Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
@@ -35,6 +35,7 @@ Imports:
 Suggests:
     testthat (>= 3.0.0),
     covr,
+    gridExtra,
     patchwork,
     quarto,
     scales,

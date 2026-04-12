@@ -4,7 +4,7 @@
 ## cross-fitting / Lambda / DML inference layers into a single
 ## formula-driven entry point.  `scfit()` is the first user-facing
 ## export of the package.  Full `sc_fit` methods (summary, predict,
-## plot) land in M4; M3 ships only the minimum (print, coef, vcov).
+## Full S3 method set: print, coef, vcov, summary, predict, plot.
 
 #' Structural deep-learning estimator for forced-choice conjoint
 #'
@@ -74,7 +74,7 @@
 #'   `parallel`, `n_cores`;
 #' * `loss_traces` -- list of per-fold training loss curves.
 #'
-#' `summary()`, `predict()`, and `plot()` methods land in M4.
+#' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
 #' @examples
 #' \donttest{
 #' if (requireNamespace("torch", quietly = TRUE) &&

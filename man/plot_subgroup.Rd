@@ -9,6 +9,7 @@ plot_subgroup(
   subgroup,
   dummies = NULL,
   labels = NULL,
+  groups = NULL,
   colors = NULL,
   level = 0.95,
   dodge.width = 0.6,
@@ -39,6 +40,9 @@ subgroup.  Example:
 If \code{NULL} (default), all dummies are plotted.}
 
 \item{labels}{Optional named character vector to rename dummies for display.}
+
+\item{groups}{Optional named character vector mapping dummy names to
+group labels for faceting.}
 
 \item{colors}{Named character vector of colors, one per group name.
 If \code{NULL}, a default palette is used.}

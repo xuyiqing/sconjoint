@@ -7,12 +7,11 @@ test_that("partial Quarto book renders (skipped on CRAN / no quarto)", {
   if (is.null(root)) testthat::skip("cannot locate package root")
   tut <- file.path(root, "tutorial")
   if (!dir.exists(tut)) testthat::skip("tutorial/ not present in this checkout")
-  ## Render only the tiny quickstart chapter to keep runtime low.
+  ## Render only the installation chapter (no code execution) to keep runtime low.
+  ch <- file.path(tut, "01-installation.qmd")
+  if (!file.exists(ch)) testthat::skip("01-installation.qmd not found")
   res <- tryCatch(
-    quarto::quarto_render(
-      input = file.path(tut, "02-quickstart.qmd"),
-      quiet = TRUE
-    ),
+    quarto::quarto_render(input = ch, quiet = TRUE),
     error = function(e) e
   )
   expect_false(inherits(res, "error"))

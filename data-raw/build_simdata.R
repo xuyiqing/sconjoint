@@ -3,7 +3,7 @@
 
 set.seed(42)
 
-M  <- 500L   # respondents
+M  <- 1000L  # respondents
 TT <- 6L     # tasks per respondent
 
 ## Respondent-level moderators

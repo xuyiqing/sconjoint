@@ -1,27 +1,33 @@
-# sconjoint 0.0.0.9000
+# sconjoint 0.1.0
 
-## M5.a — predict(newdata) forward-pass
-- `scfit()` gains `keep_modules` argument to persist per-fold torch modules.
-- `predict.sc_fit()` now supports `newdata` (forward-pass on new moderator data) and `type` argument.
+Initial release.
 
-## M5 — Tier B quantities + case-study data
-- New: `sc_subgroup()`, `sc_compensating()`, `sc_clusters()`.
-- Bundled datasets: `sw2022`, `gs2020`, `bs2013` (synthetic fixtures).
-- Quarto tutorial book with 3 case-study chapters.
+## Estimator
+- `scfit()`: structural deep-learning estimator with DML inference,
+  respondent-clustered cross-fitting, and bit-exact determinism.
+- `predict.sc_fit()`: forward-pass on new moderator data via `newdata`.
+- `keep_modules` argument to persist per-fold torch modules.
 
-## M4 — Tier A quantities + S3 methods
-- 9 structural quantity functions: `sc_mrs()`, `sc_counterfactual()`, `sc_wtp()`, `sc_importance()`, `sc_polarization()`, `sc_fraction_preferring()`, `sc_optimal_profile()`, `sc_direction_intensity()`, `sc_heterogeneity_test()`.
-- Full S3 method set: `summary()`, `predict()`, `plot()`, `autoplot()`.
-- Profile helper: `sc_profile()`.
+## Structural quantities (21 functions)
+- **Tier A**: `sc_mrs`, `sc_counterfactual`, `sc_wtp`, `sc_importance`,
+  `sc_polarization`, `sc_fraction_preferring`, `sc_optimal_profile`,
+  `sc_direction_intensity`, `sc_heterogeneity_test`.
+- **Tier B**: `sc_subgroup`, `sc_compensating`, `sc_clusters`.
+- **Tier C**: `sc_surplus`, `sc_welfare_change`, `sc_average`,
+  `sc_indifference`, `sc_demand_curve`, `sc_decisiveness`, `sc_inequality`.
 
-## M3 — DML inference + cross-fitting
-- `scfit()` main estimator function.
-- Respondent-clustered K-fold cross-fitting with bit-exact determinism across core counts.
-- DML debiased inference with respondent-clustered standard errors.
+## Baselines
+- `sc_baseline_logit`, `sc_baseline_lpm` for comparison with
+  the structural model.
 
-## M2 — DNN architecture + training
-- Torch-based DNN with Adam + BCE + L2 training.
-- L'Ecuyer-CMRG parallel-safe RNG streams.
+## Plots (7 functions)
+- `plot_amce`, `plot_fraction`, `plot_hetero`, `plot_subgroup`,
+  `plot_importance`: publication-quality diagnostic plots with
+  `dummies`, `labels`, `groups` customization.
+- `plot.sc_fit`: beta ridgelines and training loss trace.
 
-## M1 — Package skeleton
-- Initial DESCRIPTION, NAMESPACE, CI workflows.
+## Bundled datasets
+- `sw2022` (Saha & Weeks 2022), `gs2020` (Graham & Svolik 2020),
+  `br2017` (Ballard-Rosa, Martin & Scheve 2017),
+  `bs2013` (Bechtel & Scheve 2013) from published replication materials.
+- `simdata`: synthetic DGP with known ground truth for validation.

@@ -1,138 +1,108 @@
 ###############################################################################
 # data-raw/build_sw2022.R
 #
-# Build the bundled `sw2022` example dataset.
+# Build the bundled `sw2022` dataset from Saha-Weeks (2022) replication data.
 #
-# Provenance: The Saha-Weeks (2022) candidate-choice conjoint experiment
-#   (Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious Women:
-#   Gender and Voter Perceptions of Candidate Ambition."
-#   Political Behavior 44(2):779-805.)
+# Provenance: Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
+#   Women: Gender and Voter Perceptions of Candidate Ambition."
+#   Political Behavior 44(2):779-805.
 #
-# Note (M5): The Dropbox prototype raw CSV is not redistributable with
-#   the package (licensing not confirmed per spec §8.1).  This script
-#   therefore generates a SEED-FIXED SYNTHETIC dataset whose design
-#   mirrors the published conjoint -- 5 candidate attributes, 3 forced-
-#   choice tasks per respondent, paired profiles -- so that the
-#   case-study chapter (tutorial/08-case-saha-weeks.qmd) is
-#   self-contained and works on any machine without additional data
-#   downloads.  The `synthetic = TRUE` flag is documented in R/data.R
-#   and repeated in the first chunk of the case-study chapter.
-#
-# Design (matching Saha-Weeks 2022 Table 1):
-#   - 5 attributes: agenda, talent, children, cand_gender, prior_office
-#   - 3 tasks per respondent
-#   - 2 profiles per task (forced-choice)
-#   - Respondent moderators Z: resp_female, age (standardized), pid (-1/0/+1)
-#
-# Size budget: <=500 KB target.  At ~200 respondents x 3 tasks x 2
-# profiles = ~1200 rows the gzipped .rda file lands well under 40 KB.
-#
-# Downsampling seed: 20260409 (fixed per M5 task instructions).
+# Source: SSI survey data from published replication materials.
 ###############################################################################
 
-set.seed(20260409)
+library(data.table)
 
-M <- 200L          # respondents
-T_tasks <- 3L
-P <- 2L            # profiles per task
+# --- Load raw data -----------------------------------------------------------
 
-agenda_lv   <- c("status_quo", "progressive", "conservative")
-talent_lv   <- c("average", "hard_working", "experienced")
-children_lv <- c("no_children", "has_children")
-gender_lv   <- c("male", "female")
-prior_lv    <- c("none", "state_leg", "us_house")
+data_path <- file.path("~", "Dropbox", "Projects", "ConjointStructural",
+                        "data", "replication_materials_saha_weeks_2022", "ssi.csv")
+ssi_raw <- fread(data_path)
 
-n_rows <- M * T_tasks * P
-rid <- rep(seq_len(M), each = T_tasks * P)
-tid <- rep(rep(seq_len(T_tasks), each = P), M)
-pos <- rep(c(1L, 2L), M * T_tasks)
+cat("Raw rows:", nrow(ssi_raw), "\n")
+cat("Unique respondents:", length(unique(ssi_raw$ResponseId)), "\n")
 
-## Draw attributes independently for each profile.
-agenda   <- factor(sample(agenda_lv,   n_rows, replace = TRUE), levels = agenda_lv)
-talent   <- factor(sample(talent_lv,   n_rows, replace = TRUE), levels = talent_lv)
-children <- factor(sample(children_lv, n_rows, replace = TRUE), levels = children_lv)
-cand_gender <- factor(sample(gender_lv, n_rows, replace = TRUE), levels = gender_lv)
-prior_office <- factor(sample(prior_lv, n_rows, replace = TRUE), levels = prior_lv)
+# --- Clean: drop respondents with fewer than 3 elections ---------------------
 
-## Respondent-level moderators.
-resp_female <- rbinom(M, 1L, 0.52)
-age_raw     <- round(runif(M, 18, 82))
-age_std     <- as.numeric(scale(age_raw))
-pid         <- sample(c(-1L, 0L, 1L), M, replace = TRUE,
-                      prob = c(0.35, 0.30, 0.35))  # dem / indep / rep
+elections_per_resp <- ssi_raw[, .(n_elections = uniqueN(election)), by = ResponseId]
+keep_resp <- elections_per_resp[n_elections == 3, ResponseId]
+ssi <- ssi_raw[ResponseId %in% keep_resp]
 
-Z_row <- cbind(resp_female = resp_female, age = age_std, pid = pid)
+# --- Clean: drop respondents with missing/invalid demographics ---------------
 
-## Build DeltaX-style dummy vector per profile row using the same
-## model.matrix contrast scheme the package uses internally.
-attr_df <- data.frame(agenda, talent, children, cand_gender, prior_office)
-X <- stats::model.matrix(~ agenda + talent + children + cand_gender + prior_office,
-                         data = attr_df)[, -1L, drop = FALSE]
-colnames(X) <- make.names(colnames(X))
+VALID_INCOME <- c("Less than $ 20,000", "$ 20,000 - $ 29,999",
+                  "$ 30,000 - $ 39,999", "$ 40,000 - $ 49,999",
+                  "$ 50,000 - $ 59,999", "$ 60,000 - $ 74,999",
+                  "$ 75,000 - $ 99,999", "$ 100,000 - $ 149,999",
+                  "$ 150,000 +")
+VALID_PARTY  <- c("Democrat", "Republican (GOP)", "Independent")
+VALID_EDUC   <- c("Low", "Middle", "High")
+VALID_REGION <- c("MIDWEST", "NORTHEAST", "SOUTH", "WEST")
+VALID_EMPLOY <- c("employed fulltime", "employed part-time (less than 32 hours)",
+                  "Homemaker", "not working/looking for work",
+                  "retired/unable to work/disabled", "student/at school")
 
-## Heterogeneous true preferences.
-p <- ncol(X)
-beta_base <- c(
-  agendaprogressive    =  0.35,
-  agendaconservative   = -0.20,
-  talenthard_working   =  0.55,
-  talentexperienced    =  0.45,
-  childrenhas_children =  0.20,
-  cand_genderfemale    =  0.10,
-  prior_officestate_leg=  0.25,
-  prior_officeus_house =  0.60
-)
-## Ensure names align with X's columns in case of re-ordering.
-beta_base <- setNames(beta_base[colnames(X)], colnames(X))
-beta_base[is.na(beta_base)] <- 0
+ssi[, demo_valid := (
+  !is.na(resp_gender) & resp_gender %in% c("female", "male") &
+  !is.na(Age) &
+  Income %in% VALID_INCOME &
+  Education_Level_General %in% VALID_EDUC &
+  Interests.Political.Affiliation %in% VALID_PARTY &
+  `Geo.Census.Region..US.` %in% VALID_REGION &
+  Employment_status %in% VALID_EMPLOY
+)]
 
-## Respondent-specific beta: base + Z interactions.
-beta_true <- matrix(0, M, p, dimnames = list(NULL, colnames(X)))
-for (j in seq_len(p)) beta_true[, j] <- beta_base[j]
-beta_true[, "cand_genderfemale"] <- beta_true[, "cand_genderfemale"] +
-  0.30 * resp_female + 0.15 * (pid == -1L)
-beta_true[, "agendaprogressive"] <- beta_true[, "agendaprogressive"] +
-  0.50 * (pid == -1L) - 0.40 * (pid == 1L)
-beta_true[, "agendaconservative"] <- beta_true[, "agendaconservative"] -
-  0.50 * (pid == -1L) + 0.40 * (pid == 1L)
+valid_resp <- ssi[, .(all_valid = all(demo_valid)), by = ResponseId]
+keep_resp_demo <- valid_resp[all_valid == TRUE, ResponseId]
+ssi <- ssi[ResponseId %in% keep_resp_demo]
+ssi[, demo_valid := NULL]
 
-## Compute utility per row.
-beta_row <- beta_true[rid, , drop = FALSE]
-U <- rowSums(X * beta_row)
+cat("After cleaning:", nrow(ssi), "rows,",
+    length(unique(ssi$ResponseId)), "respondents\n")
 
-## Aggregate to (respondent, task): pick the profile with higher U + Gumbel noise.
-choice <- integer(n_rows)
-for (i in seq_len(M)) {
-  for (t in seq_len(T_tasks)) {
-    idx <- which(rid == i & tid == t)
-    u <- U[idx] + -log(-log(runif(length(idx))))  # Gumbel noise
-    pick <- which.max(u)
-    choice[idx] <- 0L
-    choice[idx[pick]] <- 1L
-  }
-}
+# --- Create factor attribute columns ----------------------------------------
 
-sw2022 <- data.frame(
-  respondent = rid,
-  task = tid,
-  profile = pos,
-  choice = choice,
-  agenda = agenda,
-  talent = talent,
-  children = children,
-  cand_gender = cand_gender,
-  prior_office = prior_office,
-  resp_female = resp_female[rid],
-  age = age_std[rid],
-  pid = pid[rid],
-  stringsAsFactors = FALSE
-)
+ssi[, cand_gender := factor(ifelse(candidate_gender == 1, "Female", "Male"),
+                            levels = c("Male", "Female"))]
+ssi[, prior_office := factor(ifelse(candidate_run == 1, "Yes", "No"),
+                             levels = c("No", "Yes"))]
+ssi[, talent := factor(Talent,
+                       levels = c("Assertive", "Collaborative",
+                                  "Determined to Succeed", "Empathetic",
+                                  "Good Communicator", "Hard-Working",
+                                  "Tough Negotiator"))]
+ssi[, agenda := factor(Agenda,
+                       levels = c("Very Few Changes", "Moderate Changes",
+                                  "Complete Overhaul"))]
+ssi[, children := factor(Children,
+                         levels = c("No children", "1 child", "2 children",
+                                    "3 children"))]
 
-attr(sw2022, "synthetic") <- TRUE
-attr(sw2022, "source") <- "Saha & Weeks (2022) design; synthetic data with matching structure."
+# --- Respondent-level covariates --------------------------------------------
 
-## Save to data/
-out_path <- file.path("data", "sw2022.rda")
-save(sw2022, file = out_path, compress = "xz", version = 2L)
-cat(sprintf("Wrote %s (%.1f KB)\n", out_path,
-            file.info(out_path)$size / 1024))
+ssi[, resp_female := as.numeric(resp_gender == "female")]
+ssi[, age := as.numeric(Age)]
+ssi[, pid := factor(Interests.Political.Affiliation,
+                    levels = c("Democrat", "Republican (GOP)", "Independent"))]
+
+# --- Reshape to long format -------------------------------------------------
+
+ssi[, respondent := as.character(ResponseId)]
+ssi[, task := as.integer(election)]
+ssi[, profile := ifelse(variable == "candidateA", 1L, 2L)]
+ssi[, choice := as.integer(candidate_vote)]
+
+# Select columns for sconjoint
+cols_keep <- c("respondent", "task", "profile", "choice",
+               "agenda", "talent", "children", "cand_gender", "prior_office",
+               "resp_female", "age", "pid")
+sw2022 <- as.data.frame(ssi[, ..cols_keep])
+
+# --- Summary ----------------------------------------------------------------
+
+cat("Final dataset:", nrow(sw2022), "rows\n")
+cat("Respondents:", length(unique(sw2022$respondent)), "\n")
+cat("Tasks:", nrow(sw2022) / 2, "\n")
+
+# --- Save -------------------------------------------------------------------
+
+usethis::use_data(sw2022, overwrite = TRUE)

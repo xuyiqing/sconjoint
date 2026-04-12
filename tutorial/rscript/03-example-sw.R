@@ -5,6 +5,39 @@ torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
 
+## Groups and labels for plot annotations --------------------------------
+sw_groups <- c(
+  "agendaModerate Changes"      = "Agenda",
+  "agendaComplete Overhaul"     = "Agenda",
+  "talentCollaborative"         = "Talent",
+  "talentDetermined to Succeed" = "Talent",
+  "talentEmpathetic"            = "Talent",
+  "talentGood Communicator"     = "Talent",
+  "talentHard-Working"          = "Talent",
+  "talentTough Negotiator"      = "Talent",
+  "children1 child"             = "Children",
+  "children2 children"          = "Children",
+  "children3 children"          = "Children",
+  "cand_genderFemale"           = "Gender",
+  "prior_officeYes"             = "Prior Office"
+)
+
+sw_labels <- c(
+  "agendaModerate Changes"      = "Moderate Changes",
+  "agendaComplete Overhaul"     = "Complete Overhaul",
+  "talentCollaborative"         = "Collaborative",
+  "talentDetermined to Succeed" = "Determined to Succeed",
+  "talentEmpathetic"            = "Empathetic",
+  "talentGood Communicator"     = "Good Communicator",
+  "talentHard-Working"          = "Hard-Working",
+  "talentTough Negotiator"      = "Tough Negotiator",
+  "children1 child"             = "1 child",
+  "children2 children"          = "2 children",
+  "children3 children"          = "3 children",
+  "cand_genderFemale"           = "Female",
+  "prior_officeYes"             = "Yes"
+)
+
 data(sw2022, package = "sconjoint")
 dim(sw2022)
 head(sw2022, 4)
@@ -33,6 +66,8 @@ head(beta, 3)
 
 sc_importance(fit_sw)
 
+plot_importance(fit_sw)
+
 sc_direction_intensity(fit_sw)
 
 frac <- sc_fraction_preferring(fit_sw, threshold = 0)
@@ -42,12 +77,12 @@ sc_mrs(fit_sw, numerator = 1L, denominator = 2L)
 
 sc_counterfactual(
   fit_sw,
-  A = list(agenda = "progressive", talent = "experienced",
-           children = "has_children", cand_gender = "female",
-           prior_office = "us_house"),
-  B = list(agenda = "conservative", talent = "average",
-           children = "no_children", cand_gender = "male",
-           prior_office = "none")
+  A = list(agenda = "Complete Overhaul", talent = "Hard-Working",
+           children = "2 children", cand_gender = "Female",
+           prior_office = "Yes"),
+  B = list(agenda = "Very Few Changes", talent = "Assertive",
+           children = "No children", cand_gender = "Male",
+           prior_office = "No")
 )
 
 sc_optimal_profile(fit_sw)
@@ -58,22 +93,23 @@ fem <- fit_sw$Z[, "resp_female"] > 0.5
 sub_fem  <- sc_subgroup(fit_sw, fem)
 sub_male <- sc_subgroup(fit_sw, !fem)
 rbind(
-  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderfemale",
+  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderFemale",
                             c("theta", "se")],
-  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderfemale",
+  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderFemale",
                             c("theta", "se")]
 )
 
-plot_amce(fit_sw)
+plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
 
-plot_fraction(fit_sw)
+plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 
-plot_hetero(fit_sw)
+plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
 
 plot_subgroup(
   fit_sw,
   subgroup = list(Female = fit_sw$Z[, "resp_female"] > 0.5,
                   Male   = fit_sw$Z[, "resp_female"] <= 0.5),
+  groups = sw_groups, labels = sw_labels,
   title = "Subgroup AMCE: female vs male respondents"
 )
 
