@@ -113,7 +113,7 @@ The returned \code{sc_fit} list contains at least the following fields:
 \item \code{loss_traces} -- list of per-fold training loss curves.
 }
 
-\code{summary()}, \code{predict()}, and \code{plot()} methods land in M4.
+See \code{summary.sc_fit()}, \code{predict.sc_fit()}, and \code{plot.sc_fit()}.
 }
 \examples{
 \donttest{
