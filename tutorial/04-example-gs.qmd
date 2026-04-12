@@ -32,7 +32,16 @@ gs_groups <- c(
   "cand_raceBlack"            = "Race",
   "cand_raceHispanic"         = "Race",
   "cand_raceAsian"            = "Race",
-  "policy_prox"               = "Policy"
+  "p1"                        = "Policy",
+  "p2"                        = "Policy",
+  "cand_proFarmer"            = "Profession",
+  "cand_proLawyer"            = "Profession",
+  "cand_proLegislative_staffer" = "Profession",
+  "cand_proPolice_officer"    = "Profession",
+  "cand_proServed_in_the_army" = "Profession",
+  "cand_proServed_in_the_navy" = "Profession",
+  "cand_proSmall_business_owner" = "Profession",
+  "cand_proTeacher"           = "Profession"
 )
 
 gs_labels <- c(
@@ -56,7 +65,16 @@ gs_labels <- c(
   "cand_raceBlack"            = "Black",
   "cand_raceHispanic"         = "Hispanic",
   "cand_raceAsian"            = "Asian",
-  "policy_prox"               = "Policy proximity"
+  "p1"                        = "Econ. policy (conservative)",
+  "p2"                        = "Social policy (conservative)",
+  "cand_proFarmer"            = "Farmer",
+  "cand_proLawyer"            = "Lawyer",
+  "cand_proLegislative_staffer" = "Legislative staffer",
+  "cand_proPolice_officer"    = "Police officer",
+  "cand_proServed_in_the_army" = "Army veteran",
+  "cand_proServed_in_the_navy" = "Navy veteran",
+  "cand_proSmall_business_owner" = "Small business owner",
+  "cand_proTeacher"           = "Teacher"
 )
 ```
 
@@ -84,18 +102,22 @@ head(gs2020, 4)
 str(gs2020)
 ```
 
-Each respondent sees eight tasks with two candidate profiles each,
-yielding 16 rows per respondent. The respondent-level moderators are
-`resp_pid` (-1/0/+1 partisanship), `resp_ideo` (standardized ideology),
-and standardized `age`.
+Each respondent sees up to 13 matchups with two candidate profiles each.
+The respondent-level moderators include ideology (`resp_ideo`, 1--7),
+party identification (`resp_pid`, -3 to 3), Trump approval (`resp_trump`,
+1--4), demographics (age, gender, race, education, income), and
+dispositional measures (authoritarianism, political knowledge) --- 12
+moderators in total.
 
 ## Fitting the structural model
 
 ```{r}
 #| label: gs-fit
 fit_gs <- scfit(
-  choice ~ copartisan + dem_code + cand_sex + cand_race + policy_prox |
-           resp_ideo + resp_pid + resp_age,
+  choice ~ copartisan + p1 + p2 + dem_code + cand_sex + cand_race + cand_pro |
+           resp_ideo + resp_pid + resp_trump + resp_age + resp_female +
+           resp_race_black + resp_race_asian + resp_race_other +
+           resp_educ + resp_income + resp_auth + resp_knowledge,
   data        = gs2020,
   respondent  = "respondent",
   task        = "task",
@@ -140,8 +162,9 @@ sc_importance(fit_gs)
 ```{r}
 #| label: gs-importance-plot
 #| fig-height: 5
-plot_importance(fit_gs, labels = c(copartisan = "Party", dem_code = "Democracy",
-  cand_sex = "Sex", cand_race = "Race", policy_prox = "Policy"))
+plot_importance(fit_gs, labels = c(copartisan = "Party", p1 = "Econ. Policy",
+  p2 = "Social Policy", dem_code = "Democracy",
+  cand_sex = "Sex", cand_race = "Race", cand_pro = "Profession"))
 ```
 
 ## Heterogeneity test
@@ -162,6 +185,10 @@ het_gs$estimate
 #| fig-height: 8
 plot_hetero(fit_gs, groups = gs_groups, labels = gs_labels)
 ```
+
+Fewer than 5% of respondents have a positive coefficient on any
+undemocratic action --- opposition to democratic backsliding is
+near-universal.
 
 ### Fraction preferring
 
@@ -194,9 +221,9 @@ sign of the underlying -1/0/+1 encoding.
 #| label: gs-subgroup
 pid_col <- fit_gs$Z[, "resp_pid"]
 sub <- sc_subgroup(fit_gs, list(
-  dem = pid_col < -0.5,
-  ind = abs(pid_col) <= 0.5,
-  rep = pid_col >  0.5
+  dem = pid_col < 0,
+  ind = pid_col == 0,
+  rep = pid_col > 0
 ))
 do.call(rbind, lapply(names(sub), function(g) {
   e <- sub[[g]]$estimate
@@ -212,14 +239,18 @@ do.call(rbind, lapply(names(sub), function(g) {
 pid_col <- fit_gs$Z[, "resp_pid"]
 plot_subgroup(
   fit_gs,
-  subgroup = list(Democrat    = pid_col < -0.5,
-                  Independent = abs(pid_col) <= 0.5,
-                  Republican  = pid_col > 0.5),
+  subgroup = list(Democrat    = pid_col < 0,
+                  Independent = pid_col == 0,
+                  Republican  = pid_col > 0),
   dummies = grep("^dem_codeu_", fit_gs$attr_names, value = TRUE),
   groups = gs_groups, labels = gs_labels,
   title = "Subgroup AMCE: undemocratic behavior"
 )
 ```
+
+The structural model reveals that even strong partisans penalize
+undemocratic behavior, but the intensity of the penalty varies
+meaningfully with ideology.
 
 ## Preference clustering
 

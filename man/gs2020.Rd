@@ -5,7 +5,7 @@
 \alias{gs2020}
 \title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms}
 \format{
-A data frame with 20,440 rows (999 respondents, ~10,220
+A data frame with 41,314 rows (1,605 respondents, ~20,657
 matchups x 2 profiles) and the following columns:
 \describe{
 \item{respondent}{Respondent id (character).}
@@ -13,18 +13,33 @@ matchups x 2 profiles) and the following columns:
 \item{profile}{Profile id within matchup (1 or 2).}
 \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
 \item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
+\item{p1}{Numeric 1-4: economic policy position (1 = most liberal,
+4 = most conservative).}
+\item{p2}{Numeric 1-4: social policy position (1 = most liberal,
+4 = most conservative).}
 \item{dem_code}{Factor: democracy behavior code -- 7 good-governance
 codes (\verb{g_*}), 7 undemocratic codes (\verb{u_*}), 2 valence codes (\verb{v_*}).
 Reference: \code{g_boardElect}.}
 \item{cand_sex}{Factor: candidate sex (ref: \code{Male}, \code{Female}).}
 \item{cand_race}{Factor: candidate race (ref: \code{White}, \code{Black},
 \code{Hispanic}, \code{Asian}).}
-\item{policy_prox}{Numeric 0-1: policy proximity (higher = closer to
-respondent's ideal point).}
+\item{cand_pro}{Factor: candidate profession (9 levels; ref:
+\code{Business_executive}).}
 \item{resp_ideo}{Numeric 1-7: respondent ideology (1 = extremely liberal,
 7 = extremely conservative).}
-\item{resp_pid}{Numeric: respondent party ID (7-point scale).}
+\item{resp_pid}{Numeric: respondent party ID (-3 to 3).}
+\item{resp_trump}{Numeric 1-4: Trump approval (1 = strongly disapprove,
+4 = strongly approve).}
 \item{resp_age}{Numeric: respondent age in years.}
+\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
+\item{resp_race_black}{Numeric 0/1: respondent is Black.}
+\item{resp_race_asian}{Numeric 0/1: respondent is Asian.}
+\item{resp_race_other}{Numeric 0/1: respondent is other race.}
+\item{resp_educ}{Numeric 1-6: respondent education (1 = no HS,
+6 = graduate degree).}
+\item{resp_income}{Numeric 1-24: household income bracket (ordinal).}
+\item{resp_auth}{Numeric 0-4: authoritarianism score.}
+\item{resp_knowledge}{Numeric 0-8: political knowledge score.}
 }
 }
 \source{
@@ -41,13 +56,13 @@ gs2020
 A long-format forced-choice candidate-conjoint dataset from the
 replication materials of Graham and Svolik (2020).  Respondents see
 up to 13 matchups, each showing a pair of hypothetical candidates
-described by party, democracy behavior, sex, race, and policy
-proximity.  The original study measures the extent to which U.S.
+described by party, democracy behavior, policy positions, sex, race,
+and profession.  The original study measures the extent to which U.S.
 voters tolerate democratic backsliding by co-partisan candidates.
 }
 \details{
 The data is cleaned from the original experiment file: respondents
-with incomplete matchups or missing key variables are dropped.
+with incomplete matchups or missing moderator variables are dropped.
 }
 \examples{
 data(gs2020)

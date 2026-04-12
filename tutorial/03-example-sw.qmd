@@ -148,12 +148,19 @@ plot_importance(fit_sw, labels = c(agenda = "Agenda", talent = "Talent",
   children = "Children", cand_gender = "Gender", prior_office = "Prior Office"))
 ```
 
+Policy agenda dominates, accounting for approximately two-thirds of the
+decision variance for the median voter.
+
 ### Direction and intensity
 
 ```{r}
 #| label: sw-di
 sc_direction_intensity(fit_sw)
 ```
+
+For the Empathetic attribute, the near-zero average masks an almost
+perfectly polarized electorate: approximately half favor empathetic
+candidates while the other half oppose them.
 
 ### Fraction preferring
 
@@ -168,6 +175,9 @@ frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 #| fig-height: 6
 plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
+
+The structural model reveals that 83% of respondents prefer female
+candidates despite a near-zero population-average AMCE for gender.
 
 ### Marginal rate of substitution
 

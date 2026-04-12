@@ -60,8 +60,10 @@ str(br2017)
 
 Each respondent contributes eight forced-choice tasks with two tax-plan
 profiles each (16 rows per respondent). The respondent-level moderators
-are `resp_pid7` (party identification, 1--7+ scale), `resp_age` (years),
-and `resp_female` (binary).
+include demographics (age, gender, education, race, income), partisanship
+(`resp_pid7`, 1--7), and economic attitudes (inequality aversion,
+work-vs-luck beliefs, taxes-harm beliefs, hard-work beliefs, economic
+knowledge, employment status) --- 12 moderators in total.
 
 ## Fitting the structural model
 
@@ -70,7 +72,10 @@ and `resp_female` (binary).
 fit_br <- scfit(
   choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
            rate_175_375 + rate_375P + revenue_score |
-           resp_pid7 + resp_age + resp_female,
+           resp_age + resp_female + resp_pid7 + resp_educ +
+           resp_race_white + resp_income + resp_ineq_averse +
+           resp_work_vs_luck + resp_taxes_harm + resp_hardwork +
+           resp_high_econ_know + resp_employed_ft,
   data        = br2017,
   respondent  = "respondent",
   task        = "task",
@@ -236,3 +241,9 @@ ggplot(quant_data, aes(x = bracket, color = party, fill = party, group = party))
   theme(axis.text.x = element_text(angle = 30, hjust = 1),
         legend.position = "bottom")
 ```
+
+Nearly all respondents --- 99.9% --- exhibit progressive tax preferences
+(positive slope from low to high brackets). Even among Republicans,
+99.7% reveal progressive preferences. The partisan gap in progressivity
+is real but modest: Democrats' mean slope is approximately 30% larger
+than Republicans'.

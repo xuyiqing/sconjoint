@@ -19,9 +19,18 @@ A data frame with 32,000 rows (2,000 respondents x 8 tasks x
 \item{rate_175_375}{Rate for $175-375k bracket.}
 \item{rate_375P}{Rate for over-$375k bracket.}
 \item{revenue_score}{Revenue impact: -2 (much less) to +2 (much more).}
-\item{resp_pid7}{Respondent party ID (1=Strong Dem to 7=Strong Rep).}
 \item{resp_age}{Respondent age in years.}
 \item{resp_female}{Respondent gender (0/1, 1 = female).}
+\item{resp_pid7}{Respondent party ID (1=Strong Dem to 7=Strong Rep).}
+\item{resp_educ}{Respondent education (1-6 ordinal).}
+\item{resp_race_white}{Respondent is white (0/1).}
+\item{resp_income}{Household income (1-13 ordinal).}
+\item{resp_ineq_averse}{Inequality averse (0/1).}
+\item{resp_work_vs_luck}{Work-vs-luck belief (ordinal, higher = hard work).}
+\item{resp_taxes_harm}{Taxes-harm-economy belief (ordinal, higher = more harmful).}
+\item{resp_hardwork}{Hard work leads to success (0/1).}
+\item{resp_high_econ_know}{High economic knowledge (0/1).}
+\item{resp_employed_ft}{Employed full-time (0/1).}
 }
 }
 \source{

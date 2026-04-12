@@ -50,18 +50,29 @@ and climate treaties.
 
 ### `gs2020` --- @graham2020democracy: democratic norms
 
-999 respondents $\times$ $\sim$10 matchups $\times$ 2 profiles = 20,440 rows.
+1,605 respondents $\times$ $\sim$13 matchups $\times$ 2 profiles = 41,314 rows.
 
 | Column | Role | Levels |
 |--------|------|--------|
 | `copartisan` | Attribute | Not, Co-partisan |
+| `p1` | Attribute | numeric 1--4 (econ. policy position) |
+| `p2` | Attribute | numeric 1--4 (social policy position) |
 | `dem_code` | Attribute | 16-level factor (good governance, undemocratic, valence) |
 | `cand_sex` | Attribute | Male, Female |
 | `cand_race` | Attribute | White, Black, Hispanic, Asian |
-| `policy_prox` | Attribute | numeric 0--1 (policy proximity) |
+| `cand_pro` | Attribute | 9-level factor (profession) |
 | `resp_ideo` | Moderator ($\mathbf Z$) | 1--7 ideology |
-| `resp_pid` | Moderator ($\mathbf Z$) | party ID (7-point) |
+| `resp_pid` | Moderator ($\mathbf Z$) | party ID (-3 to 3) |
+| `resp_trump` | Moderator ($\mathbf Z$) | Trump approval (1--4) |
 | `resp_age` | Moderator ($\mathbf Z$) | age in years |
+| `resp_female` | Moderator ($\mathbf Z$) | binary |
+| `resp_race_black` | Moderator ($\mathbf Z$) | binary |
+| `resp_race_asian` | Moderator ($\mathbf Z$) | binary |
+| `resp_race_other` | Moderator ($\mathbf Z$) | binary |
+| `resp_educ` | Moderator ($\mathbf Z$) | 1--6 education |
+| `resp_income` | Moderator ($\mathbf Z$) | 1--24 household income |
+| `resp_auth` | Moderator ($\mathbf Z$) | 0--4 authoritarianism |
+| `resp_knowledge` | Moderator ($\mathbf Z$) | 0--8 political knowledge |
 
 ### `br2017` --- @ballard2017structure: tax preferences
 
@@ -76,9 +87,18 @@ and climate treaties.
 | `rate_175_375` | Attribute | numeric (tax rate %) |
 | `rate_375P` | Attribute | numeric (tax rate %) |
 | `revenue_score` | Attribute | numeric ($-2$ to $+2$) |
-| `resp_pid7` | Moderator ($\mathbf Z$) | 1--7+ party ID |
 | `resp_age` | Moderator ($\mathbf Z$) | age in years |
 | `resp_female` | Moderator ($\mathbf Z$) | binary |
+| `resp_pid7` | Moderator ($\mathbf Z$) | 1--7 party ID |
+| `resp_educ` | Moderator ($\mathbf Z$) | 1--6 education |
+| `resp_race_white` | Moderator ($\mathbf Z$) | binary |
+| `resp_income` | Moderator ($\mathbf Z$) | 1--13 household income |
+| `resp_ineq_averse` | Moderator ($\mathbf Z$) | binary |
+| `resp_work_vs_luck` | Moderator ($\mathbf Z$) | ordinal |
+| `resp_taxes_harm` | Moderator ($\mathbf Z$) | ordinal |
+| `resp_hardwork` | Moderator ($\mathbf Z$) | binary |
+| `resp_high_econ_know` | Moderator ($\mathbf Z$) | binary |
+| `resp_employed_ft` | Moderator ($\mathbf Z$) | binary |
 
 ### `bs2013` --- @bechtel_scheve_2013: climate treaties
 
@@ -116,7 +136,7 @@ The user guide is structured into the following chapters:
     Fourth worked example on the @ballard2017structure tax-plan conjoint, showcasing all-numeric (continuous) attributes and partisan tax-schedule preferences.
 
 -   [Chapter @sec-bs]\
-    Fifth worked example on the @bechtel_scheve_2013 climate-treaty conjoint, showcasing willingness-to-pay and compensating differentials.
+    Tutorial example on the @bechtel_scheve_2013 climate-treaty conjoint (not in main paper), showcasing willingness-to-pay analysis with a numeric cost attribute.
 
 -   [Chapter @sec-plots]\
     Customizing ridgeline density plots and training loss traces with `ggplot2`.

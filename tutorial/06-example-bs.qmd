@@ -46,6 +46,13 @@ bs_labels <- c(
 )
 ```
 
+::: {.callout-note}
+This dataset is included as a tutorial example to illustrate
+willingness-to-pay and compensating differential analysis with a
+numeric cost attribute. It is not one of the three main applications
+analyzed in the paper.
+:::
+
 This chapter applies the structural estimator to a climate-treaty
 conjoint experiment whose design follows @bechtel_scheve_2013.
 Respondents evaluate pairs of hypothetical international climate
