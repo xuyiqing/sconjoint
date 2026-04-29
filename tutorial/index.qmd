@@ -2,7 +2,7 @@
 
 `sconjoint` is an R package implementing the *structural deep learning*
 estimator for forced-choice conjoint experiments developed by @acharya2026structural
-([paper](https://bit.ly/sconjoint)). The estimator embeds a deep neural network
+([paper](https://arxiv.org/abs/2604.10845)). The estimator embeds a deep neural network
 inside a random-utility logit so that each respondent's preference
 vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
 smoothly and flexibly with her observed covariates $\mathbf Z$. Double /
