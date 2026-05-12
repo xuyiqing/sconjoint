@@ -24,7 +24,7 @@ scfit(
   verbose = FALSE,
   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
   stage2_seed = 12345L,
-  normalize_deltaX = TRUE
+  normalize_deltaX = FALSE
 )
 }
 \arguments{
@@ -98,8 +98,8 @@ clustered SEs are unchanged across \code{stage2} choices on the same
 \item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
 ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
 
-\item{normalize_deltaX}{Logical (default \code{TRUE} since 0.2.0.9000;
-was \code{FALSE} in 0.2.0).  When \code{TRUE},
+\item{normalize_deltaX}{Logical (default \code{FALSE}, matching the
+paper's stated runtime).  When \code{TRUE},
 each column of the internal \code{deltaX} matrix is divided by its
 sample SD before training, lambda estimation, DML inference, and
 the Stage-2 MAP update.  At return all user-facing slots

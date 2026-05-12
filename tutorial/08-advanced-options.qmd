@@ -143,11 +143,12 @@ fit <- scfit(formula, data, ..., normalize_deltaX = TRUE)
 fit$sd_dx
 ```
 
-Default flipped to `TRUE` in 0.2.0.9000 (was `FALSE` in 0.2.0). On
-pure factor-dummy designs this is a small refinement (theta shifts in
-the 3rd-4th decimal); on continuous-attribute designs it is required
-for sane per-respondent MAP estimates. Pass `normalize_deltaX = FALSE`
-to recover the 0.2.0 default behavior.
+Default is `FALSE`, matching the paper's stated runtime (which keeps
+attributes on their original units, e.g. tax rates in percentage
+points). On continuous-attribute designs the v0.2 score-based prior
+can leave per-respondent MAP estimates with extreme tails when
+$\mathrm{Var}(\Delta X_k) \gg 1$; pass `normalize_deltaX = TRUE` in
+that case. For pure factor-dummy designs the option is a near-no-op.
 
 ## `sc_design_diagnostic()`: which recovery tiers does my design support?
 

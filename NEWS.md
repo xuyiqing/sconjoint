@@ -4,14 +4,20 @@ Post-release development on `dev`.  Per project policy, the next
 release will also be `0.2.0` (or below); the `.9xxx` suffix indicates
 in-progress work on top of v0.2.0.
 
-## Default changes
+## Importance formula (paper-consistency fix)
 
-- `scfit(..., normalize_deltaX = TRUE)` is now the default (was
-  `FALSE` in 0.2.0).  On continuous-attribute designs this is
-  required for sane per-respondent MAP estimates; on factor-dummy
-  designs it is a small refinement (theta shifts in the 3rd-4th
-  decimal).  Pass `normalize_deltaX = FALSE` to recover the 0.2.0
-  default behavior.
+- `sc_importance(..., design = "design_variance")` is the new default.
+  This implements the paper's reported formula
+  \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g} \hat\beta_{ik}^2 \cdot
+  \mathrm{Var}(\Delta X_k)}, where `Var(ΔX_k)` is the empirical
+  variance of dummy column k.  Reproduces the paper's sw2022 agenda
+  share (~0.65 in the paper; ~0.62 in the package on the same data
+  with K=5 / n_epochs=200).
+- The previous `"uniform"` and `"empirical"` branches remain
+  available but implement different functionals (variance of beta
+  over a level distribution, not sum of beta^2 weighted by per-dummy
+  Var(ΔX)).  Neither reproduces the paper's reported numbers;
+  `?sc_importance` explains the relationship.
 
 ## Documentation
 

@@ -1,30 +1,46 @@
 #' Attribute importance via per-respondent variance decomposition
 #'
-#' For each respondent \eqn{i} and attribute block \eqn{a}, computes
-#' a within-block variance-share \eqn{\mathrm{share}_{ia}}, then
-#' averages over the subgroup.  Point estimate matches the prototype
-#' `07b_structural_quantities.R` lines 643--664; the clustered SE of
-#' the per-row share is new in sconjoint v0.1.
+#' For each respondent \eqn{i} and attribute group \eqn{g}, computes a
+#' utility-variance share \eqn{\mathrm{share}_{i,g}}, then averages
+#' over the subgroup.
 #'
-#' `design = "uniform"` (default) weights each level of each
-#' attribute equally; this is the prototype's default and matches the
-#' paper's sw2022 agenda share more closely than empirical weighting
-#' under the package's training config (see Note).
-#' `design = "empirical"` replaces the uniform weights by empirical
-#' level frequencies computed from `object$deltaX`.
+#' Three weighting conventions are supported, selected by `design`:
 #'
-#' @note A 0.2.0.9000 spot-check on sw2022 found neither weighting
-#'   matches the paper's reported agenda share of 0.65 under
-#'   the package defaults (K=5, n_epochs=200, hybrid path).
-#'   Uniform gives ~0.40, empirical ~0.31.  Switching to the DNN-only
-#'   path (`which_beta = "dnn"`) brings uniform to ~0.57, much closer
-#'   to the paper.  The remaining gap appears to be a training-config
-#'   difference (paper uses K=50, n_epochs=5000), not a weighting-
-#'   formula difference; see `statsclaw-workspace/sconjoint/ref/
-#'   se-ratio-and-importance-share.md`.
+#' \itemize{
+#'   \item `"design_variance"` (default) implements the paper's
+#'     formula \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g}
+#'     \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)}, normalized to
+#'     shares across groups.  Here `Var(ΔX_k)` is computed empirically
+#'     from `object$deltaX`, so each dummy contributes scaled by the
+#'     spread of its presentation in the realized design.  This is the
+#'     formula reported in Acharya, Hainmueller, and Xu (2026) and is
+#'     what reproduces the paper's sw2022 agenda share (~0.65).
+#'   \item `"uniform"` computes the variance of \eqn{\beta_{i,\cdot}}
+#'     over a uniform distribution on levels (treating the reference
+#'     level as \eqn{\beta = 0}).  This is the prototype's default
+#'     used in v0.1 / v0.2.0; it diverges from the paper because the
+#'     paper weights each dummy by its empirical design variance
+#'     instead of treating levels symmetrically.
+#'   \item `"empirical"` computes the variance of \eqn{\beta_{i,\cdot}}
+#'     over the empirical level distribution (level frequencies read
+#'     off `object$deltaX`).  Different functional from `"design_variance"`:
+#'     it asks "how do per-respondent \eqn{\beta} values vary across
+#'     levels under the realized design," not "how much does each
+#'     dummy contribute to utility variance."
+#' }
+#'
+#' For factor designs with uniform level randomization, `"uniform"`
+#' and `"design_variance"` agree up to normalization (the empirical
+#' \eqn{\mathrm{Var}(\Delta X_k)} is the same across dummies within an
+#' attribute), but they disagree across attributes when level counts
+#' differ.  For continuous-attribute designs (e.g. BR tax-rate
+#' brackets), they diverge substantially.
 #'
 #' @param object An `sc_fit`.
-#' @param design Either `"uniform"` (default) or `"empirical"`.
+#' @param design One of `"design_variance"` (default, paper formula),
+#'   `"uniform"` (prototype's symmetric-levels formula), or
+#'   `"empirical"` (variance of \eqn{\beta} over realized level
+#'   distribution).
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with one
@@ -32,7 +48,7 @@
 #'   `ci_hi`).
 #' @export
 sc_importance <- function(object,
-                          design = c("uniform", "empirical"),
+                          design = c("design_variance", "uniform", "empirical"),
                           subgroup = NULL,
                           which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
@@ -45,25 +61,39 @@ sc_importance <- function(object,
   attrs <- names(map)
   K <- length(attrs)
   n_S <- length(S)
-  ## Compute per-row V_{ia} under the chosen design.
+
+  ## design_variance and empirical both need deltaX
+  if (design %in% c("design_variance", "empirical")) {
+    dX <- object$deltaX
+    if (is.null(dX)) {
+      stop(sprintf(
+        "sc_importance(design='%s'): object$deltaX not stored.", design),
+        call. = FALSE)
+    }
+  }
+
+  ## Compute per-row V_{i,g} under the chosen design.
   V_mat <- matrix(0, n_S, K)
   for (a in seq_len(K)) {
     cols <- map[[attrs[a]]]
-    if (identical(design, "uniform")) {
+    if (identical(design, "design_variance")) {
+      ## Paper formula: per-respondent sum_k beta_ik^2 * Var(deltaX_k).
+      ## Var is the empirical column variance of deltaX (over all
+      ## task rows in the full sample, not just the subgroup S),
+      ## matching the paper's "given the realized design" framing.
+      dvar <- apply(dX[, cols, drop = FALSE], 2L, stats::var)
+      bsub <- B[S, cols, drop = FALSE]
+      V_mat[, a] <- as.numeric((bsub^2) %*% dvar)
+    } else if (identical(design, "uniform")) {
       ## L_a = number of levels including reference; dummy contribution
       ## for the reference level is 0.
       L_a <- length(cols) + 1L
       bsub <- B[S, cols, drop = FALSE]
-      ## mean over { 0, B[S, cols] } is sum(B)/L_a
       m1 <- rowSums(bsub) / L_a
       m2 <- rowSums(bsub^2) / L_a
+      V_mat[, a] <- m2 - m1^2
     } else {
-      ## Empirical frequencies from deltaX absolute values (treat
-      ## nonzero as "level selected"); v0.1 approximation.
-      dX <- object$deltaX
-      if (is.null(dX)) {
-        stop("sc_importance(design='empirical'): object$deltaX not stored.")
-      }
+      ## "empirical": variance of beta over empirical level distribution.
       w <- colMeans(abs(dX[, cols, drop = FALSE]))
       w_ref <- max(1 - sum(w), 0)
       tot <- w_ref + sum(w)
@@ -75,8 +105,8 @@ sc_importance <- function(object,
         m1 <- as.numeric(bsub %*% w_norm)
         m2 <- as.numeric((bsub^2) %*% w_norm)
       }
+      V_mat[, a] <- m2 - m1^2
     }
-    V_mat[, a] <- m2 - m1^2
   }
   ## Shares: per-row normalization, then average.
   row_sum <- rowSums(V_mat)

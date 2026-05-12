@@ -1,6 +1,6 @@
 ## Tests for the v0.2.1 `normalize_deltaX = TRUE` option on scfit().
 
-test_that("normalize_deltaX = FALSE preserves no-op semantics", {
+test_that("normalize_deltaX = FALSE is a no-op (back-compat)", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
@@ -12,31 +12,17 @@ test_that("normalize_deltaX = FALSE preserves no-op semantics", {
                  data = d, respondent = "respondent", task = "task", profile = "profile",
                  K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
                  normalize_deltaX = FALSE)
-  expect_equal(unname(f_off$sd_dx), rep(1, length(f_off$theta)))
-  expect_false(isTRUE(f_off$normalize_deltaX))
-})
-
-test_that("default normalize_deltaX is TRUE (matches explicit TRUE)", {
-  skip_if_not_installed("torch")
-  skip_if(!torch::torch_is_installed())
-  data(sw2022, package = "sconjoint")
-  d <- sw2022[sw2022$respondent %in% unique(sw2022$respondent)[1:30], ]
-
+  ## Default of FALSE behaves the same as not passing the arg
   set.seed(1); torch::torch_manual_seed(1)
   f_def <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                    resp_female + age + pid,
                  data = d, respondent = "respondent", task = "task", profile = "profile",
                  K = 2L, n_epochs = 30L, seed = 1, stage2 = "none")
-  set.seed(1); torch::torch_manual_seed(1)
-  f_on  <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
-                   resp_female + age + pid,
-                 data = d, respondent = "respondent", task = "task", profile = "profile",
-                 K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
-                 normalize_deltaX = TRUE)
-  expect_identical(f_def$theta, f_on$theta)
-  expect_identical(f_def$vcov, f_on$vcov)
-  expect_identical(f_def$beta_hat, f_on$beta_hat)
-  expect_true(isTRUE(f_def$normalize_deltaX))
+  expect_identical(f_off$theta, f_def$theta)
+  expect_identical(f_off$vcov, f_def$vcov)
+  expect_identical(f_off$beta_hat, f_def$beta_hat)
+  expect_equal(unname(f_off$sd_dx), rep(1, length(f_off$theta)))
+  expect_false(isTRUE(f_off$normalize_deltaX))
 })
 
 test_that("normalize_deltaX = TRUE stores sd_dx and flips the flag", {
