@@ -33,9 +33,18 @@
 #'   `T_ratio`, `R2_ratio`, `N_ratio`.  See default in
 #'   `.sc_default_tier_thresholds()`.
 #' @param experimental Logical; if `TRUE` the print method shows
-#'   an "experimental" banner.  Default `TRUE` for v0.2.1 because
-#'   the estimator has not yet been validated against the paper's
-#'   5,760-cell simulation grid.
+#'   an "experimental" banner.  Default `TRUE`.
+#'
+#'   A build-time validation against a controlled 18-cell sim grid
+#'   (see `inst/benchmarks/validate_design_diagnostic.R` and the
+#'   companion memo in `statsclaw-workspace/sconjoint/ref/`) gives
+#'   Pearson rho(R^2_hat, R^2_true) = 0.76 across the grid but a mean
+#'   absolute bias of 0.23, with the bias concentrated at low true
+#'   R^2_Z (true R^2_Z = 0.10 gets mean R^2_hat = 0.52).  The
+#'   estimator is useful for **relative comparisons across
+#'   coefficients within a fit** but its **absolute value
+#'   over-estimates the recovery share when Z is uninformative**.
+#'   Treat tier hints as direction, not as a pass/fail gate.
 #' @return An `sc_quantity` of subclass `sc_quantity_design_diagnostic`
 #'   with:
 #'   * `estimate`: data.frame, one row per coefficient
@@ -162,8 +171,11 @@ print.sc_quantity_design_diagnostic <- function(x, digits = 3L, ...) {
   s <- x$estimate$summary
   cat("sc_design_diagnostic --- recovery-tier hint\n")
   if (isTRUE(s$experimental)) {
-    cat("[experimental: estimator not yet validated against paper sim grid;\n",
-        " interpret as guidance, not a hard cutoff]\n", sep = "")
+    cat("[experimental: estimator over-estimates R^2_Z when Z is\n",
+        " uninformative (validation bias +0.4 at true R^2_Z = 0.10).\n",
+        " Use for relative comparisons across coefficients; do not\n",
+        " treat tier hints as a pass/fail gate.  See ?sc_design_diagnostic.]\n",
+        sep = "")
   }
   cat(sprintf("Stage 2: %s\n",
               if (is.null(x$details$stage2_method)) "(unknown)"

@@ -4,6 +4,23 @@ Post-release development on `dev`.  Per project policy, the next
 release will also be `0.2.0` (or below); the `.9xxx` suffix indicates
 in-progress work on top of v0.2.0.
 
+## Default change
+
+- `scfit(..., normalize_deltaX = TRUE)` is now the default (was
+  `FALSE` in 0.2.0).  On continuous-attribute designs this is
+  required for sane per-respondent MAP estimates; on factor-dummy
+  designs it is a small refinement (theta shifts in the 3rd-4th
+  decimal).  Pass `normalize_deltaX = FALSE` to recover the 0.2.0
+  default behavior.
+
+## Documentation
+
+- `?sc_design_diagnostic` now reports build-time validation results
+  against a controlled 18-cell sim grid (Pearson rho 0.76 with truth,
+  mean |bias| 0.23, bias concentrated at low true R^2_Z).  The print
+  banner makes the failure mode explicit: do not treat tier hints as
+  a pass/fail gate.  `experimental = TRUE` remains the default.
+
 # sconjoint 0.2.0
 
 This release brings `sconjoint` up to the algorithmic defaults in the

@@ -66,7 +66,8 @@
 #'   `seed`: they are always computed from the Stage-1 cross-fit.
 #' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
 #'   ensemble.  Independent of `seed`.  Default `12345L`.
-#' @param normalize_deltaX Logical (default `FALSE`).  When `TRUE`,
+#' @param normalize_deltaX Logical (default `TRUE` since 0.2.0.9000;
+#'   was `FALSE` in 0.2.0).  When `TRUE`,
 #'   each column of the internal `deltaX` matrix is divided by its
 #'   sample SD before training, lambda estimation, DML inference, and
 #'   the Stage-2 MAP update.  At return all user-facing slots
@@ -164,7 +165,7 @@ scfit <- function(formula, data,
                   verbose = FALSE,
                   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
                   stage2_seed = 12345L,
-                  normalize_deltaX = FALSE) {
+                  normalize_deltaX = TRUE) {
   call <- match.call()
   stage2 <- match.arg(stage2)
 

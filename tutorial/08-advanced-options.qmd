@@ -143,9 +143,11 @@ fit <- scfit(formula, data, ..., normalize_deltaX = TRUE)
 fit$sd_dx
 ```
 
-Default is `FALSE` to preserve all v0.2 behavior bit-exactly. For
-pure factor-dummy designs the option is a near-no-op (every dummy
-already has similar SD).
+Default flipped to `TRUE` in 0.2.0.9000 (was `FALSE` in 0.2.0). On
+pure factor-dummy designs this is a small refinement (theta shifts in
+the 3rd-4th decimal); on continuous-attribute designs it is required
+for sane per-respondent MAP estimates. Pass `normalize_deltaX = FALSE`
+to recover the 0.2.0 default behavior.
 
 ## `sc_design_diagnostic()`: which recovery tiers does my design support?
 
