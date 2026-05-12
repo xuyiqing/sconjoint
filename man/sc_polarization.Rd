@@ -4,12 +4,14 @@
 \alias{sc_polarization}
 \title{Preference polarization index per dummy}
 \usage{
-sc_polarization(object, subgroup = NULL)
+sc_polarization(object, subgroup = NULL, which_beta = c("hybrid", "dnn"))
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
 \item{subgroup}{Row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with \code{estimate} a data.frame of one row

@@ -9,7 +9,8 @@ sc_demand_curve(
   cost_attr,
   cost_grid = NULL,
   profile = NULL,
-  subgroup = NULL
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
 )
 }
 \arguments{
@@ -26,6 +27,8 @@ Default: 20-point regular grid over the observed range of
 (defaults to reference levels, i.e. all zeros).}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} whose \code{estimate} is a data.frame with

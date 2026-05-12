@@ -4,7 +4,13 @@
 \alias{sc_welfare_change}
 \title{Welfare change between two choice sets}
 \usage{
-sc_welfare_change(object, old_set, new_set, subgroup = NULL)
+sc_welfare_change(
+  object,
+  old_set,
+  new_set,
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -13,6 +19,8 @@ sc_welfare_change(object, old_set, new_set, subgroup = NULL)
 list as accepted by \code{\link[=sc_counterfactual]{sc_counterfactual()}}).}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with scalar estimate, clustered SE, and

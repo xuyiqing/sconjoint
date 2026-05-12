@@ -4,7 +4,7 @@
 \alias{sc_subgroup}
 \title{Subgroup-conditional preference estimates}
 \usage{
-sc_subgroup(object, subgroup, ...)
+sc_subgroup(object, subgroup, which_beta = c("hybrid", "dnn"), ...)
 }
 \arguments{
 \item{object}{An \code{sc_fit} produced by \code{scfit()}.}

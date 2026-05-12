@@ -55,6 +55,17 @@
 #'   data.  Set to \code{FALSE} to reduce object size when forward-pass
 #'   prediction is not needed.
 #' @param verbose Logical, print per-epoch training progress.
+#' @param stage2 Stage-2 estimator.  One of `"map_c5"` (default; paper
+#'   EnsC5), `"none"` (skip Stage 2; v0.1 behavior), `"varref"`
+#'   (experimental alternative prior), or `"mixed_logit"` (DNN-offset
+#'   `lme4::glmer` BLUP per paper §A.4; requires the `lme4` package).
+#'   The Stage-2 result is what `object$beta_hat` holds and what all
+#'   `sc_*` quantity functions read by default; the Stage-1 single-DNN
+#'   matrix is kept on `object$beta_hat_dnn`.  DML point estimates and
+#'   clustered SEs are unchanged across `stage2` choices on the same
+#'   `seed`: they are always computed from the Stage-1 cross-fit.
+#' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
+#'   ensemble.  Independent of `seed`.  Default `12345L`.
 #' @return An object of class `sc_fit` -- see Details.  Key components
 #'   include the DML point estimates `theta`, the full `p x p`
 #'   clustered variance-covariance `vcov`, the out-of-sample
@@ -128,8 +139,11 @@ scfit <- function(formula, data,
                   n_cores = NULL,
                   device = "cpu",
                   keep_modules = TRUE,
-                  verbose = FALSE) {
+                  verbose = FALSE,
+                  stage2 = c("map_c5", "none", "varref", "mixed_logit"),
+                  stage2_seed = 12345L) {
   call <- match.call()
+  stage2 <- match.arg(stage2)
 
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop("scfit(): the 'torch' package is required.")
@@ -296,13 +310,46 @@ scfit <- function(formula, data,
   rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
   se_ratio <- .sc_dml_iid_ratio(vcov_cluster$vcov, vcov_iid$vcov)
 
+  ## ---- 12b. Stage 2 (paper §3 hybrid update) ----
+  ## DML output above is frozen — it used `beta_hat` (single Stage-1 DNN).
+  ## Stage 2 (re-)produces a Stage-2-refined task-level `beta_hat` and
+  ## adds auxiliary slots.  When `stage2 = "none"` this is a fast
+  ## pass-through.
+  stage2_out <- .sc_run_stage2(
+    stage2         = stage2,
+    beta_hat_dnn   = beta_hat,
+    deltaX         = deltaX,
+    y              = y,
+    Z              = Z_task,
+    respondent_id  = respondent_task,
+    hidden         = hidden_use,
+    n_epochs       = n_epochs,
+    learning_rate  = learning_rate,
+    lambda         = lambda,
+    K              = K,
+    stage2_seed    = stage2_seed,
+    parallel       = parallel,
+    n_cores        = n_cores,
+    device         = device,
+    verbose        = verbose
+  )
+
   ## ---- 13. Assemble sc_fit ----
   fit <- list(
     theta              = theta,
     vcov               = vcov_cluster$vcov,
     vcov_iid           = vcov_iid$vcov,
     se_ratio_dml_iid   = se_ratio,
-    beta_hat           = beta_hat,
+    beta_hat           = stage2_out$beta_hat,
+    beta_hat_dnn       = stage2_out$beta_hat_dnn,
+    beta_hat_dnn2      = stage2_out$beta_hat_dnn2,
+    beta_hat_ens       = stage2_out$beta_hat_ens,
+    beta_hat_resp      = stage2_out$beta_hat_resp,
+    sigma_prior        = stage2_out$sigma_prior,
+    sigma_post_diag    = stage2_out$sigma_post_diag,
+    stage2_method      = stage2_out$stage2_method,
+    stage2_warnings    = stage2_out$stage2_warnings,
+    stage2_seed        = as.integer(stage2_seed),
     Z                  = Z_task,
     deltaX             = deltaX,
     y                  = y,

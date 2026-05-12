@@ -21,7 +21,9 @@ scfit(
   n_cores = NULL,
   device = "cpu",
   keep_modules = TRUE,
-  verbose = FALSE
+  verbose = FALSE,
+  stage2 = c("map_c5", "none", "varref", "mixed_logit"),
+  stage2_seed = 12345L
 )
 }
 \arguments{
@@ -81,6 +83,19 @@ data.  Set to \code{FALSE} to reduce object size when forward-pass
 prediction is not needed.}
 
 \item{verbose}{Logical, print per-epoch training progress.}
+
+\item{stage2}{Stage-2 estimator.  One of \code{"map_c5"} (default; paper
+EnsC5), \code{"none"} (skip Stage 2; v0.1 behavior), \code{"varref"}
+(experimental alternative prior), or \code{"mixed_logit"} (DNN-offset
+\code{lme4::glmer} BLUP per paper §A.4; requires the \code{lme4} package).
+The Stage-2 result is what \code{object$beta_hat} holds and what all
+\verb{sc_*} quantity functions read by default; the Stage-1 single-DNN
+matrix is kept on \code{object$beta_hat_dnn}.  DML point estimates and
+clustered SEs are unchanged across \code{stage2} choices on the same
+\code{seed}: they are always computed from the Stage-1 cross-fit.}
+
+\item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
+ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
 }
 \value{
 An object of class \code{sc_fit} -- see Details.  Key components

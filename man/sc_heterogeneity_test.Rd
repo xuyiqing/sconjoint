@@ -4,12 +4,18 @@
 \alias{sc_heterogeneity_test}
 \title{Per-dummy heterogeneity test of Var(beta_j(Z)) > 0}
 \usage{
-sc_heterogeneity_test(object, adjust = c("none", "holm", "bh"))
+sc_heterogeneity_test(
+  object,
+  adjust = c("none", "holm", "bh"),
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
 \item{adjust}{Either \code{"none"}, \code{"holm"}, or \code{"bh"}.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} whose \code{estimate} is a data.frame with
