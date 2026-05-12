@@ -26,6 +26,7 @@ plot_subgroup(
   cex.lab = NULL,
   legendOff = FALSE,
   legend.pos = NULL,
+  facet_scales = c("free", "free_y", "free_x", "fixed"),
   ...
 )
 }
@@ -76,6 +77,14 @@ If \code{NULL}, a default palette is used.}
 \item{legendOff}{If \code{TRUE}, hide the legend.}
 
 \item{legend.pos}{Legend position.}
+
+\item{facet_scales}{Passed to \code{facet_grid()}'s \code{scales} when
+\code{groups} is supplied. One of \code{"free"} (default; both axes
+free per attribute-group facet), \code{"free_y"} (v0.1 behavior:
+shared x), \code{"free_x"}, or \code{"fixed"}. The new default
+handles the common case where one attribute is continuous (e.g.
+price in USD) and others are 0/1 dummies, which the v0.1
+shared-x behavior collapsed onto an unreadable scale.}
 
 \item{...}{Unused.}
 }
