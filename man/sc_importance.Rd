@@ -4,7 +4,12 @@
 \alias{sc_importance}
 \title{Attribute importance via per-respondent variance decomposition}
 \usage{
-sc_importance(object, design = c("uniform", "empirical"), subgroup = NULL)
+sc_importance(
+  object,
+  design = c("uniform", "empirical"),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +17,8 @@ sc_importance(object, design = c("uniform", "empirical"), subgroup = NULL)
 \item{design}{Either \code{"uniform"} or \code{"empirical"}.}
 
 \item{subgroup}{Row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} whose \code{estimate} is a data.frame with one

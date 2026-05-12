@@ -4,7 +4,14 @@
 \alias{sc_wtp}
 \title{Willingness-to-pay: signed MRS against a cost attribute}
 \usage{
-sc_wtp(object, attr, cost_attr, trim = c(0.01, 0.99), subgroup = NULL)
+sc_wtp(
+  object,
+  attr,
+  cost_attr,
+  trim = c(0.01, 0.99),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -14,6 +21,9 @@ sc_wtp(object, attr, cost_attr, trim = c(0.01, 0.99), subgroup = NULL)
 \item{cost_attr}{Single-column cost attribute.}
 
 \item{trim, subgroup}{Forwarded to \code{sc_mrs()}.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. Forwarded to
+\code{sc_mrs()}. See \code{?sc_mrs} for details.}
 }
 \value{
 An \code{sc_quantity} with the sign-flipped MRS.

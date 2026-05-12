@@ -4,7 +4,12 @@
 \alias{sc_optimal_profile}
 \title{Optimal profile via greedy per-attribute argmax}
 \usage{
-sc_optimal_profile(object, search = c("greedy", "exhaustive"), subgroup = NULL)
+sc_optimal_profile(
+  object,
+  search = c("greedy", "exhaustive"),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +17,8 @@ sc_optimal_profile(object, search = c("greedy", "exhaustive"), subgroup = NULL)
 \item{search}{Either \code{"greedy"} (default) or \code{"exhaustive"}.}
 
 \item{subgroup}{Row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with scalar estimate and rich \code{details}.

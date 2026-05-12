@@ -4,7 +4,13 @@
 \alias{sc_counterfactual}
 \title{Counterfactual choice probability between two profiles}
 \usage{
-sc_counterfactual(object, A, B, subgroup = NULL)
+sc_counterfactual(
+  object,
+  A,
+  B,
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +18,8 @@ sc_counterfactual(object, A, B, subgroup = NULL)
 \item{A, B}{Named lists describing the two profiles.}
 
 \item{subgroup}{Optional row selector, see \code{sc_mrs}.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with scalar estimate, clustered SE,

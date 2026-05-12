@@ -14,13 +14,16 @@
 #'
 #' @param object An `sc_fit`.
 #' @param subgroup Row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with `estimate` a data.frame of one row
 #'   per dummy (`dummy_name`, `frac_positive`, `frac_negative`,
 #'   `polarization_idx`, plus `NA` SE/CI columns).
 #' @export
-sc_polarization <- function(object, subgroup = NULL) {
+sc_polarization <- function(object, subgroup = NULL,
+                            which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
-  B <- object$beta_hat
+  which_beta <- match.arg(which_beta)
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- B[S, , drop = FALSE]
   fp <- colMeans(Bs > 0)

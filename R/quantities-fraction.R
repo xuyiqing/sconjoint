@@ -15,14 +15,17 @@
 #' @param object An `sc_fit`.
 #' @param threshold Non-negative scalar `tau`.
 #' @param subgroup Row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with `estimate` a data.frame.
 #' @export
-sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL) {
+sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
+                                   which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.numeric(threshold) || length(threshold) != 1L || threshold < 0) {
     stop("sc_fraction_preferring(): `threshold` must be a non-negative scalar.")
   }
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- B[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]

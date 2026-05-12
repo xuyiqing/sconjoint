@@ -4,7 +4,7 @@
 \alias{sc_decisiveness}
 \title{Choice decisiveness between two profiles}
 \usage{
-sc_decisiveness(object, A, B, subgroup = NULL)
+sc_decisiveness(object, A, B, subgroup = NULL, which_beta = c("hybrid", "dnn"))
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -13,6 +13,8 @@ sc_decisiveness(object, A, B, subgroup = NULL)
 \code{\link[=sc_counterfactual]{sc_counterfactual()}}).}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with scalar estimate (mean decisiveness),

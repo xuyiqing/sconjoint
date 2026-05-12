@@ -93,12 +93,21 @@ fit_bs <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 400L,
   seed        = 2024
 )
 summary(fit_bs)
 ```
+
+::: {.callout-note}
+### Stage 2 is on by default (v0.2)
+
+The Stage-2 MAP refinement runs by default for all `scfit()` calls.
+Set `stage2 = "none"` to recover v0.1 behavior. Note: this Bechtel-
+Scheve climate-policy example is *not* in the paper; it lives in the
+tutorial as a fourth showcase.
+:::
 
 ```{r}
 #| label: bs-loss

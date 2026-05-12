@@ -4,7 +4,14 @@
 \alias{sc_indifference}
 \title{Indifference sets: per-respondent MRS between two attributes}
 \usage{
-sc_indifference(object, attr1, attr2, trim = c(0.01, 0.99), subgroup = NULL)
+sc_indifference(
+  object,
+  attr1,
+  attr2,
+  trim = c(0.01, 0.99),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -17,6 +24,8 @@ or integer column index).}
 trimming the MRS distribution.  Default \code{c(0.01, 0.99)}.}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} whose \code{estimate} is a data.frame with

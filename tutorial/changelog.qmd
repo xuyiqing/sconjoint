@@ -1,5 +1,68 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## v0.2.0 (development)
+
+Paper-catchup release: brings the package up to the algorithmic defaults
+in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
+
+**Major default-behavior change**
+
+* `scfit()` now runs the paper's empirical-Bayes MAP update (paper
+  `EnsC5`) as the default Stage 2. The returned `beta_hat` is the
+  hybrid (Stage-2-refined), task-expanded matrix that every `sc_*`
+  quantity function reads. DML point estimates and clustered standard
+  errors are unchanged on the same `seed` --- they continue to use
+  the Stage-1 single-DNN prediction.
+* Set `stage2 = "none"` on `scfit()` to recover v0.1 behavior exactly.
+
+**New `scfit()` arguments**
+
+* `stage2`: one of `"map_c5"` (default), `"none"`, `"varref"`,
+  `"mixed_logit"`. The mixed-logit option implements the
+  `lme4::glmer` BLUP alternative from paper §A.4 with a deterministic
+  tryCatch fallback to the Stage-1 DNN on convergence failure.
+* `stage2_seed`: integer seed for the 2nd DNN in the Stage-2
+  ensemble (default `12345L`); independent of `seed`, so the
+  master-seed bit-exact determinism guarantee extends through
+  Stage 2.
+
+**New `sc_fit` slots**
+
+* `beta_hat_dnn`: the Stage-1 single-DNN matrix that DML used.
+* `beta_hat_dnn2`, `beta_hat_ens`, `beta_hat_resp`: auxiliary
+  Stage-2 intermediates.
+* `sigma_prior`, `sigma_post_diag`: diagonal prior variance and
+  diagonal posterior variance (from the MAP Hessian).
+* `stage2_method`, `stage2_warnings`, `stage2_seed`: provenance.
+
+**New `which_beta` argument on every quantity function**
+
+* Each `sc_*` quantity now accepts `which_beta = c("hybrid", "dnn")`.
+  Default `"hybrid"` reads the Stage-2-refined betas; `"dnn"` reads
+  the Stage-1 single-DNN view.
+
+**New exports**
+
+* `sc_validate_amce(object, subgroup = NULL)`: pooled (and
+  optionally subgroup) homogeneous-logit comparison against the DML
+  $\hat\theta$. Mirrors paper §App-D; on a full-paper fit of
+  `sw2022` the pooled correlation is essentially $r = 0.997$.
+  See \[Example: Candidate Choice\](#sec-sw-validate) for a worked
+  example.
+
+**Bug guards**
+
+* Regression test against the prototype's 2026-04-26 prior-indexing
+  bug.
+* Bit-exact orthogonality and determinism test suites confirm
+  `theta` and `vcov` are invariant across Stage-2 choices on the
+  same `seed` and identical across sequential vs parallel × cores.
+
+**New dependencies**
+
+* `lme4` added as `Suggests` (required only for
+  `stage2 = "mixed_logit"`).
+
 ## v0.1.0
 
 (2026-04-12) Initial release.

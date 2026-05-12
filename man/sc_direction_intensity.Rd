@@ -4,12 +4,18 @@
 \alias{sc_direction_intensity}
 \title{Direction-vs-intensity decomposition of the preference vector}
 \usage{
-sc_direction_intensity(object, subgroup = NULL)
+sc_direction_intensity(
+  object,
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
 \item{subgroup}{Row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity_bivariate} carrying two \code{sc_quantity}

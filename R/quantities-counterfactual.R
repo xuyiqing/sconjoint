@@ -16,15 +16,18 @@
 #' @param object An `sc_fit`.
 #' @param A,B Named lists describing the two profiles.
 #' @param subgroup Optional row selector, see `sc_mrs`.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with scalar estimate, clustered SE,
 #'   normal-approx CI.
 #' @export
-sc_counterfactual <- function(object, A, B, subgroup = NULL) {
+sc_counterfactual <- function(object, A, B, subgroup = NULL,
+                              which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   XA <- .sc_profile_to_dummies(object, A)
   XB <- .sc_profile_to_dummies(object, B)
   dx <- XA - XB
-  Bm <- object$beta_hat
+  Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   lin <- as.numeric(Bm[S, , drop = FALSE] %*% dx)
   p_i <- stats::plogis(lin)

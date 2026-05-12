@@ -4,7 +4,12 @@
 \alias{sc_average}
 \title{Average marginal effects on the logit or probability scale}
 \usage{
-sc_average(object, scale = c("logit", "probability"), subgroup = NULL)
+sc_average(
+  object,
+  scale = c("logit", "probability"),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +17,10 @@ sc_average(object, scale = c("logit", "probability"), subgroup = NULL)
 \item{scale}{One of \code{"logit"} or \code{"probability"}.}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.
+Only affects \code{scale = "probability"}; the \code{"logit"} scale uses
+\code{object$theta} from the DML fit.}
 }
 \value{
 An \code{sc_quantity} with a data.frame estimate containing

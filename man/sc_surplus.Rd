@@ -4,7 +4,7 @@
 \alias{sc_surplus}
 \title{Log-sum consumer surplus over a set of profiles}
 \usage{
-sc_surplus(object, profiles, subgroup = NULL)
+sc_surplus(object, profiles, subgroup = NULL, which_beta = c("hybrid", "dnn"))
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -13,6 +13,8 @@ sc_surplus(object, profiles, subgroup = NULL)
 accepted by \code{\link[=sc_counterfactual]{sc_counterfactual()}}).}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with scalar estimate, clustered SE, and

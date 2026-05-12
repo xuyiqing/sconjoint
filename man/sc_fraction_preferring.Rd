@@ -4,7 +4,12 @@
 \alias{sc_fraction_preferring}
 \title{Fraction of respondents with beta above / below a threshold, per dummy}
 \usage{
-sc_fraction_preferring(object, threshold = 0, subgroup = NULL)
+sc_fraction_preferring(
+  object,
+  threshold = 0,
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +17,8 @@ sc_fraction_preferring(object, threshold = 0, subgroup = NULL)
 \item{threshold}{Non-negative scalar \code{tau}.}
 
 \item{subgroup}{Row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with \code{estimate} a data.frame.

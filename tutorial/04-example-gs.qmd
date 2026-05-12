@@ -122,12 +122,23 @@ fit_gs <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 400L,
   seed        = 2024
 )
 summary(fit_gs)
 ```
+
+::: {.callout-note}
+### Stage 2 is on by default (v0.2)
+
+The summary above reports `Stage 2: map_c5` --- the empirical-Bayes
+MAP refinement of paper §3. The DML co-partisan coefficient
+($\hat\theta \approx 0.70$ in the paper) is computed from the Stage-1
+DNN only; the refined respondent-level betas (used by the
+distributional and structural quantities below) sit on
+`fit_gs$beta_hat`. Pass `stage2 = "none"` to recover v0.1 behavior.
+:::
 
 ```{r}
 #| label: gs-loss
@@ -265,3 +276,20 @@ cl_gs$estimate$sizes
 round(cl_gs$estimate$centers, 2)
 ```
 
+
+## Validating against the homogeneous-logit AMCE
+
+The structural model nests the standard pooled-logit AMCE: under
+correct logit specification, $\theta_k = \mathbb{E}[\beta_k(Z)]$
+equals the homogeneous-logit coefficient on attribute $k$. The new
+`sc_validate_amce()` export reports this comparison.
+
+```{r}
+#| label: gs-validate
+v_gs <- sc_validate_amce(fit_gs)
+v_gs
+```
+
+A correlation near $r = 1$ across the 30 attribute levels confirms
+that nothing a reduced-form AMCE analysis would deliver is lost by
+using the structural model.

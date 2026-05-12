@@ -11,6 +11,7 @@ sc_clusters(
   scale = TRUE,
   nstart = 25L,
   seed = NULL,
+  which_beta = c("hybrid", "dnn"),
   ...
 )
 }
@@ -33,6 +34,8 @@ clustering (default \code{TRUE}).}
 \item{seed}{Optional integer.  When supplied, the R RNG state is
 set to \code{seed} before running k-means and restored on exit, so
 the partition is reproducible.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 
 \item{...}{Unused; reserved for future extensions.}
 }
