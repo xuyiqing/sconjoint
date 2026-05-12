@@ -116,6 +116,64 @@ If `seed = NULL` (the default), Stage 1 is non-deterministic; we still
 respect `stage2_seed` so the 2nd DNN's behavior remains predictable
 given `seed`.
 
+## `normalize_deltaX`: scale-aware MAP regularization
+
+New in v0.2.1. The v0.2 score-based MAP prior is calibrated assuming
+$\mathrm{Var}(\Delta X_k) \approx 1$. For factor dummies under typical
+randomization this is approximately true. For designs with continuous
+attributes on very different scales --- e.g. the Ballard-Rosa tax-rate
+brackets in percentage points (0--50) --- the un-standardized prior
+becomes loose by the same factor as $\mathrm{Var}(\Delta X_k)$, and
+the MAP solver leaves per-respondent estimates with extreme tails.
+
+`normalize_deltaX = TRUE` divides each `deltaX` column by its sample
+SD before training / lambda / DML / MAP, then un-standardizes all
+coefficient-bearing slots at assembly time. The user-facing surface
+(`coef(fit)`, `vcov(fit)`, `fit$beta_hat`, etc.) is on the original
+units; only the internal pipeline runs on a common-variance scale.
+
+```{r}
+#| label: normalize-example
+#| eval: false
+## Recommended for designs with continuous attributes on different
+## scales (e.g. price in USD + age in years + 0/1 dummies)
+fit <- scfit(formula, data, ..., normalize_deltaX = TRUE)
+
+## The SDs used are kept on the fit for diagnostics:
+fit$sd_dx
+```
+
+Default is `FALSE` to preserve all v0.2 behavior bit-exactly. For
+pure factor-dummy designs the option is a near-no-op (every dummy
+already has similar SD).
+
+## `sc_design_diagnostic()`: which recovery tiers does my design support?
+
+New in v0.2.1. Estimates per-coefficient $\hat R^2_{Z,k}$ from the
+MAP posterior and maps the design to four recovery tiers per paper
+§6 heuristics:
+
+| Tier | Condition | Quantities recoverable |
+|------|-----------|------------------------|
+| mean & aggregate | any reasonable design | AMCE, average vote shares |
+| distributional | T ≥ 5 and $\bar R^2_Z$ ≥ 0.35 | preference shares, importance rankings |
+| individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
+| ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
+
+```{r}
+#| label: design-diag-example
+#| eval: false
+diag <- sc_design_diagnostic(fit)
+print(diag)
+## Top / bottom R^2_Z attributes also reported -- helps spot which
+## dummies are best-pinned by Z and which rely most on T for recovery.
+```
+
+Requires `stage2 != "none"` (needs the MAP Hessian's posterior
+variance). The v0.2.1 estimator is flagged `experimental = TRUE`
+in print output because it has not yet been validated against the
+paper's 5,760-cell simulation grid.
+
 ## Training hyperparameters
 
 `scfit()` exposes the DNN training loop. Defaults are tuned to handle

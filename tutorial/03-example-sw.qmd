@@ -402,6 +402,20 @@ plot_subgroup(
 plot(fit_sw, "loss_trace")
 ```
 
+### Design diagnostic (R²_Z + recovery-tier hint)
+
+New in v0.2.1: `sc_design_diagnostic()` estimates per-coefficient
+$\hat R^2_{Z,k}$ from the MAP posterior and reports which recovery
+tiers the design supports (mean / distributional / individual / ratio)
+per the paper §6 heuristics. On the Saha-Weeks design (T ≈ 3, modest
+covariate set), expect mean-only support; the talent attributes are
+well-pinned by Z, while gender and prior-office rely most on T.
+
+```{r}
+#| label: sw-design-diag
+sc_design_diagnostic(fit_sw)
+```
+
 ### Validating against the homogeneous-logit AMCE {#sec-sw-validate}
 
 The paper's Appendix D shows that the structural model nests the

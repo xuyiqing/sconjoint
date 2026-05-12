@@ -1,3 +1,41 @@
+# sconjoint 0.2.1 (development version)
+
+## Prior-calibration fix + design diagnostic
+
+- New `scfit()` argument **`normalize_deltaX`** (default `FALSE`).
+  When `TRUE`, the internal pipeline divides each `deltaX` column
+  by its sample SD before training / lambda / DML / MAP, and
+  un-standardizes user-facing slots at return. Use on designs with
+  continuous attributes on very different scales --- the v0.2
+  score-based MAP prior assumes `Var(deltaX_k) ~ 1`, which is
+  violated by e.g. percentage-point tax rates and was producing
+  per-respondent betas with extreme tails.
+- New export **`sc_design_diagnostic()`**: estimates per-coefficient
+  R^2_Z from the MAP posterior and reports recovery-tier hints
+  (mean / distributional / individual / ratio) per paper §6. Flagged
+  `experimental = TRUE` until validated against the paper's
+  simulation grid.
+- The user-facing surface (`coef`, `vcov`, `beta_hat`, `sigma_*`)
+  is unchanged for `normalize_deltaX = FALSE` (the default), so
+  existing scripts and the v0.2 paper-catchup behavior are preserved
+  bit-exactly.
+
+## Bug fixes (carried from PR #3, also in this release)
+
+These four fixes were originally in `v0.2-polish-2` (PR #3 awaiting
+review). They are included here for completeness; if PR #3 merges
+first, they will be no-ops on the merge into this branch.
+
+- `sc_baseline_logit` / `sc_baseline_lpm` now include an intercept;
+  the previous no-intercept fits biased LPM AMCE coefficients on
+  unbalanced designs (could flip signs).
+- `sc_average(scale = "probability")` SE now via delta-method on
+  theta's vcov (was empirical clustering on per-task contributions,
+  10-20x too small).
+- `sc_average(scale = "probability")` gprime computation now uses
+  theta_hat (was per-respondent MAP betas; pushed G' → 0 on
+  continuous-attribute designs, shrinking AME by ~58x).
+
 # sconjoint 0.2.0 (development version)
 
 ## Paper-catchup release
