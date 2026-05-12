@@ -3,7 +3,7 @@
 **Structural Deep-Learning Estimation for Conjoint Experiments**
 
 `sconjoint` implements the structural deep-learning estimator of
-[Acharya, Hainmueller, and Xu (2026)](https://bit.ly/sconjoint) for
+[Acharya, Hainmueller, and Xu (2026)](https://arxiv.org/abs/2604.10845) for
 forced-choice conjoint experiments. The estimator embeds a deep neural
 network inside a random utility logit so that each respondent's
 preference vector varies flexibly with observed covariates.
@@ -93,7 +93,7 @@ worked examples:
 ## Reference
 
 Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
-"[A Structural Deep-Learning Estimator for Conjoint Experiments](https://bit.ly/sconjoint)."
+"[A Structural Deep-Learning Estimator for Conjoint Experiments](https://arxiv.org/abs/2604.10845)."
 Working paper.
 
 ## License
