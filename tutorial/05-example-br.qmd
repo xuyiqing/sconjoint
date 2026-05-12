@@ -80,12 +80,23 @@ fit_br <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 400L,
   seed        = 2024
 )
 summary(fit_br)
 ```
+
+::: {.callout-note}
+### Stage 2 is on by default (v0.2)
+
+Each row of `br2017` is a tax plan with continuous rates per income
+bracket. `scfit()` runs the empirical-Bayes MAP refinement (paper
+`EnsC5`) by default; the refined respondent-level betas
+(`fit_br$beta_hat`) carry the *individual* preferred tax schedules
+used in the distributional analysis below. The DML population
+estimates and SEs are unchanged from v0.1.
+:::
 
 ```{r}
 #| label: br-loss
@@ -247,3 +258,16 @@ Nearly all respondents --- 99.9% --- exhibit progressive tax preferences
 99.7% reveal progressive preferences. The partisan gap in progressivity
 is real but modest: Democrats' mean slope is approximately 30% larger
 than Republicans'.
+
+## Validating against the homogeneous-logit AMCE
+
+```{r}
+#| label: br-validate
+v_br <- sc_validate_amce(fit_br)
+v_br
+```
+
+Under correct logit specification, the DML $\hat\theta$ on each tax
+bracket matches the pooled logit's coefficient on the same bracket
+exactly. The pooled correlation is the cleanest summary that the
+structural model loses nothing the AMCE delivers.

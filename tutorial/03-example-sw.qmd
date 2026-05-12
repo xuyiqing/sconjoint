@@ -84,9 +84,9 @@ choice ~ agenda + talent + children + cand_gender + prior_office |
 
 ## Fitting
 
-We fit a small, fast configuration (`K = 3` folds, 60 Adam epochs)
-suitable for pedagogy. Production analyses would use more folds and more
-epochs.
+We fit a moderate configuration (`K = 5` folds, 400 Adam epochs) that
+balances render speed against paper-quality estimates. A production run
+would use `K = 10` and `n_epochs >= 1000`.
 
 ```{r}
 #| label: sw-fit
@@ -97,12 +97,26 @@ fit_sw <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 400L,
   seed        = 2024
 )
 summary(fit_sw)
 ```
+
+::: {.callout-note}
+### The Stage-2 default
+
+As of v0.2, `scfit()` runs an empirical-Bayes MAP refinement (paper
+`EnsC5`) on top of the Stage-1 DNN by default
+(`stage2 = "map_c5"`). The summary above reports this as
+`Stage 2: map_c5`. DML point estimates and clustered standard errors
+are unchanged from v0.1 — they continue to use the Stage-1 single-DNN
+prediction (now stored on `fit_sw$beta_hat_dnn`). The refined betas
+(`fit_sw$beta_hat`) feed every distributional and individual-level
+quantity below. Set `stage2 = "none"` to recover v0.1 behavior, or
+`stage2 = "mixed_logit"` for the BLUP alternative from paper §A.4.
+:::
 
 ## Population-average estimates
 
@@ -176,8 +190,13 @@ frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
-The structural model reveals that 83% of respondents prefer female
-candidates despite a near-zero population-average AMCE for gender.
+The fraction of respondents whose individual coefficient on
+`cand_genderFemale` is positive (preferring female candidates) is what
+the paper highlights as the directional finding behind a near-zero
+population-average AMCE for gender. With the v0.2 MAP defaults and a
+full-paper fit (`K = 10`, `n_epochs >= 1000`), this fraction is around
+64% (matching paper Figure 1.C); on the lighter pedagogical config
+used here, expect a comparable number subject to small-sample noise.
 
 ### Marginal rate of substitution
 
@@ -262,3 +281,46 @@ plot_subgroup(
 #| label: sw-loss
 plot(fit_sw, "loss_trace")
 ```
+
+### Validating against the homogeneous-logit AMCE {#sec-sw-validate}
+
+The paper's Appendix D shows that the structural model nests the
+standard reduced-form AMCE: the DML population-average parameter
+$\theta_k = \mathbb{E}[\beta_k(Z)]$ equals the pooled
+homogeneous-logit coefficient on attribute $k$ when the logit
+specification holds. The `sc_validate_amce()` export turns this into
+a one-line sanity check.
+
+```{r}
+#| label: sw-validate
+v <- sc_validate_amce(fit_sw)
+v
+```
+
+In a full paper-quality fit (`K = 10`, `n_epochs >= 1000`), the
+correlation across attribute levels is essentially $r = 0.998$. Any
+material drop is a sign of either insufficient training or a
+genuinely non-logit data-generating process.
+
+### Comparing the Stage-2 view to the raw DNN view
+
+Every `sc_*` quantity now accepts a `which_beta` argument with
+default `"hybrid"` (Stage-2 refined). Passing `"dnn"` reads the
+unrefined Stage-1 DNN mean, which lives in `fit_sw$beta_hat_dnn`.
+
+```{r}
+#| label: sw-which-beta
+frac_hyb <- sc_fraction_preferring(fit_sw, which_beta = "hybrid")
+frac_dnn <- sc_fraction_preferring(fit_sw, which_beta = "dnn")
+data.frame(
+  attribute   = frac_hyb$estimate$dummy_name,
+  hybrid_pref = round(frac_hyb$estimate$frac_positive, 3),
+  dnn_pref    = round(frac_dnn$estimate$frac_positive, 3)
+)
+```
+
+The Stage-2 refinement typically shifts the more polarized columns
+(e.g. `cand_genderFemale`, `talentEmpathetic`) toward smaller
+fractions and the consensus columns (`talentHard-Working`,
+`agendaModerate Changes`) toward 100% --- this is the within-respondent
+shrinkage at work.
