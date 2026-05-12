@@ -14,7 +14,7 @@ sc_importance(
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
-\item{design}{Either \code{"uniform"} or \code{"empirical"}.}
+\item{design}{Either \code{"uniform"} (default) or \code{"empirical"}.}
 
 \item{subgroup}{Row selector.}
 
@@ -33,9 +33,20 @@ averages over the subgroup.  Point estimate matches the prototype
 the per-row share is new in sconjoint v0.1.
 }
 \details{
-\code{design = "uniform"} weights each level of each attribute equally
-(the prototype's default and the only branch tested for parity in
-v0.1).  \code{design = "empirical"} replaces the uniform weights by
-empirical level frequencies computed from \code{object$deltaX} and is
-documented but not parity-tested.
+\code{design = "uniform"} (default) weights each level of each
+attribute equally; this is the prototype's default and matches the
+paper's sw2022 agenda share more closely than empirical weighting
+under the package's training config (see Note).
+\code{design = "empirical"} replaces the uniform weights by empirical
+level frequencies computed from \code{object$deltaX}.
+}
+\note{
+A 0.2.0.9000 spot-check on sw2022 found neither weighting
+matches the paper's reported agenda share of 0.65 under
+the package defaults (K=5, n_epochs=200, hybrid path).
+Uniform gives ~0.40, empirical ~0.31.  Switching to the DNN-only
+path (\code{which_beta = "dnn"}) brings uniform to ~0.57, much closer
+to the paper.  The remaining gap appears to be a training-config
+difference (paper uses K=50, n_epochs=5000), not a weighting-
+formula difference; see \code{statsclaw-workspace/sconjoint/ref/ se-ratio-and-importance-share.md}.
 }

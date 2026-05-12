@@ -4,7 +4,7 @@ Post-release development on `dev`.  Per project policy, the next
 release will also be `0.2.0` (or below); the `.9xxx` suffix indicates
 in-progress work on top of v0.2.0.
 
-## Default change
+## Default changes
 
 - `scfit(..., normalize_deltaX = TRUE)` is now the default (was
   `FALSE` in 0.2.0).  On continuous-attribute designs this is

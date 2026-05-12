@@ -6,14 +6,25 @@
 #' `07b_structural_quantities.R` lines 643--664; the clustered SE of
 #' the per-row share is new in sconjoint v0.1.
 #'
-#' `design = "uniform"` weights each level of each attribute equally
-#' (the prototype's default and the only branch tested for parity in
-#' v0.1).  `design = "empirical"` replaces the uniform weights by
-#' empirical level frequencies computed from `object$deltaX` and is
-#' documented but not parity-tested.
+#' `design = "uniform"` (default) weights each level of each
+#' attribute equally; this is the prototype's default and matches the
+#' paper's sw2022 agenda share more closely than empirical weighting
+#' under the package's training config (see Note).
+#' `design = "empirical"` replaces the uniform weights by empirical
+#' level frequencies computed from `object$deltaX`.
+#'
+#' @note A 0.2.0.9000 spot-check on sw2022 found neither weighting
+#'   matches the paper's reported agenda share of 0.65 under
+#'   the package defaults (K=5, n_epochs=200, hybrid path).
+#'   Uniform gives ~0.40, empirical ~0.31.  Switching to the DNN-only
+#'   path (`which_beta = "dnn"`) brings uniform to ~0.57, much closer
+#'   to the paper.  The remaining gap appears to be a training-config
+#'   difference (paper uses K=50, n_epochs=5000), not a weighting-
+#'   formula difference; see `statsclaw-workspace/sconjoint/ref/
+#'   se-ratio-and-importance-share.md`.
 #'
 #' @param object An `sc_fit`.
-#' @param design Either `"uniform"` or `"empirical"`.
+#' @param design Either `"uniform"` (default) or `"empirical"`.
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with one
