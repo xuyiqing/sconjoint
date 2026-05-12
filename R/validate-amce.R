@@ -1,12 +1,12 @@
 ## sc_validate_amce(): pooled (and optionally subgroup) homogeneous-logit
-## comparison against the DML theta_hat.  Mirrors paper §Appendix D /
+## comparison against the DML theta_hat.  Mirrors paper sectionAppendix D /
 ## prototype code/70_validation_amce.R.
 
 #' Validate the structural model against reduced-form AMCE benchmarks
 #'
 #' Compares the structural DML point estimates `coef(object)` against
 #' the coefficients of a *pooled homogeneous logit* fit on the same
-#' (deltaX, y) — i.e. an ordinary `glm(family = binomial)` that
+#' (deltaX, y) -- i.e. an ordinary `glm(family = binomial)` that
 #' assumes no heterogeneity in \eqn{\beta}.  Under correct logit
 #' specification, \eqn{\theta_k = \mathbb{E}[\beta_k(Z)]} equals the
 #' pooled coefficient on attribute \eqn{k}.  In practice the paper
@@ -126,7 +126,7 @@ sc_validate_amce <- function(object, subgroup = NULL) {
   for (lev in unique_levels) {
     idx <- which(sub_vals == lev)
     if (length(idx) < length(attr_names) + 5L) {
-      ## Too few observations — skip
+      ## Too few observations -- skip
       next
     }
     dX_s <- dX[idx, , drop = FALSE]
@@ -171,9 +171,13 @@ sc_validate_amce <- function(object, subgroup = NULL) {
 }
 
 #' Print method for `sc_quantity_validate_amce`
+#' @param x An `sc_quantity_validate_amce`.
+#' @param digits Significant digits.
+#' @param ... Unused.
+#' @return `x`, invisibly.
 #' @export
 print.sc_quantity_validate_amce <- function(x, digits = 3L, ...) {
-  cat("sc_validate_amce — pooled and (optionally) subgroup comparison\n")
+  cat("sc_validate_amce -- pooled and (optionally) subgroup comparison\n")
   cat(sprintf("Stage 2: %s\n",
               if (is.null(x$details$stage2_method)) "(unknown)"
               else x$details$stage2_method))

@@ -30,7 +30,7 @@ columns \code{attribute}, \code{dml_theta}, \code{dml_se}, \code{homog_logit_coe
 \description{
 Compares the structural DML point estimates \code{coef(object)} against
 the coefficients of a \emph{pooled homogeneous logit} fit on the same
-(deltaX, y) — i.e. an ordinary \code{glm(family = binomial)} that
+(deltaX, y) -- i.e. an ordinary \code{glm(family = binomial)} that
 assumes no heterogeneity in \eqn{\beta}.  Under correct logit
 specification, \eqn{\theta_k = \mathbb{E}[\beta_k(Z)]} equals the
 pooled coefficient on attribute \eqn{k}.  In practice the paper

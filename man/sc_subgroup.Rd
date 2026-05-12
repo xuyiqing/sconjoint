@@ -11,6 +11,8 @@ sc_subgroup(object, subgroup, which_beta = c("hybrid", "dnn"), ...)
 
 \item{subgroup}{Subgroup selector (see Details).}
 
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
+
 \item{...}{Unused; present for future extensions.}
 }
 \value{

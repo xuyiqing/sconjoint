@@ -31,6 +31,7 @@
 #'
 #' @param object An `sc_fit` produced by `scfit()`.
 #' @param subgroup Subgroup selector (see Details).
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @param ... Unused; present for future extensions.
 #' @return An `sc_quantity` with `estimate` a data.frame containing
 #'   one row per dummy (`dummy_name`, `theta`, `se`, `ci_lo`, `ci_hi`),

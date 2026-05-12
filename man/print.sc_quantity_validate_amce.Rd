@@ -6,6 +6,16 @@
 \usage{
 \method{print}{sc_quantity_validate_amce}(x, digits = 3L, ...)
 }
+\arguments{
+\item{x}{An \code{sc_quantity_validate_amce}.}
+
+\item{digits}{Significant digits.}
+
+\item{...}{Unused.}
+}
+\value{
+\code{x}, invisibly.
+}
 \description{
 Print method for \code{sc_quantity_validate_amce}
 }
