@@ -50,17 +50,18 @@ cat(sprintf("\nMean ratio across params: %.3f\n", mean(ratio)))
 cat("Paper target: 1.78\n")
 
 ## sw2022 agenda importance (vs paper's 0.65)
+imp_dv      <- sc_importance(fit, design = "design_variance")$estimate
 imp_uniform <- sc_importance(fit, design = "uniform")$estimate
 imp_emp     <- sc_importance(fit, design = "empirical")$estimate
-imp_dnn     <- sc_importance(fit, design = "uniform",
+imp_dnn_dv  <- sc_importance(fit, design = "design_variance",
                              which_beta = "dnn")$estimate
-cat("\nAgenda importance:  hybrid+uniform=",
-    round(imp_uniform$share[imp_uniform$attribute == "agenda"], 3),
-    "  hybrid+empirical=",
-    round(imp_emp$share[imp_emp$attribute == "agenda"], 3),
-    "  dnn+uniform=",
-    round(imp_dnn$share[imp_dnn$attribute == "agenda"], 3),
-    "  paper=0.65\n", sep = "")
+agenda <- function(df) round(df$share[df$attribute == "agenda"], 3)
+cat("\nAgenda importance (paper=0.65):\n",
+    "  hybrid + design_variance (default) = ", agenda(imp_dv),    "\n",
+    "  hybrid + uniform                   = ", agenda(imp_uniform), "\n",
+    "  hybrid + empirical                 = ", agenda(imp_emp),   "\n",
+    "  dnn    + design_variance           = ", agenda(imp_dnn_dv), "\n",
+    sep = "")
 
 saveRDS(list(
   fit_lite = list(
@@ -74,9 +75,10 @@ saveRDS(list(
   ),
   se_ratio  = ratio,
   importance = list(
-    hybrid_uniform   = imp_uniform,
-    hybrid_empirical = imp_emp,
-    dnn_uniform      = imp_dnn
+    hybrid_design_variance = imp_dv,
+    hybrid_uniform         = imp_uniform,
+    hybrid_empirical       = imp_emp,
+    dnn_design_variance    = imp_dnn_dv
   ),
   wall_secs = as.numeric(difftime(t1, t0, units = "secs"))
 ), "inst/benchmarks/se_ratio_sw2022_paper_config.rds")
