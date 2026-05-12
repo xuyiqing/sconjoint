@@ -67,6 +67,13 @@ knowledge, employment status) --- 12 moderators in total.
 
 ## Fitting the structural model
 
+Because every attribute here is continuous and the tax rates are
+encoded as percentage points (0--50), we pass
+**`normalize_deltaX = TRUE`** so the internal training / MAP step
+sees attributes on a common ~unit scale. Coefficients are
+un-standardized at return, so `coef(fit_br)` is still in
+"logit utility per percentage point" units.
+
 ```{r}
 #| label: br-fit
 fit_br <- scfit(
@@ -76,26 +83,32 @@ fit_br <- scfit(
            resp_race_white + resp_income + resp_ineq_averse +
            resp_work_vs_luck + resp_taxes_harm + resp_hardwork +
            resp_high_econ_know + resp_employed_ft,
-  data        = br2017,
-  respondent  = "respondent",
-  task        = "task",
-  profile     = "profile",
-  K           = 5L,
-  n_epochs    = 200L,
-  seed        = 2024
+  data             = br2017,
+  respondent       = "respondent",
+  task             = "task",
+  profile          = "profile",
+  K                = 5L,
+  n_epochs         = 200L,
+  seed             = 2024,
+  normalize_deltaX = TRUE
 )
 summary(fit_br)
 ```
 
 ::: {.callout-note}
-### Stage 2 is on by default (v0.2)
+### Why `normalize_deltaX = TRUE` here?
 
-Each row of `br2017` is a tax plan with continuous rates per income
-bracket. `scfit()` runs the empirical-Bayes MAP refinement (paper
-`EnsC5`) by default; the refined respondent-level betas
-(`fit_br$beta_hat`) carry the *individual* preferred tax schedules
-used in the distributional analysis below. The DML population
-estimates and SEs are unchanged from v0.1.
+The v0.2 score-based MAP prior is calibrated assuming
+$\mathrm{Var}(\Delta X_k) \approx 1$ (true for factor dummies under
+typical randomization). For BR's tax rates --- which span 0--50
+percentage points --- the un-standardized prior becomes loose by the
+same factor as $\mathrm{Var}(\Delta X_k)$ (here ~200), and the MAP
+solver leaves per-respondent estimates with extreme tails.
+`normalize_deltaX = TRUE` (new in v0.2.1) puts every coefficient on
+a common-variance internal scale; coefficients are un-standardized
+at return. For factor-dummy designs (e.g. SW, GS) it's a near-no-op.
+
+See `?scfit` and the *Advanced options* chapter for details.
 :::
 
 ```{r}
@@ -166,37 +179,15 @@ ggplot(df_both, aes(x = estimate, y = label, color = source)) +
 
 ## Individual-level preferences
 
-::: {.callout-warning}
-### Known limitation: MAP prior calibration on large-scale continuous attributes
-
-The v0.2 score-based MAP prior is calibrated assuming attribute
-contrasts $\Delta X$ on the unit scale (factor dummies in $\{-1, 0, 1\}$).
-The Ballard-Rosa rates are encoded as percentage points (e.g.\ 0--50),
-so $\Delta X$ for the rate columns spans up to 50 units. This makes the
-estimated `sigma_prior` for the rate columns very loose (200--750 vs
-the revenue-score column's $\sim 7$), and the MAP solver lets some
-respondent estimates drift to extreme values whose densities would
-dominate any ridgeline. This is a known v0.2.1 calibration issue.
-
-Workarounds:
-
-* Plot the **raw DNN view** via `which_beta = "dnn"` (used below) to
-  see the unrefined per-respondent distributions on a sensible scale.
-* Pre-standardize numeric attributes to unit variance before fitting.
-* Use `stage2 = "none"` or `stage2 = "mixed_logit"` as alternatives.
-
-The DML population estimates $\hat\theta$ and the headline structural
-quantities for this application are unaffected --- the average
-operation cancels the extreme respondent-level tails.
-:::
+Ridgeline densities of $\hat\beta_k(\mathbf Z_i)$ per attribute across
+respondents. With `normalize_deltaX = TRUE` the MAP refinement is
+properly scaled --- the hybrid view shows clean per-respondent
+distributions for every bracket.
 
 ```{r}
 #| label: br-ridgelines
 #| fig-height: 6
-## Use which_beta = "dnn" here so the per-respondent densities are
-## visible on a sensible scale.  See the callout above.
-plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels,
-     which_beta = "dnn")
+plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels)
 ```
 
 ## Structural quantities
@@ -272,21 +263,16 @@ bracket coefficients $\hat\beta_k(\mathbf Z_i)$ and shows the
 respondent-level preferred-rate schedule in three panels (one per
 party). The dark ribbon is the interquartile range across respondents
 within each party; the light ribbon is the 10th--90th percentile range.
-Note that this uses the raw DNN view (`which_beta = "dnn"`) to avoid
-the v0.2.1 prior-calibration issue flagged in the callout above.
 
 ```{r}
 #| label: br-schedule
 #| fig-height: 4
 #| fig-width: 10
 
-## Respondent-level beta_hat (one row per respondent; use DNN view here)
+## One row per respondent on the hybrid (MAP-refined) scale
 beta_hat <- predict(fit_br, type = "beta")
 first_row <- !duplicated(fit_br$respondent_id)
-beta_resp_hybrid <- beta_hat[first_row, ]
-## Also pull the DNN view to avoid the prior-calibration issue
-beta_resp_dnn <- fit_br$beta_hat_dnn[first_row, ]
-beta_resp <- beta_resp_dnn   # cleaner per-respondent distribution
+beta_resp <- beta_hat[first_row, ]
 
 ## Party assignment from moderator
 pid <- fit_br$Z[first_row, "resp_pid7"]
