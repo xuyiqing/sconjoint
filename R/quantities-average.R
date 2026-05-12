@@ -59,21 +59,21 @@ sc_average <- function(object, scale = c("logit", "probability"),
   dX_s <- dX[S, , drop = FALSE]
   ## Average G'(linear predictor) across the subgroup -- the delta-
   ## method scaling factor that takes logit-scale theta to
-  ## probability-scale AME.
-  lin    <- rowSums(dX_s * Bs)
+  ## probability-scale AME.  Use the POPULATION-AVERAGE theta_hat
+  ## (not the per-respondent beta_hat matrix) for the linear
+  ## predictor: this is what the standard delta-method specifies, and
+  ## it avoids a perverse interaction on continuous-attribute designs
+  ## (e.g. BR's tax rates) where v0.2 MAP betas can have extreme
+  ## per-respondent tails.  Plugging those tails into `deltaX %*% beta`
+  ## yields huge |linear predictor|, pushes G' toward zero, and
+  ## shrinks the AME by ~50x relative to the LPM AMCE.
+  theta_vec <- as.numeric(object$theta)
+  lin    <- as.numeric(dX_s %*% theta_vec)
   gprime <- stats::plogis(lin) * (1 - stats::plogis(lin))
   gprime_avg <- mean(gprime)
-  ## Point estimate: scale theta_hat by mean(G').  Using theta_hat
-  ## (DML) rather than colMeans(beta_hat * gprime) keeps the AME
-  ## consistent with the population-average parameter that the DML
-  ## inference targets, and lets us derive SE from theta's vcov.
-  est_vec <- as.numeric(object$theta) * gprime_avg
+  ## Point estimate: scale theta_hat by mean(G').
+  est_vec <- theta_vec * gprime_avg
   ## SE via delta-method: Var(AME_k) = gprime_avg^2 * Var(theta_k).
-  ## This is the right uncertainty to plot alongside the LPM AMCE
-  ## CI.  The previous implementation computed the empirical SE of
-  ## per-row contributions Bs * gprime, which understated the SE by
-  ## ~10-20x because it did not propagate the uncertainty in
-  ## theta_hat itself.
   V <- object$vcov
   se_vec <- if (!is.null(V) && nrow(V) == p) {
     gprime_avg * sqrt(pmax(diag(V), 0))
