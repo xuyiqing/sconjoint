@@ -1,47 +1,8 @@
-# sconjoint 0.2.1 (development version)
-
-## Prior-calibration fix + design diagnostic
-
-- New `scfit()` argument **`normalize_deltaX`** (default `FALSE`).
-  When `TRUE`, the internal pipeline divides each `deltaX` column
-  by its sample SD before training / lambda / DML / MAP, and
-  un-standardizes user-facing slots at return. Use on designs with
-  continuous attributes on very different scales --- the v0.2
-  score-based MAP prior assumes `Var(deltaX_k) ~ 1`, which is
-  violated by e.g. percentage-point tax rates and was producing
-  per-respondent betas with extreme tails.
-- New export **`sc_design_diagnostic()`**: estimates per-coefficient
-  R^2_Z from the MAP posterior and reports recovery-tier hints
-  (mean / distributional / individual / ratio) per paper §6. Flagged
-  `experimental = TRUE` until validated against the paper's
-  simulation grid.
-- The user-facing surface (`coef`, `vcov`, `beta_hat`, `sigma_*`)
-  is unchanged for `normalize_deltaX = FALSE` (the default), so
-  existing scripts and the v0.2 paper-catchup behavior are preserved
-  bit-exactly.
-
-## Bug fixes (carried from PR #3, also in this release)
-
-These four fixes were originally in `v0.2-polish-2` (PR #3 awaiting
-review). They are included here for completeness; if PR #3 merges
-first, they will be no-ops on the merge into this branch.
-
-- `sc_baseline_logit` / `sc_baseline_lpm` now include an intercept;
-  the previous no-intercept fits biased LPM AMCE coefficients on
-  unbalanced designs (could flip signs).
-- `sc_average(scale = "probability")` SE now via delta-method on
-  theta's vcov (was empirical clustering on per-task contributions,
-  10-20x too small).
-- `sc_average(scale = "probability")` gprime computation now uses
-  theta_hat (was per-respondent MAP betas; pushed G' → 0 on
-  continuous-attribute designs, shrinking AME by ~58x).
-
-# sconjoint 0.2.0 (development version)
-
-## Paper-catchup release
+# sconjoint 0.2.0
 
 This release brings `sconjoint` up to the algorithmic defaults in the
-2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
+2026-04 paper revision of Acharya, Hainmueller, and Xu (2026), plus a
+prior-calibration fix and a new design diagnostic.
 
 ## Major default-behavior change
 
@@ -49,7 +10,7 @@ This release brings `sconjoint` up to the algorithmic defaults in the
   the default Stage 2. The returned `beta_hat` is the hybrid (Stage-2-
   refined), task-expanded matrix that all `sc_*` quantity functions read.
   DML point estimates and clustered standard errors are unchanged on
-  the same `seed` — they continue to use the Stage-1 DNN only.
+  the same `seed` --- they continue to use the Stage-1 DNN only.
   Set `stage2 = "none"` to recover 0.1 behavior exactly.
 
 ## New `scfit()` arguments
@@ -59,6 +20,21 @@ This release brings `sconjoint` up to the algorithmic defaults in the
 - `stage2_seed`: integer seed for the 2nd DNN in the Stage-2 ensemble
   (default `12345L`). Independent of `seed`, so the master-seed
   bit-exact determinism guarantee extends through Stage 2.
+- `normalize_deltaX` (default `FALSE`). When `TRUE`, the internal
+  pipeline divides each `deltaX` column by its sample SD before
+  training / lambda / DML / MAP, and un-standardizes user-facing slots
+  at return. Use on designs with continuous attributes on very
+  different scales --- the score-based MAP prior assumes
+  `Var(deltaX_k) ~ 1`, which is violated by e.g. percentage-point tax
+  rates and was producing per-respondent betas with extreme tails.
+
+## New design diagnostic
+
+- New export **`sc_design_diagnostic()`**: estimates per-coefficient
+  R^2_Z from the MAP posterior and reports recovery-tier hints
+  (mean / distributional / individual / ratio) per paper §6. Flagged
+  `experimental = TRUE` until validated against the paper's
+  simulation grid.
 
 ## New `sc_fit` slots
 
@@ -82,6 +58,18 @@ This release brings `sconjoint` up to the algorithmic defaults in the
   on `object$beta_hat_dnn`. When `stage2 = "none"`, the two are
   numerically identical.
 
+## Bug fixes
+
+- `sc_baseline_logit` / `sc_baseline_lpm` now include an intercept;
+  the previous no-intercept fits biased LPM AMCE coefficients on
+  unbalanced designs (could flip signs).
+- `sc_average(scale = "probability")` SE now via delta-method on
+  theta's vcov (was empirical clustering on per-task contributions,
+  10--20× too small).
+- `sc_average(scale = "probability")` gprime computation now uses
+  theta_hat (was per-respondent MAP betas; pushed G' → 0 on
+  continuous-attribute designs, shrinking AME by ~58×).
+
 ## Bug guards
 
 - Added an explicit regression test against the prototype's
@@ -89,6 +77,12 @@ This release brings `sconjoint` up to the algorithmic defaults in the
   rather than respondent level).
 - Added orthogonality and determinism test suites that pin DML θ̂ and
   Vcov as invariant across Stage-2 choices on the same seed.
+
+## Compatibility
+
+- The user-facing surface (`coef`, `vcov`, `beta_hat`, `sigma_*`) is
+  unchanged for `normalize_deltaX = FALSE` (the default), so existing
+  scripts and the v0.2 paper-catchup behavior are preserved bit-exactly.
 
 ## New dependencies
 
