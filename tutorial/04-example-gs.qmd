@@ -13,16 +13,18 @@ library(ggplot2)
 ## Groups and labels for plot annotations --------------------------------
 gs_groups <- c(
   "copartisanCo-partisan"      = "Party",
+  ## Good-governance items (post-relevel: g_boardElect now also a dummy)
+  "dem_codeg_boardElect"      = "Good Governance",
   "dem_codeg_committee"       = "Good Governance",
   "dem_codeg_officestructure" = "Good Governance",
   "dem_codeg_procedure"       = "Good Governance",
   "dem_codeg_progEval"        = "Good Governance",
   "dem_codeg_record"          = "Good Governance",
   "dem_codeg_schedule"        = "Good Governance",
+  ## Undemocratic items (post-relevel: u_gerry2 is the reference, no dummy)
   "dem_codeu_banProtest"      = "Undemocratic",
   "dem_codeu_court"           = "Undemocratic",
   "dem_codeu_execRule"        = "Undemocratic",
-  "dem_codeu_gerry2"          = "Undemocratic",
   "dem_codeu_gerry10"         = "Undemocratic",
   "dem_codeu_journalists"     = "Undemocratic",
   "dem_codeu_limitVote"       = "Undemocratic",
@@ -46,6 +48,8 @@ gs_groups <- c(
 
 gs_labels <- c(
   "copartisanCo-partisan"      = "Co-partisan",
+  ## g_boardElect now a dummy after the re-level above
+  "dem_codeg_boardElect"      = "Elect oversight board",
   "dem_codeg_committee"       = "Committee oversight",
   "dem_codeg_officestructure" = "Office structure",
   "dem_codeg_procedure"       = "Procedure",
@@ -55,7 +59,7 @@ gs_labels <- c(
   "dem_codeu_banProtest"      = "Ban protest",
   "dem_codeu_court"           = "Ignore court",
   "dem_codeu_execRule"        = "Executive rule",
-  "dem_codeu_gerry2"          = "Gerrymander (2%)",
+  ## u_gerry2 is the reference now — no dummy column
   "dem_codeu_gerry10"         = "Gerrymander (10%)",
   "dem_codeu_journalists"     = "Restrict journalists",
   "dem_codeu_limitVote"       = "Limit voting",
@@ -94,6 +98,10 @@ partisanship --- without re-estimating on subsets.
 
 ## Data preparation
 
+Load the Graham-Svolik subset and inspect its structure. Each
+respondent contributes about 13 forced-choice tasks against pairs of
+hypothetical candidates.
+
 ```{r}
 #| label: gs-load
 data(gs2020, package = "sconjoint")
@@ -109,6 +117,41 @@ party identification (`resp_pid`, -3 to 3), Trump approval (`resp_trump`,
 dispositional measures (authoritarianism, political knowledge) --- 12
 moderators in total.
 
+The `dem_code` attribute has 16 levels in three families: good-governance
+(`g_*`, 7 levels), undemocratic actions (`u_*`, 7 levels), and valence
+violations (`v_*`, 2 levels). The raw choice rates make the families
+crystal clear:
+
+```{r}
+#| label: gs-dem-code-raw
+agg <- aggregate(choice ~ dem_code, data = gs2020, FUN = mean)
+agg[order(-agg$choice), ]
+```
+
+Every `g_*` item is chosen at rate $> 0.55$; every `u_*` item at
+rate $< 0.42$; every `v_*` item at rate $< 0.35$. The labels are
+correct. But the default factor reference is `g_boardElect`
+(alphabetically first), so when we fit the model with default
+contrasts, the `g_*` coefficients are estimated *relative to another
+good-governance item*, which makes the within-`g_` comparisons noisy
+and a few of them slightly negative.
+
+To get a more interpretable plot that lines up with the paper's
+"voters favor good governance" finding, we **re-level `dem_code` so
+that the reference is the mildest undemocratic action,
+`u_gerry2`** (slight gerrymandering). With this baseline, every `g_*`
+item shows a clearly positive coefficient (good-governance preferred
+over mild undemocratic behavior), other `u_*` items are near-zero or
+negative (worse than mild gerry), and `v_*` valence items are
+strongly negative.
+
+```{r}
+#| label: gs-relevel
+gs2020$dem_code <- stats::relevel(factor(gs2020$dem_code),
+                                  ref = "u_gerry2")
+levels(gs2020$dem_code)[1]   # confirm new reference
+```
+
 ## Fitting the structural model
 
 ```{r}
@@ -122,12 +165,23 @@ fit_gs <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 200L,
   seed        = 2024
 )
 summary(fit_gs)
 ```
+
+::: {.callout-note}
+### Stage 2 is on by default (v0.2)
+
+The summary above reports `Stage 2: map_c5` --- the empirical-Bayes
+MAP refinement of paper §3. The DML co-partisan coefficient
+($\hat\theta \approx 0.70$ in the paper) is computed from the Stage-1
+DNN only; the refined respondent-level betas (used by the
+distributional and structural quantities below) sit on
+`fit_gs$beta_hat`. Pass `stage2 = "none"` to recover v0.1 behavior.
+:::
 
 ```{r}
 #| label: gs-loss
@@ -136,13 +190,90 @@ plot(fit_gs, "loss_trace")
 
 ## Population-average estimates
 
+::: {.callout-note}
+### How to read the AMCE plot
+
+We re-leveled `dem_code` above so that the reference is `u_gerry2`
+(mild undemocratic action). All `dem_code` coefficients are now read
+relative to that baseline:
+
+* `g_*` (good-governance) items: **positive** --- voters prefer
+  good-governance practices over mild gerrymandering.
+* Other `u_*` (undemocratic) items: **near zero or negative** ---
+  similar to or worse than mild gerry.
+* `v_*` (valence violation) items: **strongly negative** --- voters
+  reject sex affairs / tax evasion even relative to mild
+  undemocratic behavior.
+
+This is the paper's directional finding: voters favor good governance
+and oppose democratic backsliding.
+:::
+
+Plot the population-average coefficients (DML on the logit scale).
+
 ```{r}
 #| label: gs-amce-plot
 #| fig-height: 8
 plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
 ```
 
+### Structural AME vs reduced-form AMCE
+
+Overlay the structural model's average marginal effects (probability
+scale) against the linear-probability-model AMCE. Under correct
+specification the two coincide.
+
+```{r}
+#| label: gs-ame-vs-amce
+#| fig-height: 9
+ame_struct <- sc_average(fit_gs, scale = "probability")
+ame_df     <- ame_struct$estimate; ame_df$source <- "Structural AME"
+lpm        <- sc_baseline_lpm(fit_gs)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- ifelse(df_both$dummy_name %in% names(gs_labels),
+                        gs_labels[df_both$dummy_name],
+                        df_both$dummy_name)
+df_both$label <- factor(df_both$label,
+                        levels = rev(intersect(unname(gs_labels), df_both$label)))
+df_both$group <- gs_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(gs_groups))
+df_both <- df_both[!is.na(df_both$group), ]
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.3, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
 ## Individual-level preferences
+
+Ridgeline densities show how each per-respondent coefficient
+$\hat\beta_k(\mathbf Z_i)$ is distributed across the sample.
+Undemocratic-action densities should sit entirely left of zero;
+good-governance densities sit near zero (relative to the
+`g_boardElect` reference, see the callout above).
 
 ```{r}
 #| label: gs-ridgelines
@@ -153,6 +284,10 @@ plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
 ## Structural quantities
 
 ### Attribute importance
+
+Decompose utility variance by attribute group. Party and policy should
+carry most of the weight; democracy attributes should account for a
+real but smaller share.
 
 ```{r}
 #| label: gs-importance
@@ -265,3 +400,20 @@ cl_gs$estimate$sizes
 round(cl_gs$estimate$centers, 2)
 ```
 
+
+## Validating against the homogeneous-logit AMCE
+
+The structural model nests the standard pooled-logit AMCE: under
+correct logit specification, $\theta_k = \mathbb{E}[\beta_k(Z)]$
+equals the homogeneous-logit coefficient on attribute $k$. The new
+`sc_validate_amce()` export reports this comparison.
+
+```{r}
+#| label: gs-validate
+v_gs <- sc_validate_amce(fit_gs)
+v_gs
+```
+
+A correlation near $r = 1$ across the 30 attribute levels confirms
+that nothing a reduced-form AMCE analysis would deliver is lost by
+using the structural model.

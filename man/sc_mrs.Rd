@@ -4,7 +4,14 @@
 \alias{sc_mrs}
 \title{Marginal rate of substitution between two attribute dummies}
 \usage{
-sc_mrs(object, numerator, denominator, trim = c(0.01, 0.99), subgroup = NULL)
+sc_mrs(
+  object,
+  numerator,
+  denominator,
+  trim = c(0.01, 0.99),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -18,6 +25,10 @@ which the raw ratio is clipped.  Default \code{c(0.01, 0.99)}.}
 
 \item{subgroup}{Optional logical / integer / Z column-name vector
 selecting a subset of rows.  See Details.}
+
+\item{which_beta}{Either \code{"hybrid"} (default, Stage-2-refined betas) or
+\code{"dnn"} (raw Stage-1 cross-fitted DNN betas).  When the fit was made
+with \code{stage2 = "none"}, the two are numerically identical.}
 }
 \value{
 An \code{sc_quantity} with scalar \code{estimate}, clustered \code{se},

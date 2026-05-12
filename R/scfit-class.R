@@ -26,6 +26,8 @@ print.sc_fit <- function(x, ...) {
     "K = %d folds | M = %d respondents | p = %d attrs | p_Z = %d covariates | seed = %s\n",
     x$K, M, p, p_Z, seed_str
   ))
+  stage2_str <- if (is.null(x$stage2_method)) "(legacy fit)" else x$stage2_method
+  cat(sprintf("Stage 2: %s\n", stage2_str))
   ## Show the last few training losses of fold 1 as a pipeline health hint.
   if (length(x$loss_traces) >= 1L && length(x$loss_traces[[1L]]) > 0L) {
     tail_losses <- utils::tail(x$loss_traces[[1L]], n = 3L)
@@ -99,7 +101,9 @@ summary.sc_fit <- function(object, ...) {
     device           = object$device,
     parallel         = object$parallel,
     n_cores          = object$n_cores,
-    se_ratio_dml_iid = object$se_ratio_dml_iid
+    se_ratio_dml_iid = object$se_ratio_dml_iid,
+    stage2_method    = object$stage2_method,
+    sigma_prior      = object$sigma_prior
   )
   class(out) <- c("sc_fit_summary", "list")
   out
@@ -135,6 +139,14 @@ print.sc_fit_summary <- function(x, digits = 4L, ...) {
       cat(sprintf("\nDML/iid SE ratio (mean): %s\n",
                   format(r_val, digits = digits)))
     }
+  }
+  if (!is.null(x$stage2_method)) {
+    cat(sprintf("\nStage 2: %s", x$stage2_method))
+    if (!is.null(x$sigma_prior)) {
+      cat(sprintf(" | mean(sigma_prior) = %s",
+                  format(mean(x$sigma_prior), digits = digits)))
+    }
+    cat("\n")
   }
   invisible(x)
 }
@@ -234,14 +246,25 @@ predict.sc_fit <- function(object, newdata = NULL, type = c("beta", "logit", "pr
 #'
 #' @param x An `sc_fit`.
 #' @param which Either `"beta_ridgelines"` (default) or `"loss_trace"`.
-#' @param ... Unused.
+#' @param which_beta Either `"hybrid"` (default; Stage-2-refined betas)
+#'   or `"dnn"` (raw Stage-1 cross-fitted DNN betas).  Only used by
+#'   `which = "beta_ridgelines"`.
+#' @param ... Forwarded to the underlying ridgeline or loss-trace plot
+#'   helper. See `?.sc_plot_ridgelines` for ridgeline-specific
+#'   arguments (e.g. `groups`, `labels`, `xlim`, `quantile_trim`).
 #' @return A `ggplot` object.
 #' @export
-plot.sc_fit <- function(x, which = c("beta_ridgelines", "loss_trace"), ...) {
+plot.sc_fit <- function(x,
+                        which = c("beta_ridgelines", "loss_trace"),
+                        which_beta = c("hybrid", "dnn"),
+                        ...) {
   which <- match.arg(which)
+  which_beta <- match.arg(which_beta)
   switch(
     which,
-    beta_ridgelines = .sc_plot_ridgelines(x$beta_hat, x$attr_names, ...),
+    beta_ridgelines = .sc_plot_ridgelines(
+      .sc_pick_beta(x, which_beta), x$attr_names, ...
+    ),
     loss_trace      = .sc_plot_loss_traces(x$loss_traces, ...)
   )
 }

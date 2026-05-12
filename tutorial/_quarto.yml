@@ -15,6 +15,7 @@ book:
     - 05-example-br.qmd
     - 06-example-bs.qmd
     - 07-plot-options.qmd
+    - 08-advanced-options.qmd
     - references.qmd
     - changelog.qmd
 

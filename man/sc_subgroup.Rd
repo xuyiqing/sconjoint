@@ -4,12 +4,14 @@
 \alias{sc_subgroup}
 \title{Subgroup-conditional preference estimates}
 \usage{
-sc_subgroup(object, subgroup, ...)
+sc_subgroup(object, subgroup, which_beta = c("hybrid", "dnn"), ...)
 }
 \arguments{
 \item{object}{An \code{sc_fit} produced by \code{scfit()}.}
 
 \item{subgroup}{Subgroup selector (see Details).}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 
 \item{...}{Unused; present for future extensions.}
 }

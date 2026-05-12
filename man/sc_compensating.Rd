@@ -4,7 +4,14 @@
 \alias{sc_compensating}
 \title{Compensating differential between two attribute levels}
 \usage{
-sc_compensating(object, benefit, cost, trim = c(0.01, 0.99), subgroup = NULL)
+sc_compensating(
+  object,
+  benefit,
+  cost,
+  trim = c(0.01, 0.99),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -18,6 +25,8 @@ for trimming the per-row ratio.  Defaults to \code{c(0.01, 0.99)}.}
 
 \item{subgroup}{Optional subgroup selector (see
 \code{sc_subgroup}).}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity}.  \code{estimate} is a scalar; \code{details}

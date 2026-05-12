@@ -4,7 +4,12 @@
 \alias{sc_inequality}
 \title{Preference inequality across respondents}
 \usage{
-sc_inequality(object, measure = c("variance", "gini"), subgroup = NULL)
+sc_inequality(
+  object,
+  measure = c("variance", "gini"),
+  subgroup = NULL,
+  which_beta = c("hybrid", "dnn")
+)
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -12,6 +17,8 @@ sc_inequality(object, measure = c("variance", "gini"), subgroup = NULL)
 \item{measure}{One of \code{"variance"} or \code{"gini"}.}
 
 \item{subgroup}{Optional row selector.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
 }
 \value{
 An \code{sc_quantity} with a data.frame estimate containing

@@ -55,6 +55,39 @@
 #'   data.  Set to \code{FALSE} to reduce object size when forward-pass
 #'   prediction is not needed.
 #' @param verbose Logical, print per-epoch training progress.
+#' @param stage2 Stage-2 estimator.  One of `"map_c5"` (default; paper
+#'   EnsC5), `"none"` (skip Stage 2; v0.1 behavior), `"varref"`
+#'   (experimental alternative prior), or `"mixed_logit"` (DNN-offset
+#'   `lme4::glmer` BLUP per paper §A.4; requires the `lme4` package).
+#'   The Stage-2 result is what `object$beta_hat` holds and what all
+#'   `sc_*` quantity functions read by default; the Stage-1 single-DNN
+#'   matrix is kept on `object$beta_hat_dnn`.  DML point estimates and
+#'   clustered SEs are unchanged across `stage2` choices on the same
+#'   `seed`: they are always computed from the Stage-1 cross-fit.
+#' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
+#'   ensemble.  Independent of `seed`.  Default `12345L`.
+#' @param normalize_deltaX Logical (default `FALSE`).  When `TRUE`,
+#'   each column of the internal `deltaX` matrix is divided by its
+#'   sample SD before training, lambda estimation, DML inference, and
+#'   the Stage-2 MAP update.  At return all user-facing slots
+#'   (`theta`, `vcov`, `beta_hat`, `sigma_prior`, etc.) are
+#'   un-standardized back to the original-units scale, so
+#'   `fit$deltaX %*% fit$theta` reproduces the correct logit index in
+#'   the user's input units.  The SDs used are stored on
+#'   `fit$sd_dx` for diagnostics.
+#'
+#'   Use `normalize_deltaX = TRUE` on designs with continuous
+#'   attributes whose ΔX columns span very different scales (e.g.
+#'   percentage-point tax rates alongside 0/1 dummies).  The default
+#'   v0.2 score-based MAP prior is calibrated assuming
+#'   `Var(ΔX_k) ~ 1` (factor dummies under typical randomization);
+#'   on large-scale continuous attributes the prior becomes loose by
+#'   the same factor as `Var(ΔX_k)` and per-respondent MAP estimates
+#'   drift to extreme tails.  Internal standardization puts every
+#'   coefficient on a common-variance internal scale, restoring the
+#'   c5 prior's intended regularization strength.  For factor-dummy
+#'   designs `normalize_deltaX` is a near-no-op (each dummy's SD is
+#'   already on a similar scale).
 #' @return An object of class `sc_fit` -- see Details.  Key components
 #'   include the DML point estimates `theta`, the full `p x p`
 #'   clustered variance-covariance `vcov`, the out-of-sample
@@ -128,8 +161,12 @@ scfit <- function(formula, data,
                   n_cores = NULL,
                   device = "cpu",
                   keep_modules = TRUE,
-                  verbose = FALSE) {
+                  verbose = FALSE,
+                  stage2 = c("map_c5", "none", "varref", "mixed_logit"),
+                  stage2_seed = 12345L,
+                  normalize_deltaX = FALSE) {
   call <- match.call()
+  stage2 <- match.arg(stage2)
 
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop("scfit(): the 'torch' package is required.")
@@ -191,6 +228,36 @@ scfit <- function(formula, data,
   colnames(deltaX) <- x_names
   colnames(Z_task) <- z_names
 
+  ## ---- 4b. Optional internal standardization of deltaX ----
+  ## When `normalize_deltaX = TRUE`, divide each deltaX column by its
+  ## sample SD so the internal training / lambda / DML / MAP pipeline
+  ## sees attributes on a common ~unit scale.  At assembly time we
+  ## un-standardize the user-facing slots (beta_hat, theta, vcov,
+  ## sigma_prior, sigma_post_diag, etc.) back to the original-units
+  ## scale, so a user reading `coef(fit)`, `vcov(fit)`, or
+  ## `fit$deltaX %*% fit$theta` sees results consistent with the input
+  ## data they supplied.
+  ##
+  ## Motivation: the v0.2 score-based MAP prior is calibrated assuming
+  ## ΔX columns have Var ~ 1 (true for factor dummies in {-1, 0, 1}
+  ## under typical balanced randomization).  On designs with
+  ## large-scale continuous attributes (e.g. Ballard-Rosa tax rates in
+  ## percentage points, where Var(ΔX_k) ~ 200), `sigma_prior` blows up
+  ## by the same factor and the MAP step barely regularizes ---
+  ## per-respondent betas drift to extreme tails.  Standardizing ΔX
+  ## first puts every column's variance at 1 and gives the c5 prior
+  ## a uniform meaning across attribute types.
+  if (isTRUE(normalize_deltaX)) {
+    sd_dx <- apply(deltaX, 2L, stats::sd)
+    sd_dx[!is.finite(sd_dx) | sd_dx < 1e-10] <- 1
+    deltaX_internal <- sweep(deltaX, 2L, sd_dx, FUN = "/")
+    colnames(deltaX_internal) <- x_names
+  } else {
+    sd_dx <- rep(1, ncol(deltaX))
+    names(sd_dx) <- x_names
+    deltaX_internal <- deltaX
+  }
+
   ## ---- 5. Task-level outcome y ----
   ## The two profile rows of a task have complementary 0/1 choice
   ## indicators; `.sc_build_deltax()` takes X[profile==first] minus
@@ -246,8 +313,12 @@ scfit <- function(formula, data,
   fold_id <- .sc_make_folds(respondent_task, K = K, seed = seed)
 
   ## ---- 9. Cross-fitting ----
+  ## All internal computations downstream use `deltaX_internal` (the
+  ## standardized matrix when normalize_deltaX = TRUE; identical to
+  ## deltaX otherwise).  We un-standardize the user-facing slots at
+  ## assembly time using `sd_dx`.
   cf <- .sc_crossfit(
-    deltaX        = deltaX,
+    deltaX        = deltaX_internal,
     y             = y,
     Z             = Z_task,
     fold_id       = fold_id,
@@ -267,7 +338,7 @@ scfit <- function(formula, data,
   ## ---- 10. Lambda(Z) ----
   lambda_obj <- .sc_estimate_lambda(
     beta_hat     = beta_hat,
-    deltaX       = deltaX,
+    deltaX       = deltaX_internal,
     Z            = Z_task,
     ridge_lambda = ridge_lambda
   )
@@ -276,7 +347,7 @@ scfit <- function(formula, data,
   infl <- .sc_influence_function(
     beta_hat   = beta_hat,
     lambda_obj = lambda_obj,
-    deltaX     = deltaX,
+    deltaX     = deltaX_internal,
     y          = y
   )
   theta <- infl$theta_hat
@@ -296,19 +367,88 @@ scfit <- function(formula, data,
   rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
   se_ratio <- .sc_dml_iid_ratio(vcov_cluster$vcov, vcov_iid$vcov)
 
+  ## ---- 12b. Stage 2 (paper §3 hybrid update) ----
+  ## DML output above is frozen — it used `beta_hat` (single Stage-1 DNN).
+  ## Stage 2 (re-)produces a Stage-2-refined task-level `beta_hat` and
+  ## adds auxiliary slots.  When `stage2 = "none"` this is a fast
+  ## pass-through.
+  stage2_out <- .sc_run_stage2(
+    stage2         = stage2,
+    beta_hat_dnn   = beta_hat,
+    deltaX         = deltaX_internal,
+    y              = y,
+    Z              = Z_task,
+    respondent_id  = respondent_task,
+    hidden         = hidden_use,
+    n_epochs       = n_epochs,
+    learning_rate  = learning_rate,
+    lambda         = lambda,
+    K              = K,
+    stage2_seed    = stage2_seed,
+    parallel       = parallel,
+    n_cores        = n_cores,
+    device         = device,
+    verbose        = verbose
+  )
+
+  ## ---- 12c. Un-standardize coefficients back to original-deltaX scale ----
+  ## All internal slots above ran on `deltaX_internal` (= deltaX / sd_dx
+  ## column-wise when normalize_deltaX = TRUE).  Apply the inverse
+  ## transform so user-facing slots are on the original-units scale:
+  ## β_orig = β_std / sd_dx (col), θ_orig = θ_std / sd_dx,
+  ## Vcov_orig[i,j] = Vcov_std[i,j] / (sd_dx[i] * sd_dx[j]),
+  ## σ²_orig = σ²_std / sd_dx^2.  No-op when normalize_deltaX = FALSE
+  ## (sd_dx = 1).
+  unstd_beta <- function(B) {
+    if (is.null(B)) return(B)
+    sweep(B, 2L, sd_dx, FUN = "/")
+  }
+  unstd_vec <- function(v) {
+    if (is.null(v)) return(v)
+    v / sd_dx
+  }
+  unstd_var <- function(v) {  # variance scales like 1/sd^2
+    if (is.null(v)) return(v)
+    v / (sd_dx^2)
+  }
+  unstd_vcov <- function(V) {
+    if (is.null(V)) return(V)
+    out <- V / outer(sd_dx, sd_dx)
+    rownames(out) <- colnames(out) <- x_names
+    out
+  }
+
+  theta_orig          <- unstd_vec(theta)
+  vcov_orig           <- unstd_vcov(vcov_cluster$vcov)
+  vcov_iid_orig       <- unstd_vcov(vcov_iid$vcov)
+  plugin_orig         <- unstd_vec(infl$plugin)
+  correction_orig     <- unstd_beta(infl$correction)
+  influence_raw_orig  <- unstd_beta(infl$influence_raw)
+
   ## ---- 13. Assemble sc_fit ----
   fit <- list(
-    theta              = theta,
-    vcov               = vcov_cluster$vcov,
-    vcov_iid           = vcov_iid$vcov,
+    theta              = theta_orig,
+    vcov               = vcov_orig,
+    vcov_iid           = vcov_iid_orig,
     se_ratio_dml_iid   = se_ratio,
-    beta_hat           = beta_hat,
+    beta_hat           = unstd_beta(stage2_out$beta_hat),
+    beta_hat_dnn       = unstd_beta(stage2_out$beta_hat_dnn),
+    beta_hat_dnn2      = unstd_beta(stage2_out$beta_hat_dnn2),
+    beta_hat_ens       = unstd_beta(stage2_out$beta_hat_ens),
+    beta_hat_resp      = unstd_beta(stage2_out$beta_hat_resp),
+    sigma_prior        = unstd_var(stage2_out$sigma_prior),
+    sigma_post_diag    = unstd_var(stage2_out$sigma_post_diag),
+    sd_dx              = sd_dx,
+    normalize_deltaX   = isTRUE(normalize_deltaX),
+    stage2_method      = stage2_out$stage2_method,
+    stage2_warnings    = stage2_out$stage2_warnings,
+    stage2_seed        = as.integer(stage2_seed),
     Z                  = Z_task,
     deltaX             = deltaX,
     y                  = y,
-    plugin             = infl$plugin,
-    correction         = infl$correction,
-    influence_raw      = infl$influence_raw,
+    plugin             = plugin_orig,
+    correction         = correction_orig,
+    influence_raw      = influence_raw_orig,
     fold_id            = fold_id,
     lambda_obj         = lambda_obj,
     call               = call,

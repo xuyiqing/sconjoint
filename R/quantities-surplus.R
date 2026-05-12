@@ -11,17 +11,20 @@
 #' @param profiles A list of profile specs (each a named list as
 #'   accepted by [sc_counterfactual()]).
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with scalar estimate, clustered SE, and
 #'   normal-approx CI.
 #' @export
-sc_surplus <- function(object, profiles, subgroup = NULL) {
+sc_surplus <- function(object, profiles, subgroup = NULL,
+                       which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.list(profiles) || length(profiles) < 1L) {
     stop("sc_surplus(): `profiles` must be a non-empty list of profile specs.")
   }
   ## Convert each profile to dummy vector
   dummies <- lapply(profiles, function(pr) .sc_profile_to_dummies(object, pr))
-  Bm <- object$beta_hat
+  Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
   ## For each respondent, compute V_j for every profile, then logsumexp

@@ -19,16 +19,19 @@
 #' @param object An `sc_fit`.
 #' @param search Either `"greedy"` (default) or `"exhaustive"`.
 #' @param subgroup Row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with scalar estimate and rich `details`.
 #' @export
 sc_optimal_profile <- function(object,
                                search = c("greedy", "exhaustive"),
-                               subgroup = NULL) {
+                               subgroup = NULL,
+                               which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   search <- match.arg(search)
+  which_beta <- match.arg(which_beta)
   map <- .sc_attr_map(object)
   attrs <- names(map)
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   resp_s <- object$respondent_id[S]
   fl <- object$factor_levels

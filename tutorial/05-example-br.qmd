@@ -67,6 +67,13 @@ knowledge, employment status) --- 12 moderators in total.
 
 ## Fitting the structural model
 
+Because every attribute here is continuous and the tax rates are
+encoded as percentage points (0--50), we pass
+**`normalize_deltaX = TRUE`** so the internal training / MAP step
+sees attributes on a common ~unit scale. Coefficients are
+un-standardized at return, so `coef(fit_br)` is still in
+"logit utility per percentage point" units.
+
 ```{r}
 #| label: br-fit
 fit_br <- scfit(
@@ -76,16 +83,33 @@ fit_br <- scfit(
            resp_race_white + resp_income + resp_ineq_averse +
            resp_work_vs_luck + resp_taxes_harm + resp_hardwork +
            resp_high_econ_know + resp_employed_ft,
-  data        = br2017,
-  respondent  = "respondent",
-  task        = "task",
-  profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
-  seed        = 2024
+  data             = br2017,
+  respondent       = "respondent",
+  task             = "task",
+  profile          = "profile",
+  K                = 5L,
+  n_epochs         = 200L,
+  seed             = 2024,
+  normalize_deltaX = TRUE
 )
 summary(fit_br)
 ```
+
+::: {.callout-note}
+### Why `normalize_deltaX = TRUE` here?
+
+The v0.2 score-based MAP prior is calibrated assuming
+$\mathrm{Var}(\Delta X_k) \approx 1$ (true for factor dummies under
+typical randomization). For BR's tax rates --- which span 0--50
+percentage points --- the un-standardized prior becomes loose by the
+same factor as $\mathrm{Var}(\Delta X_k)$ (here ~200), and the MAP
+solver leaves per-respondent estimates with extreme tails.
+`normalize_deltaX = TRUE` (new in v0.2.1) puts every coefficient on
+a common-variance internal scale; coefficients are un-standardized
+at return. For factor-dummy designs (e.g. SW, GS) it's a near-no-op.
+
+See `?scfit` and the *Advanced options* chapter for details.
+:::
 
 ```{r}
 #| label: br-loss
@@ -94,13 +118,71 @@ plot(fit_br, "loss_trace")
 
 ## Population-average estimates
 
+DML coefficients per attribute, on the logit scale, with respondent-
+clustered SEs. With numeric attributes the coefficient is "logit
+utility per unit of the attribute" (per percentage-point of the
+rate, or per unit of the centered revenue indicator).
+
 ```{r}
 #| label: br-amce-plot
 #| fig-height: 5
 plot_amce(fit_br, groups = br_groups, labels = br_labels)
 ```
 
+### Structural AME vs reduced-form AMCE
+
+For continuous attributes the AME is "average effect on Pr(choice) per
+unit of the attribute". Overlay the structural and LPM versions on the
+probability scale.
+
+```{r}
+#| label: br-ame-vs-amce
+#| fig-height: 5
+ame_struct <- sc_average(fit_br, scale = "probability")
+ame_df     <- ame_struct$estimate; ame_df$source <- "Structural AME"
+lpm        <- sc_baseline_lpm(fit_br)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- ifelse(df_both$dummy_name %in% names(br_labels),
+                        br_labels[df_both$dummy_name],
+                        df_both$dummy_name)
+df_both$label <- factor(df_both$label, levels = rev(unname(br_labels)))
+df_both$group <- br_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(br_groups))
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.35, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
 ## Individual-level preferences
+
+Ridgeline densities of $\hat\beta_k(\mathbf Z_i)$ per attribute across
+respondents. With `normalize_deltaX = TRUE` the MAP refinement is
+properly scaled --- the hybrid view shows clean per-respondent
+distributions for every bracket.
 
 ```{r}
 #| label: br-ridgelines
@@ -177,18 +259,18 @@ plot_subgroup(
 ### Tax schedule preferences by party
 
 This plot is unique to the tax-plan conjoint. It extracts the six
-bracket coefficients $\hat\beta_k(\mathbf Z_i)$ and plots them as a
-continuous "tax schedule" curve, colored by partisan affiliation. The
-ribbons show the interquartile range (dark) and 10th--90th percentile
-range (light) across respondents within each party.
+bracket coefficients $\hat\beta_k(\mathbf Z_i)$ and shows the
+respondent-level preferred-rate schedule in three panels (one per
+party). The dark ribbon is the interquartile range across respondents
+within each party; the light ribbon is the 10th--90th percentile range.
 
 ```{r}
 #| label: br-schedule
-#| fig-height: 5
-#| fig-width: 8
+#| fig-height: 4
+#| fig-width: 10
 
-## Extract respondent-level beta
-beta_hat <- predict(fit_br)
+## One row per respondent on the hybrid (MAP-refined) scale
+beta_hat <- predict(fit_br, type = "beta")
 first_row <- !duplicated(fit_br$respondent_id)
 beta_resp <- beta_hat[first_row, ]
 
@@ -203,7 +285,6 @@ brackets <- c("Under $10k", "$10-35k", "$35-85k",
 rate_cols <- c("rate_L10", "rate_10_35", "rate_35_85",
                "rate_85_175", "rate_175_375", "rate_375P")
 
-## Compute quantiles by party x bracket
 quant_data <- do.call(rbind, lapply(unique(party), function(p) {
   do.call(rbind, lapply(seq_along(brackets), function(j) {
     vals <- beta_resp[party == p, rate_cols[j]]
@@ -222,24 +303,24 @@ quant_data$bracket <- factor(quant_data$bracket, levels = brackets)
 quant_data$party   <- factor(quant_data$party,
                               levels = c("Democrat", "Independent", "Republican"))
 
-## Plot
+party_palette <- c(Democrat = "#2166AC", Independent = "gray50",
+                   Republican = "#B2182B")
+
 ggplot(quant_data, aes(x = bracket, color = party, fill = party, group = party)) +
-  geom_ribbon(aes(ymin = q10, ymax = q90), alpha = 0.1, color = NA) +
-  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.2, color = NA) +
-  geom_line(aes(y = median), linewidth = 1.2) +
-  geom_point(aes(y = median), size = 2) +
+  geom_ribbon(aes(ymin = q10, ymax = q90), alpha = 0.15, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.30, color = NA) +
+  geom_line(aes(y = median), linewidth = 1.0) +
+  geom_point(aes(y = median), size = 1.8) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  scale_color_manual(values = c(Democrat = "#2166AC", Independent = "gray50",
-                                Republican = "#B2182B")) +
-  scale_fill_manual(values = c(Democrat = "#2166AC", Independent = "gray50",
-                               Republican = "#B2182B")) +
+  facet_wrap(~ party, ncol = 3) +
+  scale_color_manual(values = party_palette, guide = "none") +
+  scale_fill_manual(values  = party_palette, guide = "none") +
   labs(x = "Income bracket",
        y = expression(hat(beta)[k](Z) ~ "(utility per % point)"),
-       title = "Tax schedule preferences by party",
-       color = NULL, fill = NULL) +
-  theme_minimal(base_size = 12) +
+       title = "Tax schedule preferences, faceted by party") +
+  theme_minimal(base_size = 11) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1),
-        legend.position = "bottom")
+        strip.text  = element_text(face = "bold"))
 ```
 
 Nearly all respondents --- 99.9% --- exhibit progressive tax preferences
@@ -247,3 +328,16 @@ Nearly all respondents --- 99.9% --- exhibit progressive tax preferences
 99.7% reveal progressive preferences. The partisan gap in progressivity
 is real but modest: Democrats' mean slope is approximately 30% larger
 than Republicans'.
+
+## Validating against the homogeneous-logit AMCE
+
+```{r}
+#| label: br-validate
+v_br <- sc_validate_amce(fit_br)
+v_br
+```
+
+Under correct logit specification, the DML $\hat\theta$ on each tax
+bracket matches the pooled logit's coefficient on the same bracket
+exactly. The pooled correlation is the cleanest summary that the
+structural model loses nothing the AMCE delivers.

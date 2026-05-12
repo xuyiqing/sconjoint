@@ -41,6 +41,7 @@
 #'   for trimming the per-row ratio.  Defaults to `c(0.01, 0.99)`.
 #' @param subgroup Optional subgroup selector (see
 #'   `sc_subgroup`).
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity`.  `estimate` is a scalar; `details`
 #'   contains `frac_compensated`, `n`, and the trimming thresholds.
 #' @export
@@ -48,8 +49,10 @@ sc_compensating <- function(object,
                             benefit,
                             cost,
                             trim = c(0.01, 0.99),
-                            subgroup = NULL) {
+                            subgroup = NULL,
+                            which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.numeric(trim) || length(trim) != 2L ||
       trim[1] < 0 || trim[2] > 1 || trim[1] >= trim[2]) {
     stop("sc_compensating(): `trim` must be a length-2 numeric in (0,1) with trim[1] < trim[2].")
@@ -59,7 +62,7 @@ sc_compensating <- function(object,
   if (b_idx == c_idx) {
     stop("sc_compensating(): `benefit` and `cost` must refer to different dummies.")
   }
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup_ext(object, subgroup)
   if (length(S) == 0L) {
     stop("sc_compensating(): selected subgroup is empty.")

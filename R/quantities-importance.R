@@ -15,17 +15,20 @@
 #' @param object An `sc_fit`.
 #' @param design Either `"uniform"` or `"empirical"`.
 #' @param subgroup Row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with one
 #'   row per attribute (columns: `attribute`, `share`, `se`, `ci_lo`,
 #'   `ci_hi`).
 #' @export
 sc_importance <- function(object,
                           design = c("uniform", "empirical"),
-                          subgroup = NULL) {
+                          subgroup = NULL,
+                          which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   design <- match.arg(design)
+  which_beta <- match.arg(which_beta)
   map <- .sc_attr_map(object)
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   resp_s <- object$respondent_id[S]
   attrs <- names(map)

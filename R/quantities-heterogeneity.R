@@ -11,15 +11,18 @@
 #'
 #' @param object An `sc_fit`.
 #' @param adjust Either `"none"`, `"holm"`, or `"bh"`.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with
 #'   columns `dummy_name`, `var_beta`, `se_var`, `t_stat`, `p_value`,
 #'   `p_adjusted`, `sig`.
 #' @export
 sc_heterogeneity_test <- function(object,
-                                  adjust = c("none", "holm", "bh")) {
+                                  adjust = c("none", "holm", "bh"),
+                                  which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   adjust <- match.arg(adjust)
-  B <- object$beta_hat
+  which_beta <- match.arg(which_beta)
+  B <- .sc_pick_beta(object, which_beta)
   resp <- object$respondent_id
   N <- nrow(B); p <- ncol(B)
   M <- length(unique(resp))

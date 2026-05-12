@@ -8,14 +8,16 @@ test_that("Quarto book includes all chapters", {
   if (!file.exists(yml)) testthat::skip("_quarto.yml missing")
   lines <- readLines(yml, warn = FALSE)
   chapters <- grep("\\.qmd\\s*$", lines, value = TRUE)
-  ## 9 entries: index + 01-installation + 02-sanity + 03-sw + 04-gs +
-  ##            05-br + 06-bs + 07-plot-options + references
-  expect_equal(length(chapters), 9L,
+  ## 11 entries: index + 01-installation + 02-sanity + 03-sw + 04-gs +
+  ##             05-br + 06-bs + 07-plot-options + 08-advanced-options +
+  ##             references + changelog
+  expect_equal(length(chapters), 11L,
                info = paste(chapters, collapse = "\n"))
   expect_true(any(grepl("03-example-sw", chapters)))
   expect_true(any(grepl("04-example-gs", chapters)))
   expect_true(any(grepl("05-example-br", chapters)))
   expect_true(any(grepl("06-example-bs", chapters)))
+  expect_true(any(grepl("08-advanced-options", chapters)))
 })
 
 test_that("full book renders (skipped without quarto)", {

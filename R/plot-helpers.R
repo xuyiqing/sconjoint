@@ -35,7 +35,8 @@ utils::globalVariables(c("x", "group"))
                                 gridOff = FALSE, cex.main = NULL,
                                 cex.axis = NULL, cex.lab = NULL,
                                 legendOff = NULL, legend.pos = NULL,
-                                xlim = NULL) {
+                                xlim = NULL,
+                                quantile_trim = c(0.025, 0.975)) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop(".sc_plot_ridgelines(): ggplot2 is required.")
   }
@@ -47,6 +48,43 @@ utils::globalVariables(c("x", "group"))
     attr_names <- attr_names[idx]
   }
   p_cols <- ncol(beta_hat)
+
+  ## Per-column quantile trimming: drop the most extreme values from
+  ## each column before plotting so the density (and the auto-axis it
+  ## drives) reflects the bulk of the distribution, not a handful of
+  ## outlier respondents.  Important on continuous-attribute designs
+  ## (e.g. BR's revenue_score and tax-bracket rates) where the v0.2
+  ## score-based MAP prior is mis-calibrated for large-scale ΔX and
+  ## can produce extreme respondent-level β values whose tails would
+  ## otherwise dominate the axis.
+  ##
+  ## Disabled when the caller passes `xlim` (manual axis takes priority)
+  ## or `quantile_trim = NULL` (no clipping).
+  if (!is.null(quantile_trim) && is.numeric(quantile_trim) &&
+      length(quantile_trim) == 2L &&
+      quantile_trim[1] >= 0 && quantile_trim[2] <= 1 &&
+      quantile_trim[1] < quantile_trim[2]) {
+    for (j in seq_len(p_cols)) {
+      qj <- stats::quantile(beta_hat[, j],
+                            probs = quantile_trim, na.rm = TRUE)
+      if (is.finite(qj[1]) && is.finite(qj[2]) && qj[2] > qj[1]) {
+        out_of_range <- beta_hat[, j] < qj[1] | beta_hat[, j] > qj[2]
+        beta_hat[out_of_range, j] <- NA_real_
+      }
+    }
+  }
+
+  ## Set a global xlim only when groups is NULL (no faceting).  With
+  ## faceting the per-facet free scale handles per-group ranges.
+  if (is.null(groups) && is.null(xlim) && !is.null(quantile_trim)) {
+    qs <- as.numeric(stats::quantile(as.numeric(beta_hat),
+                                     probs = c(0.01, 0.99), na.rm = TRUE))
+    if (all(is.finite(qs)) && qs[2] > qs[1]) {
+      pad <- 0.05 * (qs[2] - qs[1])
+      xlim <- c(qs[1] - pad, qs[2] + pad)
+    }
+  }
+
   long <- data.frame(
     dummy = factor(rep(attr_names, each = nrow(beta_hat)),
                    levels = rev(attr_names)),
@@ -93,12 +131,19 @@ utils::globalVariables(c("x", "group"))
                     title = if (is.null(title)) default_title else title) +
       ggplot2::theme_minimal(base_size = 12)
   }
-  ## Apply group faceting
+  ## Apply group faceting.  Use `facet_wrap(ncol = 1, scales = "free")`
+  ## so each attribute group gets its own x-axis (important when one
+  ## group is a continuous attribute on a very different scale from
+  ## 0/1 dummies -- e.g. BR's revenue_score vs the tax rate brackets).
+  ## `facet_grid(group ~ .)` keeps x shared across rows even with
+  ## `scales = "free"`; facet_wrap gives true per-panel axes.
   if (!is.null(groups)) {
     pl <- pl +
-      ggplot2::facet_grid(group ~ ., scales = "free_y", space = "free_y") +
-      ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0,
-                                                           face = "bold"))
+      ggplot2::facet_wrap(~ group, ncol = 1, scales = "free",
+                          strip.position = "right") +
+      ggplot2::theme(strip.text.y.right = ggplot2::element_text(angle = 0,
+                                                                 hjust = 0,
+                                                                 face = "bold"))
   }
   ## Use the shared theme helper from plot-diagnostics.R
   if (exists(".sc_plot_theme", mode = "function")) {

@@ -21,14 +21,17 @@
 #' @param profile Optional named list for non-cost attributes
 #'   (defaults to reference levels, i.e. all zeros).
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with
 #'   columns `cost`, `demand`, and `se`.
 #' @export
 sc_demand_curve <- function(object, cost_attr,
                             cost_grid = NULL,
                             profile = NULL,
-                            subgroup = NULL) {
+                            subgroup = NULL,
+                            which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   ## Resolve cost attribute to column index
   cost_idx <- .sc_parse_dummy_name(object, cost_attr)
   ## Build the non-cost profile dummies
@@ -49,7 +52,7 @@ sc_demand_curve <- function(object, cost_attr,
     cvals <- dX[, cost_idx]
     cost_grid <- seq(min(cvals), max(cvals), length.out = 20L)
   }
-  Bm <- object$beta_hat
+  Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]

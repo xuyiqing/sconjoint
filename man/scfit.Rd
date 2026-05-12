@@ -21,7 +21,10 @@ scfit(
   n_cores = NULL,
   device = "cpu",
   keep_modules = TRUE,
-  verbose = FALSE
+  verbose = FALSE,
+  stage2 = c("map_c5", "none", "varref", "mixed_logit"),
+  stage2_seed = 12345L,
+  normalize_deltaX = FALSE
 )
 }
 \arguments{
@@ -81,6 +84,42 @@ data.  Set to \code{FALSE} to reduce object size when forward-pass
 prediction is not needed.}
 
 \item{verbose}{Logical, print per-epoch training progress.}
+
+\item{stage2}{Stage-2 estimator.  One of \code{"map_c5"} (default; paper
+EnsC5), \code{"none"} (skip Stage 2; v0.1 behavior), \code{"varref"}
+(experimental alternative prior), or \code{"mixed_logit"} (DNN-offset
+\code{lme4::glmer} BLUP per paper §A.4; requires the \code{lme4} package).
+The Stage-2 result is what \code{object$beta_hat} holds and what all
+\verb{sc_*} quantity functions read by default; the Stage-1 single-DNN
+matrix is kept on \code{object$beta_hat_dnn}.  DML point estimates and
+clustered SEs are unchanged across \code{stage2} choices on the same
+\code{seed}: they are always computed from the Stage-1 cross-fit.}
+
+\item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
+ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
+
+\item{normalize_deltaX}{Logical (default \code{FALSE}).  When \code{TRUE},
+each column of the internal \code{deltaX} matrix is divided by its
+sample SD before training, lambda estimation, DML inference, and
+the Stage-2 MAP update.  At return all user-facing slots
+(\code{theta}, \code{vcov}, \code{beta_hat}, \code{sigma_prior}, etc.) are
+un-standardized back to the original-units scale, so
+\code{fit$deltaX \%*\% fit$theta} reproduces the correct logit index in
+the user's input units.  The SDs used are stored on
+\code{fit$sd_dx} for diagnostics.
+
+Use \code{normalize_deltaX = TRUE} on designs with continuous
+attributes whose ΔX columns span very different scales (e.g.
+percentage-point tax rates alongside 0/1 dummies).  The default
+v0.2 score-based MAP prior is calibrated assuming
+\code{Var(ΔX_k) ~ 1} (factor dummies under typical randomization);
+on large-scale continuous attributes the prior becomes loose by
+the same factor as \code{Var(ΔX_k)} and per-respondent MAP estimates
+drift to extreme tails.  Internal standardization puts every
+coefficient on a common-variance internal scale, restoring the
+c5 prior's intended regularization strength.  For factor-dummy
+designs \code{normalize_deltaX} is a near-no-op (each dummy's SD is
+already on a similar scale).}
 }
 \value{
 An object of class \code{sc_fit} -- see Details.  Key components

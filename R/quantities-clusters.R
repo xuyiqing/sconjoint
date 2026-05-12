@@ -37,6 +37,7 @@
 #' @param seed Optional integer.  When supplied, the R RNG state is
 #'   set to `seed` before running k-means and restored on exit, so
 #'   the partition is reproducible.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @param ... Unused; reserved for future extensions.
 #' @return An `sc_quantity` whose `estimate` is a named list with
 #'   fields `cluster_assignment` (length-N integer), `centers`
@@ -49,14 +50,16 @@ sc_clusters <- function(object,
                         scale = TRUE,
                         nstart = 25L,
                         seed = NULL,
+                        which_beta = c("hybrid", "dnn"),
                         ...) {
   stopifnot(inherits(object, "sc_fit"))
   method <- match.arg(method)
+  which_beta <- match.arg(which_beta)
   if (!is.numeric(k) || length(k) != 1L || k < 2L) {
     stop("sc_clusters(): `k` must be an integer >= 2.")
   }
   k <- as.integer(k)
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   N <- nrow(B)
   if (k > N) {
     stop("sc_clusters(): `k` exceeds number of rows in beta_hat.")

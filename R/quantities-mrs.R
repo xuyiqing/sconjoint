@@ -19,6 +19,9 @@
 #'   which the raw ratio is clipped.  Default `c(0.01, 0.99)`.
 #' @param subgroup Optional logical / integer / Z column-name vector
 #'   selecting a subset of rows.  See Details.
+#' @param which_beta Either `"hybrid"` (default, Stage-2-refined betas) or
+#'   `"dnn"` (raw Stage-1 cross-fitted DNN betas).  When the fit was made
+#'   with `stage2 = "none"`, the two are numerically identical.
 #' @return An `sc_quantity` with scalar `estimate`, clustered `se`,
 #'   normal-approx CI, and `details` including the prototype delta SE.
 #' @examples
@@ -33,15 +36,17 @@ sc_mrs <- function(object,
                    numerator,
                    denominator,
                    trim = c(0.01, 0.99),
-                   subgroup = NULL) {
+                   subgroup = NULL,
+                   which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.numeric(trim) || length(trim) != 2L ||
       trim[1L] < 0 || trim[2L] > 1 || trim[1L] >= trim[2L]) {
     stop("sc_mrs(): `trim` must be c(q_lo, q_hi) with 0 <= q_lo < q_hi <= 1.")
   }
   j <- .sc_parse_dummy_name(object, numerator)
   k <- .sc_parse_dummy_name(object, denominator)
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   resp <- object$respondent_id
   S <- .sc_resolve_subgroup(object, subgroup)
   r_raw <- B[S, j] / B[S, k]

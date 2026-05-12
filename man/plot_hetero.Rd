@@ -25,6 +25,8 @@ plot_hetero(
   cex.lab = NULL,
   legendOff = FALSE,
   legend.pos = NULL,
+  which_beta = c("hybrid", "dnn"),
+  facet_scales = c("free", "free_y", "free_x", "fixed"),
   ...
 )
 }
@@ -71,6 +73,18 @@ group labels for faceting.}
 \item{legendOff}{If \code{TRUE}, hide the legend.}
 
 \item{legend.pos}{Legend position.}
+
+\item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}.
+Forwarded to \code{sc_heterogeneity_test()}.  Use \code{"dnn"}
+when MAP-shrunk per-respondent variances on continuous-attribute
+designs are dominated by a single large-scale attribute.}
+
+\item{facet_scales}{Passed to \code{facet_grid()}/\code{facet_wrap()}'s
+\code{scales} when \code{groups} is supplied.  One of
+\code{"free"} (default; per-attribute-group x-axis via
+\code{facet_wrap}, which handles the common case of a continuous
+attribute alongside 0/1 dummies), \code{"free_y"} (v0.1 behavior:
+shared x), \code{"free_x"}, or \code{"fixed"}.}
 
 \item{...}{Unused.}
 }

@@ -23,7 +23,7 @@ sw_groups <- c(
   "children1 child"             = "Children",
   "children2 children"          = "Children",
   "children3 children"          = "Children",
-  "cand_genderFemale"           = "Gender",
+  "cand_genderMale"             = "Gender",
   "prior_officeYes"             = "Prior Office"
 )
 
@@ -39,7 +39,7 @@ sw_labels <- c(
   "children1 child"             = "1 child",
   "children2 children"          = "2 children",
   "children3 children"          = "3 children",
-  "cand_genderFemale"           = "Female",
+  "cand_genderMale"             = "Male",
   "prior_officeYes"             = "Yes"
 )
 ```
@@ -53,6 +53,8 @@ whether a near-zero AMCE for candidate gender masks genuine
 heterogeneity --- half the sample preferring women, half preferring men.
 
 ## Data preparation
+
+Load the bundled Saha-Weeks subset and inspect its structure.
 
 ```{r}
 #| label: sw-load
@@ -72,6 +74,17 @@ str(sw2022)
 table(table(sw2022$respondent))
 ```
 
+For consistency with the paper, we re-level `cand_gender` so that
+**Female is the reference and Male is the non-reference dummy**. The
+paper reports the Male-relative-to-Female coefficient throughout.
+
+```{r}
+#| label: sw-relevel
+sw2022$cand_gender <- stats::relevel(factor(sw2022$cand_gender),
+                                     ref = "Female")
+levels(sw2022$cand_gender)
+```
+
 The respondent-level moderators available in $\mathbf Z$ are
 `resp_female` (binary), `age` (standardized), and `pid` (3-level
 partisanship index). The formula interface puts conjoint attributes to
@@ -84,9 +97,11 @@ choice ~ agenda + talent + children + cand_gender + prior_office |
 
 ## Fitting
 
-We fit a small, fast configuration (`K = 3` folds, 60 Adam epochs)
-suitable for pedagogy. Production analyses would use more folds and more
-epochs.
+We fit a moderate configuration (`K = 5` folds, 200 Adam epochs) that
+balances render speed against paper-quality estimates. A production run
+would use `K = 10` and `n_epochs >= 1000`. The loss trace below shows
+the per-fold training curves; with `K = 5` cross-fitting the loss has
+largely plateaued by epoch 150-200.
 
 ```{r}
 #| label: sw-fit
@@ -97,14 +112,31 @@ fit_sw <- scfit(
   respondent  = "respondent",
   task        = "task",
   profile     = "profile",
-  K           = 3L,
-  n_epochs    = 60L,
+  K           = 5L,
+  n_epochs    = 200L,
   seed        = 2024
 )
 summary(fit_sw)
 ```
 
+::: {.callout-note}
+### The Stage-2 default
+
+As of v0.2, `scfit()` runs an empirical-Bayes MAP refinement (paper
+`EnsC5`) on top of the Stage-1 DNN by default
+(`stage2 = "map_c5"`). The summary above reports this as
+`Stage 2: map_c5`. DML point estimates and clustered standard errors
+are unchanged from v0.1 — they continue to use the Stage-1 single-DNN
+prediction (now stored on `fit_sw$beta_hat_dnn`). The refined betas
+(`fit_sw$beta_hat`) feed every distributional and individual-level
+quantity below. Set `stage2 = "none"` to recover v0.1 behavior, or
+`stage2 = "mixed_logit"` for the BLUP alternative from paper §A.4.
+:::
+
 ## Population-average estimates
+
+The DML point estimates $\hat\theta_k$ on the logit scale. Inspect
+numerically, then visualize as a coefficient plot grouped by attribute.
 
 ```{r}
 #| label: sw-coef
@@ -117,7 +149,68 @@ coef(fit_sw)
 plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
+### Structural AME vs reduced-form AMCE (paper Figure 1.B)
+
+The paper notes that the structural model's average marginal effect
+(AME) on the *probability* scale nearly coincides with the standard
+linear-probability-model AMCE --- confirming that the structural
+estimator nests reduced-form AMCE analysis. Below we compute both and
+overlay them as point-ranges on the probability scale.
+
+```{r}
+#| label: sw-ame-vs-amce
+#| fig-height: 6
+## Structural AME on the probability scale (delta-method via plogis')
+ame_struct <- sc_average(fit_sw, scale = "probability")
+ame_df     <- ame_struct$estimate
+ame_df$source <- "Structural AME"
+
+## Linear-probability-model AMCE
+lpm        <- sc_baseline_lpm(fit_sw)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- ifelse(df_both$dummy_name %in% names(sw_labels),
+                        sw_labels[df_both$dummy_name],
+                        df_both$dummy_name)
+df_both$label <- factor(df_both$label, levels = rev(unname(sw_labels)))
+df_both$group <- sw_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(sw_groups))
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.35, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
+The two series should overlap nearly point-for-point ---
+the structural model loses nothing the reduced-form AMCE delivers.
+
 ## Individual-level preferences
+
+Pull the respondent-level $\hat\beta(\mathbf Z_i)$ matrix. With the v0.2
+default `stage2 = "map_c5"`, this is the MAP-refined hybrid view.
 
 ```{r}
 #| label: sw-beta
@@ -125,6 +218,10 @@ beta <- predict(fit_sw)
 dim(beta)
 head(beta, 3)
 ```
+
+Ridgeline densities show the distribution of $\hat\beta_k(\mathbf Z_i)$
+per dummy across respondents. The vertical dashed line is at zero; the
+solid line in each density is the median.
 
 ```{r}
 #| label: sw-ridgelines
@@ -135,6 +232,10 @@ plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
 ## Structural quantities
 
 ### Attribute importance
+
+Variance-decomposition share of utility carried by each attribute
+group, averaged across respondents. The "importance" answers: which
+attribute moves the choice the most?
 
 ```{r}
 #| label: sw-importance
@@ -153,6 +254,11 @@ decision variance for the median voter.
 
 ### Direction and intensity
 
+For each dummy, decompose preference into a *direction* (the sign of
+$\hat\beta_{ik}$) and an *intensity* (its magnitude). Near-zero average
+effects can hide either consensus (everyone close to zero) or
+polarization (large opposing intensities cancelling).
+
 ```{r}
 #| label: sw-di
 sc_direction_intensity(fit_sw)
@@ -163,6 +269,9 @@ perfectly polarized electorate: approximately half favor empathetic
 candidates while the other half oppose them.
 
 ### Fraction preferring
+
+What share of respondents have a positive coefficient on each dummy?
+This is the direction-only summary --- ignores intensity.
 
 ```{r}
 #| label: sw-fraction
@@ -176,10 +285,20 @@ frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
-The structural model reveals that 83% of respondents prefer female
-candidates despite a near-zero population-average AMCE for gender.
+The paper's directional finding for gender: the population-average
+AMCE for Male is near zero, but the individual-level fractions reveal
+that about 64% of respondents have $\hat\beta_{\text{Male}} < 0$,
+i.e.\ prefer Female candidates. The fraction-preferring panel above
+makes this visible per dummy. The exact percentage depends on training
+configuration; the qualitative finding survives down to the
+lighter pedagogical settings.
 
 ### Marginal rate of substitution
+
+The respondent-averaged trimmed ratio $\hat\beta_j / \hat\beta_k$
+between two dummies, with respondent-clustered SE. Trimming at
+$\{0.01, 0.99\}$ guards the unbounded ratio when the denominator is
+near zero.
 
 ```{r}
 #| label: sw-mrs
@@ -196,10 +315,19 @@ denominator column is well-separated from zero.
 
 ### Counterfactual choice probability
 
+Predicted choice probability for a *specific* head-to-head profile pair,
+averaged across respondents. Each profile is a named list of attribute
+levels; unmentioned attributes default to the reference level.
+
 ```{r}
 #| label: sw-counterfactual
 sc_counterfactual(
   fit_sw,
+  ## Profile A: a Female Hard-Working candidate proposing a Complete
+  ## Overhaul, against B: a Male Assertive candidate proposing the
+  ## minimal change.  Female is the reference level so it does not
+  ## appear in the dummy contrast; Male contributes +beta_Male to A's
+  ## utility (negative in this design).
   A = list(agenda = "Complete Overhaul", talent = "Hard-Working",
            children = "2 children", cand_gender = "Female",
            prior_office = "Yes"),
@@ -211,12 +339,19 @@ sc_counterfactual(
 
 ### Optimal profile
 
+The single profile that maximizes the population-average utility (greedy
+attribute-by-attribute selection over the discrete attribute levels).
+
 ```{r}
 #| label: sw-optimal
 sc_optimal_profile(fit_sw)
 ```
 
 ### Heterogeneity test
+
+For each dummy, the one-sided test that $\mathrm{Var}(\beta_k(Z)) > 0$
+exceeds zero. Useful for screening which attributes genuinely vary
+across respondents.
 
 ```{r}
 #| label: sw-het
@@ -231,15 +366,19 @@ plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
 
 ### Subgroup analysis
 
+Re-average the respondent-level betas over a subset of respondents,
+then compare across subsets. Below: compare the per-attribute means for
+female vs male respondents on the gender attribute.
+
 ```{r}
 #| label: sw-subgroup
 fem <- fit_sw$Z[, "resp_female"] > 0.5
 sub_fem  <- sc_subgroup(fit_sw, fem)
 sub_male <- sc_subgroup(fit_sw, !fem)
 rbind(
-  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderFemale",
+  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderMale",
                             c("theta", "se")],
-  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderFemale",
+  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderMale",
                             c("theta", "se")]
 )
 ```
@@ -262,3 +401,60 @@ plot_subgroup(
 #| label: sw-loss
 plot(fit_sw, "loss_trace")
 ```
+
+### Design diagnostic (R²_Z + recovery-tier hint)
+
+New in v0.2.1: `sc_design_diagnostic()` estimates per-coefficient
+$\hat R^2_{Z,k}$ from the MAP posterior and reports which recovery
+tiers the design supports (mean / distributional / individual / ratio)
+per the paper §6 heuristics. On the Saha-Weeks design (T ≈ 3, modest
+covariate set), expect mean-only support; the talent attributes are
+well-pinned by Z, while gender and prior-office rely most on T.
+
+```{r}
+#| label: sw-design-diag
+sc_design_diagnostic(fit_sw)
+```
+
+### Validating against the homogeneous-logit AMCE {#sec-sw-validate}
+
+The paper's Appendix D shows that the structural model nests the
+standard reduced-form AMCE: the DML population-average parameter
+$\theta_k = \mathbb{E}[\beta_k(Z)]$ equals the pooled
+homogeneous-logit coefficient on attribute $k$ when the logit
+specification holds. The `sc_validate_amce()` export turns this into
+a one-line sanity check.
+
+```{r}
+#| label: sw-validate
+v <- sc_validate_amce(fit_sw)
+v
+```
+
+In a full paper-quality fit (`K = 10`, `n_epochs >= 1000`), the
+correlation across attribute levels is essentially $r = 0.998$. Any
+material drop is a sign of either insufficient training or a
+genuinely non-logit data-generating process.
+
+### Comparing the Stage-2 view to the raw DNN view
+
+Every `sc_*` quantity now accepts a `which_beta` argument with
+default `"hybrid"` (Stage-2 refined). Passing `"dnn"` reads the
+unrefined Stage-1 DNN mean, which lives in `fit_sw$beta_hat_dnn`.
+
+```{r}
+#| label: sw-which-beta
+frac_hyb <- sc_fraction_preferring(fit_sw, which_beta = "hybrid")
+frac_dnn <- sc_fraction_preferring(fit_sw, which_beta = "dnn")
+data.frame(
+  attribute   = frac_hyb$estimate$dummy_name,
+  hybrid_pref = round(frac_hyb$estimate$frac_positive, 3),
+  dnn_pref    = round(frac_dnn$estimate$frac_positive, 3)
+)
+```
+
+The Stage-2 refinement typically shifts the more polarized columns
+(e.g. `cand_genderMale`, `talentEmpathetic`) toward smaller
+fractions and the consensus columns (`talentHard-Working`,
+`agendaModerate Changes`) toward 100% --- this is the within-respondent
+shrinkage at work.

@@ -1,0 +1,250 @@
+# Advanced options {#sec-advanced}
+
+```{r}
+#| label: setup-advanced
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+library(sconjoint)
+```
+
+This chapter is a reference for arguments to `scfit()` and the
+`sc_*` quantity functions that most users will never need to change.
+Read it when you need to deviate from defaults: alternative Stage-2
+estimators, manual tuning of training hyperparameters, parallel
+execution, or reproducibility audits.
+
+The four example chapters (Saha-Weeks, Graham-Svolik, Ballard-Rosa,
+Bechtel-Scheve) all use the defaults. This chapter explains what those
+defaults are and when you might override them.
+
+## Stage 2: choosing the empirical-Bayes refinement
+
+`scfit()` runs a Stage-2 refinement on top of the Stage-1 DNN cross-fit
+by default. The Stage-2 output is what `sc_fit$beta_hat` carries and
+what every `sc_*` quantity function reads. The DML population estimates
+$\hat\theta$ and clustered SEs are *bit-exactly invariant* across
+Stage-2 choices on the same `seed` --- they are always computed from
+the Stage-1 DNN.
+
+The four `stage2` choices:
+
+| Value | What it does | When to use |
+|-------|--------------|-------------|
+| `"map_c5"` (default) | Paper EnsC5. Trains a 2nd DNN with `stage2_seed`, averages with the first DNN, runs a Newton MAP solver per respondent with a score-based diagonal prior scaled by $1/5$. | The paper's recommended default. Best individual-$\beta$ correlation under realistic conjoint designs. |
+| `"none"` | Skip Stage 2. `beta_hat` is the raw Stage-1 cross-fitted DNN. | Reproduce v0.1 behavior, or when you want the raw DNN view for downstream code that does its own refinement. |
+| `"varref"` | Use $0.5 \cdot \mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$ as the diagonal prior variance (floored at $0.01$). Otherwise identical to MAP. | Diagnostic / experimental. We do not promise stability of this option across releases. |
+| `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. Paper §A.4 notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
+
+```{r}
+#| label: stage2-example
+#| eval: false
+## v0.1 behavior
+fit_dnn <- scfit(formula, data, ..., stage2 = "none")
+
+## Paper EnsC5 default
+fit_map <- scfit(formula, data, ..., stage2 = "map_c5")
+
+## Mixed-logit alternative (requires lme4)
+fit_ml  <- scfit(formula, data, ..., stage2 = "mixed_logit")
+```
+
+The mixed-logit option calls `lme4::glmer()` and is wrapped in a
+deterministic fallback: on convergence failure it sets
+`stage2_method = "mixed_logit_failed"`, emits a `warning()` with the
+underlying glmer message, and sets `beta_hat <- beta_hat_dnn`. Quantity
+functions continue to work; they simply read the unrefined DNN matrix.
+
+### Inspecting what Stage 2 produced
+
+```{r}
+#| label: stage2-slots
+#| eval: false
+fit$stage2_method     # one of: none, map_c5, varref, mixed_logit, mixed_logit_failed
+fit$beta_hat          # Stage-2-refined task-level betas (what quantities read)
+fit$beta_hat_dnn      # Stage-1 single-DNN betas (always present in v0.2)
+fit$beta_hat_dnn2     # 2nd-DNN cross-fit (NULL if stage2 = "none")
+fit$beta_hat_ens      # ensemble average of dnn + dnn2 (NULL if stage2 = "none")
+fit$beta_hat_resp     # respondent-level Stage-2 betas (N_resp x p)
+fit$sigma_prior       # diagonal prior variance used in MAP (length p)
+fit$sigma_post_diag   # mean posterior variance from MAP Hessian (length p)
+fit$stage2_warnings   # character vector of glmer warnings, if any
+```
+
+## `which_beta`: hybrid vs raw DNN view on quantities
+
+Every `sc_*` quantity now accepts
+`which_beta = c("hybrid", "dnn")`. The default `"hybrid"` reads
+`fit$beta_hat` (whatever Stage 2 produced). Passing `"dnn"` reads
+`fit$beta_hat_dnn` (the raw Stage-1 view). When `stage2 = "none"` the
+two are numerically identical and the helper silently falls back.
+
+```{r}
+#| label: which-beta-example
+#| eval: false
+## Same fit, two views of the same distribution
+sc_fraction_preferring(fit)                     # MAP-shrunk
+sc_fraction_preferring(fit, which_beta = "dnn") # raw DNN
+```
+
+When the paper text says "the structural model reveals that X% of
+respondents prefer Y", it means the MAP-shrunk fraction (the
+`"hybrid"` default). The raw DNN fraction is usually wider because
+unrefined respondent-level coefficients have more sampling noise.
+
+## Reproducibility: `seed` and `stage2_seed`
+
+`scfit()` ships a bit-exact determinism guarantee:
+
+```{r}
+#| label: determinism-example
+#| eval: false
+## All three return identical(beta_hat, ...) output
+scfit(..., seed = 42, stage2_seed = 12345L, parallel = FALSE)
+scfit(..., seed = 42, stage2_seed = 12345L, parallel = TRUE, n_cores = 2)
+scfit(..., seed = 42, stage2_seed = 12345L, parallel = TRUE, n_cores = 4)
+```
+
+`seed` controls Stage 1; `stage2_seed` controls the 2nd DNN in the
+Stage-2 ensemble. They are independent --- changing `stage2_seed`
+does *not* perturb `theta` or `vcov` (those are computed from the
+Stage-1 cross-fit alone), but it does shift the MAP `beta_hat`
+through the 2nd DNN's contribution to the ensemble. The default
+`stage2_seed = 12345L` matches the paper's prototype.
+
+If `seed = NULL` (the default), Stage 1 is non-deterministic; we still
+respect `stage2_seed` so the 2nd DNN's behavior remains predictable
+given `seed`.
+
+## `normalize_deltaX`: scale-aware MAP regularization
+
+New in v0.2.1. The v0.2 score-based MAP prior is calibrated assuming
+$\mathrm{Var}(\Delta X_k) \approx 1$. For factor dummies under typical
+randomization this is approximately true. For designs with continuous
+attributes on very different scales --- e.g. the Ballard-Rosa tax-rate
+brackets in percentage points (0--50) --- the un-standardized prior
+becomes loose by the same factor as $\mathrm{Var}(\Delta X_k)$, and
+the MAP solver leaves per-respondent estimates with extreme tails.
+
+`normalize_deltaX = TRUE` divides each `deltaX` column by its sample
+SD before training / lambda / DML / MAP, then un-standardizes all
+coefficient-bearing slots at assembly time. The user-facing surface
+(`coef(fit)`, `vcov(fit)`, `fit$beta_hat`, etc.) is on the original
+units; only the internal pipeline runs on a common-variance scale.
+
+```{r}
+#| label: normalize-example
+#| eval: false
+## Recommended for designs with continuous attributes on different
+## scales (e.g. price in USD + age in years + 0/1 dummies)
+fit <- scfit(formula, data, ..., normalize_deltaX = TRUE)
+
+## The SDs used are kept on the fit for diagnostics:
+fit$sd_dx
+```
+
+Default is `FALSE` to preserve all v0.2 behavior bit-exactly. For
+pure factor-dummy designs the option is a near-no-op (every dummy
+already has similar SD).
+
+## `sc_design_diagnostic()`: which recovery tiers does my design support?
+
+New in v0.2.1. Estimates per-coefficient $\hat R^2_{Z,k}$ from the
+MAP posterior and maps the design to four recovery tiers per paper
+§6 heuristics:
+
+| Tier | Condition | Quantities recoverable |
+|------|-----------|------------------------|
+| mean & aggregate | any reasonable design | AMCE, average vote shares |
+| distributional | T ≥ 5 and $\bar R^2_Z$ ≥ 0.35 | preference shares, importance rankings |
+| individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
+| ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
+
+```{r}
+#| label: design-diag-example
+#| eval: false
+diag <- sc_design_diagnostic(fit)
+print(diag)
+## Top / bottom R^2_Z attributes also reported -- helps spot which
+## dummies are best-pinned by Z and which rely most on T for recovery.
+```
+
+Requires `stage2 != "none"` (needs the MAP Hessian's posterior
+variance). The v0.2.1 estimator is flagged `experimental = TRUE`
+in print output because it has not yet been validated against the
+paper's 5,760-cell simulation grid.
+
+## Training hyperparameters
+
+`scfit()` exposes the DNN training loop. Defaults are tuned to handle
+realistic conjoint sample sizes (1k--10k respondents). The arguments
+worth knowing:
+
+| Argument | Default | Effect |
+|----------|---------|--------|
+| `K` | `10L` | Number of respondent-clustered cross-fitting folds. Higher = less Stage-1 overfit; lower = faster. Below `K = 3` is not recommended. |
+| `n_epochs` | `2000L` | Adam epochs per fold. Production fits use 1000--2000; tutorial chapters use 200--400 for render speed. Monitor the loss trace via `plot(fit, "loss_trace")`. |
+| `learning_rate` | `0.01` | Adam step size. Lower if the loss diverges; higher if convergence is slow. |
+| `lambda` | `1e-4` | L2 penalty on DNN weights. Increase under tight data; decrease when DNN underfits. |
+| `ridge_lambda` | `1e-4` | Ridge penalty on the local information matrix $\Lambda(Z)$ used in DML. Independent from `lambda`. |
+| `hidden` | `"auto"` | Hidden-layer widths. `"auto"` picks a three-tier default from $N \cdot T$; you can pass `c(64L, 64L, 32L)` directly. |
+
+```{r}
+#| label: hyperparam-example
+#| eval: false
+fit <- scfit(formula, data, ...,
+             K = 10L, n_epochs = 2000L,
+             learning_rate = 0.005, lambda = 5e-4,
+             ridge_lambda = 1e-3,
+             hidden = c(128L, 64L, 32L))
+```
+
+## Parallel execution
+
+Cross-fitting parallelizes across folds. Use `parallel = TRUE` and set
+`n_cores` to the number of physical cores you want to use. The
+bit-exact determinism guarantee holds across worker counts (folds are
+seeded by `(seed, fold_id)`, never by which worker picks them up).
+
+```{r}
+#| label: parallel-example
+#| eval: false
+fit <- scfit(formula, data, ...,
+             parallel = TRUE, n_cores = 4L,
+             seed = 42, stage2_seed = 12345L)
+```
+
+The bit-exact guarantee is CPU-only. `device = "cuda"` runs the DNN
+on a GPU and is faster on large designs but is not deterministic.
+
+## `keep_modules`: forward-pass prediction on new respondents
+
+By default, `scfit()` retains the trained per-fold `torch::nn_module`
+objects on the returned `sc_fit`, which enables forward-pass
+prediction on new $\mathbf Z$:
+
+```{r}
+#| label: keep-modules-example
+#| eval: false
+fit <- scfit(formula, data, ..., keep_modules = TRUE)  # default
+
+## Forward-pass on new respondents
+new_Z <- matrix(stats::rnorm(50 * length(fit$z_names)),
+                nrow = 50, ncol = length(fit$z_names))
+beta_new <- predict(fit, newdata = new_Z, type = "beta")
+```
+
+Set `keep_modules = FALSE` to halve the in-memory size of the fit when
+forward-pass prediction is not needed.
+
+## When to override defaults: a quick decision guide
+
+| Situation | Default | Override |
+|-----------|---------|----------|
+| Routine paper-quality conjoint analysis | use defaults | none |
+| Code targeting a specific published v0.1 reproduction | `stage2 = "map_c5"` | `stage2 = "none"` |
+| Comparing the MAP refinement to a likelihood-based alternative | use defaults | also run `stage2 = "mixed_logit"`; check `stage2_warnings` |
+| Sample very small ($N < 100$ respondents) | `K = 10L` | drop to `K = 3L` (and accept higher Stage-1 variance) |
+| Need GPU speedup | `device = "cpu"` | `device = "cuda"` (gives up bit-exact determinism) |
+| Distributional claims about polarization or fraction-preferring | `which_beta = "hybrid"` | sanity-check with `which_beta = "dnn"`; if results flip qualitatively, design is too sparse for individual-level claims |
+| Forward-pass on out-of-sample $\mathbf Z$ | `keep_modules = TRUE` | none --- the default does what you want |
