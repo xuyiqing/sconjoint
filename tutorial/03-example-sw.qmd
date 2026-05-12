@@ -149,6 +149,64 @@ coef(fit_sw)
 plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
+### Structural AME vs reduced-form AMCE (paper Figure 1.B)
+
+The paper notes that the structural model's average marginal effect
+(AME) on the *probability* scale nearly coincides with the standard
+linear-probability-model AMCE --- confirming that the structural
+estimator nests reduced-form AMCE analysis. Below we compute both and
+overlay them as point-ranges on the probability scale.
+
+```{r}
+#| label: sw-ame-vs-amce
+#| fig-height: 6
+## Structural AME on the probability scale (delta-method via plogis')
+ame_struct <- sc_average(fit_sw, scale = "probability")
+ame_df     <- ame_struct$estimate
+ame_df$source <- "Structural AME"
+
+## Linear-probability-model AMCE
+lpm        <- sc_baseline_lpm(fit_sw)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- ifelse(df_both$dummy_name %in% names(sw_labels),
+                        sw_labels[df_both$dummy_name],
+                        df_both$dummy_name)
+df_both$label <- factor(df_both$label, levels = rev(unname(sw_labels)))
+df_both$group <- sw_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(sw_groups))
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.35, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
+The two series should overlap nearly point-for-point ---
+the structural model loses nothing the reduced-form AMCE delivers.
+
 ## Individual-level preferences
 
 Pull the respondent-level $\hat\beta(\mathbf Z_i)$ matrix. With the v0.2
