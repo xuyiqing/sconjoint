@@ -16,11 +16,15 @@
 #' @param attr Numerator attribute level.
 #' @param cost_attr Single-column cost attribute.
 #' @param trim,subgroup Forwarded to `sc_mrs()`.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. Forwarded to
+#'   `sc_mrs()`. See `?sc_mrs` for details.
 #' @return An `sc_quantity` with the sign-flipped MRS.
 #' @export
 sc_wtp <- function(object, attr, cost_attr,
-                   trim = c(0.01, 0.99), subgroup = NULL) {
+                   trim = c(0.01, 0.99), subgroup = NULL,
+                   which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   j <- .sc_parse_dummy_name(object, attr)
   k <- .sc_parse_dummy_name(object, cost_attr)
   ## Validate that cost_attr does not refer to a multi-level attribute
@@ -43,11 +47,12 @@ sc_wtp <- function(object, attr, cost_attr,
                     numerator   = attr,
                     denominator = cost_attr,
                     trim        = trim,
-                    subgroup    = subgroup)
+                    subgroup    = subgroup,
+                    which_beta  = which_beta)
   est <- -mrs_obj$estimate
   ci_lo <- -mrs_obj$ci_hi
   ci_hi <- -mrs_obj$ci_lo
-  sign_cost <- sign(mean(object$beta_hat[, k]))
+  sign_cost <- sign(mean(.sc_pick_beta(object, which_beta)[, k]))
   .sc_quantity(
     name = "wtp",
     estimate = est,

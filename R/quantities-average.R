@@ -13,15 +13,20 @@
 #' @param object An `sc_fit`.
 #' @param scale One of `"logit"` or `"probability"`.
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#'   Only affects `scale = "probability"`; the `"logit"` scale uses
+#'   `object$theta` from the DML fit.
 #' @return An `sc_quantity` with a data.frame estimate containing
 #'   per-attribute AMEs and clustered SEs.
 #' @export
 sc_average <- function(object, scale = c("logit", "probability"),
-                       subgroup = NULL) {
+                       subgroup = NULL,
+                       which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   scale <- match.arg(scale)
+  which_beta <- match.arg(which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
-  Bs <- object$beta_hat[S, , drop = FALSE]
+  Bs <- .sc_pick_beta(object, which_beta)[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
   p <- ncol(Bs)
   if (scale == "logit") {

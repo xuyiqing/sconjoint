@@ -44,18 +44,23 @@
 #' }
 #' }
 #' @export
-sc_subgroup <- function(object, subgroup, ...) {
+sc_subgroup <- function(object, subgroup,
+                        which_beta = c("hybrid", "dnn"),
+                        ...) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   ## Named list of selectors -> recurse.
   if (is.list(subgroup) && !is.data.frame(subgroup) && !is.null(names(subgroup))) {
-    out <- lapply(subgroup, function(sel) sc_subgroup(object, sel))
+    out <- lapply(subgroup,
+                  function(sel) sc_subgroup(object, sel,
+                                            which_beta = which_beta))
     return(out)
   }
   S <- .sc_resolve_subgroup_ext(object, subgroup)
   if (length(S) == 0L) {
     stop("sc_subgroup(): selected subgroup is empty.")
   }
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   Bs <- B[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
   p <- ncol(B)

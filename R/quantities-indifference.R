@@ -17,21 +17,24 @@
 #' @param trim Length-2 numeric with lower/upper quantiles for
 #'   trimming the MRS distribution.  Default `c(0.01, 0.99)`.
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with
 #'   columns `respondent`, `mrs`, `beta_attr1`, `beta_attr2`, and
 #'   whose `details` contain summary statistics.
 #' @export
 sc_indifference <- function(object, attr1, attr2,
                             trim = c(0.01, 0.99),
-                            subgroup = NULL) {
+                            subgroup = NULL,
+                            which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.numeric(trim) || length(trim) != 2L ||
       trim[1L] < 0 || trim[2L] > 1 || trim[1L] >= trim[2L]) {
     stop("sc_indifference(): `trim` must be c(q_lo, q_hi) with 0 <= q_lo < q_hi <= 1.")
   }
   j1 <- .sc_parse_dummy_name(object, attr1)
   j2 <- .sc_parse_dummy_name(object, attr2)
-  B <- object$beta_hat
+  B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   b1 <- B[S, j1]
   b2 <- B[S, j2]

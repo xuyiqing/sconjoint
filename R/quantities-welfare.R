@@ -11,11 +11,14 @@
 #' @param old_set,new_set Lists of profile specs (each element a named
 #'   list as accepted by [sc_counterfactual()]).
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with scalar estimate, clustered SE, and
 #'   normal-approx CI.
 #' @export
-sc_welfare_change <- function(object, old_set, new_set, subgroup = NULL) {
+sc_welfare_change <- function(object, old_set, new_set, subgroup = NULL,
+                              which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  which_beta <- match.arg(which_beta)
   if (!is.list(old_set) || length(old_set) < 1L) {
     stop("sc_welfare_change(): `old_set` must be a non-empty list of profile specs.")
   }
@@ -31,7 +34,7 @@ sc_welfare_change <- function(object, old_set, new_set, subgroup = NULL) {
     }
     apply(V, 1L, .sc_logsumexp)
   }
-  Bm <- object$beta_hat
+  Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
   cs_old <- .cs_vec(old_set, Bs)

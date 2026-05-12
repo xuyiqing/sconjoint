@@ -13,15 +13,18 @@
 #' @param object An `sc_fit`.
 #' @param measure One of `"variance"` or `"gini"`.
 #' @param subgroup Optional row selector.
+#' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with a data.frame estimate containing
 #'   per-attribute inequality measures.
 #' @export
 sc_inequality <- function(object, measure = c("variance", "gini"),
-                          subgroup = NULL) {
+                          subgroup = NULL,
+                          which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   measure <- match.arg(measure)
+  which_beta <- match.arg(which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
-  Bs <- object$beta_hat[S, , drop = FALSE]
+  Bs <- .sc_pick_beta(object, which_beta)[S, , drop = FALSE]
   p  <- ncol(Bs)
   vals <- numeric(p)
   if (measure == "variance") {
