@@ -246,14 +246,25 @@ predict.sc_fit <- function(object, newdata = NULL, type = c("beta", "logit", "pr
 #'
 #' @param x An `sc_fit`.
 #' @param which Either `"beta_ridgelines"` (default) or `"loss_trace"`.
-#' @param ... Unused.
+#' @param which_beta Either `"hybrid"` (default; Stage-2-refined betas)
+#'   or `"dnn"` (raw Stage-1 cross-fitted DNN betas).  Only used by
+#'   `which = "beta_ridgelines"`.
+#' @param ... Forwarded to the underlying ridgeline or loss-trace plot
+#'   helper. See `?.sc_plot_ridgelines` for ridgeline-specific
+#'   arguments (e.g. `groups`, `labels`, `xlim`, `quantile_trim`).
 #' @return A `ggplot` object.
 #' @export
-plot.sc_fit <- function(x, which = c("beta_ridgelines", "loss_trace"), ...) {
+plot.sc_fit <- function(x,
+                        which = c("beta_ridgelines", "loss_trace"),
+                        which_beta = c("hybrid", "dnn"),
+                        ...) {
   which <- match.arg(which)
+  which_beta <- match.arg(which_beta)
   switch(
     which,
-    beta_ridgelines = .sc_plot_ridgelines(x$beta_hat, x$attr_names, ...),
+    beta_ridgelines = .sc_plot_ridgelines(
+      .sc_pick_beta(x, which_beta), x$attr_names, ...
+    ),
     loss_trace      = .sc_plot_loss_traces(x$loss_traces, ...)
   )
 }

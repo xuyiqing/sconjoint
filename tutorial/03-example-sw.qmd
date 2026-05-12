@@ -84,9 +84,11 @@ choice ~ agenda + talent + children + cand_gender + prior_office |
 
 ## Fitting
 
-We fit a moderate configuration (`K = 5` folds, 400 Adam epochs) that
+We fit a moderate configuration (`K = 5` folds, 200 Adam epochs) that
 balances render speed against paper-quality estimates. A production run
-would use `K = 10` and `n_epochs >= 1000`.
+would use `K = 10` and `n_epochs >= 1000`. The loss trace below shows
+the per-fold training curves; with `K = 5` cross-fitting the loss has
+largely plateaued by epoch 150-200.
 
 ```{r}
 #| label: sw-fit
@@ -98,7 +100,7 @@ fit_sw <- scfit(
   task        = "task",
   profile     = "profile",
   K           = 5L,
-  n_epochs    = 400L,
+  n_epochs    = 200L,
   seed        = 2024
 )
 summary(fit_sw)

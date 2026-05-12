@@ -4,14 +4,25 @@
 \alias{plot.sc_fit}
 \title{Plot method for \code{sc_fit}}
 \usage{
-\method{plot}{sc_fit}(x, which = c("beta_ridgelines", "loss_trace"), ...)
+\method{plot}{sc_fit}(
+  x,
+  which = c("beta_ridgelines", "loss_trace"),
+  which_beta = c("hybrid", "dnn"),
+  ...
+)
 }
 \arguments{
 \item{x}{An \code{sc_fit}.}
 
 \item{which}{Either \code{"beta_ridgelines"} (default) or \code{"loss_trace"}.}
 
-\item{...}{Unused.}
+\item{which_beta}{Either \code{"hybrid"} (default; Stage-2-refined betas)
+or \code{"dnn"} (raw Stage-1 cross-fitted DNN betas).  Only used by
+\code{which = "beta_ridgelines"}.}
+
+\item{...}{Forwarded to the underlying ridgeline or loss-trace plot
+helper. See \code{?.sc_plot_ridgelines} for ridgeline-specific
+arguments (e.g. \code{groups}, \code{labels}, \code{xlim}, \code{quantile_trim}).}
 }
 \value{
 A \code{ggplot} object.

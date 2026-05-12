@@ -81,7 +81,7 @@ fit_br <- scfit(
   task        = "task",
   profile     = "profile",
   K           = 5L,
-  n_epochs    = 400L,
+  n_epochs    = 200L,
   seed        = 2024
 )
 summary(fit_br)
@@ -113,10 +113,37 @@ plot_amce(fit_br, groups = br_groups, labels = br_labels)
 
 ## Individual-level preferences
 
+::: {.callout-warning}
+### Known limitation: MAP prior calibration on large-scale continuous attributes
+
+The v0.2 score-based MAP prior is calibrated assuming attribute
+contrasts $\Delta X$ on the unit scale (factor dummies in $\{-1, 0, 1\}$).
+The Ballard-Rosa rates are encoded as percentage points (e.g.\ 0--50),
+so $\Delta X$ for the rate columns spans up to 50 units. This makes the
+estimated `sigma_prior` for the rate columns very loose (200--750 vs
+the revenue-score column's $\sim 7$), and the MAP solver lets some
+respondent estimates drift to extreme values whose densities would
+dominate any ridgeline. This is a known v0.2.1 calibration issue.
+
+Workarounds:
+
+* Plot the **raw DNN view** via `which_beta = "dnn"` (used below) to
+  see the unrefined per-respondent distributions on a sensible scale.
+* Pre-standardize numeric attributes to unit variance before fitting.
+* Use `stage2 = "none"` or `stage2 = "mixed_logit"` as alternatives.
+
+The DML population estimates $\hat\theta$ and the headline structural
+quantities for this application are unaffected --- the average
+operation cancels the extreme respondent-level tails.
+:::
+
 ```{r}
 #| label: br-ridgelines
 #| fig-height: 6
-plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels)
+## Use which_beta = "dnn" here so the per-respondent densities are
+## visible on a sensible scale.  See the callout above.
+plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels,
+     which_beta = "dnn")
 ```
 
 ## Structural quantities

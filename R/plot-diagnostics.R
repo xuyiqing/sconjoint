@@ -420,6 +420,13 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
 #' @param cex.lab Scaling factor for axis titles.
 #' @param legendOff If \code{TRUE}, hide the legend.
 #' @param legend.pos Legend position.
+#' @param facet_scales Passed to \code{facet_grid()}'s \code{scales} when
+#'   \code{groups} is supplied. One of \code{"free"} (default; both axes
+#'   free per attribute-group facet), \code{"free_y"} (v0.1 behavior:
+#'   shared x), \code{"free_x"}, or \code{"fixed"}. The new default
+#'   handles the common case where one attribute is continuous (e.g.
+#'   price in USD) and others are 0/1 dummies, which the v0.1
+#'   shared-x behavior collapsed onto an unreadable scale.
 #' @param ... Unused.
 #' @return A \code{ggplot} object.
 #' @export
@@ -429,7 +436,10 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
                           title = NULL, xlab = NULL, ylab = NULL,
                           xlim = NULL, theme.bw = FALSE, gridOff = FALSE,
                           cex.main = NULL, cex.axis = NULL, cex.lab = NULL,
-                          legendOff = FALSE, legend.pos = NULL, ...) {
+                          legendOff = FALSE, legend.pos = NULL,
+                          facet_scales = c("free", "free_y", "free_x", "fixed"),
+                          ...) {
+  facet_scales <- match.arg(facet_scales)
   stopifnot(inherits(object, "sc_fit"))
   stopifnot(is.list(subgroup) && !is.null(names(subgroup)))
   sub_res <- sc_subgroup(object, subgroup)
@@ -501,10 +511,36 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
       legend.position = "bottom"
     )
   if (!is.null(groups)) {
-    p <- p +
-      ggplot2::facet_grid(attr_group ~ ., scales = "free_y", space = "free_y") +
-      ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0,
-                                                           face = "bold"))
+    ## Pick the right facet primitive for the requested `facet_scales`:
+    ##
+    ## * `"fixed"` and `"free_y"` -> `facet_grid(rows = attr_group)`
+    ##   with `space = "free_y"`.  This preserves v0.1 behavior
+    ##   (shared x-axis, row heights proportional to attribute counts).
+    ##
+    ## * `"free"` and `"free_x"` -> `facet_wrap(~ attr_group, ncol = 1)`.
+    ##   `facet_grid` keeps the x-axis shared across rows even with
+    ##   `scales = "free"`, but `facet_wrap` gives each panel its own
+    ##   x-axis -- which is the behavior we want when one attribute
+    ##   group spans a very different scale (e.g. a continuous price
+    ##   in USD alongside 0/1 factor dummies).
+    if (facet_scales %in% c("fixed", "free_y")) {
+      grid_scales <- if (facet_scales == "fixed") "fixed" else "free_y"
+      p <- p +
+        ggplot2::facet_grid(attr_group ~ ., scales = grid_scales,
+                            space = "free_y") +
+        ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0,
+                                                             hjust = 0,
+                                                             face = "bold"))
+    } else {
+      ## "free" or "free_x"
+      wrap_scales <- if (facet_scales == "free_x") "free_x" else "free"
+      p <- p +
+        ggplot2::facet_wrap(~ attr_group, ncol = 1, scales = wrap_scales,
+                            strip.position = "right") +
+        ggplot2::theme(strip.text.y.right = ggplot2::element_text(angle = 0,
+                                                                   hjust = 0,
+                                                                   face = "bold"))
+    }
   }
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,

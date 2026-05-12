@@ -123,7 +123,7 @@ fit_gs <- scfit(
   task        = "task",
   profile     = "profile",
   K           = 5L,
-  n_epochs    = 400L,
+  n_epochs    = 200L,
   seed        = 2024
 )
 summary(fit_gs)
