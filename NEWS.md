@@ -1,3 +1,9 @@
+# sconjoint 0.2.0.9000 (development version)
+
+Post-release development on `dev`.  Per project policy, the next
+release will also be `0.2.0` (or below); the `.9xxx` suffix indicates
+in-progress work on top of v0.2.0.
+
 # sconjoint 0.2.0
 
 This release brings `sconjoint` up to the algorithmic defaults in the
