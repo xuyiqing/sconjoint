@@ -325,6 +325,16 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
 #' @param cex.lab Scaling factor for axis titles.
 #' @param legendOff If \code{TRUE}, hide the legend.
 #' @param legend.pos Legend position.
+#' @param which_beta Either \code{"hybrid"} (default) or \code{"dnn"}.
+#'   Forwarded to \code{sc_heterogeneity_test()}.  Use \code{"dnn"}
+#'   when MAP-shrunk per-respondent variances on continuous-attribute
+#'   designs are dominated by a single large-scale attribute.
+#' @param facet_scales Passed to \code{facet_grid()}/\code{facet_wrap()}'s
+#'   \code{scales} when \code{groups} is supplied.  One of
+#'   \code{"free"} (default; per-attribute-group x-axis via
+#'   \code{facet_wrap}, which handles the common case of a continuous
+#'   attribute alongside 0/1 dummies), \code{"free_y"} (v0.1 behavior:
+#'   shared x), \code{"free_x"}, or \code{"fixed"}.
 #' @param ... Unused.
 #' @return A \code{ggplot} object.
 #' @export
@@ -335,9 +345,15 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
                         title = NULL, xlab = NULL, ylab = NULL,
                         xlim = NULL, theme.bw = FALSE, gridOff = FALSE,
                         cex.main = NULL, cex.axis = NULL, cex.lab = NULL,
-                        legendOff = FALSE, legend.pos = NULL, ...) {
+                        legendOff = FALSE, legend.pos = NULL,
+                        which_beta = c("hybrid", "dnn"),
+                        facet_scales = c("free", "free_y", "free_x", "fixed"),
+                        ...) {
   stopifnot(inherits(object, "sc_fit"))
-  het <- sc_heterogeneity_test(object, adjust = adjust)
+  which_beta <- match.arg(which_beta)
+  facet_scales <- match.arg(facet_scales)
+  het <- sc_heterogeneity_test(object, adjust = adjust,
+                               which_beta = which_beta)
   df <- het$estimate
   df$significant <- df$p_adjusted < alpha
   df$neg_log_p <- pmin(-log10(df$p_adjusted + 1e-300), 20)
@@ -376,7 +392,29 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
       legend.position = "right",
       legend.key.height = ggplot2::unit(0.8, "cm")
     )
-  p <- .sc_apply_groups(p, df, groups)
+  if (!is.null(groups)) {
+    ## Mirror plot_subgroup's facet logic: facet_grid keeps x shared
+    ## across rows even with scales="free", so use facet_wrap for the
+    ## per-panel free x-axis when one attribute group is on a very
+    ## different scale (e.g. continuous cost_usd alongside 0/1 dummies).
+    if (facet_scales %in% c("fixed", "free_y")) {
+      grid_scales <- if (facet_scales == "fixed") "fixed" else "free_y"
+      p <- p +
+        ggplot2::facet_grid(group ~ ., scales = grid_scales,
+                            space = "free_y") +
+        ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0,
+                                                             hjust = 0,
+                                                             face = "bold"))
+    } else {
+      wrap_scales <- if (facet_scales == "free_x") "free_x" else "free"
+      p <- p +
+        ggplot2::facet_wrap(~ group, ncol = 1, scales = wrap_scales,
+                            strip.position = "right") +
+        ggplot2::theme(strip.text.y.right = ggplot2::element_text(angle = 0,
+                                                                   hjust = 0,
+                                                                   face = "bold"))
+    }
+  }
   .sc_plot_theme(p, title = NULL, xlab = NULL, ylab = NULL,
                  theme.bw = theme.bw, gridOff = gridOff,
                  cex.main = cex.main, cex.axis = cex.axis,

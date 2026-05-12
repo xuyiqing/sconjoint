@@ -23,7 +23,7 @@ sw_groups <- c(
   "children1 child"             = "Children",
   "children2 children"          = "Children",
   "children3 children"          = "Children",
-  "cand_genderFemale"           = "Gender",
+  "cand_genderMale"             = "Gender",
   "prior_officeYes"             = "Prior Office"
 )
 
@@ -39,7 +39,7 @@ sw_labels <- c(
   "children1 child"             = "1 child",
   "children2 children"          = "2 children",
   "children3 children"          = "3 children",
-  "cand_genderFemale"           = "Female",
+  "cand_genderMale"             = "Male",
   "prior_officeYes"             = "Yes"
 )
 ```
@@ -53,6 +53,8 @@ whether a near-zero AMCE for candidate gender masks genuine
 heterogeneity --- half the sample preferring women, half preferring men.
 
 ## Data preparation
+
+Load the bundled Saha-Weeks subset and inspect its structure.
 
 ```{r}
 #| label: sw-load
@@ -70,6 +72,17 @@ candidate profiles are presented and exactly one is chosen
 #| label: sw-structure
 str(sw2022)
 table(table(sw2022$respondent))
+```
+
+For consistency with the paper, we re-level `cand_gender` so that
+**Female is the reference and Male is the non-reference dummy**. The
+paper reports the Male-relative-to-Female coefficient throughout.
+
+```{r}
+#| label: sw-relevel
+sw2022$cand_gender <- stats::relevel(factor(sw2022$cand_gender),
+                                     ref = "Female")
+levels(sw2022$cand_gender)
 ```
 
 The respondent-level moderators available in $\mathbf Z$ are
@@ -122,6 +135,9 @@ quantity below. Set `stage2 = "none"` to recover v0.1 behavior, or
 
 ## Population-average estimates
 
+The DML point estimates $\hat\theta_k$ on the logit scale. Inspect
+numerically, then visualize as a coefficient plot grouped by attribute.
+
 ```{r}
 #| label: sw-coef
 coef(fit_sw)
@@ -135,12 +151,19 @@ plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
 
 ## Individual-level preferences
 
+Pull the respondent-level $\hat\beta(\mathbf Z_i)$ matrix. With the v0.2
+default `stage2 = "map_c5"`, this is the MAP-refined hybrid view.
+
 ```{r}
 #| label: sw-beta
 beta <- predict(fit_sw)
 dim(beta)
 head(beta, 3)
 ```
+
+Ridgeline densities show the distribution of $\hat\beta_k(\mathbf Z_i)$
+per dummy across respondents. The vertical dashed line is at zero; the
+solid line in each density is the median.
 
 ```{r}
 #| label: sw-ridgelines
@@ -151,6 +174,10 @@ plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
 ## Structural quantities
 
 ### Attribute importance
+
+Variance-decomposition share of utility carried by each attribute
+group, averaged across respondents. The "importance" answers: which
+attribute moves the choice the most?
 
 ```{r}
 #| label: sw-importance
@@ -169,6 +196,11 @@ decision variance for the median voter.
 
 ### Direction and intensity
 
+For each dummy, decompose preference into a *direction* (the sign of
+$\hat\beta_{ik}$) and an *intensity* (its magnitude). Near-zero average
+effects can hide either consensus (everyone close to zero) or
+polarization (large opposing intensities cancelling).
+
 ```{r}
 #| label: sw-di
 sc_direction_intensity(fit_sw)
@@ -179,6 +211,9 @@ perfectly polarized electorate: approximately half favor empathetic
 candidates while the other half oppose them.
 
 ### Fraction preferring
+
+What share of respondents have a positive coefficient on each dummy?
+This is the direction-only summary --- ignores intensity.
 
 ```{r}
 #| label: sw-fraction
@@ -192,15 +227,20 @@ frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
 plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
-The fraction of respondents whose individual coefficient on
-`cand_genderFemale` is positive (preferring female candidates) is what
-the paper highlights as the directional finding behind a near-zero
-population-average AMCE for gender. With the v0.2 MAP defaults and a
-full-paper fit (`K = 10`, `n_epochs >= 1000`), this fraction is around
-64% (matching paper Figure 1.C); on the lighter pedagogical config
-used here, expect a comparable number subject to small-sample noise.
+The paper's directional finding for gender: the population-average
+AMCE for Male is near zero, but the individual-level fractions reveal
+that about 64% of respondents have $\hat\beta_{\text{Male}} < 0$,
+i.e.\ prefer Female candidates. The fraction-preferring panel above
+makes this visible per dummy. The exact percentage depends on training
+configuration; the qualitative finding survives down to the
+lighter pedagogical settings.
 
 ### Marginal rate of substitution
+
+The respondent-averaged trimmed ratio $\hat\beta_j / \hat\beta_k$
+between two dummies, with respondent-clustered SE. Trimming at
+$\{0.01, 0.99\}$ guards the unbounded ratio when the denominator is
+near zero.
 
 ```{r}
 #| label: sw-mrs
@@ -217,10 +257,19 @@ denominator column is well-separated from zero.
 
 ### Counterfactual choice probability
 
+Predicted choice probability for a *specific* head-to-head profile pair,
+averaged across respondents. Each profile is a named list of attribute
+levels; unmentioned attributes default to the reference level.
+
 ```{r}
 #| label: sw-counterfactual
 sc_counterfactual(
   fit_sw,
+  ## Profile A: a Female Hard-Working candidate proposing a Complete
+  ## Overhaul, against B: a Male Assertive candidate proposing the
+  ## minimal change.  Female is the reference level so it does not
+  ## appear in the dummy contrast; Male contributes +beta_Male to A's
+  ## utility (negative in this design).
   A = list(agenda = "Complete Overhaul", talent = "Hard-Working",
            children = "2 children", cand_gender = "Female",
            prior_office = "Yes"),
@@ -232,12 +281,19 @@ sc_counterfactual(
 
 ### Optimal profile
 
+The single profile that maximizes the population-average utility (greedy
+attribute-by-attribute selection over the discrete attribute levels).
+
 ```{r}
 #| label: sw-optimal
 sc_optimal_profile(fit_sw)
 ```
 
 ### Heterogeneity test
+
+For each dummy, the one-sided test that $\mathrm{Var}(\beta_k(Z)) > 0$
+exceeds zero. Useful for screening which attributes genuinely vary
+across respondents.
 
 ```{r}
 #| label: sw-het
@@ -252,15 +308,19 @@ plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
 
 ### Subgroup analysis
 
+Re-average the respondent-level betas over a subset of respondents,
+then compare across subsets. Below: compare the per-attribute means for
+female vs male respondents on the gender attribute.
+
 ```{r}
 #| label: sw-subgroup
 fem <- fit_sw$Z[, "resp_female"] > 0.5
 sub_fem  <- sc_subgroup(fit_sw, fem)
 sub_male <- sc_subgroup(fit_sw, !fem)
 rbind(
-  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderFemale",
+  female = sub_fem$estimate[sub_fem$estimate$dummy_name == "cand_genderMale",
                             c("theta", "se")],
-  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderFemale",
+  male   = sub_male$estimate[sub_male$estimate$dummy_name == "cand_genderMale",
                             c("theta", "se")]
 )
 ```
@@ -322,7 +382,7 @@ data.frame(
 ```
 
 The Stage-2 refinement typically shifts the more polarized columns
-(e.g. `cand_genderFemale`, `talentEmpathetic`) toward smaller
+(e.g. `cand_genderMale`, `talentEmpathetic`) toward smaller
 fractions and the consensus columns (`talentHard-Working`,
 `agendaModerate Changes`) toward 100% --- this is the within-respondent
 shrinkage at work.

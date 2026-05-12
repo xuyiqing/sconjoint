@@ -156,10 +156,10 @@ sc_direction_intensity(fit_bs)
 
 ### Willingness to pay
 
-Because `cost_usd` is a single numeric attribute (one dummy column),
-`sc_wtp()` can compute the WTP for each non-cost attribute level. The
-WTP is the negative MRS against the cost column, expressed in the same
-units as `cost_usd`.
+`sc_wtp()` returns $-\hat\beta_k / \hat\beta_{\text{cost}}$, the
+respondent-level cost the average voter would accept to gain feature
+$k$, in the same units as `cost_usd`. Positive values mean the feature
+is desired enough that voters would pay for it.
 
 ```{r}
 #| label: bs-wtp
@@ -201,10 +201,17 @@ plot_fraction(fit_bs, groups = bs_groups, labels = bs_labels)
 
 ### Heterogeneity test
 
+Plot the per-attribute heterogeneity variance. Because the numeric
+`cost_usd` attribute is on a much larger scale than the 0/1 dummies,
+its MAP-shrunk per-respondent variance dominates a shared x-axis. We
+pass `which_beta = "dnn"` (read the well-scaled Stage-1 view) and
+`facet_scales = "free"` (each attribute group gets its own x range).
+
 ```{r}
 #| label: bs-het-bar
 #| fig-height: 6
-plot_hetero(fit_bs, groups = bs_groups, labels = bs_labels)
+plot_hetero(fit_bs, groups = bs_groups, labels = bs_labels,
+            which_beta = "dnn", facet_scales = "free")
 ```
 
 ### Subgroup AMCE by ideology

@@ -94,6 +94,10 @@ partisanship --- without re-estimating on subsets.
 
 ## Data preparation
 
+Load the Graham-Svolik subset and inspect its structure. Each
+respondent contributes about 13 forced-choice tasks against pairs of
+hypothetical candidates.
+
 ```{r}
 #| label: gs-load
 data(gs2020, package = "sconjoint")
@@ -147,6 +151,32 @@ plot(fit_gs, "loss_trace")
 
 ## Population-average estimates
 
+::: {.callout-important}
+### Reading the AMCE plot: the `dem_code` reference is itself a good-governance item
+
+`dem_code` is a 16-level factor whose first level (the dummy reference)
+is `g_boardElect` --- a good-governance item. **All other `dem_code`
+coefficients are read relative to this good-governance baseline.** So:
+
+* **`dem_codeg_*` items have coefficients near zero.**  This does not
+  mean "voters are indifferent to good governance" --- it means voters
+  are indifferent **among the good-governance items themselves**
+  (every g_ item is a different good-governance practice, and they
+  trade off near-equivalently).
+* **`dem_codeu_*` items have large negative coefficients.**  Voters
+  strongly prefer the good-governance baseline `g_boardElect` over any
+  undemocratic action. This is the paper's headline finding: voters
+  favor good governance (and oppose undemocratic behavior).
+* **`dem_codev_*` items (valence violations) are also negative**,
+  similarly preferring the good-governance baseline.
+
+In short: the "voters favor good governance" finding lives in the
+*negative* `u_` and `v_` coefficients, not in the near-zero `g_`
+coefficients.
+:::
+
+Plot the population-average coefficients (DML on the logit scale).
+
 ```{r}
 #| label: gs-amce-plot
 #| fig-height: 8
@@ -154,6 +184,12 @@ plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
 ```
 
 ## Individual-level preferences
+
+Ridgeline densities show how each per-respondent coefficient
+$\hat\beta_k(\mathbf Z_i)$ is distributed across the sample.
+Undemocratic-action densities should sit entirely left of zero;
+good-governance densities sit near zero (relative to the
+`g_boardElect` reference, see the callout above).
 
 ```{r}
 #| label: gs-ridgelines
@@ -164,6 +200,10 @@ plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
 ## Structural quantities
 
 ### Attribute importance
+
+Decompose utility variance by attribute group. Party and policy should
+carry most of the weight; democracy attributes should account for a
+real but smaller share.
 
 ```{r}
 #| label: gs-importance
