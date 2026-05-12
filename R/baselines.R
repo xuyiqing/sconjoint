@@ -23,15 +23,29 @@ sc_baseline_logit <- function(object) {
   safe_names <- make.names(names(df))
   names(df) <- safe_names
   df$.y <- y
+  ## Include an intercept.  Forcing the fit through the origin
+  ## (`- 1`) is incorrect for a binary forced-choice outcome whose
+  ## unconditional mean is ~0.5: under any empirical imbalance in
+  ## attribute-level presentation (so that mean(deltaX[, k]) != 0),
+  ## the no-intercept fit biases each coefficient by a term
+  ## proportional to mean(y) * mean(deltaX[, k]), which can flip
+  ## the sign of attributes that happen to be slightly over- or
+  ## under-presented in the design.
   fml <- stats::as.formula(paste(".y ~", paste(safe_names,
-                                               collapse = " + "), "- 1"))
+                                               collapse = " + ")))
   fit <- stats::glm(fml, data = df, family = stats::binomial())
-  ## Restore original names on coefficients
-  names(fit$coefficients) <- colnames(dX)
+  ## Restore original column names; drop the intercept from the
+  ## reported coefficient vector (it is captured in the model object)
+  coef_full <- stats::coef(fit)
+  coef_dummies <- coef_full[names(coef_full) != "(Intercept)"]
+  names(coef_dummies) <- colnames(dX)
   vcov_cl <- .sc_baseline_vcov(fit, object$respondent_id)
+  ## Drop the intercept row/column from the reported vcov
+  keep <- rownames(vcov_cl) != "(Intercept)"
+  vcov_cl <- vcov_cl[keep, keep, drop = FALSE]
   rownames(vcov_cl) <- colnames(vcov_cl) <- colnames(dX)
   .sc_baseline(
-    coefficients = stats::coef(fit),
+    coefficients = coef_dummies,
     vcov         = vcov_cl,
     fitted.values = stats::fitted(fit),
     residuals    = stats::residuals(fit, type = "response"),
@@ -63,13 +77,21 @@ sc_baseline_lpm <- function(object) {
   safe_names <- make.names(names(df))
   names(df) <- safe_names
   df$.y <- y
+  ## Include an intercept (see comment in sc_baseline_logit for why
+  ## fitting `y ~ deltaX - 1` biases coefficients in binary forced
+  ## choice).
   fml <- stats::as.formula(paste(".y ~", paste(safe_names,
-                                               collapse = " + "), "- 1"))
+                                               collapse = " + ")))
   fit <- stats::lm(fml, data = df)
-  names(fit$coefficients) <- colnames(dX)
+  coef_full    <- stats::coef(fit)
+  coef_dummies <- coef_full[names(coef_full) != "(Intercept)"]
+  names(coef_dummies) <- colnames(dX)
   vcov_cl <- .sc_baseline_vcov(fit, object$respondent_id)
+  keep <- rownames(vcov_cl) != "(Intercept)"
+  vcov_cl <- vcov_cl[keep, keep, drop = FALSE]
+  rownames(vcov_cl) <- colnames(vcov_cl) <- colnames(dX)
   .sc_baseline(
-    coefficients = stats::coef(fit),
+    coefficients = coef_dummies,
     vcov         = vcov_cl,
     fitted.values = stats::fitted(fit),
     residuals    = stats::residuals(fit),
