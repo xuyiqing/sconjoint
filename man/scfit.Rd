@@ -12,9 +12,9 @@ scfit(
   profile,
   hidden = "auto",
   K = 10L,
-  n_epochs = 2000L,
+  n_epochs = 1000L,
   learning_rate = 0.01,
-  lambda = 1e-04,
+  weight_decay = "adaptive",
   ridge_lambda = 1e-04,
   seed = NULL,
   parallel = FALSE,
@@ -24,6 +24,7 @@ scfit(
   verbose = FALSE,
   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
   stage2_seed = 12345L,
+  varref_floor = 0.001,
   normalize_deltaX = FALSE
 )
 }
@@ -53,14 +54,30 @@ integer vector of hidden-layer widths.}
 \item{K}{Integer, number of respondent-clustered folds for
 cross-fitting.  Defaults to 10.}
 
-\item{n_epochs}{Integer, number of full-batch Adam epochs per fold.}
+\item{n_epochs}{Integer, number of full-batch Adam epochs per fold.
+Default \code{1000L} (matches the paper's v13 production runtime; see
+\verb{code/04_training.R}).}
 
 \item{learning_rate}{Numeric, Adam learning rate.}
 
-\item{lambda}{Numeric L2 penalty on DNN parameters during training.}
+\item{weight_decay}{Either the character string \code{"adaptive"}
+(default), or a non-negative numeric scalar passed to the Adam
+optimizer's \code{weight_decay} argument.  When \code{"adaptive"}, the
+per-fit weight decay is resolved from the dataset shape using the
+paper's v13 rule:
+\deqn{\mathrm{weight\_decay} = K_{adaptive} / NT,\quad
+        K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
+                                     25 & NT/p \ge 300 \end{cases}}{
+        weight_decay = K_adaptive / NT, K_adaptive = 15 if NT/p<300 else 25}
+where \code{NT} is the number of task-level observations and \code{p} is the
+number of attribute dummies.  This is what generated every current
+paper number; see \verb{code/04_training.R} and memo 42 for the
+rationale.  Pass a fixed numeric (e.g. \code{1e-4}) to override.}
 
 \item{ridge_lambda}{Numeric ridge penalty used both in the
-Lambda(Z) regression and in the Lambda inversion.}
+Lambda(Z) regression and in the Lambda inversion.  Distinct from
+\code{weight_decay}, which regularises the DNN; this regularises the
+Lambda(Z) ridge.}
 
 \item{seed}{Integer master seed.  When supplied, the cross-fit
 output is bit-identical on 1 core and on N cores.  The function
@@ -98,10 +115,20 @@ clustered SEs are unchanged across \code{stage2} choices on the same
 \item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
 ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
 
+\item{varref_floor}{Numeric lower bound on the per-coefficient prior
+variance when \code{stage2 = "varref"}.  Default \code{1e-3}, which matches
+the production setting used for continuous-attribute designs
+(Ballard-Rosa tax rates; see paper memo 42).  The previous default
+of \code{0.01} clipped every coefficient and over-shrank under v13,
+collapsing BR top-bracket validation \code{r} from \code{0.39} to \code{0.13}.
+On factor-dummy designs the natural varref value sits well above
+\code{1e-3}, so the floor is rarely binding there.  Ignored unless
+\code{stage2 = "varref"}.}
+
 \item{normalize_deltaX}{Logical (default \code{FALSE}, matching the
 paper's stated runtime).  When \code{TRUE},
 each column of the internal \code{deltaX} matrix is divided by its
-sample SD before training, lambda estimation, DML inference, and
+sample SD before training, Lambda(Z) estimation, DML inference, and
 the Stage-2 MAP update.  At return all user-facing slots
 (\code{theta}, \code{vcov}, \code{beta_hat}, \code{sigma_prior}, etc.) are
 un-standardized back to the original-units scale, so

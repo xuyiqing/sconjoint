@@ -113,8 +113,10 @@
 #' @param Z Numeric N x p_Z matrix of respondent moderators.
 #' @param fold_id Integer vector of length N mapping rows to folds.
 #' @param hidden Integer vector of hidden-layer widths.
-#' @param n_epochs,learning_rate,lambda Training hyperparameters
-#'   forwarded to `.sc_train_one()`.
+#' @param n_epochs,learning_rate,weight_decay Training hyperparameters
+#'   forwarded to `.sc_train_one()`.  `weight_decay` must be a numeric
+#'   scalar here (the `"adaptive"` sentinel is resolved upstream in
+#'   `scfit()`).
 #' @param seed Integer master seed (or NULL).
 #' @param parallel Logical, run folds in parallel.
 #' @param n_cores Integer number of workers to request when parallel.
@@ -130,9 +132,9 @@
 #' @noRd
 .sc_crossfit <- function(deltaX, y, Z, fold_id,
                          hidden = NULL,
-                         n_epochs = 2000L,
+                         n_epochs = 1000L,
                          learning_rate = 0.01,
-                         lambda = 1e-4,
+                         weight_decay = 1e-4,
                          seed = NULL,
                          parallel = FALSE,
                          n_cores = NULL,
@@ -194,7 +196,7 @@
       hidden        = hidden,
       n_epochs      = n_epochs,
       learning_rate = learning_rate,
-      lambda        = lambda,
+      weight_decay  = weight_decay,
       seed          = fold_seeds[k],
       device        = device,
       verbose       = verbose

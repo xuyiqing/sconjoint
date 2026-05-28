@@ -46,7 +46,7 @@ sw_labels <- c(
 
 This chapter walks through a complete `sconjoint` analysis of a
 candidate-choice conjoint experiment whose design follows
-@saha2022welfare. Respondents evaluate pairs of hypothetical
+@saha2022ambitious. Respondents evaluate pairs of hypothetical
 political candidates varying on five attributes and select one. The
 structural decomposition into direction and intensity lets us ask
 whether a near-zero AMCE for candidate gender masks genuine
@@ -225,7 +225,7 @@ solid line in each density is the median.
 
 ```{r}
 #| label: sw-ridgelines
-#| fig-height: 8
+#| fig-height: 11
 plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
 ```
 
@@ -244,13 +244,16 @@ sc_importance(fit_sw)
 
 ```{r}
 #| label: sw-importance-plot
-#| fig-height: 5
+#| fig-height: 6
 plot_importance(fit_sw, labels = c(agenda = "Agenda", talent = "Talent",
   children = "Children", cand_gender = "Gender", prior_office = "Prior Office"))
 ```
 
-Policy agenda dominates, accounting for approximately two-thirds of the
-decision variance for the median voter.
+Policy agenda dominates the decision variance for the median voter,
+ranking well above the other attributes. Read the exact shares off the
+plot above rather than quoting a fixed fraction --- on the bundled data
+they reflect the reduced moderator set (see the note in the
+[overview](index.qmd)).
 
 ### Direction and intensity
 
@@ -287,11 +290,11 @@ plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
 
 The paper's directional finding for gender: the population-average
 AMCE for Male is near zero, but the individual-level fractions reveal
-that about 64% of respondents have $\hat\beta_{\text{Male}} < 0$,
+that a clear majority of respondents have $\hat\beta_{\text{Male}} < 0$,
 i.e.\ prefer Female candidates. The fraction-preferring panel above
-makes this visible per dummy. The exact percentage depends on training
-configuration; the qualitative finding survives down to the
-lighter pedagogical settings.
+makes this visible per dummy. (Read the exact share off the rendered
+table rather than quoting a fixed number --- it depends on the training
+configuration and, on the bundled data, on the reduced moderator set.)
 
 ### Marginal rate of substitution
 
@@ -431,8 +434,8 @@ v <- sc_validate_amce(fit_sw)
 v
 ```
 
-In a full paper-quality fit (`K = 10`, `n_epochs >= 1000`), the
-correlation across attribute levels is essentially $r = 0.998$. Any
+In a full paper-quality fit (`K = 10`, `n_epochs >= 1000`) the
+correlation across attribute levels is very high (close to 1). Any
 material drop is a sign of either insufficient training or a
 genuinely non-logit data-generating process.
 

@@ -56,12 +56,35 @@ test_that(".sc_estimate_sigma_score floor at 0.01 triggers on near-separated dat
   expect_true(all(sig >= 0.01))
 })
 
-test_that(".sc_estimate_sigma_varref gives 0.5 * Var with floor", {
+test_that(".sc_estimate_sigma_varref gives 0.5 * Var with default 1e-3 floor", {
   set.seed(3)
   beta_resp <- matrix(stats::rnorm(60), 20, 3)
   s <- .sc_estimate_sigma_varref(beta_resp)
-  expected <- pmax(0.5 * apply(beta_resp, 2, stats::var), 0.01)
+  expected <- pmax(0.5 * apply(beta_resp, 2, stats::var), 1e-3)
   expect_equal(unname(s), expected)
+})
+
+test_that(".sc_estimate_sigma_varref respects an explicit floor override", {
+  set.seed(3)
+  beta_resp <- matrix(stats::rnorm(60), 20, 3)
+  s_low  <- .sc_estimate_sigma_varref(beta_resp, floor = 1e-6)
+  s_high <- .sc_estimate_sigma_varref(beta_resp, floor = 0.01)
+  expect_equal(unname(s_low),
+               pmax(0.5 * apply(beta_resp, 2, stats::var), 1e-6))
+  expect_equal(unname(s_high),
+               pmax(0.5 * apply(beta_resp, 2, stats::var), 0.01))
+})
+
+test_that(".sc_estimate_sigma_varref floor binds on tiny-variance columns", {
+  ## Tax-rate-style fixture: per-respondent betas with very small variance
+  ## (continuous-attribute case after the v13 ensemble averages out noise).
+  ## Default floor 1e-3 binds; 0.01 floor over-shrinks by 10x.
+  beta_resp <- matrix(seq(-0.02, 0.02, length.out = 40), 20, 2)
+  s_default <- .sc_estimate_sigma_varref(beta_resp)          # floor 1e-3
+  s_overshrink <- .sc_estimate_sigma_varref(beta_resp, floor = 0.01)
+  expect_true(all(s_default < 0.01))
+  expect_true(all(s_default >= 1e-3))
+  expect_true(all(s_overshrink == 0.01))
 })
 
 test_that(".sc_map_one reduces gradient and Hessian is negative definite", {

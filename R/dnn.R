@@ -10,30 +10,44 @@
 
 #' Choose a default hidden-layer configuration from N * T
 #'
-#' Implements the memo-06 "three-tier" rule documented in spec.md
-#' section 20:
+#' Implements the paper's v13 base architecture rule
+#' (`code/04_training.R`, memo 42):
 #'
-#' * N*T <  2000: c(32L, 16L)
-#' * N*T < 10000: c(32L, 32L, 16L)
-#' * N*T >=10000: c(64L, 64L, 32L)
+#' * N*T < 2000: c(32L, 16L)  (small-fixture safety; paper does not
+#'   use this regime directly)
+#' * N*T >= 2000: c(32L, 32L, 16L)  (paper v13 base; used for all
+#'   three showcase apps SW / GS / BR regardless of NT)
+#' * Override at p >= 40 AND N*T >= 80,000: c(128L, 64L, 64L)
+#'   (paper v13 large-design override; none of the showcase apps
+#'   trigger this)
+#'
+#' This *changed* in the v13 alignment (memo 42): the earlier rule
+#' scaled up to c(64L, 64L, 32L) at NT >= 10,000.  The paper uses
+#' c(32L, 32L, 16L) for all three apps including BR (NT=16000) and
+#' GS (NT=20657), so the auto-scaling was diverging from paper for
+#' medium-to-large conjoint designs.
 #'
 #' @param n_obs Number of (respondent x task) observations on which
-#'   the network will be trained, i.e. the number of rows of
-#'   `delta_x` passed to the trainer.
+#'   the network will be trained.
+#' @param p_beta Number of attribute dummies (number of `deltaX`
+#'   columns).  Used only by the v13 large-design override.  Default
+#'   `NULL` skips the override check.
 #' @return An integer vector giving the hidden-layer widths.
 #' @keywords internal
 #' @noRd
-.sc_auto_hidden <- function(n_obs) {
+.sc_auto_hidden <- function(n_obs, p_beta = NULL) {
   if (!is.numeric(n_obs) || length(n_obs) != 1L || !is.finite(n_obs) || n_obs < 1) {
     stop(".sc_auto_hidden(): `n_obs` must be a single positive finite number.")
+  }
+  if (!is.null(p_beta) &&
+      is.numeric(p_beta) && length(p_beta) == 1L && is.finite(p_beta) &&
+      p_beta >= 40L && n_obs >= 80000L) {
+    return(c(128L, 64L, 64L))
   }
   if (n_obs < 2000) {
     return(c(32L, 16L))
   }
-  if (n_obs < 10000) {
-    return(c(32L, 32L, 16L))
-  }
-  c(64L, 64L, 32L)
+  c(32L, 32L, 16L)
 }
 
 #' Build the conjoint structural DNN `nn_module`

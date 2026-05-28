@@ -649,7 +649,7 @@ plot_importance <- function(object, labels = NULL, title = NULL, ...) {
   p <- ggplot2::ggplot(long, ggplot2::aes(x = importance, y = attribute,
                                            fill = ggplot2::after_stat(x))) +
     ggridges::geom_density_ridges_gradient(
-      scale = 1.8, quantile_lines = TRUE, quantiles = 2
+      scale = 1.0, quantile_lines = TRUE, quantiles = 2
     ) +
     ggplot2::scale_fill_viridis_c(option = "D") +
     ggplot2::geom_segment(

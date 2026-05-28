@@ -15,14 +15,14 @@ test_that(".sc_train_one with fixed seed is bit-exact on CPU (single core)", {
                                   hidden = c(8L),
                                   n_epochs = 30L,
                                   learning_rate = 0.05,
-                                  lambda = 0,
+                                  weight_decay = 0,
                                   seed = 42L,
                                   device = "cpu")
   r2 <- sconjoint:::.sc_train_one(deltaX, y, Z,
                                   hidden = c(8L),
                                   n_epochs = 30L,
                                   learning_rate = 0.05,
-                                  lambda = 0,
+                                  weight_decay = 0,
                                   seed = 42L,
                                   device = "cpu")
 

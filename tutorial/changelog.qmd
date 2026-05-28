@@ -45,8 +45,8 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 
 * `sc_validate_amce(object, subgroup = NULL)`: pooled (and
   optionally subgroup) homogeneous-logit comparison against the DML
-  $\hat\theta$. Mirrors paper §App-D; on a full-paper fit of
-  `sw2022` the pooled correlation is essentially $r = 0.997$.
+  $\hat\theta$. Mirrors paper §App-D, where the pooled correlation on
+  the paper's external validation data is near 1.
   See \[Example: Candidate Choice\](#sec-sw-validate) for a worked
   example.
 
