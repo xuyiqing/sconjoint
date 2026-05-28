@@ -33,7 +33,7 @@ The four `stage2` choices:
 |-------|--------------|-------------|
 | `"map_c5"` (default) | Paper EnsC5. Trains a 2nd DNN with `stage2_seed`, averages with the first DNN, runs a Newton MAP solver per respondent with a score-based diagonal prior scaled by $1/5$. | The paper's recommended default. Best individual-$\beta$ correlation under realistic conjoint designs. |
 | `"none"` | Skip Stage 2. `beta_hat` is the raw Stage-1 cross-fitted DNN. | Reproduce v0.1 behavior, or when you want the raw DNN view for downstream code that does its own refinement. |
-| `"varref"` | Use $0.5 \cdot \mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$ as the diagonal prior variance (floored at $0.01$). Otherwise identical to MAP. | Diagnostic / experimental. We do not promise stability of this option across releases. |
+| `"varref"` | Use $0.5 \cdot \mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$ as the diagonal prior variance (floored at `varref_floor`, default $10^{-3}$). Otherwise identical to MAP. | Recommended for continuous-attribute designs (e.g. Ballard-Rosa tax rates); see `varref_floor` below. |
 | `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. Paper §A.4 notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
 
 ```{r}
@@ -127,7 +127,7 @@ becomes loose by the same factor as $\mathrm{Var}(\Delta X_k)$, and
 the MAP solver leaves per-respondent estimates with extreme tails.
 
 `normalize_deltaX = TRUE` divides each `deltaX` column by its sample
-SD before training / lambda / DML / MAP, then un-standardizes all
+SD before training / Lambda(Z) / DML / MAP, then un-standardizes all
 coefficient-bearing slots at assembly time. The user-facing surface
 (`coef(fit)`, `vcov(fit)`, `fit$beta_hat`, etc.) is on the original
 units; only the internal pipeline runs on a common-variance scale.
@@ -143,9 +143,12 @@ fit <- scfit(formula, data, ..., normalize_deltaX = TRUE)
 fit$sd_dx
 ```
 
-Default is `FALSE` to preserve all v0.2 behavior bit-exactly. For
-pure factor-dummy designs the option is a near-no-op (every dummy
-already has similar SD).
+Default is `FALSE`, matching the paper's stated runtime (which keeps
+attributes on their original units, e.g. tax rates in percentage
+points). On continuous-attribute designs the v0.2 score-based prior
+can leave per-respondent MAP estimates with extreme tails when
+$\mathrm{Var}(\Delta X_k) \gg 1$; pass `normalize_deltaX = TRUE` in
+that case. For pure factor-dummy designs the option is a near-no-op.
 
 ## `sc_design_diagnostic()`: which recovery tiers does my design support?
 
@@ -183,18 +186,19 @@ worth knowing:
 | Argument | Default | Effect |
 |----------|---------|--------|
 | `K` | `10L` | Number of respondent-clustered cross-fitting folds. Higher = less Stage-1 overfit; lower = faster. Below `K = 3` is not recommended. |
-| `n_epochs` | `2000L` | Adam epochs per fold. Production fits use 1000--2000; tutorial chapters use 200--400 for render speed. Monitor the loss trace via `plot(fit, "loss_trace")`. |
+| `n_epochs` | `1000L` | Adam epochs per fold (paper v13 default). Tutorial chapters use 200--400 for render speed. Monitor the loss trace via `plot(fit, "loss_trace")`. |
 | `learning_rate` | `0.01` | Adam step size. Lower if the loss diverges; higher if convergence is slow. |
-| `lambda` | `1e-4` | L2 penalty on DNN weights. Increase under tight data; decrease when DNN underfits. |
-| `ridge_lambda` | `1e-4` | Ridge penalty on the local information matrix $\Lambda(Z)$ used in DML. Independent from `lambda`. |
-| `hidden` | `"auto"` | Hidden-layer widths. `"auto"` picks a three-tier default from $N \cdot T$; you can pass `c(64L, 64L, 32L)` directly. |
+| `weight_decay` | `"adaptive"` | L2 penalty on DNN weights, applied through the Adam optimizer. `"adaptive"` uses the paper's v13 rule $K_{adaptive}/NT$ with $K_{adaptive}=15$ if $NT/p<300$ else $25$; pass a fixed numeric (e.g. `1e-4`) to override. The resolved value is reported on `fit$weight_decay_used`. |
+| `varref_floor` | `1e-3` | Lower bound on the prior variance when `stage2 = "varref"` (continuous-attribute designs). The default matches the paper's Ballard-Rosa setting; raising it over-shrinks per-respondent estimates. Ignored for other `stage2` choices. |
+| `ridge_lambda` | `1e-4` | Ridge penalty on the local information matrix $\Lambda(Z)$ used in DML. Independent from `weight_decay`. |
+| `hidden` | `"auto"` | Hidden-layer widths. `"auto"` picks the paper v13 base `c(32L, 32L, 16L)` for any $N \cdot T \ge 2000$ (with a `c(128L, 64L, 64L)` override at $p \ge 40$ and $NT \ge 80{,}000$); you can pass an integer vector directly. |
 
 ```{r}
 #| label: hyperparam-example
 #| eval: false
 fit <- scfit(formula, data, ...,
-             K = 10L, n_epochs = 2000L,
-             learning_rate = 0.005, lambda = 5e-4,
+             K = 10L, n_epochs = 1000L,
+             learning_rate = 0.005, weight_decay = 5e-4,
              ridge_lambda = 1e-3,
              hidden = c(128L, 64L, 32L))
 ```

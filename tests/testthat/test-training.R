@@ -20,7 +20,7 @@ test_that(".sc_train_one reduces loss and recovers a simple DGP", {
     hidden        = c(8L, 8L),
     n_epochs      = 200L,
     learning_rate = 0.05,
-    lambda        = 0,
+    weight_decay  = 0,
     seed          = 123L,
     device        = "cpu",
     verbose       = FALSE

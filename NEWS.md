@@ -1,3 +1,85 @@
+# sconjoint 0.2.0.9001 (development version)
+
+Paper v13 alignment.  Three changes to bring `scfit()` defaults in
+line with the May v13 production estimator that generated every
+current paper number (memo 42, `ConjointStructural/output/memos/42_sconjoint_upgrades/`).
+
+## Plotting
+
+- Ridgeline plots (`plot(fit, "beta_ridgelines")` and
+  `plot_importance()`) now use `ggridges` `scale = 1.0` (was `2.0`
+  and `1.8` respectively).  At the old scale each density spanned up
+  to two row-heights and overlapped its neighbours; `1.0` makes the
+  per-respondent distributions legible, especially on many-level
+  designs.  Pair with a taller `fig.height` for dense panels.
+
+## Continuous-attribute MAP prior
+
+- New `scfit()` argument **`varref_floor`** (default `1e-3`,
+  ignored unless `stage2 = "varref"`).  Replaces the hardcoded
+  `0.01` floor on the diagonal prior variance.  The `0.01` default
+  over-shrank continuous-attribute coefficients --- the BR top-bracket
+  validation `r` against self-reported ideal rates collapsed from the
+  paper's `0.39` to `0.13`.  At `1e-3` (production setting in
+  `code/60_setup_ballard_rosa.R`) the natural varref value passes
+  through unclipped on continuous designs; factor-dummy designs are
+  unaffected (the floor is rarely binding there).
+
+## Training config: NT-adaptive L2 + paper-faithful defaults
+
+- Renamed `scfit(lambda = ...)` --> **`scfit(weight_decay = ...)`**.
+  Matches the production code (`code/04_training.R`) and torch's
+  optimizer convention.  Also distinguishes the DNN L2 coefficient
+  from the unrelated `ridge_lambda` used in Lambda(Z) estimation.
+- Default `weight_decay = "adaptive"` (new sentinel).  Resolves
+  per-fit to the v13 NT-adaptive rule `K_adaptive / NT` where
+  `K_adaptive = 15` if `NT/p < 300` else `25`.  Numeric values
+  (e.g. `1e-4`) still pass through unchanged.  The resolved value
+  is exposed on the returned `sc_fit` as `weight_decay_used` for
+  diagnostics.
+- Default `n_epochs = 1000L` (was `2000L`).  Matches paper v13.
+- **Behavioral**: L2 regularization now applied via
+  `optim_adam(..., weight_decay = X)` instead of adding
+  `X * sum(p^2)` to the loss.  For Adam these are not equivalent
+  (loss-side L2 is rescaled by Adam's adaptive per-parameter rates
+  whereas `weight_decay` is applied to the parameter update
+  directly).  The production code uses the optimizer channel; the
+  package now matches it bit-for-bit.
+
+## Auto-hidden architecture
+
+- `.sc_auto_hidden()` (internal; used when `hidden = "auto"`) now
+  returns the paper v13 base `c(32L, 32L, 16L)` for any `NT >= 2000`
+  instead of scaling up to `c(64L, 64L, 32L)` at `NT >= 10000`.
+  This is the architecture the paper uses for all three showcase
+  apps (SW NT=3573, GS NT=20657, BR NT=16000).  A new
+  large-design override returns `c(128L, 64L, 64L)` only when
+  `p >= 40 AND NT >= 80000` (no showcase app triggers it; logic
+  included for safety).
+
+## Importance formula (paper-consistency fix)
+
+- `sc_importance(..., design = "design_variance")` is the new default.
+  This implements the paper's reported formula
+  \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g} \hat\beta_{ik}^2 \cdot
+  \mathrm{Var}(\Delta X_k)}, where `Var(ΔX_k)` is the empirical
+  variance of dummy column k.  Reproduces the paper's sw2022 agenda
+  share (~0.65 in the paper; ~0.62 in the package on the same data
+  with K=5 / n_epochs=200).
+- The previous `"uniform"` and `"empirical"` branches remain
+  available but implement different functionals (variance of beta
+  over a level distribution, not sum of beta^2 weighted by per-dummy
+  Var(ΔX)).  Neither reproduces the paper's reported numbers;
+  `?sc_importance` explains the relationship.
+
+## Documentation
+
+- `?sc_design_diagnostic` now reports build-time validation results
+  against a controlled 18-cell sim grid (Pearson rho 0.76 with truth,
+  mean |bias| 0.23, bias concentrated at low true R^2_Z).  The print
+  banner makes the failure mode explicit: do not treat tier hints as
+  a pass/fail gate.  `experimental = TRUE` remains the default.
+
 # sconjoint 0.2.0
 
 This release brings `sconjoint` up to the algorithmic defaults in the

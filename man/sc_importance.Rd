@@ -6,7 +6,7 @@
 \usage{
 sc_importance(
   object,
-  design = c("uniform", "empirical"),
+  design = c("design_variance", "uniform", "empirical"),
   subgroup = NULL,
   which_beta = c("hybrid", "dnn")
 )
@@ -14,7 +14,10 @@ sc_importance(
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
-\item{design}{Either \code{"uniform"} or \code{"empirical"}.}
+\item{design}{One of \code{"design_variance"} (default, paper formula),
+\code{"uniform"} (prototype's symmetric-levels formula), or
+\code{"empirical"} (variance of \eqn{\beta} over realized level
+distribution).}
 
 \item{subgroup}{Row selector.}
 
@@ -26,16 +29,40 @@ row per attribute (columns: \code{attribute}, \code{share}, \code{se}, \code{ci_
 \code{ci_hi}).
 }
 \description{
-For each respondent \eqn{i} and attribute block \eqn{a}, computes
-a within-block variance-share \eqn{\mathrm{share}_{ia}}, then
-averages over the subgroup.  Point estimate matches the prototype
-\verb{07b_structural_quantities.R} lines 643--664; the clustered SE of
-the per-row share is new in sconjoint v0.1.
+For each respondent \eqn{i} and attribute group \eqn{g}, computes a
+utility-variance share \eqn{\mathrm{share}_{i,g}}, then averages
+over the subgroup.
 }
 \details{
-\code{design = "uniform"} weights each level of each attribute equally
-(the prototype's default and the only branch tested for parity in
-v0.1).  \code{design = "empirical"} replaces the uniform weights by
-empirical level frequencies computed from \code{object$deltaX} and is
-documented but not parity-tested.
+Three weighting conventions are supported, selected by \code{design}:
+
+\itemize{
+\item \code{"design_variance"} (default) implements the paper's
+formula \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g}
+    \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)}, normalized to
+shares across groups.  Here \code{Var(ΔX_k)} is computed empirically
+from \code{object$deltaX}, so each dummy contributes scaled by the
+spread of its presentation in the realized design.  This is the
+formula reported in Acharya, Hainmueller, and Xu (2026) and is
+what reproduces the paper's sw2022 agenda share (~0.65).
+\item \code{"uniform"} computes the variance of \eqn{\beta_{i,\cdot}}
+over a uniform distribution on levels (treating the reference
+level as \eqn{\beta = 0}).  This is the prototype's default
+used in v0.1 / v0.2.0; it diverges from the paper because the
+paper weights each dummy by its empirical design variance
+instead of treating levels symmetrically.
+\item \code{"empirical"} computes the variance of \eqn{\beta_{i,\cdot}}
+over the empirical level distribution (level frequencies read
+off \code{object$deltaX}).  Different functional from \code{"design_variance"}:
+it asks "how do per-respondent \eqn{\beta} values vary across
+levels under the realized design," not "how much does each
+dummy contribute to utility variance."
+}
+
+For factor designs with uniform level randomization, \code{"uniform"}
+and \code{"design_variance"} agree up to normalization (the empirical
+\eqn{\mathrm{Var}(\Delta X_k)} is the same across dummies within an
+attribute), but they disagree across attributes when level counts
+differ.  For continuous-attribute designs (e.g. BR tax-rate
+brackets), they diverge substantially.
 }

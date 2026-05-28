@@ -67,12 +67,12 @@ knowledge, employment status) --- 12 moderators in total.
 
 ## Fitting the structural model
 
-Because every attribute here is continuous and the tax rates are
-encoded as percentage points (0--50), we pass
-**`normalize_deltaX = TRUE`** so the internal training / MAP step
-sees attributes on a common ~unit scale. Coefficients are
-un-standardized at return, so `coef(fit_br)` is still in
-"logit utility per percentage point" units.
+Every attribute here is continuous, with the tax rates encoded as
+percentage points (0--50). The paper handles this with the **`varref`**
+Stage-2 prior and a low variance floor (**`varref_floor = 1e-3`**) on the
+raw rates, rather than the default score-based `map_c5` prior. We follow
+the paper's recipe here. Coefficients are in "logit utility per
+percentage point" units.
 
 ```{r}
 #| label: br-fit
@@ -83,32 +83,35 @@ fit_br <- scfit(
            resp_race_white + resp_income + resp_ineq_averse +
            resp_work_vs_luck + resp_taxes_harm + resp_hardwork +
            resp_high_econ_know + resp_employed_ft,
-  data             = br2017,
-  respondent       = "respondent",
-  task             = "task",
-  profile          = "profile",
-  K                = 5L,
-  n_epochs         = 200L,
-  seed             = 2024,
-  normalize_deltaX = TRUE
+  data         = br2017,
+  respondent   = "respondent",
+  task         = "task",
+  profile      = "profile",
+  K            = 5L,
+  n_epochs     = 200L,
+  seed         = 2024,
+  stage2       = "varref",
+  varref_floor = 1e-3
 )
 summary(fit_br)
 ```
 
 ::: {.callout-note}
-### Why `normalize_deltaX = TRUE` here?
+### Why `stage2 = "varref"` for continuous attributes?
 
-The v0.2 score-based MAP prior is calibrated assuming
+The default `map_c5` Stage-2 prior is calibrated assuming
 $\mathrm{Var}(\Delta X_k) \approx 1$ (true for factor dummies under
-typical randomization). For BR's tax rates --- which span 0--50
-percentage points --- the un-standardized prior becomes loose by the
-same factor as $\mathrm{Var}(\Delta X_k)$ (here ~200), and the MAP
-solver leaves per-respondent estimates with extreme tails.
-`normalize_deltaX = TRUE` (new in v0.2.1) puts every coefficient on
-a common-variance internal scale; coefficients are un-standardized
-at return. For factor-dummy designs (e.g. SW, GS) it's a near-no-op.
-
-See `?scfit` and the *Advanced options* chapter for details.
+typical randomization). BR's tax rates span 0--50 percentage points, so
+the score-based prior becomes loose and the MAP solver leaves
+per-respondent estimates with extreme tails. The paper instead uses the
+`varref` prior --- $0.5\cdot\mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$,
+floored at `varref_floor` --- on the raw rates. The **low floor matters**:
+the prior `0.01` default over-shrinks continuous coefficients and badly
+degrades recovery of individual progressivity, so continuous designs use
+`varref_floor = 1e-3` (the paper's setting). An alternative is
+`normalize_deltaX = TRUE` with the default `map_c5` prior, which
+standardizes $\Delta X$ internally; see the *Advanced options* chapter.
+For factor-dummy designs (SW, GS) neither is needed.
 :::
 
 ```{r}
@@ -186,7 +189,7 @@ distributions for every bracket.
 
 ```{r}
 #| label: br-ridgelines
-#| fig-height: 6
+#| fig-height: 8
 plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels)
 ```
 
@@ -201,7 +204,7 @@ sc_importance(fit_br)
 
 ```{r}
 #| label: br-importance-plot
-#| fig-height: 4
+#| fig-height: 6
 plot_importance(fit_br, labels = c(
   rate_L10 = "Under $10k", rate_10_35 = "$10-35k",
   rate_35_85 = "$35-85k", rate_85_175 = "$85-175k",
@@ -323,11 +326,12 @@ ggplot(quant_data, aes(x = bracket, color = party, fill = party, group = party))
         strip.text  = element_text(face = "bold"))
 ```
 
-Nearly all respondents --- 99.9% --- exhibit progressive tax preferences
-(positive slope from low to high brackets). Even among Republicans,
-99.7% reveal progressive preferences. The partisan gap in progressivity
-is real but modest: Democrats' mean slope is approximately 30% larger
-than Republicans'.
+Nearly all respondents exhibit progressive tax preferences (a positive
+slope from low to high brackets), and progressivity remains the majority
+pattern even among Republicans. The partisan gap is real but modest ---
+Democrats' mean slope is somewhat steeper than Republicans'. (These
+shares are computed on the bundled data; read the exact values off the
+rendered output rather than quoting fixed numbers.)
 
 ## Validating against the homogeneous-logit AMCE
 

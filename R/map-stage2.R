@@ -211,14 +211,20 @@
 #' Estimate the "varref" alternative prior variance
 #'
 #' Variant prior: \eqn{0.5\,\mathrm{Var}_i(\hat\beta_{ens,resp,k})},
-#' floored at `floor`.  Documented as experimental / diagnostic.
+#' floored at `floor`.  The recommended path for continuous-attribute
+#' designs (e.g. Ballard-Rosa tax rates); see `?scfit` argument
+#' `varref_floor` and paper memo 42.
 #'
 #' @param beta_hat_resp Numeric `n_resp` x `P` matrix.
-#' @param floor Numeric lower bound. Default 0.01.
+#' @param floor Numeric lower bound. Default `1e-3` (matches the
+#'   production `MAP_VARREF_FLOOR` in `code/60_setup_ballard_rosa.R`).
+#'   The prior `0.01` default clipped every coefficient on continuous
+#'   designs and over-shrank the per-respondent betas; lowering to
+#'   `1e-3` restores the BR validation `r` to the paper value (0.39).
 #' @return Numeric length-`P` vector.
 #' @keywords internal
 #' @noRd
-.sc_estimate_sigma_varref <- function(beta_hat_resp, floor = 0.01) {
+.sc_estimate_sigma_varref <- function(beta_hat_resp, floor = 1e-3) {
   v <- apply(beta_hat_resp, 2L, stats::var)
   out <- pmax(0.5 * v, floor)
   names(out) <- colnames(beta_hat_resp)

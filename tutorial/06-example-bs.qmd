@@ -126,7 +126,7 @@ plot_amce(fit_bs, groups = bs_groups, labels = bs_labels)
 
 ```{r}
 #| label: bs-ridgelines
-#| fig-height: 8
+#| fig-height: 11
 plot(fit_bs, "beta_ridgelines", groups = bs_groups, labels = bs_labels)
 ```
 
@@ -141,7 +141,7 @@ sc_importance(fit_bs)
 
 ```{r}
 #| label: bs-importance-plot
-#| fig-height: 5
+#| fig-height: 6
 plot_importance(fit_bs, labels = c(cost_usd = "Cost", distribution = "Distribution",
   participation = "Participation", emissions = "Emissions",
   sanctions = "Sanctions", monitoring = "Monitoring"))

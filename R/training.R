@@ -8,10 +8,15 @@
 #' Train a single conjoint DNN
 #'
 #' Full-batch gradient descent with Adam and BCE-with-logits loss,
-#' matching the prototype exactly.  An explicit L2 penalty on the
-#' network parameters is added to the loss so that callers can pass
-#' any `lambda` without depending on the optimizer's `weight_decay`
-#' argument (which changed defaults across torch-for-R versions).
+#' matching the paper's v13 production training loop
+#' (`code/03_structural_dnn.R::train_one_fold`).  L2 regularization
+#' is applied via the optimizer's `weight_decay` argument (the same
+#' channel the production code uses), not as an explicit term added
+#' to the loss --- for Adam the two are not equivalent because the
+#' loss-side L2 gradient is rescaled by Adam's per-parameter adaptive
+#' rates, whereas `weight_decay` is applied to the parameter update
+#' directly.  The production rate is the v13 NT-adaptive
+#' `K_adaptive / NT` rule (see `?scfit` argument `weight_decay`).
 #'
 #' Seeds are handled carefully: the call saves both the R RNG state
 #' and the torch RNG state, sets them from `seed`, runs training,
@@ -24,7 +29,8 @@
 #'   `.sc_auto_hidden(nrow(deltaX))`.
 #' @param n_epochs Integer, number of full-batch epochs.
 #' @param learning_rate Numeric, Adam learning rate.
-#' @param lambda Numeric, L2 penalty coefficient added to the loss.
+#' @param weight_decay Numeric, non-negative L2 coefficient passed
+#'   to `torch::optim_adam(weight_decay = ...)`.  `0` disables L2.
 #' @param seed Integer, master seed.  When `NULL` the current RNG
 #'   state is used and nothing is restored.
 #' @param device Character, `"cpu"` (default) or `"cuda"`.  Only CPU
@@ -36,9 +42,9 @@
 #' @noRd
 .sc_train_one <- function(deltaX, y, Z,
                           hidden = NULL,
-                          n_epochs = 2000L,
+                          n_epochs = 1000L,
                           learning_rate = 0.01,
-                          lambda = 1e-4,
+                          weight_decay = 1e-4,
                           seed = NULL,
                           device = "cpu",
                           verbose = FALSE) {
@@ -86,7 +92,8 @@
   net <- .sc_build_network(p = p_beta, p_Z = p_z, hidden = hidden)
   net$to(device = dev)
 
-  optimizer <- torch::optim_adam(net$parameters, lr = learning_rate)
+  optimizer <- torch::optim_adam(net$parameters, lr = learning_rate,
+                                 weight_decay = weight_decay)
   loss_fn   <- torch::nn_bce_with_logits_loss()
 
   loss_trace <- numeric(n_epochs)
@@ -95,15 +102,6 @@
     optimizer$zero_grad()
     logit <- net$forward(dx, zt)
     loss  <- loss_fn(logit, yt)
-
-    if (lambda > 0) {
-      l2 <- torch::torch_zeros(1L, device = dev)
-      for (par in net$parameters) {
-        l2 <- l2 + torch::torch_sum(par * par)
-      }
-      loss <- loss + lambda * l2
-    }
-
     loss$backward()
     optimizer$step()
     loss_trace[epoch] <- as.numeric(loss$item())
@@ -119,6 +117,35 @@
     loss_trace = loss_trace,
     final_loss = loss_trace[n_epochs]
   )
+}
+
+#' Resolve `weight_decay` argument to a numeric L2 coefficient
+#'
+#' Implements the paper's v13 NT-adaptive rule when
+#' `weight_decay = "adaptive"`:
+#' \deqn{K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
+#'                                    25 & NT/p \ge 300 \end{cases},\qquad
+#'   \mathrm{weight\_decay} = K_{adaptive} / NT.}
+#' Numeric input passes through unchanged (after validation).
+#'
+#' @param weight_decay Either the string `"adaptive"` or a
+#'   non-negative numeric scalar.
+#' @param NT Integer, the number of task-level observations.
+#' @param p Integer, the number of attribute dummies.
+#' @return A non-negative numeric scalar.
+#' @keywords internal
+#' @noRd
+.sc_resolve_weight_decay <- function(weight_decay, NT, p) {
+  if (is.character(weight_decay) && length(weight_decay) == 1L &&
+      weight_decay == "adaptive") {
+    K_adaptive <- if (NT / p < 300) 15L else 25L
+    return(K_adaptive / NT)
+  }
+  if (is.numeric(weight_decay) && length(weight_decay) == 1L &&
+      is.finite(weight_decay) && weight_decay >= 0) {
+    return(as.numeric(weight_decay))
+  }
+  stop("scfit(): `weight_decay` must be \"adaptive\" or a non-negative numeric scalar.")
 }
 
 #' Predict `beta(Z)` from a trained network

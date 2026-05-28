@@ -14,10 +14,15 @@
 #' @param deltaX,y,Z,respondent_id Existing model arrays.
 #' @param fold_id_stage1 Integer length-`n_task` from Stage 1 (used only
 #'   to size things; the 2nd DNN gets its own fold partition).
-#' @param hidden,n_epochs,learning_rate,lambda Training hyperparameters
-#'   reused for the 2nd DNN.
+#' @param hidden,n_epochs,learning_rate,weight_decay Training
+#'   hyperparameters reused for the 2nd DNN.  `weight_decay` must be a
+#'   numeric scalar here (the `"adaptive"` sentinel is resolved
+#'   upstream in `scfit()`).
 #' @param K Number of folds.
 #' @param stage2_seed Integer seed for the 2nd DNN cross-fit.
+#' @param varref_floor Numeric lower bound on the diagonal prior
+#'   variance when `stage2 = "varref"`.  Default `1e-3`.  Ignored for
+#'   other Stage-2 methods.
 #' @param parallel,n_cores,device,verbose Same as in `scfit()`.
 #' @return A named list of slots to merge into the `sc_fit` object:
 #'   `beta_hat`, `beta_hat_dnn`, `beta_hat_dnn2`, `beta_hat_ens`,
@@ -28,8 +33,9 @@
 .sc_run_stage2 <- function(stage2,
                            beta_hat_dnn,
                            deltaX, y, Z, respondent_id,
-                           hidden, n_epochs, learning_rate, lambda,
+                           hidden, n_epochs, learning_rate, weight_decay,
                            K, stage2_seed,
+                           varref_floor = 1e-3,
                            parallel = FALSE,
                            n_cores = NULL,
                            device = "cpu",
@@ -65,7 +71,7 @@
     hidden        = hidden,
     n_epochs      = n_epochs,
     learning_rate = learning_rate,
-    lambda        = lambda,
+    weight_decay  = weight_decay,
     seed          = stage2_seed,
     parallel      = parallel,
     n_cores       = n_cores,
@@ -96,7 +102,8 @@
     stage2_method <- "map_c5"
     warns <- character()
   } else if (identical(stage2, "varref")) {
-    sigma_prior <- .sc_estimate_sigma_varref(beta_hat_ens_resp)
+    sigma_prior <- .sc_estimate_sigma_varref(beta_hat_ens_resp,
+                                             floor = varref_floor)
     out <- .sc_map_all(
       deltaX, y, beta_hat_ens_resp, respondent_idx, sigma_prior
     )

@@ -115,7 +115,8 @@ The respondent-level moderators include ideology (`resp_ideo`, 1--7),
 party identification (`resp_pid`, -3 to 3), Trump approval (`resp_trump`,
 1--4), demographics (age, gender, race, education, income), and
 dispositional measures (authoritarianism, political knowledge) --- 12
-moderators in total.
+moderators in total. This is a reduced set relative to the paper (see
+the [overview](index.qmd)), so the numbers below are illustrative.
 
 The `dem_code` attribute has 16 levels in three families: good-governance
 (`g_*`, 7 levels), undemocratic actions (`u_*`, 7 levels), and valence
@@ -176,9 +177,9 @@ summary(fit_gs)
 ### Stage 2 is on by default (v0.2)
 
 The summary above reports `Stage 2: map_c5` --- the empirical-Bayes
-MAP refinement of paper §3. The DML co-partisan coefficient
-($\hat\theta \approx 0.70$ in the paper) is computed from the Stage-1
-DNN only; the refined respondent-level betas (used by the
+MAP refinement of paper §3. The DML co-partisan coefficient (a large,
+precisely-estimated positive effect in the paper) is computed from the
+Stage-1 DNN only; the refined respondent-level betas (used by the
 distributional and structural quantities below) sit on
 `fit_gs$beta_hat`. Pass `stage2 = "none"` to recover v0.1 behavior.
 :::
@@ -277,7 +278,7 @@ good-governance densities sit near zero (relative to the
 
 ```{r}
 #| label: gs-ridgelines
-#| fig-height: 10
+#| fig-height: 16
 plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
 ```
 
@@ -296,7 +297,7 @@ sc_importance(fit_gs)
 
 ```{r}
 #| label: gs-importance-plot
-#| fig-height: 5
+#| fig-height: 8
 plot_importance(fit_gs, labels = c(copartisan = "Party", p1 = "Econ. Policy",
   p2 = "Social Policy", dem_code = "Democracy",
   cand_sex = "Sex", cand_race = "Race", cand_pro = "Profession"))

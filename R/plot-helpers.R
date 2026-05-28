@@ -109,7 +109,7 @@ utils::globalVariables(c("x", "group"))
     pl <- ggplot2::ggplot(long, ggplot2::aes(x = .data$value, y = .data$dummy,
                                        fill = ggplot2::after_stat(x))) +
       ggridges::geom_density_ridges_gradient(
-        scale = 2.0, rel_min_height = 0.01,
+        scale = 1.0, rel_min_height = 0.01,
         quantile_lines = TRUE, quantiles = 2
       ) +
       ggplot2::scale_fill_viridis_c(option = "C") +

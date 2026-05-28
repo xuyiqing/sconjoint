@@ -194,7 +194,7 @@ full distribution:
 
 ```{r}
 #| label: sim-ridgelines
-#| fig-height: 4
+#| fig-height: 5
 plot(fit_sim, "beta_ridgelines")
 ```
 

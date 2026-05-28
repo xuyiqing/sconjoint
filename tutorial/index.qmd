@@ -34,7 +34,22 @@ The package ships four conjoint datasets from published replication
 materials, covering candidate choice, democratic norms, tax preferences,
 and climate treaties.
 
-### `sw2022` --- @saha2022welfare: candidate choice
+::: {.callout-important}
+### Bundled data are reduced-$\mathbf Z$ illustrations
+
+These bundled datasets carry a **smaller set of respondent moderators
+($\mathbf Z$)** than the full replication data used in the paper (for
+example, `sw2022` here exposes 3 moderators versus 19 in the paper).
+The worked examples are therefore **illustrative of the workflow and
+API**, not exact reproductions: the structural quantities they produce
+will differ from the paper's published numbers, and the chapters
+deliberately avoid quoting fixed figures. Consult the paper for the
+definitive estimates. The examples also use light training settings
+(small `K`, `n_epochs`) for fast rendering; production fits use `K = 10`
+and `n_epochs >= 1000`.
+:::
+
+### `sw2022` --- @saha2022ambitious: candidate choice
 
 1,191 respondents $\times$ 3 tasks $\times$ 2 profiles = 7,146 rows.
 
@@ -105,7 +120,7 @@ The user guide is structured into the following chapters:
     each step against the true DGP.
 
 -   [Chapter @sec-sw]\
-    Full pipeline on the @saha2022welfare candidate-choice conjoint.
+    Full pipeline on the @saha2022ambitious candidate-choice conjoint.
 
 -   [Chapter @sec-gs]\
     @graham2020democracy democratic-norms conjoint, emphasizing
@@ -134,7 +149,7 @@ The user guide is structured into the following chapters:
 
 > Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
 > *sconjoint: Structural Deep-Learning Estimation for Conjoint
-> Experiments --- User Manual (v0.1.0).*
+> Experiments --- User Manual (v0.2.0).*
 > <https://github.com/xuyiqing/sconjoint>
 
 ```bibtex
@@ -142,7 +157,7 @@ The user guide is structured into the following chapters:
   title = {sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments --- User Manual},
   author = {Acharya, Avidit and Hainmueller, Jens and Xu, Yiqing},
   year = {2026},
-  note = {R package version 0.1.0},
+  note = {R package version 0.2.0},
   url = {https://github.com/xuyiqing/sconjoint}
 }
 ```

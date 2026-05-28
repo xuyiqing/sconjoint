@@ -34,10 +34,26 @@
 #' @param K Integer, number of respondent-clustered folds for
 #'   cross-fitting.  Defaults to 10.
 #' @param n_epochs Integer, number of full-batch Adam epochs per fold.
+#'   Default `1000L` (matches the paper's v13 production runtime; see
+#'   `code/04_training.R`).
 #' @param learning_rate Numeric, Adam learning rate.
-#' @param lambda Numeric L2 penalty on DNN parameters during training.
+#' @param weight_decay Either the character string `"adaptive"`
+#'   (default), or a non-negative numeric scalar passed to the Adam
+#'   optimizer's `weight_decay` argument.  When `"adaptive"`, the
+#'   per-fit weight decay is resolved from the dataset shape using the
+#'   paper's v13 rule:
+#'   \deqn{\mathrm{weight\_decay} = K_{adaptive} / NT,\quad
+#'         K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
+#'                                      25 & NT/p \ge 300 \end{cases}}{
+#'         weight_decay = K_adaptive / NT, K_adaptive = 15 if NT/p<300 else 25}
+#'   where `NT` is the number of task-level observations and `p` is the
+#'   number of attribute dummies.  This is what generated every current
+#'   paper number; see `code/04_training.R` and memo 42 for the
+#'   rationale.  Pass a fixed numeric (e.g. `1e-4`) to override.
 #' @param ridge_lambda Numeric ridge penalty used both in the
-#'   Lambda(Z) regression and in the Lambda inversion.
+#'   Lambda(Z) regression and in the Lambda inversion.  Distinct from
+#'   `weight_decay`, which regularises the DNN; this regularises the
+#'   Lambda(Z) ridge.
 #' @param seed Integer master seed.  When supplied, the cross-fit
 #'   output is bit-identical on 1 core and on N cores.  The function
 #'   saves and restores the R and torch RNG states on exit.
@@ -66,9 +82,19 @@
 #'   `seed`: they are always computed from the Stage-1 cross-fit.
 #' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
 #'   ensemble.  Independent of `seed`.  Default `12345L`.
-#' @param normalize_deltaX Logical (default `FALSE`).  When `TRUE`,
+#' @param varref_floor Numeric lower bound on the per-coefficient prior
+#'   variance when `stage2 = "varref"`.  Default `1e-3`, which matches
+#'   the production setting used for continuous-attribute designs
+#'   (Ballard-Rosa tax rates; see paper memo 42).  The previous default
+#'   of `0.01` clipped every coefficient and over-shrank under v13,
+#'   collapsing BR top-bracket validation `r` from `0.39` to `0.13`.
+#'   On factor-dummy designs the natural varref value sits well above
+#'   `1e-3`, so the floor is rarely binding there.  Ignored unless
+#'   `stage2 = "varref"`.
+#' @param normalize_deltaX Logical (default `FALSE`, matching the
+#'   paper's stated runtime).  When `TRUE`,
 #'   each column of the internal `deltaX` matrix is divided by its
-#'   sample SD before training, lambda estimation, DML inference, and
+#'   sample SD before training, Lambda(Z) estimation, DML inference, and
 #'   the Stage-2 MAP update.  At return all user-facing slots
 #'   (`theta`, `vcov`, `beta_hat`, `sigma_prior`, etc.) are
 #'   un-standardized back to the original-units scale, so
@@ -152,9 +178,9 @@ scfit <- function(formula, data,
                   respondent, task, profile,
                   hidden = "auto",
                   K = 10L,
-                  n_epochs = 2000L,
+                  n_epochs = 1000L,
                   learning_rate = 0.01,
-                  lambda = 1e-4,
+                  weight_decay = "adaptive",
                   ridge_lambda = 1e-4,
                   seed = NULL,
                   parallel = FALSE,
@@ -164,6 +190,7 @@ scfit <- function(formula, data,
                   verbose = FALSE,
                   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
                   stage2_seed = 12345L,
+                  varref_floor = 1e-3,
                   normalize_deltaX = FALSE) {
   call <- match.call()
   stage2 <- match.arg(stage2)
@@ -230,7 +257,7 @@ scfit <- function(formula, data,
 
   ## ---- 4b. Optional internal standardization of deltaX ----
   ## When `normalize_deltaX = TRUE`, divide each deltaX column by its
-  ## sample SD so the internal training / lambda / DML / MAP pipeline
+  ## sample SD so the internal training / Lambda(Z) / DML / MAP pipeline
   ## sees attributes on a common ~unit scale.  At assembly time we
   ## un-standardize the user-facing slots (beta_hat, theta, vcov,
   ## sigma_prior, sigma_post_diag, etc.) back to the original-units
@@ -279,12 +306,22 @@ scfit <- function(formula, data,
 
   ## ---- 6. Resolve hidden ----
   if (is.character(hidden) && length(hidden) == 1L && hidden == "auto") {
-    hidden_use <- .sc_auto_hidden(nrow(deltaX))
+    hidden_use <- .sc_auto_hidden(nrow(deltaX), p_beta = ncol(deltaX))
   } else if (is.numeric(hidden) && length(hidden) >= 1L && all(hidden >= 1)) {
     hidden_use <- as.integer(hidden)
   } else {
     stop("scfit(): `hidden` must be \"auto\" or a positive integer vector.")
   }
+
+  ## ---- 6b. Resolve weight_decay ----
+  ## "adaptive" --> paper v13 rule (memo 42, code/04_training.R).
+  ## Numeric pass-through otherwise.  Delegated to
+  ## `.sc_resolve_weight_decay()` so the rule itself can be unit-tested.
+  weight_decay_use <- .sc_resolve_weight_decay(
+    weight_decay,
+    NT = nrow(deltaX_internal),
+    p  = ncol(deltaX_internal)
+  )
 
   ## ---- 7. Master RNG state save/restore (R-level via withr) ----
   ## `withr::defer()` is tied to the calling frame and guarantees
@@ -325,7 +362,7 @@ scfit <- function(formula, data,
     hidden        = hidden_use,
     n_epochs      = n_epochs,
     learning_rate = learning_rate,
-    lambda        = lambda,
+    weight_decay  = weight_decay_use,
     seed          = seed,
     parallel      = parallel,
     n_cores       = n_cores,
@@ -382,9 +419,10 @@ scfit <- function(formula, data,
     hidden         = hidden_use,
     n_epochs       = n_epochs,
     learning_rate  = learning_rate,
-    lambda         = lambda,
+    weight_decay   = weight_decay_use,
     K              = K,
     stage2_seed    = stage2_seed,
+    varref_floor   = varref_floor,
     parallel       = parallel,
     n_cores        = n_cores,
     device         = device,
@@ -464,6 +502,7 @@ scfit <- function(formula, data,
     seed               = seed,
     n_epochs           = as.integer(n_epochs),
     learning_rate      = learning_rate,
+    weight_decay_used  = weight_decay_use,
     device             = device,
     parallel           = isTRUE(parallel),
     n_cores            = n_cores,

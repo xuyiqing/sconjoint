@@ -17,9 +17,18 @@ in c("map_c5", "varref").}
 \code{.sc_default_tier_thresholds()}.}
 
 \item{experimental}{Logical; if \code{TRUE} the print method shows
-an "experimental" banner.  Default \code{TRUE} for v0.2.1 because
-the estimator has not yet been validated against the paper's
-5,760-cell simulation grid.}
+an "experimental" banner.  Default \code{TRUE}.
+
+A build-time validation against a controlled 18-cell sim grid
+(see \code{inst/benchmarks/validate_design_diagnostic.R} and the
+companion memo in \verb{statsclaw-workspace/sconjoint/ref/}) gives
+Pearson rho(R^2_hat, R^2_true) = 0.76 across the grid but a mean
+absolute bias of 0.23, with the bias concentrated at low true
+R^2_Z (true R^2_Z = 0.10 gets mean R^2_hat = 0.52).  The
+estimator is useful for \strong{relative comparisons across
+coefficients within a fit} but its \strong{absolute value
+over-estimates the recovery share when Z is uninformative}.
+Treat tier hints as direction, not as a pass/fail gate.}
 }
 \value{
 An \code{sc_quantity} of subclass \code{sc_quantity_design_diagnostic}
