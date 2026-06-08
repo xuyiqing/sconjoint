@@ -6,14 +6,22 @@
 ## that `vcov.sc_fit()` works and downstream subgroup / joint-test
 ## quantities can be computed.
 ##
-## Notation mirrors spec.md section 6.5:
+## Notation mirrors the paper's Appendix B (Proposition "Average-parameter
+## asymptotic normality"). The estimator and its variance are
+## RESPONDENT-weighted -- the respondent is the i.i.d. sampling unit:
 ##
-##   psi_i^raw = beta_hat(Z_i) + Lambda^{-1}(Z_i) * DeltaX_i * (Y_i - G_i)
-##   theta_hat = colMeans(psi_raw)
-##   psi_c     = psi_raw - theta_hat  (centered)
-##   V_cluster = (M/(M-1)) * crossprod(cluster_sums) / N^2
+##   psi_it^raw = beta_hat(Z_i) + Lambda^{-1}(Z_i) * DeltaX_it * (Y_it - G_it)
+##   phi_bar_i  = (1 / T_i) * sum_t psi_it^raw          (within-respondent mean)
+##   theta_hat  = (1 / M)   * sum_i phi_bar_i           (respondent-weighted)
+##   phi_i      = phi_bar_i - theta_hat                 (centered respondent contrib.)
+##   V_cluster  = (1 / (M (M-1))) * sum_i phi_i phi_i^T
+##            ( = (M/(M-1)) * crossprod(phi_centered) / M^2 )
 ##
-## where `cluster_sums[m, ]` is the within-respondent sum of `psi_c`.
+## Under balanced T_i = T these reduce exactly to the task-weighted forms
+## colMeans(psi_raw) and (M/(M-1)) * crossprod(cluster_sums) / n^2 (with
+## n = sum_i T_i). Under unbalanced T_i (e.g. the Graham 2020 application,
+## T in {10,...,15}) they differ, and the respondent-weighted form is the
+## one the paper states and proves.
 
 #' Compute the DML influence function and point estimates
 #'
@@ -21,15 +29,26 @@
 #' @param lambda_obj List returned by `.sc_estimate_lambda()`.
 #' @param deltaX Numeric N x p matrix of per-task attribute differences.
 #' @param y Numeric vector of length N with 0/1 choice outcomes.
+#' @param respondent_id Optional length-N vector giving each row's
+#'   respondent. When supplied, `theta_hat` and `plugin` are
+#'   RESPONDENT-weighted, `(1/M) sum_i (1/T_i) sum_t .`, matching the
+#'   paper's Appendix B estimator. When `NULL` (legacy / balanced-only)
+#'   they fall back to the task-weighted `colMeans()`; the two coincide
+#'   when every respondent has the same number of tasks.
 #' @return A list with:
-#'   * `theta_hat` -- numeric p-vector of DML point estimates;
-#'   * `plugin` -- numeric p-vector of plug-in estimates
-#'     `colMeans(beta_hat)`;
+#'   * `theta_hat` -- numeric p-vector of (respondent-weighted) DML point
+#'     estimates;
+#'   * `plugin` -- numeric p-vector of plug-in estimates (respondent-mean
+#'     of `beta_hat`);
 #'   * `correction` -- numeric N x p matrix of DML correction terms;
-#'   * `influence_raw` -- numeric N x p matrix `beta_hat + correction`.
+#'   * `influence_raw` -- numeric N x p matrix `beta_hat + correction`;
+#'   * `phi_bar` -- numeric M x p matrix of within-respondent means of
+#'     `influence_raw` (rows ordered by sorted respondent id), or `NULL`
+#'     when `respondent_id` is not supplied.
 #' @keywords internal
 #' @noRd
-.sc_influence_function <- function(beta_hat, lambda_obj, deltaX, y) {
+.sc_influence_function <- function(beta_hat, lambda_obj, deltaX, y,
+                                   respondent_id = NULL) {
   if (!is.list(lambda_obj) ||
       !all(c("fitted", "p", "ridge", "prob_hat") %in% names(lambda_obj))) {
     stop(".sc_influence_function(): `lambda_obj` missing required fields.")
@@ -68,27 +87,51 @@
   }
 
   influence_raw <- beta_hat + correction
-  theta_hat     <- colMeans(influence_raw)
-  plugin        <- colMeans(beta_hat)
+
+  if (is.null(respondent_id)) {
+    ## Legacy / balanced-only: task-weighted average (== respondent-weighted
+    ## when every respondent has the same number of tasks).
+    theta_hat <- colMeans(influence_raw)
+    plugin    <- colMeans(beta_hat)
+    phi_bar   <- NULL
+  } else {
+    if (length(respondent_id) != n) {
+      stop(".sc_influence_function(): `respondent_id` length disagrees with nrow(beta_hat).")
+    }
+    ## Respondent-weighted: theta_hat = (1/M) sum_i phi_bar_i, with
+    ## phi_bar_i = (1/T_i) sum_t psi_it. rowsum(reorder=TRUE) groups by
+    ## sorted respondent id; the unit-vector rowsum yields the matching T_i.
+    key     <- as.character(respondent_id)
+    cnt     <- as.numeric(rowsum(rep.int(1, n), group = key, reorder = TRUE))
+    phi_bar <- rowsum(influence_raw, group = key, reorder = TRUE) / cnt
+    bbar    <- rowsum(beta_hat,      group = key, reorder = TRUE) / cnt
+    theta_hat <- colMeans(phi_bar)
+    plugin    <- colMeans(bbar)
+  }
 
   list(
     theta_hat     = theta_hat,
     plugin        = plugin,
     correction    = correction,
-    influence_raw = influence_raw
+    influence_raw = influence_raw,
+    phi_bar       = phi_bar
   )
 }
 
 #' Respondent-clustered variance-covariance of theta_hat
 #'
-#' Computes the full `p x p` clustered variance of the DML estimator
-#' using the cluster-crossproduct formula from spec.md section 6.5:
+#' Computes the full `p x p` RESPONDENT-weighted clustered variance of the
+#' DML estimator, matching the paper's Appendix B:
 #'
-#'   V_cluster = (M / (M-1)) * crossprod(cluster_sums) / N^2
+#'   V_cluster = (1 / (M (M-1))) * sum_i phi_i phi_i^T
+#'             = (M/(M-1)) * crossprod(phi_centered) / M^2
 #'
-#' where `cluster_sums[m, ]` is the sum of the centered influence
-#' contributions of respondent `m` across all of that respondent's
-#' tasks.
+#' where `phi_i = phi_bar_i - theta_hat` and `phi_bar_i` is respondent
+#' `i`'s within-respondent mean of the raw influence contributions. This
+#' is the textbook clustered variance of the respondent-weighted mean
+#' `theta_hat = (1/M) sum_i phi_bar_i`. Under balanced `T_i` it equals the
+#' task-weighted `(M/(M-1)) crossprod(cluster_sums)/n^2`; `theta_hat`
+#' passed in must therefore be the respondent-weighted point estimate.
 #'
 #' @param influence_raw Numeric N x p matrix of raw influence values.
 #' @param theta_hat Numeric p-vector of point estimates.
@@ -114,24 +157,21 @@
     stop(".sc_cluster_vcov(): `respondent_id` length disagrees with nrow(influence_raw).")
   }
 
-  infl_c <- sweep(influence_raw, 2L, theta_hat, check.margin = FALSE)
-  ## Sort respondent ids for deterministic ordering
   key <- as.character(respondent_id)
-  uniq <- sort(unique(key))
-  M <- length(uniq)
+  M   <- length(unique(key))
   if (M < 2L) {
     stop(".sc_cluster_vcov(): at least 2 clusters are required.")
   }
 
-  cluster_sums <- matrix(0, nrow = M, ncol = p)
-  idx_by_resp  <- split(seq_len(n), factor(key, levels = uniq))
-  for (m in seq_len(M)) {
-    rows <- idx_by_resp[[m]]
-    cluster_sums[m, ] <- colSums(infl_c[rows, , drop = FALSE])
-  }
+  ## Within-respondent means phi_bar_i (rows ordered by sorted id),
+  ## centered at the respondent-weighted theta_hat.
+  cnt     <- as.numeric(rowsum(rep.int(1, n), group = key, reorder = TRUE))
+  phi_bar <- rowsum(influence_raw, group = key, reorder = TRUE) / cnt  # M x p
+  phi_c   <- sweep(phi_bar, 2L, theta_hat, check.margin = FALSE)
 
-  dfc <- M / (M - 1)
-  vcov_mat <- dfc * crossprod(cluster_sums) / (n * n)
+  ## V_cluster = (1 / (M (M-1))) sum_i phi_i phi_i^T
+  ##           = (M/(M-1)) * crossprod(phi_c) / M^2
+  vcov_mat <- crossprod(phi_c) / (M * (M - 1))
   se <- sqrt(pmax(diag(vcov_mat), 0))
 
   list(vcov = vcov_mat, se = se, M = M)
@@ -145,13 +185,28 @@
 #'
 #' @param influence_raw Numeric N x p matrix of raw influence values.
 #' @param theta_hat Numeric p-vector of point estimates.
+#' @param respondent_id Optional length-N vector of respondent ids. When
+#'   supplied, the iid variance uses the respondent-weighted estimator's
+#'   per-row weights `w_it = 1 / (M T_i)` -- i.e. the variance the
+#'   respondent-weighted `theta_hat` would have if tasks were independent.
+#'   When `NULL` it falls back to the equal-weight `crossprod(infl_c)/n^2`.
+#'   The two coincide under balanced `T_i`.
 #' @return A list with `vcov` (p x p) and `se` (p-vector).
 #' @keywords internal
 #' @noRd
-.sc_iid_vcov <- function(influence_raw, theta_hat) {
+.sc_iid_vcov <- function(influence_raw, theta_hat, respondent_id = NULL) {
   n <- nrow(influence_raw)
   infl_c <- sweep(influence_raw, 2L, theta_hat, check.margin = FALSE)
-  vcov_mat <- crossprod(infl_c) / (n * n)
+  if (is.null(respondent_id)) {
+    vcov_mat <- crossprod(infl_c) / (n * n)
+  } else {
+    key <- as.character(respondent_id)
+    M   <- length(unique(key))
+    Ti  <- stats::ave(rep.int(1, n), key, FUN = length)  # T_i per row
+    Wc  <- infl_c * (1 / (M * Ti))
+    ## crossprod(Wc) = sum_it w_it^2 (psi_it - theta)(psi_it - theta)^T
+    vcov_mat <- crossprod(Wc)
+  }
   se <- sqrt(pmax(diag(vcov_mat), 0))
   list(vcov = vcov_mat, se = se)
 }

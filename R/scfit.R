@@ -382,10 +382,11 @@ scfit <- function(formula, data,
 
   ## ---- 11. DML influence and point estimates ----
   infl <- .sc_influence_function(
-    beta_hat   = beta_hat,
-    lambda_obj = lambda_obj,
-    deltaX     = deltaX_internal,
-    y          = y
+    beta_hat      = beta_hat,
+    lambda_obj    = lambda_obj,
+    deltaX        = deltaX_internal,
+    y             = y,
+    respondent_id = respondent_task
   )
   theta <- infl$theta_hat
   names(theta) <- x_names
@@ -398,7 +399,8 @@ scfit <- function(formula, data,
   )
   vcov_iid <- .sc_iid_vcov(
     influence_raw = infl$influence_raw,
-    theta_hat     = theta
+    theta_hat     = theta,
+    respondent_id = respondent_task
   )
   rownames(vcov_cluster$vcov) <- colnames(vcov_cluster$vcov) <- x_names
   rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
