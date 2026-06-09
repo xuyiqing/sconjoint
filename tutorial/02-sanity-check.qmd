@@ -197,9 +197,13 @@ payoff --- it gives a complete preference vector for each respondent.
 #| label: sim-beta-recovery
 beta_hat_all <- predict(fit_sim)
 
-## De-duplicate to respondent level
+## One row per respondent, reordered to `beta_true`'s respondent order.
+## `fit_sim$respondent_id` follows the package's internal row order, which
+## is not the 1..M order of the simulated truth, so align by id rather than
+## by position.
 first_row <- !duplicated(fit_sim$respondent_id)
-beta_hat <- beta_hat_all[first_row, ]
+rid       <- fit_sim$respondent_id[first_row]
+beta_hat  <- beta_hat_all[first_row, ][order(rid), ]
 
 ## Correlation between true and estimated beta
 data.frame(
@@ -213,10 +217,13 @@ data.frame(
 )
 ```
 
-High correlations for $x_1$ and $x_2$ confirm that the DNN recovers
-the individual-level mapping $\beta(Z)$. The correlation for $x_3$ is
-low because $\beta_3$ is constant --- there is no heterogeneity to
-recover.
+The clear positive correlations for $x_1$ and $x_2$ confirm that the DNN
+recovers the individual-level mapping $\beta(Z)$; the magnitudes are
+moderate because individual coefficients are recovered more noisily than
+the population averages with only $T = 6$ tasks per respondent. The
+correlation for $x_3$ is undefined (`NA`) because $\beta_3$ is constant
+--- with no variation in the truth, there is nothing to correlate
+against.
 
 ```{r}
 #| label: sim-scatter
@@ -236,9 +243,9 @@ ggplot(df_compare, aes(x = true, y = estimated)) +
   theme_minimal(base_size = 12)
 ```
 
-The point cloud tracks the 45-degree line, confirming recovery of both
-**direction** and **magnitude**. The beta ridgelines below show the
-full distribution:
+The point cloud slopes along the 45-degree line, confirming recovery of
+the **direction** and, more roughly, the **magnitude** of $\beta_1(Z)$.
+The beta ridgelines below show the full distribution:
 
 ```{r}
 #| label: sim-ridgelines
