@@ -28,6 +28,19 @@
 #'   respondent id in `data`.
 #' @param task Column name of the task id in `data`.
 #' @param profile Column name of the within-task profile id in `data`.
+#' @param learner First-stage learner for `beta(Z)`.  One of `"dnn"`
+#'   (default; the cross-fitted structural deep network), `"enet"`
+#'   (cross-fitted elastic-net logit on attribute differences and their
+#'   first-order moderator interactions; requires the `glmnet` package), or
+#'   `"grf"` (a generalized-random-forest localized logit; requires the
+#'   `grf` package).  All three feed the identical DML inference layer ---
+#'   only the first-stage `beta_hat` differs.  The DNN is the estimator used
+#'   throughout the paper's applications; `"enet"` and `"grf"` are provided
+#'   so the same debiased quantities can be computed with a flexible learner
+#'   of the user's choice (see the package vignette / paper appendix).  The
+#'   DNN-specific arguments (`hidden`, `n_epochs`, `learning_rate`,
+#'   `weight_decay`, `device`, `keep_modules`, and the `stage2` family) are
+#'   ignored when `learner != "dnn"`, and `stage2` is forced to `"none"`.
 #' @param hidden Either the character string `"auto"` (default, picks
 #'   a three-tier default from `N*T`, see `.sc_auto_hidden()`), or an
 #'   integer vector of hidden-layer widths.
@@ -54,6 +67,9 @@
 #'   Lambda(Z) regression and in the Lambda inversion.  Distinct from
 #'   `weight_decay`, which regularises the DNN; this regularises the
 #'   Lambda(Z) ridge.
+#' @param enet_alpha Elastic-net mixing parameter in `[0, 1]` used when
+#'   `learner = "enet"` (`1` = lasso, `0` = ridge).  Default `0.5`.
+#'   Ignored for other learners.
 #' @param seed Integer master seed.  When supplied, the cross-fit
 #'   output is bit-identical on 1 core and on N cores.  The function
 #'   saves and restores the R and torch RNG states on exit.
@@ -176,12 +192,14 @@
 #' @export
 scfit <- function(formula, data,
                   respondent, task, profile,
+                  learner = c("dnn", "enet", "grf"),
                   hidden = "auto",
                   K = 10L,
                   n_epochs = 1000L,
                   learning_rate = 0.01,
                   weight_decay = "adaptive",
                   ridge_lambda = 1e-4,
+                  enet_alpha = 0.5,
                   seed = NULL,
                   parallel = FALSE,
                   n_cores = NULL,
@@ -193,7 +211,25 @@ scfit <- function(formula, data,
                   varref_floor = 1e-3,
                   normalize_deltaX = FALSE) {
   call <- match.call()
+  learner <- match.arg(learner)
+  stage2_supplied <- !missing(stage2)
   stage2 <- match.arg(stage2)
+
+  ## Stage 2 (the MAP/varref/mixed-logit refinement) is DNN-specific: its
+  ## ensemble retrains a second DNN.  For the flexible alternative learners
+  ## the first-stage matrix `beta_hat` already is the estimate every quantity
+  ## function reads, so we pass it through unchanged.  DML point estimates and
+  ## clustered SEs are computed from the Stage-1 cross-fit regardless of
+  ## `stage2`, so this does not affect inference.  Warn only if the user
+  ## explicitly asked for a DNN-only stage2; the default downgrade is silent.
+  if (learner != "dnn" && stage2 != "none") {
+    if (stage2_supplied) {
+      warning(sprintf(
+        "scfit(): stage2 = \"%s\" is only available for learner = \"dnn\"; using stage2 = \"none\" for learner = \"%s\".",
+        stage2, learner), call. = FALSE)
+    }
+    stage2 <- "none"
+  }
 
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop("scfit(): the 'torch' package is required.")
@@ -349,25 +385,46 @@ scfit <- function(formula, data,
   ## ---- 8. Fold assignment ----
   fold_id <- .sc_make_folds(respondent_task, K = K, seed = seed)
 
-  ## ---- 9. Cross-fitting ----
+  ## ---- 9. Cross-fitting (first stage) ----
   ## All internal computations downstream use `deltaX_internal` (the
   ## standardized matrix when normalize_deltaX = TRUE; identical to
   ## deltaX otherwise).  We un-standardize the user-facing slots at
-  ## assembly time using `sd_dx`.
-  cf <- .sc_crossfit(
-    deltaX        = deltaX_internal,
-    y             = y,
-    Z             = Z_task,
-    fold_id       = fold_id,
-    hidden        = hidden_use,
-    n_epochs      = n_epochs,
-    learning_rate = learning_rate,
-    weight_decay  = weight_decay_use,
-    seed          = seed,
-    parallel      = parallel,
-    n_cores       = n_cores,
-    device        = device,
-    verbose       = verbose
+  ## assembly time using `sd_dx`.  The first stage is pluggable: the DNN
+  ## (default) or a flexible alternative learner.  Each produces the same
+  ## out-of-sample `beta_hat` (N x p) that the DML layer consumes.
+  cf <- switch(
+    learner,
+    dnn = .sc_crossfit(
+      deltaX        = deltaX_internal,
+      y             = y,
+      Z             = Z_task,
+      fold_id       = fold_id,
+      hidden        = hidden_use,
+      n_epochs      = n_epochs,
+      learning_rate = learning_rate,
+      weight_decay  = weight_decay_use,
+      seed          = seed,
+      parallel      = parallel,
+      n_cores       = n_cores,
+      device        = device,
+      verbose       = verbose
+    ),
+    enet = .sc_crossfit_enet(
+      deltaX  = deltaX_internal,
+      y       = y,
+      Z       = Z_task,
+      fold_id = fold_id,
+      alpha   = enet_alpha,
+      seed    = seed
+    ),
+    grf = .sc_crossfit_grf(
+      deltaX        = deltaX_internal,
+      y             = y,
+      Z             = Z_task,
+      fold_id       = fold_id,
+      respondent_id = respondent_task,
+      seed          = seed
+    )
   )
   beta_hat <- cf$beta_hat
   colnames(beta_hat) <- x_names
@@ -509,7 +566,9 @@ scfit <- function(formula, data,
     parallel           = isTRUE(parallel),
     n_cores            = n_cores,
     loss_traces        = cf$loss_traces,
-    nets               = if (isTRUE(keep_modules)) cf$nets else NULL,
+    learner            = learner,
+    nets               = if (learner == "dnn" && isTRUE(keep_modules)) cf$nets else NULL,
+    fold_models        = if (learner != "dnn" && isTRUE(keep_modules)) cf$nets else NULL,
     keep_modules       = isTRUE(keep_modules)
   )
   class(fit) <- c("sc_fit", "list")

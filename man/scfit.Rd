@@ -10,12 +10,14 @@ scfit(
   respondent,
   task,
   profile,
+  learner = c("dnn", "enet", "grf"),
   hidden = "auto",
   K = 10L,
   n_epochs = 1000L,
   learning_rate = 0.01,
   weight_decay = "adaptive",
   ridge_lambda = 1e-04,
+  enet_alpha = 0.5,
   seed = NULL,
   parallel = FALSE,
   n_cores = NULL,
@@ -46,6 +48,20 @@ respondent id in \code{data}.}
 \item{task}{Column name of the task id in \code{data}.}
 
 \item{profile}{Column name of the within-task profile id in \code{data}.}
+
+\item{learner}{First-stage learner for \code{beta(Z)}.  One of \code{"dnn"}
+(default; the cross-fitted structural deep network), \code{"enet"}
+(cross-fitted elastic-net logit on attribute differences and their
+first-order moderator interactions; requires the \code{glmnet} package), or
+\code{"grf"} (a generalized-random-forest localized logit; requires the
+\code{grf} package).  All three feed the identical DML inference layer ---
+only the first-stage \code{beta_hat} differs.  The DNN is the estimator used
+throughout the paper's applications; \code{"enet"} and \code{"grf"} are provided
+so the same debiased quantities can be computed with a flexible learner
+of the user's choice (see the package vignette / paper appendix).  The
+DNN-specific arguments (\code{hidden}, \code{n_epochs}, \code{learning_rate},
+\code{weight_decay}, \code{device}, \code{keep_modules}, and the \code{stage2} family) are
+ignored when \code{learner != "dnn"}, and \code{stage2} is forced to \code{"none"}.}
 
 \item{hidden}{Either the character string \code{"auto"} (default, picks
 a three-tier default from \code{N*T}, see \code{.sc_auto_hidden()}), or an
@@ -78,6 +94,10 @@ rationale.  Pass a fixed numeric (e.g. \code{1e-4}) to override.}
 Lambda(Z) regression and in the Lambda inversion.  Distinct from
 \code{weight_decay}, which regularises the DNN; this regularises the
 Lambda(Z) ridge.}
+
+\item{enet_alpha}{Elastic-net mixing parameter in \verb{[0, 1]} used when
+\code{learner = "enet"} (\code{1} = lasso, \code{0} = ridge).  Default \code{0.5}.
+Ignored for other learners.}
 
 \item{seed}{Integer master seed.  When supplied, the cross-fit
 output is bit-identical on 1 core and on N cores.  The function
