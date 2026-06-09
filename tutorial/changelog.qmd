@@ -15,6 +15,21 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
   the Stage-1 single-DNN prediction.
 * Set `stage2 = "none"` on `scfit()` to recover v0.1 behavior exactly.
 
+**Pluggable first-stage learners**
+
+* `scfit(learner = ...)` selects the first-stage estimator of
+  $\beta(\mathbf Z)$: `"dnn"` (default, the cross-fitted deep network),
+  `"enet"` (cross-fitted elastic-net logit with an automatically
+  spline-expanded moderator basis; needs `glmnet`), or `"grf"`
+  (a generalized-random-forest local logit; needs `grf`). All three feed
+  the identical DML inference; only the first stage changes. The Stage-2
+  refinement is specific to the network, so `stage2` is forced to
+  `"none"` for the alternative learners.
+* `enet_alpha`, `enet_df`, `enet_interactions`: the elastic-net mixing
+  parameter and its spline basis-expansion controls (`enet_df = 1` with
+  `enet_interactions = FALSE` recovers a linear-in-moderators first
+  stage). See @sec-sanity for a worked recovery comparison.
+
 **New `scfit()` arguments**
 
 * `stage2`: one of `"map_c5"` (default), `"none"`, `"varref"`,

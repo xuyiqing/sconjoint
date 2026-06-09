@@ -140,6 +140,54 @@ plot makes the pattern visual:
 plot_amce(fit_sim)
 ```
 
+## First-stage learners
+
+The debiased population averages come from the orthogonal score and
+respondent-clustered cross-fitting, which do not depend on *how* the
+first-stage mean $\hat\beta(\mathbf Z)$ is estimated. The default is the
+cross-fitted deep network used throughout this book; `scfit()` also
+provides two flexible alternatives through the `learner` argument.
+Setting `learner = "enet"` uses a cross-fitted elastic-net logit that
+expands the moderators into a spline basis, so $\hat\beta(\mathbf Z)$ can
+be nonlinear; `learner = "grf"` uses a generalized-random-forest local
+logit. The two options need the `glmnet` and `grf` packages. Only the
+first stage changes --- the cross-fitting, the orthogonal correction, and
+the clustered standard errors are identical.
+
+Refitting `simdata` with each learner and comparing the recovered
+population averages against the known truth:
+
+```{r}
+#| label: sim-learners
+#| eval: !expr requireNamespace("glmnet", quietly = TRUE) && requireNamespace("grf", quietly = TRUE)
+fit_en <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data = simdata, respondent = "respondent", task = "task",
+  profile = "profile", learner = "enet", K = 5L, seed = 42
+)
+fit_grf <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data = simdata, respondent = "respondent", task = "task",
+  profile = "profile", learner = "grf", K = 5L, seed = 42
+)
+
+data.frame(
+  attribute = names(theta_true),
+  true      = unname(theta_true),
+  dnn       = round(unname(coef(fit_sim)), 3),
+  enet      = round(unname(coef(fit_en)), 3),
+  grf       = round(unname(coef(fit_grf)), 3),
+  row.names = NULL
+)
+```
+
+All three learners recover $E[\beta_1] = 0.5$, $E[\beta_2] = -0.8$, and
+$E[\beta_3] = 0.3$ closely: valid debiased inference is a property of the
+cross-fitted orthogonal score, not of the particular first stage. The
+deep network is the default because it is the most robust across the
+shape of preference heterogeneity; the elastic-net and forest learners
+are lighter-weight alternatives.
+
 ## Individual-level recovery
 
 The per-respondent $\hat\beta(\mathbf Z_i)$ matrix is the structural
