@@ -46,6 +46,25 @@ test_that("debiased vote share for a contrast lies in (0, 1)", {
   expect_true(is.finite(vs["se"]) && vs["se"] >= 0)
 })
 
+test_that("sc_mrs / sc_wtp population estimand returns the debiased ratio", {
+  fit <- .fit_toy()
+  m  <- sc_mrs(fit, "a1", "a2", estimand = "population")
+  r  <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "mrs")
+  expect_equal(unname(m$estimate), unname(r$estimate), tolerance = 1e-10)
+  expect_equal(unname(m$se),       unname(r$se),       tolerance = 1e-10)
+  expect_identical(m$details$estimand, "population")
+  expect_true(m$details$fieller_type %in%
+                c("bounded", "empty", "all_real", "exclusive"))
+
+  w  <- sc_wtp(fit, "a1", "a2", estimand = "population")
+  rw <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "wtp")
+  expect_equal(unname(w$estimate), unname(rw$estimate), tolerance = 1e-10)
+  expect_identical(w$details$estimand, "population")
+
+  ## individual (default) path is unchanged
+  expect_identical(sc_mrs(fit, "a1", "a2")$name, "mrs")
+})
+
 test_that("debiased inference errors clearly when the fit lacks the needed slots", {
   fit <- .fit_toy()
   fit$correction <- NULL

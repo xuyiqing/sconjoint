@@ -15,15 +15,23 @@
 #' @param object An `sc_fit`.
 #' @param attr Numerator attribute level.
 #' @param cost_attr Single-column cost attribute.
+#' @param estimand Either `"individual"` (default) for the per-respondent
+#'   sign-flipped MRS, or `"population"` for the debiased population WTP
+#'   \eqn{-\theta_{\mathrm{attr}}/\theta_{\mathrm{cost}}} (paper Section
+#'   2.3): orthogonal-score average parameters with a delta-method standard
+#'   error and a Fieller interval. The `"population"` estimand ignores
+#'   `trim`, `subgroup`, and `which_beta`.
 #' @param trim,subgroup Forwarded to `sc_mrs()`.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. Forwarded to
 #'   `sc_mrs()`. See `?sc_mrs` for details.
 #' @return An `sc_quantity` with the sign-flipped MRS.
 #' @export
 sc_wtp <- function(object, attr, cost_attr,
+                   estimand = c("individual", "population"),
                    trim = c(0.01, 0.99), subgroup = NULL,
                    which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  estimand   <- match.arg(estimand)
   which_beta <- match.arg(which_beta)
   j <- .sc_parse_dummy_name(object, attr)
   k <- .sc_parse_dummy_name(object, cost_attr)
@@ -43,6 +51,23 @@ sc_wtp <- function(object, attr, cost_attr,
       ))
     }
   }
+  if (estimand == "population") {
+    ## Debiased population WTP = -theta_attr / theta_cost (paper Section 2.3):
+    ## orthogonal score + delta-method SE + Fieller (WTP construction).
+    r <- .sc_debiased_ratio(object, j, k, transform = "wtp")
+    sign_cost <- sign(mean(.sc_pick_beta(object, which_beta)[, k]))
+    return(.sc_quantity(
+      name = "wtp", estimate = r$estimate, se = r$se,
+      ci_lo = r$ci_lo, ci_hi = r$ci_hi,
+      details = list(
+        estimand     = "population",
+        fieller_lo   = r$fieller_lo, fieller_hi = r$fieller_hi,
+        fieller_type = r$fieller_type,
+        attr = attr, cost_attr = cost_attr, sign_cost = sign_cost,
+        se_method    = "debiased orthogonal score (delta-method), respondent-clustered"),
+      call = match.call()))
+  }
+
   mrs_obj <- sc_mrs(object,
                     numerator   = attr,
                     denominator = cost_attr,

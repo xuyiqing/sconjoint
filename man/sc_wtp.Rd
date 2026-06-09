@@ -8,6 +8,7 @@ sc_wtp(
   object,
   attr,
   cost_attr,
+  estimand = c("individual", "population"),
   trim = c(0.01, 0.99),
   subgroup = NULL,
   which_beta = c("hybrid", "dnn")
@@ -19,6 +20,13 @@ sc_wtp(
 \item{attr}{Numerator attribute level.}
 
 \item{cost_attr}{Single-column cost attribute.}
+
+\item{estimand}{Either \code{"individual"} (default) for the per-respondent
+sign-flipped MRS, or \code{"population"} for the debiased population WTP
+\eqn{-\theta_{\mathrm{attr}}/\theta_{\mathrm{cost}}} (paper Section
+2.3): orthogonal-score average parameters with a delta-method standard
+error and a Fieller interval. The \code{"population"} estimand ignores
+\code{trim}, \code{subgroup}, and \code{which_beta}.}
 
 \item{trim, subgroup}{Forwarded to \code{sc_mrs()}.}
 

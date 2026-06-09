@@ -8,6 +8,7 @@ sc_mrs(
   object,
   numerator,
   denominator,
+  estimand = c("individual", "population"),
   trim = c(0.01, 0.99),
   subgroup = NULL,
   which_beta = c("hybrid", "dnn")
@@ -19,6 +20,14 @@ sc_mrs(
 \item{numerator, denominator}{Character of form \code{"attribute:level"},
 or a bare dummy column name matching \code{object$attr_names}, or an
 integer column index.}
+
+\item{estimand}{Either \code{"individual"} (default) for the
+respondent-averaged trimmed ratio of per-respondent
+\eqn{\beta_j(Z_i)/\beta_k(Z_i)} described below, or \code{"population"} for
+the debiased population ratio \eqn{\theta_j/\theta_k} (paper Section
+2.3): the orthogonal-score average parameters with a delta-method
+standard error and a Fieller interval (returned in \code{details}). The
+\code{"population"} estimand ignores \code{trim}, \code{subgroup}, and \code{which_beta}.}
 
 \item{trim}{Length-2 numeric with the lower and upper quantiles at
 which the raw ratio is clipped.  Default \code{c(0.01, 0.99)}.}
