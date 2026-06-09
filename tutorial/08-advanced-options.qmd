@@ -92,6 +92,39 @@ respondents prefer Y", it means the MAP-shrunk fraction (the
 `"hybrid"` default). The raw DNN fraction is usually wider because
 unrefined respondent-level coefficients have more sampling noise.
 
+## Debiased inference for the additional quantities
+
+The population-average parameter `theta` (from `coef()` / `summary()`)
+carries double/debiased machine-learning inference: an orthogonal-score
+correction with a respondent-clustered standard error. The same
+correction, implemented for the paper's Appendix C, extends to the other
+quantities of interest, so several `sc_*` functions can return debiased
+confidence intervals rather than plug-in ones:
+
+| Quantity | Debiased option |
+|---|---|
+| `sc_counterfactual()` | `vartype = "orthogonal"` (the **default**); `vartype = "plugin"` for the v0.1 plug-in |
+| `sc_ame()` | always debiased (the structural AME on the probability scale) |
+| `sc_mrs()`, `sc_wtp()` | `estimand = "population"` (debiased ratio `theta_j/theta_k` with a Fieller interval) |
+| `sc_importance()` | `vartype = "orthogonal"` (opt-in; the plug-in shares stay the default) |
+
+```{r}
+#| label: debiased-example
+#| eval: false
+sc_counterfactual(fit, A = list(...), B = list(...))     # debiased by default
+sc_ame(fit, "attr_level")                                # debiased structural AME
+sc_mrs(fit, "attr_a", "attr_b", estimand = "population") # debiased theta_j/theta_k
+sc_importance(fit, vartype = "orthogonal")               # debiased shares (opt-in)
+```
+
+These debiased estimates use the Stage-1 cross-fitted first stage and are
+population averages, so `subgroup` and `which_beta` do not apply to them.
+Applied to `theta` itself the orthogonal score reproduces the
+average-parameter estimate and its clustered standard error exactly. For
+`sc_importance()`, the debiased shares are a ratio of orthogonal-score
+numerators and can fall outside `[0, 1]` when the first stage is noisy,
+which is why the always-in-`[0, 1]` plug-in shares remain the default.
+
 ## Reproducibility: `seed` and `stage2_seed`
 
 `scfit()` ships a bit-exact determinism guarantee:

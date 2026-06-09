@@ -15,6 +15,19 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
   the Stage-1 single-DNN prediction.
 * Set `stage2 = "none"` on `scfit()` to recover v0.1 behavior exactly.
 
+**Debiased inference for the additional quantities**
+
+* The orthogonal-score debiasing now extends beyond the average
+  parameter to the quantities of Appendix C. `sc_counterfactual()`
+  defaults to a debiased counterfactual probability
+  (`vartype = "orthogonal"`); new `sc_ame()` returns a debiased
+  structural average marginal effect on the probability scale;
+  `sc_mrs()` / `sc_wtp()` add `estimand = "population"` for the debiased
+  ratio of average parameters with a Fieller interval; and
+  `sc_importance(vartype = "orthogonal")` gives the debiased
+  attribute-importance shares. `scfit()` now stores a single-profile pool
+  (`object$profile_pool`) for the AME integral. See @sec-advanced.
+
 **Pluggable first-stage learners**
 
 * `scfit(learner = ...)` selects the first-stage estimator of

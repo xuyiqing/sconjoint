@@ -1,3 +1,33 @@
+# sconjoint 0.2.0.9003 (development version)
+
+## Debiased inference for the additional quantities of interest
+
+The orthogonal-score debiasing now extends beyond the average parameter
+`theta` to the additional quantities of the paper's Appendix C, through
+the per-row score `psi^H = H(f_hat) + grad_f H' u`, where `u` is the
+universal correction already formed by `scfit()` and stored on the fit.
+With `H = f_k` this reproduces the average-parameter estimate and its
+clustered standard error exactly.
+
+* `sc_counterfactual()` gains `vartype = c("orthogonal", "plugin")` with
+  `"orthogonal"` as the default: the counterfactual choice probability
+  now carries a respondent-clustered standard error that propagates
+  first-stage uncertainty. The v0.1 plug-in, which did not, remains
+  available via `vartype = "plugin"`.
+* New `sc_ame(object, attr)`: the debiased structural average marginal
+  effect on the probability scale. `scfit()` now stores a single-profile
+  pool (`object$profile_pool`) used for the design-law integral.
+* `sc_mrs()` / `sc_wtp()` gain `estimand = "population"`: the debiased
+  population ratio `theta_j / theta_k` (delta-method plus Fieller
+  interval), distinct from the default per-respondent trimmed ratio.
+* `sc_importance()` gains `vartype = "orthogonal"`: the debiased
+  Appendix-C shares (a ratio of orthogonal-score numerators with a
+  clustered simplex-Jacobian standard error) for
+  `design = "design_variance"`. This is opt-in -- the always-in-`[0, 1]`
+  plug-in shares stay the default, because the debiased shares are a
+  ratio and can fall outside `[0, 1]` when the first stage is noisy.
+
+
 # sconjoint 0.2.0.9002 (development version)
 
 ## Pluggable first-stage learners
