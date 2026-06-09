@@ -7,6 +7,7 @@
 sc_importance(
   object,
   design = c("design_variance", "uniform", "empirical"),
+  vartype = c("plugin", "orthogonal"),
   subgroup = NULL,
   which_beta = c("hybrid", "dnn")
 )

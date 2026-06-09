@@ -49,12 +49,35 @@
 #' @export
 sc_importance <- function(object,
                           design = c("design_variance", "uniform", "empirical"),
+                          vartype = c("plugin", "orthogonal"),
                           subgroup = NULL,
                           which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
   design <- match.arg(design)
+  vartype <- match.arg(vartype)
   which_beta <- match.arg(which_beta)
   map <- .sc_attr_map(object)
+
+  ## Opt-in debiased (orthogonal-score) shares -- the paper's Appendix C
+  ## estimand: share_a = N_a / sum_a N_a with N_a = E[f_a' S_a f_a] and a
+  ## clustered simplex-Jacobian standard error, on the Stage-1 f-hat
+  ## (`subgroup`/`which_beta` do not apply; it is a population functional).
+  ## The default plug-in shares below are always in [0, 1]; the debiased
+  ## shares are a ratio and can fall outside [0, 1] when the first stage is
+  ## noisy or under-fit, so they are opt-in via vartype = "orthogonal".
+  if (vartype == "orthogonal") {
+    if (design != "design_variance") {
+      stop("sc_importance(): vartype = \"orthogonal\" is implemented only for ",
+           "design = \"design_variance\" (the paper's weighting).", call. = FALSE)
+    }
+    df <- .sc_debiased_importance(object, map)
+    return(.sc_quantity(
+      name = "importance", estimate = df, se = NA_real_,
+      details = list(design = design, vartype = "orthogonal",
+                     se_method = "debiased orthogonal score, respondent-clustered"),
+      call = match.call()))
+  }
+
   B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   resp_s <- object$respondent_id[S]

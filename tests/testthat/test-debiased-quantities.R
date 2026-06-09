@@ -46,6 +46,16 @@ test_that("debiased vote share for a contrast lies in (0, 1)", {
   expect_true(is.finite(vs["se"]) && vs["se"] >= 0)
 })
 
+test_that("sc_importance vartype='orthogonal' returns the debiased shares", {
+  fit <- .fit_toy()
+  expect_true(all(sc_importance(fit)$estimate$share >= 0))   # plug-in default in [0,1]
+  imp <- sc_importance(fit, vartype = "orthogonal")
+  expect_identical(imp$details$vartype, "orthogonal")
+  expect_equal(sum(imp$estimate$share), 1, tolerance = 1e-8)
+  expect_error(sc_importance(fit, design = "empirical", vartype = "orthogonal"),
+               "design_variance")
+})
+
 test_that("sc_mrs / sc_wtp population estimand returns the debiased ratio", {
   fit <- .fit_toy()
   m  <- sc_mrs(fit, "a1", "a2", estimand = "population")
