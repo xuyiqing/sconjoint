@@ -1,3 +1,21 @@
+# sconjoint 0.2.0.9002 (development version)
+
+## Pluggable first-stage learners
+
+- `scfit(learner = ...)` adds two alternatives to the default deep
+  network (`"dnn"`): `"enet"`, a cross-fitted elastic-net logit with an
+  automatically spline-expanded moderator basis (needs `glmnet`), and
+  `"grf"`, a generalized-random-forest local logit (needs `grf`).  All
+  three feed the identical DML inference; only the first stage changes.
+  `stage2` is forced to `"none"` for the alternative learners.
+- New `scfit()` arguments `enet_alpha`, `enet_df`, `enet_interactions`
+  control the elastic-net mixing parameter and the spline basis expansion
+  (`enet_df = 1` with `enet_interactions = FALSE` recovers a
+  linear-in-moderators first stage).
+- `glmnet` and `grf` added to Suggests.  New tutorial section
+  (Simulated Example) compares learner recovery against known truth.
+
+
 # sconjoint 0.2.0.9001 (development version)
 
 Paper v13 alignment.  Three changes to bring `scfit()` defaults in
