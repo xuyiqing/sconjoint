@@ -75,6 +75,25 @@ test_that("sc_mrs / sc_wtp population estimand returns the debiased ratio", {
   expect_identical(sc_mrs(fit, "a1", "a2")$name, "mrs")
 })
 
+test_that("sc_ame returns a finite debiased AME with a clustered SE", {
+  fit <- .fit_toy()
+  a <- sc_ame(fit, "a1")
+  expect_identical(a$name, "ame")
+  expect_true(is.finite(a$estimate) && is.finite(a$se) && a$se >= 0)
+  expect_identical(a$details$vartype, "orthogonal")
+  expect_true(a$details$n_pool > 0)
+})
+
+test_that("sc_counterfactual debiased default and plug-in both give probs in (0,1)", {
+  fit <- .fit_toy()
+  d <- sc_counterfactual(fit, A = list(a1 = 1), B = list(a1 = -1))
+  expect_identical(d$details$vartype, "orthogonal")
+  expect_true(d$estimate > 0 && d$estimate < 1 && is.finite(d$se) && d$se >= 0)
+  p <- sc_counterfactual(fit, A = list(a1 = 1), B = list(a1 = -1),
+                         vartype = "plugin")
+  expect_true(p$estimate > 0 && p$estimate < 1)
+})
+
 test_that("debiased inference errors clearly when the fit lacks the needed slots", {
   fit <- .fit_toy()
   fit$correction <- NULL

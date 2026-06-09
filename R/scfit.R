@@ -301,6 +301,16 @@ scfit <- function(formula, data,
   colnames(deltaX) <- x_names
   colnames(Z_task) <- z_names
 
+  ## Single-profile pool for debiased AME integration (the E_X integral over
+  ## the design law P_X). A capped, deterministic subsample of the encoded
+  ## single profiles, on the same original attribute scale as `deltaX`.
+  n_pool   <- min(1000L, nrow(X))
+  pool_idx <- if (nrow(X) > n_pool) {
+    round(seq(1, nrow(X), length.out = n_pool))
+  } else seq_len(nrow(X))
+  profile_pool <- X[pool_idx, , drop = FALSE]
+  colnames(profile_pool) <- x_names
+
   ## ---- 4b. Optional internal standardization of deltaX ----
   ## When `normalize_deltaX = TRUE`, divide each deltaX column by its
   ## sample SD so the internal training / Lambda(Z) / DML / MAP pipeline
@@ -554,6 +564,7 @@ scfit <- function(formula, data,
     stage2_seed        = as.integer(stage2_seed),
     Z                  = Z_task,
     deltaX             = deltaX,
+    profile_pool       = profile_pool,
     y                  = y,
     plugin             = plugin_orig,
     correction         = correction_orig,

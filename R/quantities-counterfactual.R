@@ -15,18 +15,40 @@
 #'
 #' @param object An `sc_fit`.
 #' @param A,B Named lists describing the two profiles.
+#' @param vartype Either `"orthogonal"` (default) for the debiased
+#'   counterfactual probability \eqn{E[G((X_A - X_B)^\top f(Z))]} -- the
+#'   orthogonal score on the Stage-1 first stage, with a respondent-clustered
+#'   standard error that propagates first-stage uncertainty -- or `"plugin"`
+#'   for the v0.1 average of per-respondent probabilities (which does not).
+#'   The `"orthogonal"` estimand is a population average and ignores
+#'   `subgroup` and `which_beta`.
 #' @param subgroup Optional row selector, see `sc_mrs`.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with scalar estimate, clustered SE,
 #'   normal-approx CI.
 #' @export
-sc_counterfactual <- function(object, A, B, subgroup = NULL,
+sc_counterfactual <- function(object, A, B,
+                              vartype = c("orthogonal", "plugin"),
+                              subgroup = NULL,
                               which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  vartype <- match.arg(vartype)
   which_beta <- match.arg(which_beta)
   XA <- .sc_profile_to_dummies(object, A)
   XB <- .sc_profile_to_dummies(object, B)
   dx <- XA - XB
+
+  if (vartype == "orthogonal") {
+    d <- .sc_debiased_scalar(object, .sc_dH_voteshare(dx))
+    return(.sc_quantity(
+      name = "counterfactual", estimate = unname(d["estimate"]),
+      se = unname(d["se"]), ci_lo = unname(d["ci_lo"]), ci_hi = unname(d["ci_hi"]),
+      details = list(delta_x = dx, profile_A = A, profile_B = B,
+                     vartype = "orthogonal",
+                     se_method = "debiased orthogonal score, respondent-clustered"),
+      call = match.call()))
+  }
+
   Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   lin <- as.numeric(Bm[S, , drop = FALSE] %*% dx)
