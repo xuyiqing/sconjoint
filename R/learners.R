@@ -28,22 +28,79 @@
 ## Elastic-net first stage
 ## ----------------------------------------------------------------------------
 
+#' Automated moderator-basis expansion for the elastic-net first stage
+#'
+#' Expands each moderator into a flexible basis so the penalized logit can
+#' approximate a nonlinear `beta(Z)` rather than only a linear one.  Each
+#' continuous coordinate (at least `min_unique` distinct values) is mapped to
+#' a natural cubic spline with `df` degrees of freedom; low-cardinality
+#' coordinates pass through as raw indicators.  Pairwise products `Z_j * Z_l`
+#' are appended when `interactions = TRUE`.  The basis is a pure function of
+#' `Z` (spline knots come from the full sample, which is exogenous and carries
+#' no outcome information), so it is built once and reused across folds, which
+#' keeps the held-in fit and the held-out evaluation on a common basis.
+#' Setting `df <= 1` recovers the linear moderator basis.
+#'
+#' @param Z Numeric N x p_Z moderator matrix.
+#' @param df Spline degrees of freedom per continuous coordinate; `>= 2`
+#'   expands, `<= 1` keeps the raw linear term.
+#' @param interactions Append pairwise `Z_j * Z_l` products.
+#' @param min_unique Minimum distinct values for spline expansion of a
+#'   coordinate; below this the raw column is used.
+#' @return Numeric N x q basis matrix with globally non-constant columns.
+#' @keywords internal
+#' @noRd
+.sc_enet_basis <- function(Z, df = 4L, interactions = TRUE, min_unique = 5L) {
+  n <- nrow(Z); pZ <- ncol(Z)
+  use_spline <- df >= 2L && requireNamespace("splines", quietly = TRUE)
+  blocks <- vector("list", 0L); nm <- character(0)
+  for (j in seq_len(pZ)) {
+    zj <- Z[, j]
+    if (use_spline && length(unique(zj)) >= min_unique) {
+      B <- tryCatch(unclass(splines::ns(zj, df = df)), error = function(e) NULL)
+      if (is.null(B)) B <- matrix(zj, n, 1L)
+    } else {
+      B <- matrix(zj, n, 1L)
+    }
+    B <- matrix(as.numeric(B), n)
+    blocks[[length(blocks) + 1L]] <- B
+    nm <- c(nm, sprintf("z%d.%d", j, seq_len(ncol(B))))
+  }
+  if (isTRUE(interactions) && pZ >= 2L) {
+    for (j in seq_len(pZ - 1L)) for (l in (j + 1L):pZ) {
+      blocks[[length(blocks) + 1L]] <- matrix(Z[, j] * Z[, l], n, 1L)
+      nm <- c(nm, sprintf("z%d:z%d", j, l))
+    }
+  }
+  Phi <- do.call(cbind, blocks)
+  colnames(Phi) <- nm
+  keep <- apply(Phi, 2L, function(col) stats::sd(col) > 1e-10)
+  Phi[, keep, drop = FALSE]
+}
+
 #' Cross-fitted elastic-net first stage
 #'
 #' Penalized logistic regression of the binary task outcome on the attribute
 #' differences and their first-order interactions with the moderators,
 #' `[deltaX , deltaX (x) Z]`, fit with `glmnet::cv.glmnet()` at `lambda.min`.
-#' Because the index is linear in the interactions, the implied
-#' per-respondent coefficient is the analytic gradient with respect to
-#' `deltaX_k`,
-#' \deqn{\hat\beta_k(Z_i) = B^0_k + \sum_{l} B^{int}_{k,l} Z_{i,l},}
-#' which is evaluated out of sample on each held-out fold.
+#' The moderators are first expanded by `.sc_enet_basis()` into a flexible
+#' basis `phi(Z)` (natural splines per continuous coordinate plus pairwise
+#' products), and the design is `[deltaX, deltaX (x) phi(Z)]`.  Because the
+#' index is linear in these expanded interactions, the implied per-respondent
+#' coefficient is the analytic gradient with respect to `deltaX_k`,
+#' \deqn{\hat\beta_k(Z_i) = B^0_k + \sum_{m} B^{int}_{k,m}\,\phi_m(Z_i),}
+#' a nonlinear function of `Z_i` evaluated out of sample on each held-out
+#' fold.  With `df <= 1` and `interactions = FALSE`, `phi(Z) = Z` and this
+#' reduces to a linear-in-moderators first stage.
 #'
 #' @param deltaX Numeric N x p matrix of per-task attribute differences.
 #' @param y Numeric 0/1 vector, length N.
 #' @param Z Numeric N x p_Z matrix of (task-level) moderators.
 #' @param fold_id Integer vector, length N, respondent-clustered fold ids.
 #' @param alpha Elastic-net mixing parameter in [0, 1]; 1 = lasso, 0 = ridge.
+#' @param df,interactions Basis-expansion controls forwarded to
+#'   `.sc_enet_basis()`: spline degrees of freedom per continuous moderator
+#'   and whether to append pairwise moderator products.
 #' @param nfolds Inner CV folds for `cv.glmnet`.
 #' @param seed Integer seed for the inner CV fold draw (determinism).
 #' @return list(beta_hat, nets, loss_traces, fold_id, K) matching
@@ -52,7 +109,8 @@
 #' @keywords internal
 #' @noRd
 .sc_crossfit_enet <- function(deltaX, y, Z, fold_id,
-                              alpha = 0.5, nfolds = 5L, seed = NULL) {
+                              alpha = 0.5, df = 4L, interactions = TRUE,
+                              nfolds = 5L, seed = NULL) {
   if (!requireNamespace("glmnet", quietly = TRUE)) {
     stop(".sc_crossfit_enet(): the 'glmnet' package is required for ",
          "learner = \"enet\".  Install it or use learner = \"dnn\".")
@@ -63,18 +121,21 @@
   if (!is.matrix(Z) || !is.numeric(Z)) {
     stop(".sc_crossfit_enet(): `Z` must be a numeric matrix.")
   }
-  n <- nrow(deltaX); p <- ncol(deltaX); pZ <- ncol(Z)
+  n <- nrow(deltaX); p <- ncol(deltaX)
   if (length(y) != n || nrow(Z) != n || length(fold_id) != n) {
     stop(".sc_crossfit_enet(): row counts of `deltaX`, `y`, `Z`, `fold_id` disagree.")
   }
   fold_id <- as.integer(fold_id)
   K <- max(fold_id)
 
-  ## Full design: main effects + first-order deltaX x Z interactions.
-  ## Block l of `inter` is deltaX[, l] * Z (the p_Z moderator interactions
-  ## for attribute l), so the coefficient layout is
-  ##   [ B0_1..B0_p , B_int(1,1..pZ) , ... , B_int(p,1..pZ) ].
-  inter <- do.call(cbind, lapply(seq_len(p), function(l) deltaX[, l] * Z))
+  ## Expand the moderators into a flexible basis once (shared across folds),
+  ## then build the design: main effects + deltaX (x) phi(Z) interactions.
+  ## Block l of `inter` is deltaX[, l] * phi(Z) (the q basis interactions for
+  ## attribute l), so the coefficient layout is
+  ##   [ B0_1..B0_p , B_int(1,1..q) , ... , B_int(p,1..q) ].
+  Phi <- .sc_enet_basis(Z, df = df, interactions = interactions)
+  q <- ncol(Phi)
+  inter <- do.call(cbind, lapply(seq_len(p), function(l) deltaX[, l] * Phi))
   Xf <- cbind(deltaX, inter)
 
   beta_hat <- matrix(NA_real_, n, p)
@@ -97,10 +158,10 @@
     )
     B <- as.numeric(stats::coef(cv, s = "lambda.min"))[-1L]  # drop intercept slot
     B0   <- B[seq_len(p)]
-    Bint <- B[p + seq_len(p * pZ)]
-    ## beta_k(Z_i) = B0_k + <B_int[k, ], Z_i>, evaluated on held-out rows.
-    Bint_mat <- matrix(Bint, nrow = p, ncol = pZ, byrow = TRUE)  # p x pZ
-    beta_hat[holdout, ] <- sweep(Z[holdout, , drop = FALSE] %*% t(Bint_mat),
+    Bint <- B[p + seq_len(p * q)]
+    ## beta_k(Z_i) = B0_k + <B_int[k, ], phi(Z_i)>, on held-out rows.
+    Bint_mat <- matrix(Bint, nrow = p, ncol = q, byrow = TRUE)  # p x q
+    beta_hat[holdout, ] <- sweep(Phi[holdout, , drop = FALSE] %*% t(Bint_mat),
                                  2L, B0, FUN = "+")
     nets[[k]] <- cv
   }

@@ -70,6 +70,14 @@
 #' @param enet_alpha Elastic-net mixing parameter in `[0, 1]` used when
 #'   `learner = "enet"` (`1` = lasso, `0` = ridge).  Default `0.5`.
 #'   Ignored for other learners.
+#' @param enet_df,enet_interactions Basis-expansion controls for
+#'   `learner = "enet"`.  Each continuous moderator is expanded into a natural
+#'   cubic spline with `enet_df` degrees of freedom (default `4`), and pairwise
+#'   moderator products are added when `enet_interactions = TRUE` (default).
+#'   This lets the elastic-net first stage approximate a nonlinear `beta(Z)`,
+#'   with the penalty selecting among the expanded terms.  Set `enet_df = 1`
+#'   and `enet_interactions = FALSE` for a linear-in-moderators first stage.
+#'   Ignored for other learners.
 #' @param seed Integer master seed.  When supplied, the cross-fit
 #'   output is bit-identical on 1 core and on N cores.  The function
 #'   saves and restores the R and torch RNG states on exit.
@@ -200,6 +208,8 @@ scfit <- function(formula, data,
                   weight_decay = "adaptive",
                   ridge_lambda = 1e-4,
                   enet_alpha = 0.5,
+                  enet_df = 4L,
+                  enet_interactions = TRUE,
                   seed = NULL,
                   parallel = FALSE,
                   n_cores = NULL,
@@ -410,12 +420,14 @@ scfit <- function(formula, data,
       verbose       = verbose
     ),
     enet = .sc_crossfit_enet(
-      deltaX  = deltaX_internal,
-      y       = y,
-      Z       = Z_task,
-      fold_id = fold_id,
-      alpha   = enet_alpha,
-      seed    = seed
+      deltaX       = deltaX_internal,
+      y            = y,
+      Z            = Z_task,
+      fold_id      = fold_id,
+      alpha        = enet_alpha,
+      df           = enet_df,
+      interactions = enet_interactions,
+      seed         = seed
     ),
     grf = .sc_crossfit_grf(
       deltaX        = deltaX_internal,

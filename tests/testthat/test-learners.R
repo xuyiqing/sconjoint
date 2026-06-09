@@ -76,6 +76,21 @@ test_that("learners are deterministic under a fixed seed", {
   expect_equal(coef(g1), coef(g2))
 })
 
+test_that("elastic-net auto-expands the moderator basis", {
+  skip_if_not_installed("glmnet")
+  Z <- matrix(stats::rnorm(200 * 3), 200, 3)
+  q_lin <- ncol(sconjoint:::.sc_enet_basis(Z, df = 1L, interactions = FALSE))
+  q_exp <- ncol(sconjoint:::.sc_enet_basis(Z, df = 4L, interactions = TRUE))
+  expect_equal(q_lin, 3L)                 # raw moderators only
+  expect_gt(q_exp, q_lin)                 # splines + pairwise products
+  ## both the expanded default and the linear escape hatch fit cleanly
+  fe <- .fit_with_learner("enet", enet_df = 4L, enet_interactions = TRUE)
+  fl <- .fit_with_learner("enet", enet_df = 1L, enet_interactions = FALSE)
+  expect_true(all(is.finite(fe$theta)))
+  expect_true(all(is.finite(fl$theta)))
+  expect_true(all(is.finite(fe$beta_hat)))
+})
+
 test_that("stage2 != none warns and is downgraded for non-DNN learners", {
   skip_if_not_installed("glmnet")
   expect_warning(

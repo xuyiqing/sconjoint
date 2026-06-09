@@ -18,6 +18,8 @@ scfit(
   weight_decay = "adaptive",
   ridge_lambda = 1e-04,
   enet_alpha = 0.5,
+  enet_df = 4L,
+  enet_interactions = TRUE,
   seed = NULL,
   parallel = FALSE,
   n_cores = NULL,
@@ -97,6 +99,15 @@ Lambda(Z) ridge.}
 
 \item{enet_alpha}{Elastic-net mixing parameter in \verb{[0, 1]} used when
 \code{learner = "enet"} (\code{1} = lasso, \code{0} = ridge).  Default \code{0.5}.
+Ignored for other learners.}
+
+\item{enet_df, enet_interactions}{Basis-expansion controls for
+\code{learner = "enet"}.  Each continuous moderator is expanded into a natural
+cubic spline with \code{enet_df} degrees of freedom (default \code{4}), and pairwise
+moderator products are added when \code{enet_interactions = TRUE} (default).
+This lets the elastic-net first stage approximate a nonlinear \code{beta(Z)},
+with the penalty selecting among the expanded terms.  Set \code{enet_df = 1}
+and \code{enet_interactions = FALSE} for a linear-in-moderators first stage.
 Ignored for other learners.}
 
 \item{seed}{Integer master seed.  When supplied, the cross-fit
