@@ -2,6 +2,21 @@
 
 ## v0.2.0 (development)
 
+**Bundled `br2017` data corrected (0.2.0.9004)**
+
+* The source replication file stores the 45% level of the \$175--375k
+  bracket as the number 5 in its derived rate column; the bundled
+  `br2017` inherited this on 19.9% of rows. The build now rebuilds all
+  six bracket rates from the coded variables and their value labels.
+  Estimates involving the \$175--375k bracket (and, through the
+  design's correlation, the revenue coefficient) change under the
+  corrected data; @sec-br was re-rendered accordingly.
+* `sc_importance()` gains `design = "levels"` (with a `levels`
+  argument) for continuous-attribute designs; the documentation now
+  states which weighting convention reproduces the paper's reported
+  shares (`"uniform"` for factor designs, `"levels"` for continuous
+  ones).
+
 Paper-catchup release: brings the package up to the algorithmic defaults
 in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 

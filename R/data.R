@@ -173,6 +173,13 @@
 #' The sample is restricted to respondents who saw the revenue
 #' column (saw_revenue == 1).
 #'
+#' All six bracket rates are rebuilt from the source file's coded
+#' variables and their value labels rather than its derived rate
+#' columns: the distributed file stores the 45 percent level of the
+#' $175-375k bracket as the number 5 in its derived column, which
+#' affected 19.9 percent of rows in copies of this dataset bundled
+#' before version 0.2.0.9004.
+#'
 #' @format A data frame with 32,000 rows (2,000 respondents x 8 tasks x
 #'   2 profiles) and the following columns:
 #' \describe{

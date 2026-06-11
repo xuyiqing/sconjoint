@@ -84,6 +84,10 @@ and `n_epochs >= 1000`.
 ### `br2017` --- @ballard2017structure: tax preferences
 
 2,000 respondents $\times$ 8 tasks $\times$ 2 profiles = 32,000 rows.
+Bracket rates are rebuilt from the source file's coded variables and
+value labels; the distributed file's derived rate column stores the
+45% level of the \$175--375k bracket as 5, which affected bundled
+copies before 0.2.0.9004 (see `?br2017`).
 
 | Column | Role | Levels |
 |--------|------|--------|
