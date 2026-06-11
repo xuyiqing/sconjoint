@@ -1,4 +1,31 @@
-# sconjoint 0.2.0.9003 (development version)
+# sconjoint 0.2.0.9004 (development version)
+
+## Bundled `br2017` data corrected
+
+The Ballard-Rosa, Martin and Scheve (2017) source file stores the
+45% level of the $175-375k bracket as the number 5 in its derived
+rate column (the underlying coded variable and its value label are
+correct). The bundled `br2017` fixture inherited this, affecting
+19.9% of profile rows. `data-raw/build_br2017.R` now rebuilds all six
+bracket rates from the coded variables and their value labels, and the
+bundled data has been regenerated. Analyses involving the $175-375k
+bracket (and, through correlation, the revenue coefficient) change
+under the corrected data.
+
+## Importance shares: reproduce the paper's reported numbers
+
+`sc_importance()` gains `design = "levels"` plus a `levels` argument:
+attributes listed in `levels` contribute `beta^2 * Var(level set)`
+(the production pipeline's convention for continuous attributes), all
+others use the `"uniform"` within-attribute variance over levels. The
+documentation now states plainly which option reproduces which set of
+published numbers: the paper's *reported* importance shares come from
+`"uniform"` (factor designs: Saha-Weeks, Graham-Svolik) and `"levels"`
+(continuous designs: Ballard-Rosa), while `"design_variance"` remains
+the formula displayed in the paper's text. The two do not agree in
+general.
+
+# sconjoint 0.2.0.9003
 
 ## Debiased inference for the additional quantities of interest
 

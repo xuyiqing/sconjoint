@@ -1,6 +1,6 @@
 Package: sconjoint
 Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.2.0.9003
+Version: 0.2.0.9004
 Date: 2026-06-08
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
