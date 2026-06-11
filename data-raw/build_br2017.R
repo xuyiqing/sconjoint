@@ -33,6 +33,36 @@ cat("Unique respondents:", uniqueN(br_raw$ID), "\n")
 br <- br_raw[as.numeric(saw_revenue) == 1]
 cat("saw_revenue == 1:", nrow(br), "rows,", uniqueN(br$ID), "respondents\n")
 
+# --- Rebuild bracket rates from taxrate codes + value labels -----------------
+# The .dta's derived rate_* columns contain a corruption: taxrate5 code 5
+# (value label "45%") is stored as numeric 5 in rate_175_375 (19.9% of
+# revenue-arm rows). Rebuild ALL six rates from the labelled codes and
+# never trust the derived columns. (Found 2026-06-11; see paper-side audit
+# in ConjointStructural/code/yiqing/br2017/.)
+
+code_cols <- paste0("taxrate", 1:6)
+rate_cols <- c("rate_L10", "rate_10_35", "rate_35_85", "rate_85_175",
+               "rate_175_375", "rate_375P")
+for (j in seq_along(code_cols)) {
+  lab <- attr(br_raw[[code_cols[j]]], "labels")
+  stopifnot(!is.null(lab))
+  pct <- suppressWarnings(as.numeric(sub("^([0-9]+).*", "\\1", names(lab))))
+  stopifnot(!anyNA(pct))
+  rebuilt <- pct[match(as.numeric(br[[code_cols[j]]]), as.numeric(lab))]
+  stopifnot(!anyNA(rebuilt))
+  old <- as.numeric(br[[rate_cols[j]]])
+  n_diff <- sum(rebuilt != old)
+  if (j %in% c(1:4, 6)) {
+    stopifnot(n_diff == 0)  # only bracket 5 is corrupted
+  } else {
+    cat(sprintf("  %s: %d rows corrected (code-5 '45%%' was stored as 5)\n",
+                rate_cols[j], n_diff))
+    stopifnot(all(as.numeric(br$taxrate5)[rebuilt != old] == 5),
+              all(rebuilt[rebuilt != old] == 45))
+  }
+  br[[rate_cols[j]]] <- rebuilt
+}
+
 # --- Keep respondents with exactly 16 rows (8 tasks x 2 plans) -------------
 
 rows_per <- br[, .(n_rows = .N), by = ID]
