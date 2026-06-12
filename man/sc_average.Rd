@@ -16,11 +16,18 @@ sc_average(
 
 \item{scale}{One of \code{"logit"} or \code{"probability"}.}
 
-\item{subgroup}{Optional row selector.}
+\item{subgroup}{Optional row selector.  With \code{scale = "logit"}, a
+non-\code{NULL} subgroup returns the influence-function subgroup estimate:
+the mean of the task-level orthogonal-score contributions within the
+subgroup, with a respondent-clustered standard error.  This is the
+debiased subgroup average of \eqn{f(Z)} (the construction used for the
+party-level estimates in the paper's candidate application), not the
+subgroup mean of the MAP \eqn{\hat\beta_i}.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.
 Only affects \code{scale = "probability"}; the \code{"logit"} scale uses
-\code{object$theta} from the DML fit.}
+\code{object$theta} from the DML fit (or its influence-function subgroup
+version when \code{subgroup} is supplied).}
 }
 \value{
 An \code{sc_quantity} with a data.frame estimate containing

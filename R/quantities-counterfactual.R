@@ -40,6 +40,13 @@ sc_counterfactual <- function(object, A, B,
 
   if (vartype == "orthogonal") {
     d <- .sc_debiased_scalar(object, .sc_dH_voteshare(dx))
+    if (!is.na(d["estimate"]) && (d["estimate"] < 0 || d["estimate"] > 1)) {
+      warning("sc_counterfactual(): the orthogonal one-step estimate (",
+              sprintf("%.3f", d["estimate"]), ") lies outside [0, 1]; the ",
+              "linearized correction is unreliable for extreme contrasts. ",
+              "Compare `vartype = \"plugin\"` and interpret with caution.",
+              call. = FALSE)
+    }
     return(.sc_quantity(
       name = "counterfactual", estimate = unname(d["estimate"]),
       se = unname(d["se"]), ci_lo = unname(d["ci_lo"]), ci_hi = unname(d["ci_hi"]),

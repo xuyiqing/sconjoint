@@ -1,3 +1,17 @@
+# sconjoint 0.2.0.9005 (2026-06-13)
+
+Paper catch-up (2026-06-12 revision):
+
+* `sc_average(scale = "logit", subgroup = ...)` now returns the
+  influence-function subgroup estimate (subgroup mean of the task-level
+  orthogonal-score contributions, respondent-clustered SE) instead of
+  silently returning the full-population `theta`. This is the construction
+  behind the party-level estimates in the paper's candidate application.
+* `sc_counterfactual(vartype = "orthogonal")` warns when the one-step
+  estimate falls outside [0, 1]: the linearized correction is unreliable for
+  extreme contrasts (observed on lopsided tax-plan bundles), and the plugin
+  aggregate should be compared.
+
 # sconjoint 0.2.0.9004 (development version)
 
 ## Bundled `br2017` data corrected

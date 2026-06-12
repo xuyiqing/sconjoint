@@ -18,3 +18,17 @@ test_that("sc_counterfactual rejects unknown attributes", {
     "unknown attribute"
   )
 })
+
+test_that("sc_counterfactual warns when the orthogonal estimate leaves [0,1]", {
+  fit <- .get_toy_fit()
+  local_mocked_bindings(
+    .sc_debiased_scalar = function(object, Hfun) {
+      c(estimate = 1.2, se = 0.1, ci_lo = 1.0, ci_hi = 1.4)
+    },
+    .package = "sconjoint"
+  )
+  expect_warning(
+    sc_counterfactual(fit, A = list(a1 = 1), B = list(a2 = 1)),
+    "outside \\[0, 1\\]"
+  )
+})
