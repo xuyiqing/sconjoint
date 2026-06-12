@@ -31,7 +31,10 @@ scfit(
   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
   stage2_seed = 12345L,
   varref_floor = 0.001,
-  normalize_deltaX = FALSE
+  normalize_deltaX = FALSE,
+  interactions = c("none", "lowrank", "explicit"),
+  interaction_rank = 2L,
+  lambda_V = 0.01
 )
 }
 \arguments{
@@ -205,6 +208,56 @@ coefficient on a common-variance internal scale, restoring the
 c5 prior's intended regularization strength.  For factor-dummy
 designs \code{normalize_deltaX} is a near-no-op (each dummy's SD is
 already on a similar scale).}
+
+\item{interactions}{One of \code{"none"} (default), \code{"lowrank"}, or
+\code{"explicit"}.  Adds a POPULATION-LEVEL attribute-interaction term
+to the profile utility, \verb{u(X) = X'beta_i + g(X)}, so the choice
+index becomes \verb{deltaX'beta_i + g(X_A) - g(X_B)}.
+\itemize{
+\item \code{"lowrank"}: \verb{g(X) = ||V'X||^2} with \code{V} a \verb{p x interaction_rank}
+parameter trained inside the torch mean stage and ridge-penalized
+by \code{lambda_V}.  Note the difference-of-quadratics form: the
+quadratic-in-the-difference \verb{||V' deltaX||^2} is profile-swap
+invariant and structurally incoherent for forced choice, and is
+deliberately not used.
+\item \code{"explicit"}: \verb{g(X_A) - g(X_B) = (q_A - q_B)'w} over the
+IDENTIFIED interaction features only (cross-attribute dummy
+products; within-attribute pairs are structurally zero and
+diagonal terms are collinear with the main effects), with \code{w} a
+ridge-penalized (\code{lambda_V}) linear head in the same torch
+optimization.
+}
+
+The interaction term is population-level (it does not vary with
+\code{Z}): respondent-level interaction residuals are not estimable at
+typical conjoint task counts.  Inference always uses the explicit
+linear-in-parameters representation: the expanded regressor
+\verb{[deltaX, q_A - q_B]} (identified features only), an expanded local
+Gram \code{Lambda(Z)}, and the orthogonal score on the expanded
+coefficient vector with cross-fitted nuisances -- under
+\code{interactions = "lowrank"} the trained \verb{V V'} is linearized onto
+the identified features (the diagonal of \verb{V V'} is absorbed into
+the main effects), so the DML theory for the linear-in-parameters
+logit applies verbatim.  \code{theta} and \code{vcov} on the returned fit
+remain the main-effect subvector / submatrix; the interaction
+coefficients and their clustered variance live on
+\code{fit$interaction}.  Under \code{interactions != "none"}, \code{beta_hat}
+(and \code{beta_i} generally) is the main-effect part of the utility at
+the no-interaction baseline, not the all-else-equal effect.
+
+Requires \code{learner = "dnn"}, all-factor attributes,
+\code{normalize_deltaX = FALSE}, and \code{stage2 != "mixed_logit"}.  With
+the default \code{"none"} the historical code path runs untouched
+(byte-identical results under the same seed).}
+
+\item{interaction_rank}{Integer rank \code{r} of the low-rank head
+(default \code{2L}).  Only used when \code{interactions = "lowrank"}.  Note
+that only the cross-attribute blocks of \verb{W = V V'} are identified,
+never \code{V} itself; the fit reports \code{W} (\code{fit$interaction$W_avg}).}
+
+\item{lambda_V}{Non-negative ridge penalty on the interaction head
+(default \code{1e-2}), added to the training loss as
+\code{lambda_V * sum(V^2)} or \code{lambda_V * sum(w^2)}.}
 }
 \value{
 An object of class \code{sc_fit} -- see Details.  Key components
@@ -234,7 +287,17 @@ The returned \code{sc_fit} list contains at least the following fields:
 \item \code{call}, \code{formula}, \code{attr_names}, \code{z_names}, \code{respondent_id};
 \item \code{K}, \code{hidden}, \code{seed}, \code{n_epochs}, \code{learning_rate}, \code{device},
 \code{parallel}, \code{n_cores};
-\item \code{loss_traces} -- list of per-fold training loss curves.
+\item \code{loss_traces} -- list of per-fold training loss curves;
+\item \code{interaction} -- \code{NULL} unless \code{interactions != "none"}; a list with
+the identified feature set (\code{pairs}, \code{feature_names}), the DML
+interaction coefficients and clustered variance (\code{theta}, \code{vcov},
+\code{se}; the full expanded \code{theta_full} / \code{vcov_full}), the
+population-level plugin coefficients (\code{w_hat}; per-fold \code{w_fold}),
+the averaged \verb{W_avg = mean(V V')} under \code{"lowrank"} (only the
+cross-attribute blocks of \code{W} are identified -- \code{V} itself never
+is), the realized-task features \code{F_int} and cross-fitted offsets
+(\code{g_offset}, \code{g_offset_ens}, \code{g_offset_task}), and the interaction
+block of the orthogonal-score correction (\code{correction_int}).
 }
 }
 \section{Inference validity by quantity}{
