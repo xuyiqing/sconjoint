@@ -138,6 +138,52 @@
 #'   c5 prior's intended regularization strength.  For factor-dummy
 #'   designs `normalize_deltaX` is a near-no-op (each dummy's SD is
 #'   already on a similar scale).
+#' @param interactions One of `"none"` (default), `"lowrank"`, or
+#'   `"explicit"`.  Adds a POPULATION-LEVEL attribute-interaction term
+#'   to the profile utility, `u(X) = X'beta_i + g(X)`, so the choice
+#'   index becomes `deltaX'beta_i + g(X_A) - g(X_B)`.
+#'
+#'   * `"lowrank"`: `g(X) = ||V'X||^2` with `V` a `p x interaction_rank`
+#'     parameter trained inside the torch mean stage and ridge-penalized
+#'     by `lambda_V`.  Note the difference-of-quadratics form: the
+#'     quadratic-in-the-difference `||V' deltaX||^2` is profile-swap
+#'     invariant and structurally incoherent for forced choice, and is
+#'     deliberately not used.
+#'   * `"explicit"`: `g(X_A) - g(X_B) = (q_A - q_B)'w` over the
+#'     IDENTIFIED interaction features only (cross-attribute dummy
+#'     products; within-attribute pairs are structurally zero and
+#'     diagonal terms are collinear with the main effects), with `w` a
+#'     ridge-penalized (`lambda_V`) linear head in the same torch
+#'     optimization.
+#'
+#'   The interaction term is population-level (it does not vary with
+#'   `Z`): respondent-level interaction residuals are not estimable at
+#'   typical conjoint task counts.  Inference always uses the explicit
+#'   linear-in-parameters representation: the expanded regressor
+#'   `[deltaX, q_A - q_B]` (identified features only), an expanded local
+#'   Gram `Lambda(Z)`, and the orthogonal score on the expanded
+#'   coefficient vector with cross-fitted nuisances -- under
+#'   `interactions = "lowrank"` the trained `V V'` is linearized onto
+#'   the identified features (the diagonal of `V V'` is absorbed into
+#'   the main effects), so the DML theory for the linear-in-parameters
+#'   logit applies verbatim.  `theta` and `vcov` on the returned fit
+#'   remain the main-effect subvector / submatrix; the interaction
+#'   coefficients and their clustered variance live on
+#'   `fit$interaction`.  Under `interactions != "none"`, `beta_hat`
+#'   (and `beta_i` generally) is the main-effect part of the utility at
+#'   the no-interaction baseline, not the all-else-equal effect.
+#'
+#'   Requires `learner = "dnn"`, all-factor attributes,
+#'   `normalize_deltaX = FALSE`, and `stage2 != "mixed_logit"`.  With
+#'   the default `"none"` the historical code path runs untouched
+#'   (byte-identical results under the same seed).
+#' @param interaction_rank Integer rank `r` of the low-rank head
+#'   (default `2L`).  Only used when `interactions = "lowrank"`.  Note
+#'   that only the cross-attribute blocks of `W = V V'` are identified,
+#'   never `V` itself; the fit reports `W` (`fit$interaction$W_avg`).
+#' @param lambda_V Non-negative ridge penalty on the interaction head
+#'   (default `1e-2`), added to the training loss as
+#'   `lambda_V * sum(V^2)` or `lambda_V * sum(w^2)`.
 #' @return An object of class `sc_fit` -- see Details.  Key components
 #'   include the DML point estimates `theta`, the full `p x p`
 #'   clustered variance-covariance `vcov`, the out-of-sample
@@ -155,7 +201,17 @@
 #' * `call`, `formula`, `attr_names`, `z_names`, `respondent_id`;
 #' * `K`, `hidden`, `seed`, `n_epochs`, `learning_rate`, `device`,
 #'   `parallel`, `n_cores`;
-#' * `loss_traces` -- list of per-fold training loss curves.
+#' * `loss_traces` -- list of per-fold training loss curves;
+#' * `interaction` -- `NULL` unless `interactions != "none"`; a list with
+#'   the identified feature set (`pairs`, `feature_names`), the DML
+#'   interaction coefficients and clustered variance (`theta`, `vcov`,
+#'   `se`; the full expanded `theta_full` / `vcov_full`), the
+#'   population-level plugin coefficients (`w_hat`; per-fold `w_fold`),
+#'   the averaged `W_avg = mean(V V')` under `"lowrank"` (only the
+#'   cross-attribute blocks of `W` are identified -- `V` itself never
+#'   is), the realized-task features `F_int` and cross-fitted offsets
+#'   (`g_offset`, `g_offset_ens`, `g_offset_task`), and the interaction
+#'   block of the orthogonal-score correction (`correction_int`).
 #'
 #' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
 #' @examples
@@ -219,11 +275,40 @@ scfit <- function(formula, data,
                   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
                   stage2_seed = 12345L,
                   varref_floor = 1e-3,
-                  normalize_deltaX = FALSE) {
+                  normalize_deltaX = FALSE,
+                  interactions = c("none", "lowrank", "explicit"),
+                  interaction_rank = 2L,
+                  lambda_V = 1e-2) {
   call <- match.call()
   learner <- match.arg(learner)
   stage2_supplied <- !missing(stage2)
   stage2 <- match.arg(stage2)
+  interactions <- match.arg(interactions)
+
+  if (!identical(interactions, "none")) {
+    if (!identical(learner, "dnn")) {
+      stop("scfit(): interactions != \"none\" is only available for ",
+           "learner = \"dnn\".")
+    }
+    if (identical(stage2, "mixed_logit")) {
+      stop("scfit(): stage2 = \"mixed_logit\" does not support an ",
+           "interaction offset; use stage2 = \"map_c5\", \"varref\", or \"none\".")
+    }
+    if (isTRUE(normalize_deltaX)) {
+      stop("scfit(): `normalize_deltaX = TRUE` is not supported with ",
+           "interactions != \"none\" (the interaction features are built on ",
+           "the original dummy scale; factor designs do not need ",
+           "standardization).")
+    }
+    if (!is.numeric(interaction_rank) || length(interaction_rank) != 1L ||
+        is.na(interaction_rank) || interaction_rank < 1L) {
+      stop("scfit(): `interaction_rank` must be a positive integer.")
+    }
+    if (!is.numeric(lambda_V) || length(lambda_V) != 1L ||
+        !is.finite(lambda_V) || lambda_V < 0) {
+      stop("scfit(): `lambda_V` must be a non-negative scalar.")
+    }
+  }
 
   ## Stage 2 (the MAP/varref/mixed-logit refinement) is DNN-specific: its
   ## ensemble retrains a second DNN.  For the flexible alternative learners
@@ -287,19 +372,61 @@ scfit <- function(formula, data,
   factor_levels <- enc$factor_levels
   attr_map_enc  <- enc$attr_map
 
+  ## Interaction extension requires all-factor attributes: the
+  ## identification accounting (diagonal terms collinear with mains,
+  ## within-attribute products structurally zero) relies on one-hot
+  ## dummies with X_k^2 = X_k.
+  if (!identical(interactions, "none")) {
+    numeric_attrs <- setdiff(attr_vars, names(factor_levels))
+    if (length(numeric_attrs) > 0L) {
+      stop("scfit(): interactions != \"none\" currently supports factor ",
+           "attributes only; numeric attribute(s): ",
+           paste(numeric_attrs, collapse = ", "), ".")
+    }
+  }
+
   ## ---- 4. Build Delta X, task-level Z, respondent index ----
   built <- .sc_build_deltax(
     X             = X,
     Z             = Z,
     task_id       = data_sorted[[task]],
     profile_id    = data_sorted[[profile]],
-    respondent_id = data_sorted[[respondent]]
+    respondent_id = data_sorted[[respondent]],
+    keep_profiles = !identical(interactions, "none")
   )
   deltaX          <- built$deltaX
   Z_task          <- built$Z_task
   respondent_task <- built$respondent_task
   colnames(deltaX) <- x_names
   colnames(Z_task) <- z_names
+  X_A_task <- built$X_A   # NULL when interactions = "none"
+  X_B_task <- built$X_B
+
+  ## ---- 4a. Identified interaction features (cross-attribute pairs) ----
+  int_ctx <- NULL
+  if (!identical(interactions, "none")) {
+    attr_assign <- .sc_int_attr_assign(attr_map_enc, ncol(deltaX))
+    ip    <- .sc_int_pairs(attr_assign, x_names)
+    if (nrow(ip$pairs) == 0L) {
+      stop("scfit(): interactions != \"none\" needs at least two attributes ",
+           "(no cross-attribute pairs exist).")
+    }
+    F_all <- .sc_int_features(X_A_task, X_B_task, ip$pairs)
+    ## Drop features with no empirical support (all-zero columns: level
+    ## combinations never co-observed in this sample).
+    nz <- which(colSums(abs(F_all)) > 0)
+    if (length(nz) == 0L) {
+      stop("scfit(): no identified interaction feature has empirical ",
+           "support in this design.")
+    }
+    int_ctx <- list(
+      pairs   = ip$pairs[nz, , drop = FALSE],
+      names   = ip$names[nz],
+      F_int   = F_all[, nz, drop = FALSE],
+      n_dropped_nosupport = nrow(ip$pairs) - length(nz)
+    )
+    colnames(int_ctx$F_int) <- int_ctx$names
+  }
 
   ## Single-profile pool for debiased AME integration (the E_X integral over
   ## the design law P_X). A capped, deterministic subsample of the encoded
@@ -427,7 +554,14 @@ scfit <- function(formula, data,
       parallel      = parallel,
       n_cores       = n_cores,
       device        = device,
-      verbose       = verbose
+      verbose       = verbose,
+      interactions  = interactions,
+      X_A           = X_A_task,
+      X_B           = X_B_task,
+      F_int         = if (is.null(int_ctx)) NULL else int_ctx$F_int,
+      int_pairs     = if (is.null(int_ctx)) NULL else int_ctx$pairs,
+      interaction_rank = interaction_rank,
+      lambda_V         = lambda_V
     ),
     enet = .sc_crossfit_enet(
       deltaX       = deltaX_internal,
@@ -451,39 +585,124 @@ scfit <- function(formula, data,
   beta_hat <- cf$beta_hat
   colnames(beta_hat) <- x_names
 
-  ## ---- 10. Lambda(Z) ----
-  lambda_obj <- .sc_estimate_lambda(
-    beta_hat     = beta_hat,
-    deltaX       = deltaX_internal,
-    Z            = Z_task,
-    ridge_lambda = ridge_lambda
-  )
+  ## ---- 10-12. Lambda(Z), DML influence, clustered vcov ----
+  ##
+  ## With an interaction term, inference runs on the EXPLICIT
+  ## linear-in-parameters representation regardless of how the mean
+  ## stage was fit: expanded regressor W_it = [deltaX_it, (q_A - q_B)_it]
+  ## (identified features only), expanded coefficient
+  ## gamma_hat = [beta_hat, w^(fold)], expanded local Gram Lambda(Z)
+  ## over W, orthogonal score on the expanded coefficient vector.  The
+  ## model is again a linear-in-parameters logit, so the existing DML
+  ## machinery (`.sc_estimate_lambda()`, `.sc_influence_function()`,
+  ## `.sc_cluster_vcov()`) applies verbatim on the expanded objects.
+  ## The main-effect theta / vcov are the corresponding subvector /
+  ## submatrix.  With interactions = "none" the expanded objects reduce
+  ## exactly to the historical ones (q = 0), and the historical code
+  ## path below runs untouched.
+  theta_int_full <- NULL
+  vcov_int_full  <- NULL
+  infl_full      <- NULL
+  if (is.null(int_ctx)) {
+    ## ---- 10. Lambda(Z) ----
+    lambda_obj <- .sc_estimate_lambda(
+      beta_hat     = beta_hat,
+      deltaX       = deltaX_internal,
+      Z            = Z_task,
+      ridge_lambda = ridge_lambda
+    )
 
-  ## ---- 11. DML influence and point estimates ----
-  infl <- .sc_influence_function(
-    beta_hat      = beta_hat,
-    lambda_obj    = lambda_obj,
-    deltaX        = deltaX_internal,
-    y             = y,
-    respondent_id = respondent_task
-  )
-  theta <- infl$theta_hat
-  names(theta) <- x_names
+    ## ---- 11. DML influence and point estimates ----
+    infl <- .sc_influence_function(
+      beta_hat      = beta_hat,
+      lambda_obj    = lambda_obj,
+      deltaX        = deltaX_internal,
+      y             = y,
+      respondent_id = respondent_task
+    )
+    theta <- infl$theta_hat
+    names(theta) <- x_names
 
-  ## ---- 12. Clustered vcov + iid vcov + DML/iid ratio ----
-  vcov_cluster <- .sc_cluster_vcov(
-    influence_raw = infl$influence_raw,
-    theta_hat     = theta,
-    respondent_id = respondent_task
-  )
-  vcov_iid <- .sc_iid_vcov(
-    influence_raw = infl$influence_raw,
-    theta_hat     = theta,
-    respondent_id = respondent_task
-  )
-  rownames(vcov_cluster$vcov) <- colnames(vcov_cluster$vcov) <- x_names
-  rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
-  se_ratio <- .sc_dml_iid_ratio(vcov_cluster$vcov, vcov_iid$vcov)
+    ## ---- 12. Clustered vcov + iid vcov + DML/iid ratio ----
+    vcov_cluster <- .sc_cluster_vcov(
+      influence_raw = infl$influence_raw,
+      theta_hat     = theta,
+      respondent_id = respondent_task
+    )
+    vcov_iid <- .sc_iid_vcov(
+      influence_raw = infl$influence_raw,
+      theta_hat     = theta,
+      respondent_id = respondent_task
+    )
+    rownames(vcov_cluster$vcov) <- colnames(vcov_cluster$vcov) <- x_names
+    rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
+    se_ratio <- .sc_dml_iid_ratio(vcov_cluster$vcov, vcov_iid$vcov)
+  } else {
+    p_main   <- ncol(deltaX_internal)
+    idx_main <- seq_len(p_main)
+    exp_names <- c(x_names, int_ctx$names)
+
+    ## Expanded regressor and out-of-fold expanded coefficient matrix.
+    ## Row it (in fold k) carries [beta_hat_it, w^(k)]: the interaction
+    ## coefficient is population-level but cross-fitted, so each row
+    ## uses the head trained WITHOUT that respondent's fold.
+    W_exp <- cbind(deltaX_internal, int_ctx$F_int)
+    colnames(W_exp) <- exp_names
+    gamma_hat <- cbind(beta_hat, cf$w_fold[fold_id, , drop = FALSE])
+    colnames(gamma_hat) <- exp_names
+
+    lambda_obj <- .sc_estimate_lambda(
+      beta_hat     = gamma_hat,
+      deltaX       = W_exp,
+      Z            = Z_task,
+      ridge_lambda = ridge_lambda
+    )
+    infl_full <- .sc_influence_function(
+      beta_hat      = gamma_hat,
+      lambda_obj    = lambda_obj,
+      deltaX        = W_exp,
+      y             = y,
+      respondent_id = respondent_task
+    )
+    theta_full <- infl_full$theta_hat
+    names(theta_full) <- exp_names
+    vcov_cluster_full <- .sc_cluster_vcov(
+      influence_raw = infl_full$influence_raw,
+      theta_hat     = theta_full,
+      respondent_id = respondent_task
+    )
+    vcov_iid_full <- .sc_iid_vcov(
+      influence_raw = infl_full$influence_raw,
+      theta_hat     = theta_full,
+      respondent_id = respondent_task
+    )
+    rownames(vcov_cluster_full$vcov) <- colnames(vcov_cluster_full$vcov) <- exp_names
+    rownames(vcov_iid_full$vcov)     <- colnames(vcov_iid_full$vcov)     <- exp_names
+
+    ## Main-effect subvector / submatrix for the user-facing slots;
+    ## interaction block kept for `fit$interaction`.
+    theta <- theta_full[idx_main]
+    infl <- list(
+      theta_hat     = theta,
+      plugin        = infl_full$plugin[idx_main],
+      correction    = infl_full$correction[, idx_main, drop = FALSE],
+      influence_raw = infl_full$influence_raw[, idx_main, drop = FALSE],
+      phi_bar       = NULL
+    )
+    vcov_cluster <- list(
+      vcov = vcov_cluster_full$vcov[idx_main, idx_main, drop = FALSE],
+      se   = vcov_cluster_full$se[idx_main],
+      M    = vcov_cluster_full$M
+    )
+    vcov_iid <- list(
+      vcov = vcov_iid_full$vcov[idx_main, idx_main, drop = FALSE],
+      se   = vcov_iid_full$se[idx_main]
+    )
+    se_ratio <- .sc_dml_iid_ratio(vcov_cluster$vcov, vcov_iid$vcov)
+
+    theta_int_full <- theta_full
+    vcov_int_full  <- vcov_cluster_full$vcov
+  }
 
   ## ---- 12b. Stage 2 (paper §3 hybrid update) ----
   ## DML output above is frozen — it used `beta_hat` (single Stage-1 DNN).
@@ -507,7 +726,15 @@ scfit <- function(formula, data,
     parallel       = parallel,
     n_cores        = n_cores,
     device         = device,
-    verbose        = verbose
+    verbose        = verbose,
+    interactions   = interactions,
+    X_A            = X_A_task,
+    X_B            = X_B_task,
+    F_int          = if (is.null(int_ctx)) NULL else int_ctx$F_int,
+    int_pairs      = if (is.null(int_ctx)) NULL else int_ctx$pairs,
+    interaction_rank = interaction_rank,
+    lambda_V         = lambda_V,
+    g_offset_stage1  = cf$g_offset
   )
 
   ## ---- 12c. Un-standardize coefficients back to original-deltaX scale ----
@@ -544,6 +771,67 @@ scfit <- function(formula, data,
   correction_orig     <- unstd_beta(infl$correction)
   influence_raw_orig  <- unstd_beta(infl$influence_raw)
 
+  ## ---- 12d. Interaction slot ----
+  ## All interaction state in one place (NULL when interactions =
+  ## "none").  `normalize_deltaX` is rejected upstream when an
+  ## interaction term is requested, so no un-standardization applies
+  ## here (sd_dx is identically 1).
+  interaction_slot <- NULL
+  if (!is.null(int_ctx)) {
+    q_int    <- ncol(int_ctx$F_int)
+    idx_int  <- p_main + seq_len(q_int)
+    ## Population-level w for plugin index evaluations downstream:
+    ## average over every cross-fitted head (Stage-1 folds, plus the
+    ## Stage-2 ensemble's folds when a second DNN was trained).
+    w_all <- cf$w_fold
+    if (!is.null(stage2_out$w_fold2)) {
+      w_all <- rbind(w_all, stage2_out$w_fold2)
+    }
+    w_hat <- colMeans(w_all)
+    names(w_hat) <- int_ctx$names
+    W_avg <- if (!is.null(cf$W_fold)) {
+      Reduce(`+`, cf$W_fold) / length(cf$W_fold)
+    } else NULL
+    if (!is.null(W_avg)) {
+      rownames(W_avg) <- colnames(W_avg) <- x_names
+    }
+    ## Per-task offset consistent with the `beta_hat` the quantity
+    ## functions read: the Stage-2 ensemble offset when a second DNN
+    ## was trained, the Stage-1 cross-fitted offset otherwise.
+    g_offset_task <- if (!is.null(stage2_out$g_offset_ens)) {
+      stage2_out$g_offset_ens
+    } else {
+      cf$g_offset
+    }
+    vcov_int <- vcov_int_full[idx_int, idx_int, drop = FALSE]
+    interaction_slot <- list(
+      type           = interactions,
+      rank           = if (identical(interactions, "lowrank"))
+                         as.integer(interaction_rank) else NA_integer_,
+      lambda_V       = lambda_V,
+      pairs          = int_ctx$pairs,
+      feature_names  = int_ctx$names,
+      n_features     = q_int,
+      n_dropped_nosupport = int_ctx$n_dropped_nosupport,
+      theta          = theta_int_full[idx_int],
+      vcov           = vcov_int,
+      se             = sqrt(pmax(diag(vcov_int), 0)),
+      theta_full     = theta_int_full,
+      vcov_full      = vcov_int_full,
+      w_hat          = w_hat,
+      w_fold         = cf$w_fold,
+      w_fold2        = stage2_out$w_fold2,
+      V_fold         = cf$V_fold,
+      W_avg          = W_avg,
+      F_int          = int_ctx$F_int,
+      g_offset       = cf$g_offset,
+      g_offset_ens   = stage2_out$g_offset_ens,
+      g_offset_task  = g_offset_task,
+      correction_int = infl_full$correction[, idx_int, drop = FALSE],
+      influence_int  = infl_full$influence_raw[, idx_int, drop = FALSE]
+    )
+  }
+
   ## ---- 13. Assemble sc_fit ----
   fit <- list(
     theta              = theta_orig,
@@ -559,6 +847,7 @@ scfit <- function(formula, data,
     sigma_post_diag    = unstd_var(stage2_out$sigma_post_diag),
     sd_dx              = sd_dx,
     normalize_deltaX   = isTRUE(normalize_deltaX),
+    interaction        = interaction_slot,
     stage2_method      = stage2_out$stage2_method,
     stage2_warnings    = stage2_out$stage2_warnings,
     stage2_seed        = as.integer(stage2_seed),
