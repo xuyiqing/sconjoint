@@ -58,13 +58,37 @@
 #' that extracts beta(Z) without computing the index.  `forward()`
 #' returns the logit index `sum(delta_x * beta(Z), dim = 2)`.
 #'
+#' Optional population-level attribute-interaction heads
+#' (`interactions != "none"`):
+#'
+#' * `"lowrank"` adds a `p x r` parameter `V` and the difference-of-
+#'   quadratics term `||V'X_A||^2 - ||V'X_B||^2` to the index.  The
+#'   quadratic-in-the-difference form `||V' deltaX||^2` is deliberately
+#'   not used -- it is invariant under an A/B profile swap and therefore
+#'   structurally incoherent for forced choice (see R/interactions.R).
+#' * `"explicit"` adds a length-`n_int` linear head `w_int` on
+#'   precomputed identified interaction features `f_int = q_A - q_B`
+#'   (cross-attribute dummy products only).
+#'
+#' Both heads are population-level: they do not depend on Z.  When
+#' `interactions = "none"` the module is bit-identical to the historical
+#' one (no extra parameters are created, so the torch RNG stream is
+#' untouched).
+#'
 #' @param p_z Integer, number of respondent-moderator columns.
 #' @param p_beta Integer, number of attribute dummies.
 #' @param hidden Integer vector of hidden-layer widths.
+#' @param interactions One of `"none"`, `"lowrank"`, `"explicit"`.
+#' @param interaction_rank Integer rank `r` of the low-rank head.
+#' @param n_int_features Integer, number of identified interaction
+#'   features (required by the `"explicit"` head).
 #' @return An `nn_module` generator that takes `p_z`, `p_beta`, `hidden`.
 #' @keywords internal
 #' @noRd
-.sc_build_network <- function(p, p_Z, hidden = c(64L, 64L, 32L)) {
+.sc_build_network <- function(p, p_Z, hidden = c(64L, 64L, 32L),
+                              interactions = "none",
+                              interaction_rank = 2L,
+                              n_int_features = 0L) {
   ## p is p_beta in the prototype's naming; we keep the more descriptive
   ## argument name `p` per the dispatch prompt but forward it to the
   ## module generator below as `p_beta`.
@@ -85,11 +109,24 @@
   p      <- as.integer(p)
   p_Z    <- as.integer(p_Z)
 
+  interactions <- match.arg(interactions, c("none", "lowrank", "explicit"))
+  interaction_rank <- as.integer(interaction_rank)
+  n_int_features   <- as.integer(n_int_features)
+  if (identical(interactions, "lowrank") && interaction_rank < 1L) {
+    stop(".sc_build_network(): `interaction_rank` must be >= 1 for ",
+         "interactions = \"lowrank\".")
+  }
+  if (identical(interactions, "explicit") && n_int_features < 1L) {
+    stop(".sc_build_network(): `n_int_features` must be >= 1 for ",
+         "interactions = \"explicit\".")
+  }
+
   generator <- torch::nn_module(
     "ConjointDNN",
     initialize = function() {
       self$p_z    <- p_Z
       self$p_beta <- p
+      self$int_type <- interactions
 
       layers <- list()
       in_dim <- p_Z
@@ -99,14 +136,35 @@
       }
       self$hidden <- torch::nn_module_list(layers)
       self$param_layer <- torch::nn_linear(in_dim, p)
+      ## Interaction heads come AFTER the main network so that the main
+      ## network's parameter initialization consumes the identical RNG
+      ## stream regardless of `interactions`.  `torch_zeros` consumes no
+      ## RNG at all.
+      if (identical(interactions, "lowrank")) {
+        self$V <- torch::nn_parameter(
+          torch::torch_randn(p, interaction_rank) * 0.05
+        )
+      } else if (identical(interactions, "explicit")) {
+        self$w_int <- torch::nn_parameter(torch::torch_zeros(n_int_features))
+      }
     },
-    forward = function(delta_x, z) {
+    forward = function(delta_x, z, x_a = NULL, x_b = NULL, f_int = NULL) {
       h <- z
       for (i in seq_along(self$hidden)) {
         h <- torch::nnf_relu(self$hidden[[i]](h))
       }
       beta_z <- self$param_layer(h)
-      torch::torch_sum(delta_x * beta_z, dim = 2L)
+      idx <- torch::torch_sum(delta_x * beta_z, dim = 2L)
+      if (identical(self$int_type, "lowrank")) {
+        ## Difference of quadratics (profile-swap antisymmetric); NOT
+        ## ||V' deltaX||^2, which is swap-invariant and incoherent.
+        qa <- torch::torch_sum(torch::torch_mm(x_a, self$V)^2, dim = 2L)
+        qb <- torch::torch_sum(torch::torch_mm(x_b, self$V)^2, dim = 2L)
+        idx <- idx + qa - qb
+      } else if (identical(self$int_type, "explicit")) {
+        idx <- idx + torch::torch_mv(f_int, self$w_int)
+      }
+      idx
     },
     get_beta = function(z) {
       h <- z
