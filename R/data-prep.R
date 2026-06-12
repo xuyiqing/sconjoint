@@ -215,11 +215,18 @@
 #' @param task_id Vector giving the task id of each row in `X`.
 #' @param profile_id Vector giving the within-task profile id of each row.
 #' @param respondent_id Vector giving the respondent id of each row.
+#' @param keep_profiles Logical (default `FALSE`).  When `TRUE`, also
+#'   return the per-task profile-level matrices `X_A` (first profile)
+#'   and `X_B` (second profile), needed by the attribute-interaction
+#'   extension.  The default keeps the historical output (and memory
+#'   footprint) unchanged.
 #' @return A list with `deltaX`, `Z_task`, and `respondent_task` — all
-#'   with one row (or element) per task.
+#'   with one row (or element) per task — plus `X_A` and `X_B` when
+#'   `keep_profiles = TRUE`.
 #' @keywords internal
 #' @noRd
-.sc_build_deltax <- function(X, Z, task_id, profile_id, respondent_id) {
+.sc_build_deltax <- function(X, Z, task_id, profile_id, respondent_id,
+                             keep_profiles = FALSE) {
   n <- nrow(X)
   if (length(task_id) != n || length(profile_id) != n || length(respondent_id) != n) {
     stop(".sc_build_deltax(): `task_id`, `profile_id`, `respondent_id` must all match nrow(X).")
@@ -245,10 +252,15 @@
   deltaX <- X[idx1, , drop = FALSE] - X[idx2, , drop = FALSE]
   Z_task <- Z[idx1, , drop = FALSE]
 
-  list(
+  out <- list(
     deltaX          = deltaX,
     Z_task          = Z_task,
     respondent_task = respondent_id[idx1],
     task_id         = task_id[idx1]
   )
+  if (isTRUE(keep_profiles)) {
+    out$X_A <- X[idx1, , drop = FALSE]
+    out$X_B <- X[idx2, , drop = FALSE]
+  }
+  out
 }
