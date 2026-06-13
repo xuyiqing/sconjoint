@@ -41,6 +41,18 @@
 #' Shared core: forms the per-row orthogonal score `psi = H + rowSums(grad *
 #' correction)` and collapses to respondent-level means (rows ordered by
 #' sorted respondent id, matching `.sc_cluster_vcov()`).
+#'
+#' When the fit carries an interaction term (`object$interaction`
+#' non-NULL), the first-stage matrix and the residual-transport
+#' correction are EXPANDED to the identified linear-in-parameters
+#' representation: `f = [beta_hat_dnn, w^(fold)]` (the out-of-fold
+#' interaction coefficients, constant within fold) and
+#' `U = [correction, correction_int]`.  `Hfun` then receives an
+#' `N x (p + q)` matrix; builders whose gradient is zero on the
+#' interaction block (e.g. `.sc_dH_thetak`) work unchanged, and
+#' index-evaluating builders must supply the interaction-feature part
+#' of the contrast/gradient.  Without an interaction term this reduces
+#' exactly to the historical `N x p` objects.
 #' @return list(phi = M-vector of phi_bar_i, psi = N-vector raw score).
 #' @keywords internal
 #' @noRd
@@ -51,6 +63,11 @@
     stop("debiased inference requires `object$beta_hat_dnn` and ",
          "`object$correction`; refit with a current version of scfit().",
          call. = FALSE)
+  }
+  int <- object$interaction
+  if (!is.null(int)) {
+    f <- cbind(f, int$w_fold[object$fold_id, , drop = FALSE])
+    U <- cbind(U, int$correction_int)
   }
   hb  <- Hfun(f)
   psi <- as.numeric(hb$H) + rowSums(hb$grad * U)
@@ -103,23 +120,46 @@
 #' AME of attribute `k` on the probability scale, integrated over a
 #' single-profile pool `Xpool` (n_pool x p) drawn from the design law:
 #'   H(f) = E_X[G(f_k + X_{-k}'f_{-k}) - G(X_{-k}'f_{-k})].
+#'
+#' With an interaction term (`int` non-NULL, a list with `pairs`), the
+#' on/off indices additionally carry the interaction contribution of
+#' the on/off profiles, `F(X_on)'w - F(X_off)'w`, where `X_on` / `X_off`
+#' are the pool profiles with dummy `k` set to 1 / 0 and `F()` are the
+#' identified cross-attribute features.  `f` is then the expanded
+#' `N x (p + q)` matrix from `.sc_debiased_phi()` and the gradient
+#' includes the `w` block.
 #' @keywords internal
 #' @noRd
-.sc_dH_ame <- function(k, Xpool) {
-  force(k); force(Xpool)
+.sc_dH_ame <- function(k, Xpool, int = NULL) {
+  force(k); force(Xpool); force(int)
+  Fon <- Foff <- NULL
+  q <- 0L
+  if (!is.null(int)) {
+    Xon_p  <- Xpool; Xon_p[, k]  <- 1
+    Xoff_p <- Xpool; Xoff_p[, k] <- 0
+    Fon  <- .sc_int_features_profile(Xon_p,  int$pairs)
+    Foff <- .sc_int_features_profile(Xoff_p, int$pairs)
+    q <- ncol(Fon)
+  }
   function(f) {
-    n <- nrow(f); p <- ncol(f)
+    n <- nrow(f); p <- ncol(f) - q
     off <- setdiff(seq_len(p), k)
     Xoff <- Xpool[, off, drop = FALSE]
-    H <- numeric(n); grad <- matrix(0, n, p)
+    H <- numeric(n); grad <- matrix(0, n, ncol(f))
     Gp <- function(x) { g <- stats::plogis(x); g * (1 - g) }
     for (i in seq_len(n)) {
       lin_off <- as.numeric(Xoff %*% f[i, off])
       lin_on  <- f[i, k] + lin_off
+      if (q > 0L) {
+        wi <- f[i, p + seq_len(q)]
+        lin_on  <- lin_on  + as.numeric(Fon  %*% wi)
+        lin_off <- lin_off + as.numeric(Foff %*% wi)
+      }
       gon <- Gp(lin_on); goff <- Gp(lin_off)
       H[i] <- mean(stats::plogis(lin_on) - stats::plogis(lin_off))
       grad[i, k] <- mean(gon)
       if (length(off) > 0L) grad[i, off] <- colMeans(Xpool[, off, drop = FALSE] * (gon - goff))
+      if (q > 0L) grad[i, p + seq_len(q)] <- colMeans(Fon * gon - Foff * goff)
     }
     list(H = H, grad = grad)
   }

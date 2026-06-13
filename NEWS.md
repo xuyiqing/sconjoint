@@ -1,3 +1,10 @@
+# sconjoint 0.2.0.9006 (2026-06-12)
+
+* `scfit()` gains `interactions = c("none", "lowrank", "explicit")` with `interaction_rank` and `lambda_V`: a population-level attribute-interaction term `g(X)` in the profile utility (difference-of-quadratics low-rank head or ridge-penalized explicit head on identified cross-attribute features). Default `"none"` is byte-identical to previous behavior.
+* DML inference under interactions runs on the expanded linear-in-parameters representation `[deltaX, q_A - q_B]`; interaction coefficients and clustered vcov on `fit$interaction`.
+* Stage-2 MAP update takes the cross-fitted interaction term as a known per-task offset.
+* Index-evaluating quantities (`sc_ame`, `sc_counterfactual`, `sc_decisiveness`, `sc_optimal_profile`, `sc_surplus`, `sc_welfare_change`, `predict`) include the interaction offset when the fit carries one; MRS/WTP documented as reference-profile-specific under interactions.
+
 # sconjoint 0.2.0.9005 (2026-06-13)
 
 Paper catch-up (2026-06-12 revision):

@@ -27,12 +27,15 @@ sc_surplus <- function(object, profiles, subgroup = NULL,
   Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
-  ## For each respondent, compute V_j for every profile, then logsumexp
+  ## For each respondent, compute V_j for every profile, then logsumexp.
+  ## V_j includes the population-level interaction contribution g(X_j)
+  ## when the fit carries one (g of the all-reference profile is 0).
   J <- length(dummies)
   ## V matrix: |S| x J
   V <- matrix(NA_real_, nrow = length(S), ncol = J)
   for (j in seq_len(J)) {
-    V[, j] <- as.numeric(Bs %*% dummies[[j]])
+    V[, j] <- as.numeric(Bs %*% dummies[[j]]) +
+      .sc_int_pair_offset(object, dummies[[j]])
   }
   cs_i <- apply(V, 1L, .sc_logsumexp)
   est <- mean(cs_i)

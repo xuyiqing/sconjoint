@@ -18,6 +18,14 @@
 #' @param attr Attribute level, specified as in [sc_mrs()] (an
 #'   `"attribute:level"` string, a bare dummy column name, or an integer
 #'   column index).
+#' @details
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the on/off index evaluations
+#' include the interaction contribution of the on/off profiles,
+#' \eqn{g(X_{on}) - g(X_{off})}, marginalized over the same design pool,
+#' and the orthogonal score runs on the expanded coefficient vector
+#' (main effects plus identified interaction coefficients) with
+#' cross-fitted nuisances.
 #' @return An `sc_quantity` with a scalar `estimate`, respondent-clustered
 #'   `se`, and a normal-approximation confidence interval.
 #' @seealso [sc_validate_amce()] for the structural-vs-reduced-form check.
@@ -36,7 +44,9 @@ sc_ame <- function(object, attr) {
     stop("sc_ame(): `object$profile_pool` is not stored; refit with a ",
          "current version of scfit().", call. = FALSE)
   }
-  d <- .sc_debiased_scalar(object, .sc_dH_ame(k, pool))
+  int_spec <- if (is.null(object$interaction)) NULL else
+    list(pairs = object$interaction$pairs)
+  d <- .sc_debiased_scalar(object, .sc_dH_ame(k, pool, int = int_spec))
   .sc_quantity(
     name = "ame",
     estimate = unname(d["estimate"]),

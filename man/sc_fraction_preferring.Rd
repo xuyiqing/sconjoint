@@ -36,4 +36,10 @@ Point estimate is a direct port of
 \verb{07b_structural_quantities.R} lines 478--486 (\code{frac_positive} /
 \code{frac_negative} columns).  Clustered SEs on the Bernoulli
 indicators are new in sconjoint v0.1.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

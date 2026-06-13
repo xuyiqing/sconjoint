@@ -31,4 +31,10 @@ Point estimate is a direct port of \verb{07b_structural_quantities.R}
 lines 478--497.  No standard error is defined at v0.1 — the
 polarization index is a bounded nonlinear transform of two
 proportions and does not have a clean clustered-sd expression.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

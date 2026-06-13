@@ -12,6 +12,12 @@
 #' `frac_negative` columns).  Clustered SEs on the Bernoulli
 #' indicators are new in sconjoint v0.1.
 #'
+#'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), this quantity is computed from
+#' the per-respondent `beta_i` exactly as before, but `beta_i` is then
+#' the MAIN-EFFECT part of the utility (the coefficient on `deltaX` at
+#' the no-interaction baseline), not the all-else-equal effect.
 #' @param object An `sc_fit`.
 #' @param threshold Non-negative scalar `tau`.
 #' @param subgroup Row selector.

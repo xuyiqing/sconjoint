@@ -40,4 +40,13 @@ and is conditional on the selected profile (argmax uncertainty is
 not propagated).  \code{"exhaustive"} enumerates
 \eqn{\prod_a L_a} profile combinations and errors out when the
 product exceeds \eqn{10^5}.
+
+When the fit carries an attribute-interaction term, every profile
+evaluation includes the population-level interaction contribution
+\eqn{g(X)} (the all-reference profile has \eqn{g = 0}).  The
+\code{"exhaustive"} search ranks candidate profiles with the interaction
+included; the \code{"greedy"} selection remains a per-attribute argmax on
+the main effects (interactions enter its reported probability but
+not the level picks), so prefer \code{"exhaustive"} when interactions are
+substantively important.
 }

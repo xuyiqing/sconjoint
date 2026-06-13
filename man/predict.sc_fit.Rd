@@ -37,3 +37,13 @@ numeric matrix of respondent moderators \eqn{Z}), performs a
 forward-pass through the stored per-fold neural networks and averages
 across folds.
 }
+\details{
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the stored
+\code{"logit"} / \code{"prob"} predictions include the per-task
+interaction offset \eqn{g(X_A) - g(X_B)}
+(\code{object$interaction$g_offset_task}), and \code{"beta"} (both
+stored and \code{newdata} forward-pass) returns the main-effect
+coefficient of the identified representation (under
+\code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).
+}

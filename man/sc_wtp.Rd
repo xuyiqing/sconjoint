@@ -49,4 +49,11 @@ when the cost attribute has a negative utility coefficient.
 numeric attribute or a single non-reference level of a binary
 factor).  Multi-level cost attributes require calling \code{sc_mrs()}
 directly with the user-chosen level pair.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the WTP -- like the MRS it
+wraps -- is a ratio of MAIN-EFFECT quantities and is
+reference-profile-specific: the marginal rate at the no-interaction
+baseline.  A \code{reference_profile} argument is future work; see
+\code{\link[=sc_mrs]{sc_mrs()}}.
 }

@@ -42,6 +42,15 @@
 #' dummies.  When reproducing the paper's reported shares, use
 #' `"uniform"` (factor designs) or `"levels"` (continuous designs).
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the importance shares
+#' decompose the MAIN-EFFECT part of the utility only: `beta_i` is the
+#' main-effect coefficient at the no-interaction baseline, and the
+#' variance contributed by the population-level interaction term is
+#' not attributed to either attribute of a pair.  An interaction-aware
+#' decomposition (allocating the cross-attribute variance) is future
+#' work.
+#'
 #' @param object An `sc_fit`.
 #' @param design One of `"design_variance"` (default; the paper-text
 #'   formula), `"uniform"` (production formula for factor designs),
