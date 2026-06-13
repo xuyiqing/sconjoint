@@ -7,21 +7,60 @@
 #' The default threshold is \eqn{\tau = 0}, giving the fraction of
 #' respondents preferring each non-reference level over the reference.
 #'
-#' Point estimate is a direct port of
-#' `07b_structural_quantities.R` lines 478--486 (`frac_positive` /
-#' `frac_negative` columns).  Clustered SEs on the Bernoulli
-#' indicators are new in sconjoint v0.1.
+#' This is a \emph{descriptive} summary of the distribution of the
+#' recovered per-respondent slopes, not a debiased estimator (see the
+#' *Inference validity by quantity* section of `?scfit`). Two standard
+#' error rules are offered via `se_method`:
+#' \itemize{
+#'   \item `"clustered"` (default, the v0.1 behavior): respondent-clustered
+#'     standard errors on the Bernoulli indicators
+#'     \eqn{1\{\hat\beta_j(Z_i) > \tau\}}, treating each indicator as an
+#'     observed 0/1 outcome. These are correct for the variance of a
+#'     clustered proportion but ignore that the indicators are taken of
+#'     \emph{shrunken} coefficients.
+#'   \item `"wild_bootstrap"`: a respondent-cluster (wild) bootstrap. The
+#'     recovered \eqn{\hat\beta_i} is resampled at the respondent level
+#'     (`boot_type = "wild"` applies Rademacher weights to the centered
+#'     per-respondent indicator contributions; `boot_type = "cluster"`
+#'     draws respondents with replacement) and the fraction is recomputed
+#'     on each of `n_boot` resamples. The deep network is \emph{not}
+#'     refit inside the bootstrap: only the respondent-level aggregation
+#'     step is resampled, which is what carries the sampling uncertainty
+#'     of these fractions. The returned interval is a percentile interval
+#'     and reflects \strong{sampling variability of the fraction}, not the
+#'     finite-\eqn{T} shrinkage bias that pulls each \eqn{\hat\beta_i}
+#'     toward consensus and so biases the fraction toward agreement.
+#' }
 #'
 #' @param object An `sc_fit`.
 #' @param threshold Non-negative scalar `tau`.
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
-#' @return An `sc_quantity` with `estimate` a data.frame.
+#' @param se_method One of `"clustered"` (default) or `"wild_bootstrap"`.
+#'   See Details.
+#' @param n_boot Integer number of bootstrap resamples when
+#'   `se_method = "wild_bootstrap"`. Default `200L`.
+#' @param boot_type Bootstrap scheme when `se_method = "wild_bootstrap"`:
+#'   `"wild"` (default; Rademacher weights) or `"cluster"` (nonparametric
+#'   respondent resampling).
+#' @param boot_seed Optional integer seed for the bootstrap. The RNG
+#'   state is saved and restored, so the caller's stream is unaffected.
+#' @return An `sc_quantity` with `estimate` a data.frame. The SE / CI
+#'   columns (`se_positive`, `se_negative`, `ci_*`) are filled by the
+#'   chosen `se_method`. When `se_method = "wild_bootstrap"`,
+#'   `details$se_method` is `"wild_bootstrap"` and `details$n_boot`,
+#'   `details$boot_type` record the bootstrap settings.
 #' @export
 sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
-                                   which_beta = c("hybrid", "dnn")) {
+                                   which_beta = c("hybrid", "dnn"),
+                                   se_method = c("clustered", "wild_bootstrap"),
+                                   n_boot = 200L,
+                                   boot_type = c("wild", "cluster"),
+                                   boot_seed = NULL) {
   stopifnot(inherits(object, "sc_fit"))
   which_beta <- match.arg(which_beta)
+  se_method  <- match.arg(se_method)
+  boot_type  <- match.arg(boot_type)
   if (!is.numeric(threshold) || length(threshold) != 1L || threshold < 0) {
     stop("sc_fraction_preferring(): `threshold` must be a non-negative scalar.")
   }
@@ -32,23 +71,57 @@ sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
   p <- ncol(B)
   fp <- colMeans(Bs > threshold)
   fn <- colMeans(Bs < -threshold)
-  se_p <- numeric(p)
-  se_n <- numeric(p)
-  for (j in seq_len(p)) {
-    se_p[j] <- .sc_cluster_se(as.numeric(Bs[, j] > threshold), resp_s)
-    se_n[j] <- .sc_cluster_se(as.numeric(Bs[, j] < -threshold), resp_s)
-  }
   ci_q <- stats::qnorm(0.975)
+
+  if (se_method == "clustered") {
+    se_p <- numeric(p)
+    se_n <- numeric(p)
+    for (j in seq_len(p)) {
+      se_p[j] <- .sc_cluster_se(as.numeric(Bs[, j] > threshold), resp_s)
+      se_n[j] <- .sc_cluster_se(as.numeric(Bs[, j] < -threshold), resp_s)
+    }
+    ci_lo_p <- fp - ci_q * se_p
+    ci_hi_p <- fp + ci_q * se_p
+    ci_lo_n <- fn - ci_q * se_n
+    ci_hi_n <- fn + ci_q * se_n
+    details <- list(threshold = threshold, subgroup_size = length(S),
+                    se_method = "clustered")
+  } else {
+    ## Respondent-cluster (wild) bootstrap. Collapse to one beta per
+    ## respondent (beta is constant within respondent), build the
+    ## per-respondent indicator contributions for both tails, and
+    ## resample respondents.
+    col <- .sc_collapse_beta_to_resp(Bs, resp_s)
+    Br  <- col$B_resp                                  # M x p
+    ind_pos <- (Br > threshold) * 1                    # M x p
+    ind_neg <- (Br < -threshold) * 1                   # M x p
+    G <- cbind(ind_pos, ind_neg)                       # M x 2p, colMeans = c(fp, fn)
+    bt <- .sc_resp_cluster_boot(
+      G, fun = function(m) m,                          # identity: report the fractions
+      n_boot = n_boot, boot_type = boot_type,
+      level = 0.95, seed = boot_seed
+    )
+    se_p <- bt$se[seq_len(p)]
+    se_n <- bt$se[p + seq_len(p)]
+    ci_lo_p <- bt$ci_lo[seq_len(p)]
+    ci_hi_p <- bt$ci_hi[seq_len(p)]
+    ci_lo_n <- bt$ci_lo[p + seq_len(p)]
+    ci_hi_n <- bt$ci_hi[p + seq_len(p)]
+    details <- list(threshold = threshold, subgroup_size = length(S),
+                    se_method = "wild_bootstrap", n_boot = bt$n_boot,
+                    boot_type = bt$boot_type, n_respondents = bt$M)
+  }
+
   df <- data.frame(
     dummy_name       = object$attr_names,
     frac_positive    = fp,
     frac_negative    = fn,
     se_positive      = se_p,
     se_negative      = se_n,
-    ci_lo_positive   = fp - ci_q * se_p,
-    ci_hi_positive   = fp + ci_q * se_p,
-    ci_lo_negative   = fn - ci_q * se_n,
-    ci_hi_negative   = fn + ci_q * se_n,
+    ci_lo_positive   = ci_lo_p,
+    ci_hi_positive   = ci_hi_p,
+    ci_lo_negative   = ci_lo_n,
+    ci_hi_negative   = ci_hi_n,
     stringsAsFactors = FALSE,
     row.names        = NULL
   )
@@ -56,7 +129,7 @@ sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
     name = "fraction_preferring",
     estimate = df,
     se = NA_real_,
-    details = list(threshold = threshold, subgroup_size = length(S)),
+    details = details,
     call = match.call()
   )
 }

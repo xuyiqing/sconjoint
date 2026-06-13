@@ -104,6 +104,12 @@
 #'   matrix is kept on `object$beta_hat_dnn`.  DML point estimates and
 #'   clustered SEs are unchanged across `stage2` choices on the same
 #'   `seed`: they are always computed from the Stage-1 cross-fit.
+#'
+#'   Stage 2 is only implemented for `learner = "dnn"`.  With
+#'   `learner = "enet"` or `"grf"` it is forced to `"none"` and a
+#'   once-per-session warning is emitted, because the per-respondent
+#'   betas then carry no empirical-Bayes shrinkage (see the `learner`
+#'   argument and the *Inference validity by quantity* section below).
 #' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
 #'   ensemble.  Independent of `seed`.  Default `12345L`.
 #' @param varref_floor Numeric lower bound on the per-coefficient prior
@@ -156,6 +162,33 @@
 #' * `K`, `hidden`, `seed`, `n_epochs`, `learning_rate`, `device`,
 #'   `parallel`, `n_cores`;
 #' * `loss_traces` -- list of per-fold training loss curves.
+#'
+#' @section Inference validity by quantity:
+#' The `sc_*` quantity functions fall into two groups with different
+#' inferential status, and it is worth being explicit about which is which.
+#'
+#' \strong{DML quantities (valid debiased inference).} The average
+#' structural parameters and the functionals built on the orthogonal
+#' (Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
+#' standard errors and confidence intervals: `coef()` / `summary()` /
+#' `vcov()` (the average `theta`), and the debiased quantities
+#' `sc_average()`, `sc_ame()`, `sc_counterfactual(vartype = "orthogonal")`,
+#' and `sc_mrs()` / `sc_wtp()`. Their SEs come from the cross-fitted
+#' influence function and are unchanged across `stage2` choices.
+#'
+#' \strong{Model-based / empirical-Bayes summaries (descriptive, not
+#' debiased).} The distribution-over-respondents quantities are plug-in
+#' functionals of the recovered per-respondent `beta(Z_i)` and inherit that
+#' object's finite-`T` shrinkage. They are descriptive summaries, not
+#' debiased estimators: `sc_polarization()`, `sc_fraction_preferring()`,
+#' `sc_direction_intensity()`, `sc_heterogeneity_test()`, `sc_clusters()`,
+#' `sc_optimal_profile()`, and the other per-respondent quantities. For the
+#' threshold/fraction quantities (`sc_polarization()`,
+#' `sc_fraction_preferring()`) a respondent-cluster wild bootstrap is
+#' available via `se_method = "wild_bootstrap"`, which quantifies the
+#' \emph{sampling} variability of the fraction; it does not remove the
+#' shrinkage bias that pulls each `beta_i` toward the population mean (and so
+#' biases these fractions toward consensus under short panels).
 #'
 #' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
 #' @examples
@@ -229,15 +262,34 @@ scfit <- function(formula, data,
   ## ensemble retrains a second DNN.  For the flexible alternative learners
   ## the first-stage matrix `beta_hat` already is the estimate every quantity
   ## function reads, so we pass it through unchanged.  DML point estimates and
-  ## clustered SEs are computed from the Stage-1 cross-fit regardless of
-  ## `stage2`, so this does not affect inference.  Warn only if the user
-  ## explicitly asked for a DNN-only stage2; the default downgrade is silent.
+  ## clustered SEs (theta / vcov, and the debiased quantities built on them)
+  ## are computed from the Stage-1 cross-fit regardless of `stage2`, so the
+  ## downgrade does not affect the inferential quantities.  What it does
+  ## affect is the empirical-Bayes shrinkage of the per-respondent beta(Z):
+  ## with stage2 = "none" the model-based / distributional summaries
+  ## (sc_polarization, sc_fraction_preferring, sc_clusters, ...) read the
+  ## raw first-stage betas rather than the Stage-2-refined ones.  Users
+  ## should know this happened, so warn once per session whenever the
+  ## downgrade actually applies (not only when stage2 was passed explicitly).
   if (learner != "dnn" && stage2 != "none") {
-    if (stage2_supplied) {
-      warning(sprintf(
-        "scfit(): stage2 = \"%s\" is only available for learner = \"dnn\"; using stage2 = \"none\" for learner = \"%s\".",
-        stage2, learner), call. = FALSE)
+    reason <- if (stage2_supplied) {
+      sprintf("you requested stage2 = \"%s\"", stage2)
+    } else {
+      sprintf("the default stage2 = \"%s\"", stage2)
     }
+    .sc_warn_once(
+      "stage2_downgrade",
+      sprintf(paste0(
+        "scfit(): stage2 (%s) is only implemented for learner = \"dnn\"; ",
+        "for learner = \"%s\" it has been set to \"none\", so the per-respondent ",
+        "beta(Z) receive no empirical-Bayes / MAP shrinkage. The DML quantities ",
+        "(theta from coef()/summary(), and the debiased quantities) are computed ",
+        "from the Stage-1 cross-fit and are unaffected. The model-based, ",
+        "distribution-over-respondents summaries (sc_polarization(), ",
+        "sc_fraction_preferring(), sc_clusters(), and the other per-respondent ",
+        "quantities) will read the un-shrunk first-stage betas. ",
+        "(This warning is shown once per session.)"),
+        reason, learner))
     stage2 <- "none"
   }
 

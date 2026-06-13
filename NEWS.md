@@ -1,3 +1,44 @@
+# sconjoint 0.2.0.9006 (2026-06-13)
+
+Reviewer-driven inference fixes for the distribution-over-respondents
+quantities.
+
+* `sc_polarization()` and `sc_fraction_preferring()` gain a
+  respondent-cluster bootstrap, selected with `se_method =
+  "wild_bootstrap"` and `n_boot` (default `200`). It resamples
+  respondents (either Rademacher wild weights on the per-respondent
+  contributions, `boot_type = "wild"`, the default, or a nonparametric
+  respondent resample, `boot_type = "cluster"`) and recomputes the
+  quantity on each resample, returning bootstrap standard errors and
+  percentile confidence intervals. For `sc_polarization()` this replaces
+  the previous `se = NA`: the polarization index now carries an
+  interval, including for the nonlinear `1 - |frac^+ - frac^-|`
+  transform. The deep network is not refit inside the bootstrap; only
+  the respondent-level aggregation that carries the sampling uncertainty
+  of these fractions is resampled. The default behavior is unchanged
+  (`se_method = "clustered"` for `sc_fraction_preferring()`, `"none"`
+  for `sc_polarization()`).
+
+  A Monte-Carlo check (`inst/benchmarks/coverage_resp_cluster_boot.R`)
+  confirms the fraction interval reaches its nominal 95% coverage and
+  that the bootstrap SE matches the analytic clustered-proportion SE.
+  The interval reflects sampling variability of the fraction; it does
+  not correct the finite-task shrinkage that pulls each respondent's
+  recovered slope toward the population mean and so biases the fraction
+  toward agreement. This caveat is stated in the function help and in
+  the returned object's `details`.
+
+* `scfit()` now warns, once per session, whenever it sets `stage2` to
+  `"none"` for a non-DNN learner (`"enet"` or `"grf"`). Stage 2 (the
+  empirical-Bayes / MAP refinement) is only implemented for the DNN, so
+  for the alternative learners the per-respondent slopes receive no
+  shrinkage; the warning makes that explicit instead of downgrading
+  silently. The average-parameter DML quantities are computed from the
+  Stage-1 cross-fit and are unaffected. The `?scfit` help adds an
+  *Inference validity by quantity* section spelling out which quantities
+  carry debiased (DML) inference and which are descriptive, model-based
+  summaries.
+
 # sconjoint 0.2.0.9005 (2026-06-13)
 
 Paper catch-up (2026-06-12 revision):

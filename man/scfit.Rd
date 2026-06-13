@@ -141,7 +141,13 @@ The Stage-2 result is what \code{object$beta_hat} holds and what all
 \verb{sc_*} quantity functions read by default; the Stage-1 single-DNN
 matrix is kept on \code{object$beta_hat_dnn}.  DML point estimates and
 clustered SEs are unchanged across \code{stage2} choices on the same
-\code{seed}: they are always computed from the Stage-1 cross-fit.}
+\code{seed}: they are always computed from the Stage-1 cross-fit.
+
+Stage 2 is only implemented for \code{learner = "dnn"}.  With
+\code{learner = "enet"} or \code{"grf"} it is forced to \code{"none"} and a
+once-per-session warning is emitted, because the per-respondent
+betas then carry no empirical-Bayes shrinkage (see the \code{learner}
+argument and the \emph{Inference validity by quantity} section below).}
 
 \item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
 ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
@@ -210,9 +216,38 @@ The returned \code{sc_fit} list contains at least the following fields:
 \code{parallel}, \code{n_cores};
 \item \code{loss_traces} -- list of per-fold training loss curves.
 }
+}
+\section{Inference validity by quantity}{
+
+The \verb{sc_*} quantity functions fall into two groups with different
+inferential status, and it is worth being explicit about which is which.
+
+\strong{DML quantities (valid debiased inference).} The average
+structural parameters and the functionals built on the orthogonal
+(Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
+standard errors and confidence intervals: \code{coef()} / \code{summary()} /
+\code{vcov()} (the average \code{theta}), and the debiased quantities
+\code{sc_average()}, \code{sc_ame()}, \code{sc_counterfactual(vartype = "orthogonal")},
+and \code{sc_mrs()} / \code{sc_wtp()}. Their SEs come from the cross-fitted
+influence function and are unchanged across \code{stage2} choices.
+
+\strong{Model-based / empirical-Bayes summaries (descriptive, not
+debiased).} The distribution-over-respondents quantities are plug-in
+functionals of the recovered per-respondent \code{beta(Z_i)} and inherit that
+object's finite-\code{T} shrinkage. They are descriptive summaries, not
+debiased estimators: \code{sc_polarization()}, \code{sc_fraction_preferring()},
+\code{sc_direction_intensity()}, \code{sc_heterogeneity_test()}, \code{sc_clusters()},
+\code{sc_optimal_profile()}, and the other per-respondent quantities. For the
+threshold/fraction quantities (\code{sc_polarization()},
+\code{sc_fraction_preferring()}) a respondent-cluster wild bootstrap is
+available via \code{se_method = "wild_bootstrap"}, which quantifies the
+\emph{sampling} variability of the fraction; it does not remove the
+shrinkage bias that pulls each \code{beta_i} toward the population mean (and so
+biases these fractions toward consensus under short panels).
 
 See \code{summary.sc_fit()}, \code{predict.sc_fit()}, and \code{plot.sc_fit()}.
 }
+
 \examples{
 \donttest{
 if (requireNamespace("torch", quietly = TRUE) &&

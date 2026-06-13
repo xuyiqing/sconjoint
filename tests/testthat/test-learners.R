@@ -6,10 +6,21 @@
 
 .fit_with_learner <- function(learner, seed = 1L, K = 4L, ...) {
   toy <- .make_toy_long(M = 80L, T_i = 4L, p = 3L, p_Z = 2L, seed = 7L)
-  scfit(y ~ a1 + a2 + a3 | z1 + z2,
-        data = toy$data,
-        respondent = "rid", task = "tid", profile = "pos",
-        learner = learner, K = K, seed = seed, ...)
+  ## Non-DNN learners emit a once-per-session Stage-2-downgrade warning
+  ## (see scfit() / C9). It is informational and expected here; the
+  ## dedicated test below verifies it fires. Suppress just that warning so
+  ## the shape / determinism checks are not order-dependent.
+  withCallingHandlers(
+    scfit(y ~ a1 + a2 + a3 | z1 + z2,
+          data = toy$data,
+          respondent = "rid", task = "tid", profile = "pos",
+          learner = learner, K = K, seed = seed, ...),
+    warning = function(w) {
+      if (grepl("stage2", conditionMessage(w), fixed = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
 }
 
 test_that("elastic-net learner produces a well-formed sc_fit", {
@@ -93,10 +104,20 @@ test_that("elastic-net auto-expands the moderator basis", {
 
 test_that("stage2 != none warns and is downgraded for non-DNN learners", {
   skip_if_not_installed("glmnet")
+  toy <- .make_toy_long(M = 80L, T_i = 4L, p = 3L, p_Z = 2L, seed = 7L)
+  ## Reset the once-per-session gate so the warning is observable here,
+  ## regardless of whether an earlier test in this session already tripped it.
+  sc_state <- get(".sc_state", envir = asNamespace("sconjoint"))
+  sc_state$warned <- setdiff(sc_state$warned, "stage2_downgrade")
   expect_warning(
-    .fit_with_learner("enet", stage2 = "map_c5"),
+    scfit(y ~ a1 + a2 + a3 | z1 + z2, data = toy$data,
+          respondent = "rid", task = "tid", profile = "pos",
+          learner = "enet", K = 4L, seed = 1L, stage2 = "map_c5"),
     "learner = \"dnn\""
   )
+  ## And the downgrade actually took effect.
+  fit <- .fit_with_learner("enet", stage2 = "map_c5")
+  expect_identical(fit$stage2_method, "none")
 })
 
 test_that("requesting a learner without its package errors cleanly", {
