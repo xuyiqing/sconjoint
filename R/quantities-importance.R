@@ -47,6 +47,13 @@
 #'   formula), `"uniform"` (production formula for factor designs),
 #'   `"levels"` (production formula with explicit level sets for
 #'   continuous attributes), or `"empirical"`.
+#' @param vartype Variance type for the shares. `"plugin"` (default) uses the
+#'   plug-in importance shares from the recovered coefficients, which always lie
+#'   between 0 and 1. `"orthogonal"` uses the debiased orthogonal-score shares
+#'   (the paper's Appendix-C estimand) with a respondent-clustered standard
+#'   error; these are opt-in because, as a ratio of debiased quantities, they can
+#'   fall outside the unit interval when the first stage is noisy, and are
+#'   implemented only for `design = "design_variance"`.
 #' @param levels Named list of numeric vectors, used by
 #'   `design = "levels"`: names are attribute names (as in
 #'   `names(object$attr_map)`) of *single-column continuous*

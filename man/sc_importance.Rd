@@ -21,6 +21,14 @@ formula), \code{"uniform"} (production formula for factor designs),
 \code{"levels"} (production formula with explicit level sets for
 continuous attributes), or \code{"empirical"}.}
 
+\item{vartype}{Variance type for the shares. \code{"plugin"} (default) uses the
+plug-in importance shares from the recovered coefficients, which always lie
+between 0 and 1. \code{"orthogonal"} uses the debiased orthogonal-score shares
+(the paper's Appendix-C estimand) with a respondent-clustered standard
+error; these are opt-in because, as a ratio of debiased quantities, they can
+fall outside the unit interval when the first stage is noisy, and are
+implemented only for \code{design = "design_variance"}.}
+
 \item{subgroup}{Row selector.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}

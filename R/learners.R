@@ -97,7 +97,7 @@
 #' @param y Numeric 0/1 vector, length N.
 #' @param Z Numeric N x p_Z matrix of (task-level) moderators.
 #' @param fold_id Integer vector, length N, respondent-clustered fold ids.
-#' @param alpha Elastic-net mixing parameter in [0, 1]; 1 = lasso, 0 = ridge.
+#' @param alpha Elastic-net mixing parameter between 0 and 1; 1 = lasso, 0 = ridge.
 #' @param df,interactions Basis-expansion controls forwarded to
 #'   `.sc_enet_basis()`: spline degrees of freedom per continuous moderator
 #'   and whether to append pairwise moderator products.

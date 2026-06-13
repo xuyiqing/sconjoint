@@ -102,7 +102,7 @@
 
 #' AME of attribute `k` on the probability scale, integrated over a
 #' single-profile pool `Xpool` (n_pool x p) drawn from the design law:
-#'   H(f) = E_X[G(f_k + X_{-k}'f_{-k}) - G(X_{-k}'f_{-k})].
+#'   `H(f) = E_X[G(f_k + X_{-k}'f_{-k}) - G(X_{-k}'f_{-k})]`.
 #' @keywords internal
 #' @noRd
 .sc_dH_ame <- function(k, Xpool) {
@@ -129,7 +129,7 @@
 ## design-law plug-ins (Z-measurable, exogenous) from stored slots
 ## ---------------------------------------------------------------------------
 
-#' Per-attribute block covariances S_a = Cov(DeltaX[, block_a]) from the
+#' Per-attribute block covariances S_a = `Cov(DeltaX[, block_a])` from the
 #' realized design (the empirical "design_variance" weighting).
 #' @keywords internal
 #' @noRd
