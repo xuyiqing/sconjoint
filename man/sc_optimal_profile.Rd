@@ -48,5 +48,7 @@ evaluation includes the population-level interaction contribution
 included; the \code{"greedy"} selection remains a per-attribute argmax on
 the main effects (interactions enter its reported probability but
 not the level picks), so prefer \code{"exhaustive"} when interactions are
-substantively important.
+substantively important.  The interaction term enters via the
+regularized mean-stage estimate (\code{w_hat}); see \code{?scfit} for the
+attenuation caveat.
 }

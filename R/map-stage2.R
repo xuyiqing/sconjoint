@@ -29,6 +29,8 @@
 #'   population-level interaction term.  The respondent update on
 #'   `beta_i` is otherwise unchanged: the index is
 #'   `DX_i %*% (f_i + eta) + offset`.  `NULL` (default) means no offset.
+#'   The interaction term enters via the regularized mean-stage estimate
+#'   (`w_hat`); see `?scfit` for the attenuation caveat.
 #' @return A list with:
 #'   * `eta`: numeric length-`P` residual, so that `beta_hat = f_i + eta`;
 #'   * `post_var_diag`: numeric length-`P` diagonal of the posterior

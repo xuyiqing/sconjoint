@@ -32,3 +32,10 @@ one-sided z-statistic \eqn{t_j = \hat v_j/\widehat{\mathrm{se}}}
 and p-value \eqn{p_j = \Phi(-t_j)}.  Multiplicity adjustment via
 \code{stats::p.adjust()} with \code{"holm"} or \code{"bh"} (mapped to \code{"BH"}).
 }
+\details{
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
+}

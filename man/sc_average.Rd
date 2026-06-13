@@ -44,4 +44,12 @@ With \code{scale = "probability"}, computes average marginal effects:
   \hat\beta_k(Z_i)\,G'(\Delta X_i^\top \hat\beta(Z_i))}
 where \eqn{G'(x) = \mathrm{plogis}(x)(1 - \mathrm{plogis}(x))}.
 This requires the stored \code{deltaX} matrix.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the \eqn{G'} weights in the
+\code{"probability"} scaling are computed from the main-effect linear
+predictor \eqn{\Delta X^\top \hat\theta} only -- the per-task
+interaction offset is omitted from the curvature evaluation -- and
+the scaled coefficients remain main-effect quantities at the
+no-interaction baseline.
 }

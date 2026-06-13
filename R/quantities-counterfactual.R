@@ -32,6 +32,9 @@
 #' `object$interaction$w_hat`; the `"orthogonal"` path extends the
 #' contrast with the identified interaction features of the pair and
 #' scores the expanded coefficient vector with cross-fitted nuisances.
+#' On the `"plugin"` path the interaction term enters via the
+#' regularized mean-stage estimate (`w_hat`); see `?scfit` for the
+#' attenuation caveat.
 #' @return An `sc_quantity` with scalar estimate, clustered SE,
 #'   normal-approx CI.
 #' @export

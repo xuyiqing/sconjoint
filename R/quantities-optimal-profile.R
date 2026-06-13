@@ -28,7 +28,9 @@
 #' included; the `"greedy"` selection remains a per-attribute argmax on
 #' the main effects (interactions enter its reported probability but
 #' not the level picks), so prefer `"exhaustive"` when interactions are
-#' substantively important.
+#' substantively important.  The interaction term enters via the
+#' regularized mean-stage estimate (`w_hat`); see `?scfit` for the
+#' attenuation caveat.
 #' @return An `sc_quantity` with scalar estimate and rich `details`.
 #' @export
 sc_optimal_profile <- function(object,

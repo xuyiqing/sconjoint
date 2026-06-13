@@ -13,6 +13,12 @@
 #' headline conceptual contribution described in the paper (§2.3,
 #' §3.1); it is new in sconjoint v0.1 with no prototype counterpart.
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), this quantity is computed from
+#' the per-respondent `beta_i` exactly as before, but `beta_i` is then
+#' the MAIN-EFFECT part of the utility (the coefficient on `deltaX` at
+#' the no-interaction baseline), not the all-else-equal effect.
+#'
 #' @param object An `sc_fit`.
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.

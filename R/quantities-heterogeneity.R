@@ -9,6 +9,12 @@
 #' and p-value \eqn{p_j = \Phi(-t_j)}.  Multiplicity adjustment via
 #' `stats::p.adjust()` with `"holm"` or `"bh"` (mapped to `"BH"`).
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), this quantity is computed from
+#' the per-respondent `beta_i` exactly as before, but `beta_i` is then
+#' the MAIN-EFFECT part of the utility (the coefficient on `deltaX` at
+#' the no-interaction baseline), not the all-else-equal effect.
+#'
 #' @param object An `sc_fit`.
 #' @param adjust Either `"none"`, `"holm"`, or `"bh"`.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.

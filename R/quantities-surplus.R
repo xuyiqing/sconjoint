@@ -12,6 +12,13 @@
 #'   accepted by [sc_counterfactual()]).
 #' @param subgroup Optional row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#' @details
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), each profile utility
+#' \eqn{V_{ij}} includes the population-level interaction contribution
+#' \eqn{g(X_j)} (the all-reference profile has \eqn{g = 0}).  The
+#' interaction term enters via the regularized mean-stage estimate
+#' (`w_hat`); see `?scfit` for the attenuation caveat.
 #' @return An `sc_quantity` with scalar estimate, clustered SE, and
 #'   normal-approx CI.
 #' @export
