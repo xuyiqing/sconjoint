@@ -45,5 +45,7 @@ interaction offset \eqn{g(X_A) - g(X_B)}
 (\code{object$interaction$g_offset_task}), and \code{"beta"} (both
 stored and \code{newdata} forward-pass) returns the main-effect
 coefficient of the identified representation (under
-\code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).
+\code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).  The
+interaction term enters via the regularized mean-stage estimate
+(\code{w_hat}); see \code{?scfit} for the attenuation caveat.
 }

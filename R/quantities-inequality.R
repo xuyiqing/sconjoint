@@ -10,6 +10,12 @@
 #' With `measure = "gini"`, reports the Gini coefficient of the
 #' absolute values \eqn{|\hat\beta_k(Z_i)|} for each dummy.
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), this quantity is computed from
+#' the per-respondent `beta_i` exactly as before, but `beta_i` is then
+#' the MAIN-EFFECT part of the utility (the coefficient on `deltaX` at
+#' the no-interaction baseline), not the all-else-equal effect.
+#'
 #' @param object An `sc_fit`.
 #' @param measure One of `"variance"` or `"gini"`.
 #' @param subgroup Optional row selector.

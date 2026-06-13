@@ -4,6 +4,7 @@
 * DML inference under interactions runs on the expanded linear-in-parameters representation `[deltaX, q_A - q_B]`; interaction coefficients and clustered vcov on `fit$interaction`.
 * Stage-2 MAP update takes the cross-fitted interaction term as a known per-task offset.
 * Index-evaluating quantities (`sc_ame`, `sc_counterfactual`, `sc_decisiveness`, `sc_optimal_profile`, `sc_surplus`, `sc_welfare_change`, `predict`) include the interaction offset when the fit carries one; MRS/WTP documented as reference-profile-specific under interactions.
+* docs: interaction attenuation caveat on plugin-path quantities (`w_hat` is `lambda_V`-attenuated; debiased estimates on `fit$interaction$theta`; see `?scfit`).
 
 # sconjoint 0.2.0.9005 (2026-06-13)
 

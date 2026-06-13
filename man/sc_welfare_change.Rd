@@ -34,3 +34,11 @@ choice set is the log-sum-exp inclusive value (see \code{\link[=sc_surplus]{sc_s
 The aggregate welfare change is the respondent average with
 clustered SE.
 }
+\details{
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), each profile utility in both
+choice sets includes the population-level interaction contribution
+\eqn{g(X_j)}.  The interaction term enters via the regularized
+mean-stage estimate (\code{w_hat}); see \code{?scfit} for the attenuation
+caveat.
+}

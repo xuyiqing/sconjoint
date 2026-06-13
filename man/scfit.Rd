@@ -231,7 +231,10 @@ never \code{V} itself; the fit reports \code{W} (\code{fit$interaction$W_avg}).}
 
 \item{lambda_V}{Non-negative ridge penalty on the interaction head
 (default \code{1e-2}), added to the training loss as
-\code{lambda_V * sum(V^2)} or \code{lambda_V * sum(w^2)}.}
+\code{lambda_V * sum(V^2)} or \code{lambda_V * sum(w^2)}.  See the section
+\emph{Plugin-path attenuation under interactions} below: \code{lambda_V}
+shrinks the mean-stage interaction weights \code{w_hat} that every
+plugin-path quantity consumes.}
 }
 \value{
 An object of class \code{sc_fit} -- see Details.  Key components
@@ -276,6 +279,36 @@ block of the orthogonal-score correction (\code{correction_int}).
 
 See \code{summary.sc_fit()}, \code{predict.sc_fit()}, and \code{plot.sc_fit()}.
 }
+\section{Plugin-path attenuation under interactions}{
+
+\strong{Under \code{interactions != "none"} the package carries two estimates of
+the interaction coefficients, and they are NOT interchangeable.}
+The debiased (DML-corrected) interaction estimates live on
+\code{fit$interaction$theta} (clustered variance \code{fit$interaction$vcov})
+and are approximately unbiased.  The mean-stage plugin weights
+\code{fit$interaction$w_hat} are ridge-attenuated by \code{lambda_V}: at the
+default \code{lambda_V = 1e-2} on a strong-interaction simulation they
+are shrunk to roughly 40--50\% of the true interaction coefficients.
+Main effects are approximately unbiased on both paths.
+
+The following quantities consume \code{w_hat} (via the cross-fitted
+offsets built from it), so their interaction contribution inherits
+the attenuation: \code{sc_counterfactual(vartype = "plugin")},
+\code{sc_decisiveness()}, \code{sc_optimal_profile()}, \code{sc_surplus()},
+\code{sc_welfare_change()}, \code{predict(type = "logit")} and
+\code{predict(type = "prob")}, and the Stage-2 MAP update (which takes
+the cross-fitted interaction term as a known per-task offset when
+refining \code{beta_hat}).  For population-level interaction effects,
+read \code{fit$interaction$theta} or use an orthogonal-path quantity
+(e.g. \code{sc_counterfactual(vartype = "orthogonal")}).
+
+\code{lambda_V} therefore trades prediction stability (a stronger ridge
+stabilizes the trained interaction head) against plugin-path
+attenuation (a stronger ridge shrinks every \code{w_hat}-based offset
+toward the no-interaction index).  There is currently no automatic
+selection rule for \code{lambda_V}.
+}
+
 \examples{
 \donttest{
 if (requireNamespace("torch", quietly = TRUE) &&

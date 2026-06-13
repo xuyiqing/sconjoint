@@ -12,6 +12,15 @@
 #' \deqn{\mathrm{demand}(c) = \frac{1}{N_S}\sum_{i\in S}
 #'   \mathrm{plogis}(V_i(c))}
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the population-level
+#' interaction offset is NOT applied on this path: the demand index is
+#' a MAIN-EFFECT-ONLY evaluation of the per-respondent `beta_i` (the
+#' coefficient on `deltaX` at the no-interaction baseline), so the
+#' profile's interaction contribution \eqn{g(X)} is omitted from
+#' \eqn{V_i(c)}.  See `?scfit` for how interactions enter the other
+#' index-evaluating quantities.
+#'
 #' @param object An `sc_fit`.
 #' @param cost_attr Character name of the numeric cost attribute.
 #'   Must correspond to a single column in `object$attr_names`.

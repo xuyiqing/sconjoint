@@ -34,5 +34,7 @@ strongly decisive (\eqn{p_i > 0.9} or \eqn{p_i < 0.1}).
 
 When the fit carries an attribute-interaction term, the per-respondent
 index includes the population-level interaction offset
-\eqn{g(X_A) - g(X_B)} (see \code{\link[=sc_counterfactual]{sc_counterfactual()}}).
+\eqn{g(X_A) - g(X_B)} (see \code{\link[=sc_counterfactual]{sc_counterfactual()}}).  The interaction
+term enters via the regularized mean-stage estimate (\code{w_hat}); see
+\code{?scfit} for the attenuation caveat.
 }

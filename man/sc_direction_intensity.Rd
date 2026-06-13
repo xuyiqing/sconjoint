@@ -38,4 +38,10 @@ large when respondents care a lot but disagree on direction.
 Both components carry respondent-clustered SEs.  This is the
 headline conceptual contribution described in the paper (§2.3,
 §3.1); it is new in sconjoint v0.1 with no prototype counterpart.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

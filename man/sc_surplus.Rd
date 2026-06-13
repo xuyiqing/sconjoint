@@ -28,3 +28,11 @@ the supplied choice set.
 The log-sum-exp is computed with numerical stabilisation.
 The aggregate surplus is the respondent average with clustered SE.
 }
+\details{
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), each profile utility
+\eqn{V_{ij}} includes the population-level interaction contribution
+\eqn{g(X_j)} (the all-reference profile has \eqn{g = 0}).  The
+interaction term enters via the regularized mean-stage estimate
+(\code{w_hat}); see \code{?scfit} for the attenuation caveat.
+}

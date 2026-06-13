@@ -57,4 +57,10 @@ Columns of \code{beta_hat} are optionally standardized (\code{scale = TRUE},
 the default) so that dummies with wider β ranges do not dominate
 the Euclidean distance.  This matches the prototype's clustering
 recipe in \verb{07b_structural_quantities.R} §7.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

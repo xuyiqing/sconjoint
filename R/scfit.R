@@ -183,7 +183,10 @@
 #'   never `V` itself; the fit reports `W` (`fit$interaction$W_avg`).
 #' @param lambda_V Non-negative ridge penalty on the interaction head
 #'   (default `1e-2`), added to the training loss as
-#'   `lambda_V * sum(V^2)` or `lambda_V * sum(w^2)`.
+#'   `lambda_V * sum(V^2)` or `lambda_V * sum(w^2)`.  See the section
+#'   *Plugin-path attenuation under interactions* below: `lambda_V`
+#'   shrinks the mean-stage interaction weights `w_hat` that every
+#'   plugin-path quantity consumes.
 #' @return An object of class `sc_fit` -- see Details.  Key components
 #'   include the DML point estimates `theta`, the full `p x p`
 #'   clustered variance-covariance `vcov`, the out-of-sample
@@ -214,6 +217,34 @@
 #'   block of the orthogonal-score correction (`correction_int`).
 #'
 #' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
+#'
+#' @section Plugin-path attenuation under interactions:
+#' **Under `interactions != "none"` the package carries two estimates of
+#' the interaction coefficients, and they are NOT interchangeable.**
+#' The debiased (DML-corrected) interaction estimates live on
+#' `fit$interaction$theta` (clustered variance `fit$interaction$vcov`)
+#' and are approximately unbiased.  The mean-stage plugin weights
+#' `fit$interaction$w_hat` are ridge-attenuated by `lambda_V`: at the
+#' default `lambda_V = 1e-2` on a strong-interaction simulation they
+#' are shrunk to roughly 40--50% of the true interaction coefficients.
+#' Main effects are approximately unbiased on both paths.
+#'
+#' The following quantities consume `w_hat` (via the cross-fitted
+#' offsets built from it), so their interaction contribution inherits
+#' the attenuation: `sc_counterfactual(vartype = "plugin")`,
+#' `sc_decisiveness()`, `sc_optimal_profile()`, `sc_surplus()`,
+#' `sc_welfare_change()`, `predict(type = "logit")` and
+#' `predict(type = "prob")`, and the Stage-2 MAP update (which takes
+#' the cross-fitted interaction term as a known per-task offset when
+#' refining `beta_hat`).  For population-level interaction effects,
+#' read `fit$interaction$theta` or use an orthogonal-path quantity
+#' (e.g. `sc_counterfactual(vartype = "orthogonal")`).
+#'
+#' `lambda_V` therefore trades prediction stability (a stronger ridge
+#' stabilizes the trained interaction head) against plugin-path
+#' attenuation (a stronger ridge shrinks every `w_hat`-based offset
+#' toward the no-interaction index).  There is currently no automatic
+#' selection rule for `lambda_V`.
 #' @examples
 #' \donttest{
 #' if (requireNamespace("torch", quietly = TRUE) &&

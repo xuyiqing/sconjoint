@@ -56,4 +56,7 @@ The \code{"plugin"} path adds the population-level offset built from
 \code{object$interaction$w_hat}; the \code{"orthogonal"} path extends the
 contrast with the identified interaction features of the pair and
 scores the expanded coefficient vector with cross-fitted nuisances.
+On the \code{"plugin"} path the interaction term enters via the
+regularized mean-stage estimate (\code{w_hat}); see \code{?scfit} for the
+attenuation caveat.
 }

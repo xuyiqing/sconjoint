@@ -187,7 +187,9 @@ print.sc_fit_summary <- function(x, digits = 4L, ...) {
 #' (\code{object$interaction$g_offset_task}), and \code{"beta"} (both
 #' stored and \code{newdata} forward-pass) returns the main-effect
 #' coefficient of the identified representation (under
-#' \code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).
+#' \code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).  The
+#' interaction term enters via the regularized mean-stage estimate
+#' (\code{w_hat}); see \code{?scfit} for the attenuation caveat.
 #' @return When \code{type = "beta"}: an \eqn{N \times p} numeric matrix
 #'   of preference parameters.
 #'   When \code{type = "logit"} (only \code{newdata = NULL}): a numeric
