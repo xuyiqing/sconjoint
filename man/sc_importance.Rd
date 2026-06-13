@@ -21,6 +21,11 @@ formula), \code{"uniform"} (production formula for factor designs),
 \code{"levels"} (production formula with explicit level sets for
 continuous attributes), or \code{"empirical"}.}
 
+\item{vartype}{Either \code{"plugin"} (default; per-respondent shares
+averaged with a respondent-clustered SE) or \code{"orthogonal"} (the
+debiased Appendix C shares with a clustered simplex-Jacobian SE;
+only available for \code{design = "design_variance"}).}
+
 \item{subgroup}{Row selector.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
