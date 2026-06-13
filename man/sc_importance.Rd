@@ -87,4 +87,13 @@ while \code{"uniform"} integrates over the attribute's marginal level
 distribution and accounts for within-attribute covariance of the
 dummies.  When reproducing the paper's reported shares, use
 \code{"uniform"} (factor designs) or \code{"levels"} (continuous designs).
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the importance shares
+decompose the MAIN-EFFECT part of the utility only: \code{beta_i} is the
+main-effect coefficient at the no-interaction baseline, and the
+variance contributed by the population-level interaction term is
+not attributed to either attribute of a pair.  An interaction-aware
+decomposition (allocating the cross-attribute variance) is future
+work.
 }

@@ -25,12 +25,15 @@ sc_welfare_change <- function(object, old_set, new_set, subgroup = NULL,
   if (!is.list(new_set) || length(new_set) < 1L) {
     stop("sc_welfare_change(): `new_set` must be a non-empty list of profile specs.")
   }
-  ## Helper: compute per-respondent logsumexp for a choice set
+  ## Helper: compute per-respondent logsumexp for a choice set.  Each
+  ## profile utility includes the population-level interaction
+  ## contribution g(X_j) when the fit carries one.
   .cs_vec <- function(profiles, Bs) {
     dummies <- lapply(profiles, function(pr) .sc_profile_to_dummies(object, pr))
     V <- matrix(NA_real_, nrow = nrow(Bs), ncol = length(dummies))
     for (j in seq_along(dummies)) {
-      V[, j] <- as.numeric(Bs %*% dummies[[j]])
+      V[, j] <- as.numeric(Bs %*% dummies[[j]]) +
+        .sc_int_pair_offset(object, dummies[[j]])
     }
     apply(V, 1L, .sc_logsumexp)
   }

@@ -48,4 +48,12 @@ from \eqn{\hat\beta(Z)} into \eqn{\hat p}.
 not mentioned default to the reference level.  The conversion from
 \verb{(A, B)} to encoded dummy vectors follows the prototype
 \verb{07b_structural_quantities.R} lines 153--175 (\code{profile_to_dummies}).
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the choice index includes the
+interaction offset: \eqn{(X_A - X_B)^\top \beta + g(X_A) - g(X_B)}.
+The \code{"plugin"} path adds the population-level offset built from
+\code{object$interaction$w_hat}; the \code{"orthogonal"} path extends the
+contrast with the identified interaction features of the pair and
+scores the expanded coefficient vector with cross-fitted nuisances.
 }

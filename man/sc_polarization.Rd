@@ -4,15 +4,7 @@
 \alias{sc_polarization}
 \title{Preference polarization index per dummy}
 \usage{
-sc_polarization(
-  object,
-  subgroup = NULL,
-  which_beta = c("hybrid", "dnn"),
-  se_method = c("none", "wild_bootstrap"),
-  n_boot = 200L,
-  boot_type = c("wild", "cluster"),
-  boot_seed = NULL
-)
+sc_polarization(object, subgroup = NULL, which_beta = c("hybrid", "dnn"))
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
@@ -20,30 +12,11 @@ sc_polarization(
 \item{subgroup}{Row selector.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
-
-\item{se_method}{One of \code{"none"} (default; \code{NA} SEs, the v0.1
-behavior) or \code{"wild_bootstrap"} (respondent-cluster bootstrap SEs
-and percentile CIs). See Details.}
-
-\item{n_boot}{Integer number of bootstrap resamples when
-\code{se_method = "wild_bootstrap"}. Default \code{200L}.}
-
-\item{boot_type}{Bootstrap scheme when \code{se_method = "wild_bootstrap"}:
-\code{"wild"} (default; Rademacher weights) or \code{"cluster"} (nonparametric
-respondent resampling).}
-
-\item{boot_seed}{Optional integer seed for the bootstrap. The RNG
-state is saved and restored, so the caller's stream is unaffected.}
 }
 \value{
 An \code{sc_quantity} with \code{estimate} a data.frame of one row
 per dummy (\code{dummy_name}, \code{frac_positive}, \code{frac_negative},
-\code{polarization_idx}, and SE/CI columns \code{se}, \code{ci_lo}, \code{ci_hi} for the
-polarization index). Under \code{se_method = "none"} the SE/CI columns
-are \code{NA}; under \code{"wild_bootstrap"} they are the bootstrap SE and
-percentile bounds for \code{polarization_idx}, and the extra columns
-\code{se_positive}, \code{se_negative} carry the bootstrap SEs of the two
-fractions.
+\code{polarization_idx}, plus \code{NA} SE/CI columns).
 }
 \description{
 For every dummy column \eqn{j}, computes
@@ -55,19 +28,13 @@ values near 0 indicate near-uniform agreement.
 }
 \details{
 Point estimate is a direct port of \verb{07b_structural_quantities.R}
-lines 478--497. The polarization index is a bounded nonlinear
-transform of two proportions and has no clean clustered-sd
-expression, so by default (\code{se_method = "none"}) no standard error is
-returned. A respondent-cluster (wild) bootstrap is available via
-\code{se_method = "wild_bootstrap"}: the recovered per-respondent
-\eqn{\hat\beta_i} are resampled at the respondent level and
-\eqn{\mathrm{frac}^+_j}, \eqn{\mathrm{frac}^-_j}, and the
-polarization index are recomputed on each resample, giving bootstrap
-standard errors and percentile confidence intervals for all three
-(including the nonlinear index). The deep network is \emph{not} refit
-inside the bootstrap: only the respondent-level aggregation is
-resampled. As with \code{sc_fraction_preferring()}, fixed-\eqn{T}
-shrinkage biases the plug-in fractions toward consensus, so the
-interval reflects \strong{sampling variability}, not the shrinkage
-bias. See the \emph{Inference validity by quantity} section of \code{?scfit}.
+lines 478--497.  No standard error is defined at v0.1 — the
+polarization index is a bounded nonlinear transform of two
+proportions and does not have a clean clustered-sd expression.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

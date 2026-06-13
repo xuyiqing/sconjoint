@@ -8,11 +8,7 @@ sc_fraction_preferring(
   object,
   threshold = 0,
   subgroup = NULL,
-  which_beta = c("hybrid", "dnn"),
-  se_method = c("clustered", "wild_bootstrap"),
-  n_boot = 200L,
-  boot_type = c("wild", "cluster"),
-  boot_seed = NULL
+  which_beta = c("hybrid", "dnn")
 )
 }
 \arguments{
@@ -23,26 +19,9 @@ sc_fraction_preferring(
 \item{subgroup}{Row selector.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
-
-\item{se_method}{One of \code{"clustered"} (default) or \code{"wild_bootstrap"}.
-See Details.}
-
-\item{n_boot}{Integer number of bootstrap resamples when
-\code{se_method = "wild_bootstrap"}. Default \code{200L}.}
-
-\item{boot_type}{Bootstrap scheme when \code{se_method = "wild_bootstrap"}:
-\code{"wild"} (default; Rademacher weights) or \code{"cluster"} (nonparametric
-respondent resampling).}
-
-\item{boot_seed}{Optional integer seed for the bootstrap. The RNG
-state is saved and restored, so the caller's stream is unaffected.}
 }
 \value{
-An \code{sc_quantity} with \code{estimate} a data.frame. The SE / CI
-columns (\code{se_positive}, \code{se_negative}, \verb{ci_*}) are filled by the
-chosen \code{se_method}. When \code{se_method = "wild_bootstrap"},
-\code{details$se_method} is \code{"wild_bootstrap"} and \code{details$n_boot},
-\code{details$boot_type} record the bootstrap settings.
+An \code{sc_quantity} with \code{estimate} a data.frame.
 }
 \description{
 For every dummy column \eqn{j} and row subgroup \eqn{S}, computes
@@ -53,28 +32,14 @@ The default threshold is \eqn{\tau = 0}, giving the fraction of
 respondents preferring each non-reference level over the reference.
 }
 \details{
-This is a \emph{descriptive} summary of the distribution of the
-recovered per-respondent slopes, not a debiased estimator (see the
-\emph{Inference validity by quantity} section of \code{?scfit}). Two standard
-error rules are offered via \code{se_method}:
-\itemize{
-\item \code{"clustered"} (default, the v0.1 behavior): respondent-clustered
-standard errors on the Bernoulli indicators
-\eqn{1\{\hat\beta_j(Z_i) > \tau\}}, treating each indicator as an
-observed 0/1 outcome. These are correct for the variance of a
-clustered proportion but ignore that the indicators are taken of
-\emph{shrunken} coefficients.
-\item \code{"wild_bootstrap"}: a respondent-cluster (wild) bootstrap. The
-recovered \eqn{\hat\beta_i} is resampled at the respondent level
-(\code{boot_type = "wild"} applies Rademacher weights to the centered
-per-respondent indicator contributions; \code{boot_type = "cluster"}
-draws respondents with replacement) and the fraction is recomputed
-on each of \code{n_boot} resamples. The deep network is \emph{not}
-refit inside the bootstrap: only the respondent-level aggregation
-step is resampled, which is what carries the sampling uncertainty
-of these fractions. The returned interval is a percentile interval
-and reflects \strong{sampling variability of the fraction}, not the
-finite-\eqn{T} shrinkage bias that pulls each \eqn{\hat\beta_i}
-toward consensus and so biases the fraction toward agreement.
-}
+Point estimate is a direct port of
+\verb{07b_structural_quantities.R} lines 478--486 (\code{frac_positive} /
+\code{frac_negative} columns).  Clustered SEs on the Bernoulli
+indicators are new in sconjoint v0.1.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

@@ -24,6 +24,14 @@
 #'   `subgroup` and `which_beta`.
 #' @param subgroup Optional row selector, see `sc_mrs`.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#' @details
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the choice index includes the
+#' interaction offset: \eqn{(X_A - X_B)^\top \beta + g(X_A) - g(X_B)}.
+#' The `"plugin"` path adds the population-level offset built from
+#' `object$interaction$w_hat`; the `"orthogonal"` path extends the
+#' contrast with the identified interaction features of the pair and
+#' scores the expanded coefficient vector with cross-fitted nuisances.
 #' @return An `sc_quantity` with scalar estimate, clustered SE,
 #'   normal-approx CI.
 #' @export
@@ -39,7 +47,13 @@ sc_counterfactual <- function(object, A, B,
   dx <- XA - XB
 
   if (vartype == "orthogonal") {
-    d <- .sc_debiased_scalar(object, .sc_dH_voteshare(dx))
+    cvec <- dx
+    if (!is.null(object$interaction)) {
+      f_pair <- .sc_int_features_profile(XA, object$interaction$pairs) -
+        .sc_int_features_profile(XB, object$interaction$pairs)
+      cvec <- c(dx, as.numeric(f_pair))
+    }
+    d <- .sc_debiased_scalar(object, .sc_dH_voteshare(cvec))
     if (!is.na(d["estimate"]) && (d["estimate"] < 0 || d["estimate"] > 1)) {
       warning("sc_counterfactual(): the orthogonal one-step estimate (",
               sprintf("%.3f", d["estimate"]), ") lies outside [0, 1]; the ",
@@ -59,7 +73,8 @@ sc_counterfactual <- function(object, A, B,
   Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   w_s <- .sc_weights_for_rows(object, S)
-  lin <- as.numeric(Bm[S, , drop = FALSE] %*% dx)
+  lin <- as.numeric(Bm[S, , drop = FALSE] %*% dx) +
+    .sc_int_pair_offset(object, XA, XB)
   p_i <- stats::plogis(lin)
   est <- .sc_weighted_task_mean(p_i, object$respondent_id[S], w_s)
   se  <- .sc_cluster_se(p_i, object$respondent_id[S], w_s)

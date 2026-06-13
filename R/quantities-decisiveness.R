@@ -14,6 +14,10 @@
 #'   [sc_counterfactual()]).
 #' @param subgroup Optional row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#' @details
+#' When the fit carries an attribute-interaction term, the per-respondent
+#' index includes the population-level interaction offset
+#' \eqn{g(X_A) - g(X_B)} (see [sc_counterfactual()]).
 #' @return An `sc_quantity` with scalar estimate (mean decisiveness),
 #'   clustered SE, normal-approx CI, and details including the
 #'   fraction strongly decisive.
@@ -29,7 +33,7 @@ sc_decisiveness <- function(object, A, B, subgroup = NULL,
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
-  lin <- as.numeric(Bs %*% dx)
+  lin <- as.numeric(Bs %*% dx) + .sc_int_pair_offset(object, XA, XB)
   p_i <- stats::plogis(lin)
   d_i <- abs(2 * p_i - 1)
   est <- mean(d_i)
