@@ -89,6 +89,63 @@
   }
 }
 
+#' Debiased counterfactual vote share for an exogenous contrast
+#'
+#' Computes the debiased (orthogonal-score) win probability
+#' \eqn{E[G(c^\top f(Z))]} for an analyst-supplied contrast vector
+#' \eqn{c} in the attribute-dummy space, with a respondent-clustered
+#' standard error. This is the raw-contrast counterpart of
+#' [sc_counterfactual()]: that function derives the contrast from two
+#' profile lists, whereas this one takes the contrast directly in dummy
+#' space (useful when the contrast is not a single A-vs-B profile swap,
+#' e.g. a coded difference variable or a multi-attribute plan).
+#'
+#' @param object An `sc_fit`.
+#' @param contrast Numeric contrast vector \eqn{c}. Either length
+#'   `ncol(object$beta_hat)` (assumed in dummy order) or a named vector
+#'   whose names match the fit's attribute dummies.
+#' @param level Confidence level (default 0.95).
+#' @return An `sc_quantity` with the debiased estimate, clustered SE, and
+#'   normal-approximation confidence bounds.
+#' @seealso [sc_counterfactual()]
+#' @export
+sc_voteshare_contrast <- function(object, contrast, level = 0.95) {
+  stopifnot(inherits(object, "sc_fit"))
+  nm <- colnames(object$beta_hat)
+  cvec <- numeric(length(nm))
+  names(cvec) <- nm
+  if (is.null(names(contrast))) {
+    if (length(contrast) != length(nm)) {
+      stop("`contrast` must have length ", length(nm),
+           " (the number of attribute dummies) or be a named vector ",
+           "matching the fit's attribute dummies.", call. = FALSE)
+    }
+    cvec[] <- contrast
+  } else {
+    bad <- setdiff(names(contrast), nm)
+    if (length(bad)) {
+      stop("`contrast` names not in the fit: ",
+           paste(bad, collapse = ", "), call. = FALSE)
+    }
+    cvec[names(contrast)] <- contrast
+  }
+  d <- .sc_debiased_scalar(object, .sc_dH_voteshare(cvec), level = level)
+  if (!is.na(d["estimate"]) && (d["estimate"] < 0 || d["estimate"] > 1)) {
+    warning("sc_voteshare_contrast(): the orthogonal one-step estimate (",
+            sprintf("%.3f", d["estimate"]), ") lies outside [0, 1]; the ",
+            "linearized correction is unreliable for extreme contrasts.",
+            call. = FALSE)
+  }
+  .sc_quantity(
+    name = "voteshare_contrast",
+    estimate = unname(d["estimate"]), se = unname(d["se"]),
+    ci_lo = unname(d["ci_lo"]), ci_hi = unname(d["ci_hi"]),
+    level = level,
+    details = list(contrast = cvec, vartype = "orthogonal",
+                   se_method = "debiased orthogonal score, respondent-clustered"),
+    call = match.call())
+}
+
 #' Attribute-importance numerator for block `cols`: H = f_a' S_a f_a,
 #' grad = 2 S_a^{(p)} f (zero outside the block).
 #' @keywords internal

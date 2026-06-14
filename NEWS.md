@@ -1,3 +1,20 @@
+# sconjoint 0.2.0.9008 (2026-06-13)
+
+Public API for raw-contrast debiased vote shares; quantity coercion.
+
+* New `sc_voteshare_contrast()` exposes the debiased (orthogonal-score)
+  counterfactual vote share for an analyst-supplied contrast vector in
+  attribute-dummy space --- the raw-contrast counterpart of
+  `sc_counterfactual()` (which takes two profile lists). This lets downstream
+  code obtain a debiased vote share for a coded difference or multi-attribute
+  contrast through the public API instead of the internal helpers.
+
+* New `as.data.frame()` method for `sc_quantity`: returns the estimate table for
+  multi-row quantities (`sc_average()`, `sc_importance()`, ...) or a one-row
+  summary for scalar quantities (`sc_counterfactual()`, ...). Fixes an infinite
+  recursion (C stack overflow) when coercing a scalar `sc_quantity` via the
+  default list method.
+
 # sconjoint 0.2.0.9007 (2026-06-13)
 
 Survey-weighted estimands for production analyses.

@@ -125,6 +125,31 @@ format.sc_quantity <- function(x, digits = 4L, ...) {
   }
 }
 
+#' Coerce an `sc_quantity` to a data frame
+#'
+#' Returns the estimate table for multi-row quantities (e.g.
+#' [sc_average()], [sc_importance()]), or a one-row summary
+#' (`name`, `estimate`, `se`, `ci_lo`, `ci_hi`) for scalar quantities
+#' (e.g. [sc_counterfactual()]). Defining this method avoids R's default
+#' list coercion, which recurses on the nested `details`/`call` elements.
+#' @param x An `sc_quantity`.
+#' @param row.names,optional Unused; present for S3 generic compatibility.
+#' @param ... Unused.
+#' @return A data frame.
+#' @export
+as.data.frame.sc_quantity <- function(x, row.names = NULL, optional = FALSE, ...) {
+  est <- x$estimate
+  if (is.data.frame(est)) return(est)
+  data.frame(
+    name     = x$name,
+    estimate = unname(est),
+    se       = unname(x$se),
+    ci_lo    = unname(x$ci_lo),
+    ci_hi    = unname(x$ci_hi),
+    stringsAsFactors = FALSE
+  )
+}
+
 #' Print method for `sc_quantity_bivariate`
 #' @param x An `sc_quantity_bivariate`.
 #' @param digits Significant digits.
