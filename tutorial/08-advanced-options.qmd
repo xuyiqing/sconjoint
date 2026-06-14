@@ -125,6 +125,81 @@ average-parameter estimate and its clustered standard error exactly. For
 numerators and can fall outside `[0, 1]` when the first stage is noisy,
 which is why the always-in-`[0, 1]` plug-in shares remain the default.
 
+## Survey-weighted estimands
+
+By default, `sconjoint` targets the unweighted sample of respondents:
+each respondent contributes equally after averaging over that
+respondent's conjoint tasks. If the original survey supplies respondent
+weights and the target is a weighted population, pass those weights to
+`scfit()` with `respondent_weights`.
+
+```{r}
+#| label: survey-weight-example
+#| eval: false
+fit_w <- scfit(
+  formula,
+  data = dat,
+  respondent = "respondent_id",
+  task = "task_id",
+  profile = "profile_id",
+  respondent_weights = "survey_weight",
+  seed = 42
+)
+```
+
+The weight can be a column name in `data` or a numeric vector of length
+`nrow(data)`. It must be finite, non-negative, and constant within
+respondent. The package normalizes the weights across respondents and
+then uses them in the respondent-level aggregation step:
+
+$$
+\hat\theta_w
+=
+\sum_{i=1}^{M} a_i\,\bar\psi_i,
+\qquad
+a_i=\frac{w_i}{\sum_{j=1}^{M}w_j},
+\qquad
+\bar\psi_i=\frac{1}{T_i}\sum_{t=1}^{T_i}\psi_{it}.
+$$
+
+The clustered variance uses the same weighted respondent contributions,
+with the usual finite-cluster factor:
+
+$$
+\widehat V_w
+=
+\frac{M}{M-1}
+\sum_{i=1}^{M}
+a_i^2(\bar\psi_i-\hat\theta_w)(\bar\psi_i-\hat\theta_w)'.
+$$
+
+Survey weights do **not** reweight the first-stage learner. The DNN,
+elastic net, or GRF still learns the conditional preference function
+$f(\mathbf Z)$ from the observed respondent-task rows. The weights enter
+only after the orthogonal scores or respondent-level plug-in quantities
+have been formed. This is the right operation when the issue is
+target-population composition rather than a different training loss.
+
+The same weighted aggregation is used by the production-facing
+quantities: `coef()` / `summary()`, `sc_average()`,
+`sc_counterfactual()`, `sc_mrs()` / `sc_wtp()`, `sc_compensating()`,
+`sc_fraction_preferring()`, `sc_polarization()`, `sc_importance()`,
+`sc_subgroup()`, and `sc_direction_intensity()`.
+
+```{r}
+#| label: survey-weight-quantities
+#| eval: false
+coef(fit_w)
+sc_counterfactual(fit_w, A = list(...), B = list(...))
+sc_compensating(fit_w, benefit = "co_partisan", cost = "journalists")
+sc_fraction_preferring(fit_w, se_method = "wild_bootstrap", n_boot = 1000)
+```
+
+For comparison or diagnostics, fit the model once without weights and
+once with weights. A material difference means the estimand is sensitive
+to survey composition; a small difference supports reporting the
+unweighted structural estimate with a weighting robustness check.
+
 ## Reproducibility: `seed` and `stage2_seed`
 
 `scfit()` ships a bit-exact determinism guarantee:

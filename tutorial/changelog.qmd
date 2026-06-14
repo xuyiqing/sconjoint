@@ -2,6 +2,15 @@
 
 ## v0.2.0 (development)
 
+**Survey-weighted estimands (0.2.0.9007)**
+
+* `scfit()` gains `respondent_weights` for respondent-level
+  survey/design weights. The weights reweight the target-population
+  aggregation and clustered standard errors for `theta`, the debiased
+  orthogonal quantities, and the production-facing plug-in summaries.
+  They do not reweight first-stage learner training. See
+  @sec-advanced for the formula and usage pattern.
+
 **Bundled `br2017` data corrected (0.2.0.9004)**
 
 * The source replication file stores the 45% level of the \$175--375k
