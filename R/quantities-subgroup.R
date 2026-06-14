@@ -64,11 +64,17 @@ sc_subgroup <- function(object, subgroup,
   B <- .sc_pick_beta(object, which_beta)
   Bs <- B[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(B)
-  theta <- colMeans(Bs)
+  theta <- if (is.null(w_s)) {
+    colMeans(Bs)
+  } else {
+    vapply(seq_len(p), function(j) .sc_weighted_task_mean(Bs[, j], resp_s, w_s),
+           numeric(1L))
+  }
   se <- numeric(p)
   for (j in seq_len(p)) {
-    se[j] <- .sc_cluster_se(Bs[, j], resp_s)
+    se[j] <- .sc_cluster_se(Bs[, j], resp_s, w_s)
   }
   ci_q <- stats::qnorm(0.975)
   df <- data.frame(

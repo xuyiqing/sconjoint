@@ -35,6 +35,7 @@ sc_average <- function(object, scale = c("logit", "probability"),
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- .sc_pick_beta(object, which_beta)[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(Bs)
   if (scale == "logit") {
     ci_q <- stats::qnorm(0.975)
@@ -56,11 +57,19 @@ sc_average <- function(object, scale = c("logit", "probability"),
       }
       inf_s  <- inf[S, , drop = FALSE]
       resp_s <- object$respondent_id[S]
-      est_vec <- colMeans(inf_s)
-      centered <- sweep(inf_s, 2L, est_vec)
-      sums <- rowsum(centered, group = as.character(resp_s))
-      M_s  <- nrow(sums)
-      se_vec <- sqrt(M_s / (M_s - 1) * colSums(sums^2) / length(S)^2)
+      if (is.null(w_s)) {
+        est_vec <- colMeans(inf_s)
+        centered <- sweep(inf_s, 2L, est_vec)
+        sums <- rowsum(centered, group = as.character(resp_s))
+        M_s  <- nrow(sums)
+        se_vec <- sqrt(M_s / (M_s - 1) * colSums(sums^2) / length(S)^2)
+      } else {
+        w_obj <- .sc_respondent_weight_object(resp_s, w_s)
+        phi_s <- rowsum(inf_s, group = as.character(resp_s), reorder = TRUE) / w_obj$count
+        st <- .sc_weighted_cluster_stats(phi_s, w_obj$w)
+        est_vec <- st$estimate
+        se_vec <- st$se
+      }
       se_method <- "influence-function subgroup mean, respondent-clustered"
     }
     df <- data.frame(
@@ -100,7 +109,7 @@ sc_average <- function(object, scale = c("logit", "probability"),
   theta_vec <- as.numeric(object$theta)
   lin    <- as.numeric(dX_s %*% theta_vec)
   gprime <- stats::plogis(lin) * (1 - stats::plogis(lin))
-  gprime_avg <- mean(gprime)
+  gprime_avg <- .sc_weighted_task_mean(gprime, object$respondent_id[S], w_s)
   ## Point estimate: scale theta_hat by mean(G').
   est_vec <- theta_vec * gprime_avg
   ## SE via delta-method: Var(AME_k) = gprime_avg^2 * Var(theta_k).

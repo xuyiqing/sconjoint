@@ -17,6 +17,7 @@ scfit(
   learning_rate = 0.01,
   weight_decay = "adaptive",
   ridge_lambda = 1e-04,
+  respondent_weights = NULL,
   enet_alpha = 0.5,
   enet_df = 4L,
   enet_interactions = TRUE,
@@ -96,6 +97,13 @@ rationale.  Pass a fixed numeric (e.g. \code{1e-4}) to override.}
 Lambda(Z) regression and in the Lambda inversion.  Distinct from
 \code{weight_decay}, which regularises the DNN; this regularises the
 Lambda(Z) ridge.}
+
+\item{respondent_weights}{Optional survey/design weights for respondents.
+May be \code{NULL} (equal respondent weights), a column name in \code{data}, or a
+numeric vector of length \code{nrow(data)}. Weights must be finite,
+non-negative, and constant within respondent. They affect the
+respondent-level estimand aggregation and clustered standard errors; they
+do not reweight first-stage learner training.}
 
 \item{enet_alpha}{Elastic-net mixing parameter in \verb{[0, 1]} used when
 \code{learner = "enet"} (\code{1} = lasso, \code{0} = ridge).  Default \code{0.5}.

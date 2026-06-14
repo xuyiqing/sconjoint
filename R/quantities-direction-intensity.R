@@ -28,15 +28,23 @@ sc_direction_intensity <- function(object, subgroup = NULL,
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- B[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(B)
   sig <- sign(Bs)
   mag <- abs(Bs)
-  d <- colMeans(sig)
-  u <- colMeans(mag)
+  if (is.null(w_s)) {
+    d <- colMeans(sig)
+    u <- colMeans(mag)
+  } else {
+    d <- vapply(seq_len(p), function(j) .sc_weighted_task_mean(sig[, j], resp_s, w_s),
+                numeric(1L))
+    u <- vapply(seq_len(p), function(j) .sc_weighted_task_mean(mag[, j], resp_s, w_s),
+                numeric(1L))
+  }
   se_d <- numeric(p); se_u <- numeric(p)
   for (j in seq_len(p)) {
-    se_d[j] <- .sc_cluster_se(sig[, j], resp_s)
-    se_u[j] <- .sc_cluster_se(mag[, j], resp_s)
+    se_d[j] <- .sc_cluster_se(sig[, j], resp_s, w_s)
+    se_u[j] <- .sc_cluster_se(mag[, j], resp_s, w_s)
   }
   ci_q <- stats::qnorm(0.975)
   df_d <- data.frame(

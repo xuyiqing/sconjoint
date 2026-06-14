@@ -68,17 +68,27 @@ sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- B[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(B)
-  fp <- colMeans(Bs > threshold)
-  fn <- colMeans(Bs < -threshold)
+  if (is.null(w_s)) {
+    fp <- colMeans(Bs > threshold)
+    fn <- colMeans(Bs < -threshold)
+  } else {
+    fp <- vapply(seq_len(p), function(j)
+      .sc_weighted_task_mean(as.numeric(Bs[, j] > threshold), resp_s, w_s),
+      numeric(1L))
+    fn <- vapply(seq_len(p), function(j)
+      .sc_weighted_task_mean(as.numeric(Bs[, j] < -threshold), resp_s, w_s),
+      numeric(1L))
+  }
   ci_q <- stats::qnorm(0.975)
 
   if (se_method == "clustered") {
     se_p <- numeric(p)
     se_n <- numeric(p)
     for (j in seq_len(p)) {
-      se_p[j] <- .sc_cluster_se(as.numeric(Bs[, j] > threshold), resp_s)
-      se_n[j] <- .sc_cluster_se(as.numeric(Bs[, j] < -threshold), resp_s)
+      se_p[j] <- .sc_cluster_se(as.numeric(Bs[, j] > threshold), resp_s, w_s)
+      se_n[j] <- .sc_cluster_se(as.numeric(Bs[, j] < -threshold), resp_s, w_s)
     }
     ci_lo_p <- fp - ci_q * se_p
     ci_hi_p <- fp + ci_q * se_p
@@ -93,13 +103,14 @@ sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
     ## resample respondents.
     col <- .sc_collapse_beta_to_resp(Bs, resp_s)
     Br  <- col$B_resp                                  # M x p
+    w_resp <- if (is.null(w_s)) NULL else .sc_respondent_weight_object(resp_s, w_s)$w
     ind_pos <- (Br > threshold) * 1                    # M x p
     ind_neg <- (Br < -threshold) * 1                   # M x p
     G <- cbind(ind_pos, ind_neg)                       # M x 2p, colMeans = c(fp, fn)
     bt <- .sc_resp_cluster_boot(
       G, fun = function(m) m,                          # identity: report the fractions
       n_boot = n_boot, boot_type = boot_type,
-      level = 0.95, seed = boot_seed
+      level = 0.95, seed = boot_seed, weights = w_resp
     )
     se_p <- bt$se[seq_len(p)]
     se_n <- bt$se[p + seq_len(p)]

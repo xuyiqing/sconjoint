@@ -70,6 +70,7 @@ sc_compensating <- function(object,
   b_ben <- B[S, b_idx]
   b_cost <- B[S, c_idx]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
 
   ratio <- -b_ben / b_cost
   ratio[!is.finite(ratio)] <- NA_real_
@@ -82,10 +83,12 @@ sc_compensating <- function(object,
   q_lo <- stats::quantile(r, trim[1], names = FALSE)
   q_hi <- stats::quantile(r, trim[2], names = FALSE)
   rt <- pmin(pmax(r, q_lo), q_hi)
-  est <- mean(rt)
-  se <- .sc_cluster_se(rt, rs)
+  w_ok <- if (is.null(w_s)) NULL else w_s[ok]
+  est <- .sc_weighted_task_mean(rt, rs, w_ok)
+  se <- .sc_cluster_se(rt, rs, w_ok)
 
-  frac_compensated <- mean((b_ben + b_cost) >= 0)
+  frac_compensated <- .sc_weighted_task_mean(as.numeric((b_ben + b_cost) >= 0),
+                                             resp_s, w_s)
 
   ci <- .sc_ci_normal(est, se)
   .sc_quantity(

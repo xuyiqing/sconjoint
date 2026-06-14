@@ -28,12 +28,10 @@
 #' @noRd
 .sc_debiased_scalar <- function(object, Hfun, level = 0.95) {
   comp <- .sc_debiased_phi(object, Hfun)            # respondent-level phi_bar
-  phi  <- comp$phi; M <- length(phi)
-  est  <- mean(phi)
-  V    <- sum((phi - est)^2) / (M * (M - 1))
-  se   <- sqrt(max(V, 0))
-  z    <- stats::qnorm(1 - (1 - level) / 2)
-  c(estimate = est, se = se, ci_lo = est - z * se, ci_hi = est + z * se)
+  w <- comp$weights
+  st <- .sc_weighted_cluster_stats(matrix(comp$phi, ncol = 1L), w, level = level)
+  c(estimate = st$estimate[1L], se = st$se[1L],
+    ci_lo = st$ci_lo[1L], ci_hi = st$ci_hi[1L])
 }
 
 #' Per-respondent influence means phi_bar_i for a functional H(f)
@@ -57,7 +55,12 @@
   key <- as.character(object$respondent_id)
   cnt <- as.numeric(rowsum(rep.int(1, length(psi)), group = key, reorder = TRUE))
   phi <- as.numeric(rowsum(psi, group = key, reorder = TRUE) / cnt)
-  list(phi = phi, psi = psi)
+  w <- NULL
+  if (!is.null(object$respondent_weights)) {
+    w <- .sc_respondent_weight_object(object$respondent_id,
+                                      object$respondent_weights)$w
+  }
+  list(phi = phi, psi = psi, weights = w)
 }
 
 ## ---------------------------------------------------------------------------
@@ -150,13 +153,13 @@
                                level = 0.95) {
   transform <- match.arg(transform)
   phi_a <- .sc_debiased_phi(object, .sc_dH_thetak(j))$phi
-  phi_b <- .sc_debiased_phi(object, .sc_dH_thetak(k))$phi
-  M <- length(phi_a)
-  th_a <- mean(phi_a); th_b <- mean(phi_b)
-  da <- phi_a - th_a; db <- phi_b - th_b
-  Vaa <- sum(da * da) / (M * (M - 1))
-  Vbb <- sum(db * db) / (M * (M - 1))
-  Vab <- sum(da * db) / (M * (M - 1))
+  comp_b <- .sc_debiased_phi(object, .sc_dH_thetak(k))
+  phi_b <- comp_b$phi
+  st <- .sc_weighted_cluster_stats(cbind(phi_a, phi_b), comp_b$weights, level = level)
+  th_a <- st$estimate[1L]; th_b <- st$estimate[2L]
+  Vaa <- st$vcov[1L, 1L]
+  Vbb <- st$vcov[2L, 2L]
+  Vab <- st$vcov[1L, 2L]
   z <- stats::qnorm(1 - (1 - level) / 2); z2 <- z^2
 
   if (transform == "mrs") {
@@ -209,10 +212,15 @@
     .sc_debiased_phi(object, .sc_dH_importance_num(attr_map[[a]], S_blocks[[a]]))$phi,
     numeric(length(unique(object$respondent_id))))
   if (is.null(dim(phiN))) phiN <- matrix(phiN, ncol = Kattr)
-  M <- nrow(phiN)
-  N_hat <- colMeans(phiN); D_hat <- sum(N_hat); share <- N_hat / D_hat
+  w <- NULL
+  if (!is.null(object$respondent_weights)) {
+    w <- .sc_respondent_weight_object(object$respondent_id,
+                                      object$respondent_weights)$w
+  }
+  stN <- .sc_weighted_cluster_stats(phiN, w, level = level)
+  N_hat <- stN$estimate; D_hat <- sum(N_hat); share <- N_hat / D_hat
   Jmat <- (diag(Kattr) - matrix(share, Kattr, Kattr, byrow = TRUE)) / D_hat
-  phiN_c <- sweep(phiN, 2L, N_hat); V_N <- crossprod(phiN_c) / (M * (M - 1))
+  V_N <- stN$vcov
   V_share <- Jmat %*% V_N %*% t(Jmat)
   se <- sqrt(pmax(diag(V_share), 0))
   z  <- stats::qnorm(1 - (1 - level) / 2)

@@ -88,7 +88,8 @@
                                   n_boot = 200L,
                                   boot_type = c("wild", "cluster"),
                                   level = 0.95,
-                                  seed = NULL) {
+                                  seed = NULL,
+                                  weights = NULL) {
   boot_type <- match.arg(boot_type)
   if (!is.matrix(G) || !is.numeric(G)) {
     stop(".sc_resp_cluster_boot(): `G` must be a numeric matrix.")
@@ -97,12 +98,22 @@
   if (M < 2L) {
     stop(".sc_resp_cluster_boot(): at least 2 respondents (clusters) are required.")
   }
+  if (is.null(weights)) {
+    survey_w <- rep.int(1, M)
+  } else {
+    survey_w <- as.numeric(weights)
+    if (length(survey_w) != M || any(!is.finite(survey_w)) ||
+        any(survey_w < 0) || sum(survey_w) <= 0) {
+      stop(".sc_resp_cluster_boot(): invalid respondent weights.")
+    }
+  }
+  a <- survey_w / sum(survey_w)
   n_boot <- as.integer(n_boot)
   if (is.na(n_boot) || n_boot < 1L) {
     stop(".sc_resp_cluster_boot(): `n_boot` must be a positive integer.")
   }
 
-  theta_obs <- colMeans(G)
+  theta_obs <- as.numeric(crossprod(a, G))
   est <- fun(theta_obs)
   q <- length(est)
 
@@ -123,12 +134,13 @@
   for (b in seq_len(n_boot)) {
     if (boot_type == "cluster") {
       idx <- sample.int(M, M, replace = TRUE)
-      theta_b <- colMeans(G[idx, , drop = FALSE])
+      ab <- survey_w[idx] / sum(survey_w[idx])
+      theta_b <- as.numeric(crossprod(ab, G[idx, , drop = FALSE]))
     } else {
-      ## Wild: theta_q + (1/M) sum_i w_i (G_iq - theta_q)
+      ## Wild: theta_q + sum_i a_i xi_i (G_iq - theta_q)
       w <- .sc_rademacher(M)
-      theta_b <- theta_obs + as.numeric(crossprod(w, sweep(G, 2L, theta_obs,
-                                                           check.margin = FALSE))) / M
+      theta_b <- theta_obs + as.numeric(crossprod(a * w, sweep(G, 2L, theta_obs,
+                                                               check.margin = FALSE)))
     }
     draws[, b] <- fun(theta_b)
   }
@@ -149,6 +161,7 @@
     n_boot    = n_boot,
     boot_type = boot_type,
     M         = M,
+    weights   = survey_w,
     n_valid   = n_valid
   )
 }

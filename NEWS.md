@@ -1,3 +1,20 @@
+# sconjoint 0.2.0.9007 (2026-06-13)
+
+Survey-weighted estimands for production analyses.
+
+* `scfit()` gains `respondent_weights`, an optional respondent-level
+  survey/design weight supplied as a column name or a numeric vector of
+  length `nrow(data)`. Weights must be constant within respondent. They
+  reweight the respondent-level estimand aggregation and clustered standard
+  errors for `theta`, the debiased orthogonal quantities, and the
+  respondent-level plugin summaries. They do **not** reweight first-stage
+  learner training.
+
+* Weighted aggregation is now shared across the production-facing quantities:
+  `sc_average()`, `sc_counterfactual()`, `sc_mrs()`/`sc_wtp()`,
+  `sc_compensating()`, `sc_fraction_preferring()`, `sc_polarization()`,
+  `sc_importance()`, `sc_subgroup()`, and `sc_direction_intensity()`.
+
 # sconjoint 0.2.0.9006 (2026-06-13)
 
 Reviewer-driven inference fixes for the distribution-over-respondents

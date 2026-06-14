@@ -58,10 +58,11 @@ sc_counterfactual <- function(object, A, B,
 
   Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
+  w_s <- .sc_weights_for_rows(object, S)
   lin <- as.numeric(Bm[S, , drop = FALSE] %*% dx)
   p_i <- stats::plogis(lin)
-  est <- mean(p_i)
-  se  <- .sc_cluster_se(p_i, object$respondent_id[S])
+  est <- .sc_weighted_task_mean(p_i, object$respondent_id[S], w_s)
+  se  <- .sc_cluster_se(p_i, object$respondent_id[S], w_s)
   ci  <- .sc_ci_normal(est, se)
   .sc_quantity(
     name = "counterfactual",

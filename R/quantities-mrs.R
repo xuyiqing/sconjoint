@@ -78,6 +78,7 @@ sc_mrs <- function(object,
   B <- .sc_pick_beta(object, which_beta)
   resp <- object$respondent_id
   S <- .sc_resolve_subgroup(object, subgroup)
+  w_s <- .sc_weights_for_rows(object, S)
   r_raw <- B[S, j] / B[S, k]
   r_raw[!is.finite(r_raw)] <- NA_real_
   ok <- !is.na(r_raw)
@@ -89,8 +90,9 @@ sc_mrs <- function(object,
   q_lo <- stats::quantile(r_raw, trim[1L], names = FALSE)
   q_hi <- stats::quantile(r_raw, trim[2L], names = FALSE)
   r_trim <- pmin(pmax(r_raw, q_lo), q_hi)
-  est <- mean(r_trim)
-  se  <- .sc_cluster_se(r_trim, resp_s)
+  w_ok <- if (is.null(w_s)) NULL else w_s[ok]
+  est <- .sc_weighted_task_mean(r_trim, resp_s, w_ok)
+  se  <- .sc_cluster_se(r_trim, resp_s, w_ok)
   ci  <- .sc_ci_normal(est, se)
   ## prototype "delta SE" diagnostic: plain plug-in se of the ratio mean
   delta_se <- if (length(r_trim) > 1L) {

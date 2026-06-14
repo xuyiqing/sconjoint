@@ -101,6 +101,7 @@ sc_importance <- function(object,
   B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   attrs <- names(map)
   K <- length(attrs)
   n_S <- length(S)
@@ -190,9 +191,15 @@ sc_importance <- function(object,
   row_sum[row_sum == 0] <- NA_real_
   share_mat <- V_mat / row_sum
   share_mat[is.na(share_mat)] <- 0
-  est <- colMeans(share_mat)
+  est <- if (is.null(w_s)) {
+    colMeans(share_mat)
+  } else {
+    vapply(seq_len(K), function(a)
+      .sc_weighted_task_mean(share_mat[, a], resp_s, w_s),
+      numeric(1L))
+  }
   se  <- vapply(seq_len(K), function(a) {
-    .sc_cluster_se(share_mat[, a], resp_s)
+    .sc_cluster_se(share_mat[, a], resp_s, w_s)
   }, numeric(1L))
   ci_q <- stats::qnorm(0.975)
   df <- data.frame(

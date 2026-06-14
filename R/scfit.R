@@ -67,6 +67,12 @@
 #'   Lambda(Z) regression and in the Lambda inversion.  Distinct from
 #'   `weight_decay`, which regularises the DNN; this regularises the
 #'   Lambda(Z) ridge.
+#' @param respondent_weights Optional survey/design weights for respondents.
+#'   May be `NULL` (equal respondent weights), a column name in `data`, or a
+#'   numeric vector of length `nrow(data)`. Weights must be finite,
+#'   non-negative, and constant within respondent. They affect the
+#'   respondent-level estimand aggregation and clustered standard errors; they
+#'   do not reweight first-stage learner training.
 #' @param enet_alpha Elastic-net mixing parameter in `[0, 1]` used when
 #'   `learner = "enet"` (`1` = lasso, `0` = ridge).  Default `0.5`.
 #'   Ignored for other learners.
@@ -240,6 +246,7 @@ scfit <- function(formula, data,
                   learning_rate = 0.01,
                   weight_decay = "adaptive",
                   ridge_lambda = 1e-4,
+                  respondent_weights = NULL,
                   enet_alpha = 0.5,
                   enet_df = 4L,
                   enet_interactions = TRUE,
@@ -305,6 +312,23 @@ scfit <- function(formula, data,
   respondent <- .sc_coerce_colname(respondent, "respondent")
   task       <- .sc_coerce_colname(task, "task")
   profile    <- .sc_coerce_colname(profile, "profile")
+  weight_col <- NULL
+  if (!is.null(respondent_weights)) {
+    if (is.character(respondent_weights) && length(respondent_weights) == 1L) {
+      weight_col <- respondent_weights
+      if (!weight_col %in% names(data)) {
+        stop(sprintf("scfit(): respondent_weights column '%s' not found in `data`.", weight_col))
+      }
+    } else if (is.numeric(respondent_weights) && length(respondent_weights) == nrow(data)) {
+      weight_col <- ".sc_tmp_respondent_weight"
+      while (weight_col %in% names(data)) {
+        weight_col <- paste0(weight_col, "_")
+      }
+      data[[weight_col]] <- respondent_weights
+    } else {
+      stop("scfit(): `respondent_weights` must be NULL, a column name, or a numeric vector with length nrow(data).")
+    }
+  }
 
   K <- as.integer(K)
   if (is.na(K) || K < 2L) {
@@ -320,7 +344,7 @@ scfit <- function(formula, data,
     stop("scfit(): at least one Z variable (after `|`) is required by the DML estimator.")
   }
   for (nm in c(response, attr_vars, z_vars,
-               respondent, task, profile)) {
+               respondent, task, profile, weight_col)) {
     if (!nm %in% names(data)) {
       stop(sprintf("scfit(): column '%s' not found in `data`.", nm))
     }
@@ -352,6 +376,25 @@ scfit <- function(formula, data,
   respondent_task <- built$respondent_task
   colnames(deltaX) <- x_names
   colnames(Z_task) <- z_names
+
+  respondent_weight_task <- NULL
+  if (!is.null(weight_col)) {
+    w_profile <- as.numeric(data_sorted[[weight_col]])
+    if (any(!is.finite(w_profile)) || any(w_profile < 0) || sum(w_profile) <= 0) {
+      stop("scfit(): `respondent_weights` must be finite, non-negative, and not all zero.")
+    }
+    key_w <- as.character(data_sorted[[respondent]])
+    dev_w <- tapply(w_profile, key_w, function(z) max(abs(z - z[1L])), simplify = TRUE)
+    if (any(dev_w > 1e-8)) {
+      stop("scfit(): `respondent_weights` must be constant within respondent.")
+    }
+    key_task <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
+    ord_task <- order(key_task, data_sorted[[profile]])
+    respondent_weight_task <- w_profile[ord_task][seq(1L, length(w_profile), by = 2L)]
+    if (length(respondent_weight_task) != nrow(deltaX)) {
+      stop("scfit(): internal error aligning respondent_weights with task rows.")
+    }
+  }
 
   ## Single-profile pool for debiased AME integration (the E_X integral over
   ## the design law P_X). A capped, deterministic subsample of the encoded
@@ -517,7 +560,8 @@ scfit <- function(formula, data,
     lambda_obj    = lambda_obj,
     deltaX        = deltaX_internal,
     y             = y,
-    respondent_id = respondent_task
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   theta <- infl$theta_hat
   names(theta) <- x_names
@@ -526,12 +570,14 @@ scfit <- function(formula, data,
   vcov_cluster <- .sc_cluster_vcov(
     influence_raw = infl$influence_raw,
     theta_hat     = theta,
-    respondent_id = respondent_task
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   vcov_iid <- .sc_iid_vcov(
     influence_raw = infl$influence_raw,
     theta_hat     = theta,
-    respondent_id = respondent_task
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   rownames(vcov_cluster$vcov) <- colnames(vcov_cluster$vcov) <- x_names
   rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
@@ -631,6 +677,7 @@ scfit <- function(formula, data,
     attr_map           = attr_map_enc,
     z_names            = z_names,
     respondent_id      = respondent_task,
+    respondent_weights = respondent_weight_task,
     K                  = K,
     hidden             = hidden_use,
     seed               = seed,

@@ -59,9 +59,20 @@ sc_polarization <- function(object, subgroup = NULL,
   B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- B[S, , drop = FALSE]
+  resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(B)
-  fp <- colMeans(Bs > 0)
-  fn <- colMeans(Bs < 0)
+  if (is.null(w_s)) {
+    fp <- colMeans(Bs > 0)
+    fn <- colMeans(Bs < 0)
+  } else {
+    fp <- vapply(seq_len(p), function(j)
+      .sc_weighted_task_mean(as.numeric(Bs[, j] > 0), resp_s, w_s),
+      numeric(1L))
+    fn <- vapply(seq_len(p), function(j)
+      .sc_weighted_task_mean(as.numeric(Bs[, j] < 0), resp_s, w_s),
+      numeric(1L))
+  }
   poli <- 1 - abs(fp - fn)
 
   se_poli <- rep(NA_real_, p)
@@ -71,9 +82,9 @@ sc_polarization <- function(object, subgroup = NULL,
   se_n    <- rep(NA_real_, p)
 
   if (se_method == "wild_bootstrap") {
-    resp_s <- object$respondent_id[S]
     col <- .sc_collapse_beta_to_resp(Bs, resp_s)
     Br  <- col$B_resp                                  # M x p
+    w_resp <- if (is.null(w_s)) NULL else .sc_respondent_weight_object(resp_s, w_s)$w
     ind_pos <- (Br > 0) * 1                            # M x p
     ind_neg <- (Br < 0) * 1                            # M x p
     G <- cbind(ind_pos, ind_neg)                       # M x 2p; colMeans = c(fp, fn)
@@ -85,7 +96,7 @@ sc_polarization <- function(object, subgroup = NULL,
     }
     bt <- .sc_resp_cluster_boot(
       G, fun = fun, n_boot = n_boot, boot_type = boot_type,
-      level = 0.95, seed = boot_seed
+      level = 0.95, seed = boot_seed, weights = w_resp
     )
     se_p    <- bt$se[seq_len(p)]
     se_n    <- bt$se[p + seq_len(p)]
