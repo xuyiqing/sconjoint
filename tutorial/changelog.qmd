@@ -1,6 +1,6 @@
 # Changelog {#sec-changelog .unnumbered}
 
-## v0.2.1 (2026-06-28)
+## v0.2.1
 
 **Full replication datasets.** The bundled `sw2022`, `gs2020`, and
 `br2017` datasets are now the paper's full analysis frames, with the
@@ -30,7 +30,7 @@ densities past the cap). `plot_hetero()` panels are now sized in
 proportion to each attribute group's number of levels, and the
 data-overview chunks drop `head()` in favor of `str()`.
 
-## v0.2.0 (development)
+## v0.2.0
 
 **Survey-weighted estimands (0.2.0.9007)**
 
