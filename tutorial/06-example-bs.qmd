@@ -235,9 +235,8 @@ plot_subgroup(
 The climate application is a teaching example rather than one of the
 paper's three applications, included to show the workflow on a design with
 a numeric cost attribute. Because cost is measured in dollars, the
-structural estimates convert preferences over treaty features into
-willingness to pay: the same fit yields dollar-scale valuations of the
-treaty's features, alongside the compensating-differential and subgroup
-views used in the other chapters. It illustrates the general pattern ---
+structural estimates value each treaty feature in willingness-to-pay
+terms, alongside the compensating-differential and subgroup views used in
+the other chapters. It illustrates the general pattern ---
 fit once, then read off interpretable quantities --- on a design where the
 natural unit is a price.

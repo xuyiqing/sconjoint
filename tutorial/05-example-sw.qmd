@@ -567,6 +567,6 @@ Republicans favoring men. Policy agenda dominates the importance
 decomposition, and gender is the one attribute that divides voters in
 direction rather than only in intensity. With only three tasks per
 respondent, we read this application as illustrative of what the model can
-describe in a deliberately sparse design; the paper rests its
+describe in a deliberately sparse design. The paper rests its
 distributional conclusions mainly on the richer democracy and tax
 conjoints.
