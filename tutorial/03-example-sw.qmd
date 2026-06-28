@@ -433,7 +433,7 @@ near-zero mean is real, not sampling noise.
 ### Subgroup analysis
 
 Re-average the respondent-level betas over a subset of respondents, then
-compare across subsets. The paper's headline result is partisan: the
+compare across subsets. The paper's main result is partisan: the
 null average effect of gender masks Democrats who prefer women and
 Republicans who prefer men. We recover it by splitting on `resp_party`.
 Subgroup masks are aligned to the rows of `fit_sw$beta_hat`, which `Z`
@@ -503,7 +503,7 @@ plot(fit_sw, "loss_trace")
 `sc_design_diagnostic()` estimates per-coefficient $\hat R^2_{Z,k}$ from
 the MAP posterior and reports which recovery tiers the design supports
 (mean / distributional / individual / ratio) per the paper's
-design-guidance heuristics. On the Saha-Weeks design (six tasks per
+design-guidance heuristics. On the Saha-Weeks design (three tasks per
 respondent, the full nineteen-covariate set) the talent attributes are
 well pinned by $\mathbf Z$, while gender, prior run, and children rely
 most on the within-respondent task variation.

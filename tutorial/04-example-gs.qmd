@@ -124,7 +124,7 @@ absorbed (good governance is measured against an "elect oversight
 board" baseline; the undemocratic and valence items against "absent"
 and "no scandal"). No re-leveling is needed.
 
-The 16 undemocratic, good-governance, and valence contrasts split into
+The 15 undemocratic, good-governance, and valence contrasts split into
 three families: good-governance (`diff_dem_code_g_*`, 6 contrasts),
 undemocratic actions (`diff_dem_code_u_*`, 7 contrasts), and valence
 violations (`diff_dem_code_v_*`, 2 contrasts). Their raw conditional
@@ -345,7 +345,7 @@ shares <- 100 * colMeans(imp / rowSums(imp))
 round(sort(shares, decreasing = TRUE), 1)
 ```
 
-The four leading shares are valence ($\approx 29\%$), policy
+The leading shares are valence ($\approx 29\%$), policy
 ($\approx 26\%$), and party ($\approx 23\%$) clustered at the top, with
 the undemocratic-action attribute ($\approx 9\%$) carrying a smaller but
 non-trivial share. Voters care most about scandal, policy, and party;

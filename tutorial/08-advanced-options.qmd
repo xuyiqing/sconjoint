@@ -238,7 +238,7 @@ the MAP solver leaves per-respondent estimates with extreme tails.
 SD before training / Lambda(Z) / DML / MAP, then un-standardizes all
 coefficient-bearing slots at assembly time. The user-facing surface
 (`coef(fit)`, `vcov(fit)`, `fit$beta_hat`, etc.) is on the original
-units; only the internal pipeline runs on a common-variance scale.
+units; only the internal computation runs on a common-variance scale.
 
 ```{r}
 #| label: normalize-example
