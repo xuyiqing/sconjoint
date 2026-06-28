@@ -20,11 +20,10 @@ book:
     - changelog.qmd
 
 bibliography: references.bib
+link-citations: true
 
 nocite: |
   @*
-
-suppress-bibliography: true
 
 format:
   html:
