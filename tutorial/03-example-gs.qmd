@@ -382,8 +382,8 @@ sc_importance(fit_gs, design = "uniform")$estimate[, c("attribute", "share")]
 
 ```{r}
 #| label: gs-importance-plot
-#| fig-height: 11
-plot_importance(fit_gs, labels = gs_labels, xlim = c(0, 50))
+#| fig-height: 16
+plot_importance(fit_gs, labels = gs_labels, xlim = c(0, 40))
 ```
 
 ## Heterogeneity test
@@ -399,10 +399,27 @@ het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
 het_gs$estimate
 ```
 
+The two policy contrasts are continuous (a 1--4 conservatism scale), so
+their coefficient variances are far larger than those of the binary
+attribute dummies and would compress every other bar onto an unreadable
+scale. We plot the dummies and the two policy contrasts separately.
+
 ```{r}
 #| label: gs-het-bar
 #| fig-height: 8
-plot_hetero(fit_gs, groups = gs_groups, labels = gs_labels)
+policy_contrasts <- c("diff_p1_num", "diff_p2_num")
+plot_hetero(fit_gs,
+            dummies = setdiff(fit_gs$attr_names, policy_contrasts),
+            groups = gs_groups, labels = gs_labels,
+            title = "Preference heterogeneity: attribute dummies")
+```
+
+```{r}
+#| label: gs-het-bar-policy
+#| fig-height: 2.5
+plot_hetero(fit_gs, dummies = policy_contrasts,
+            groups = gs_groups, labels = gs_labels,
+            title = "Preference heterogeneity: policy contrasts")
 ```
 
 The penalty for each undemocratic action varies in intensity across
@@ -590,15 +607,20 @@ using the structural model.
 ## Summary
 
 This application shows what the structural estimator adds beyond a
-reduced-form AMCE. The population averages recover the familiar finding:
-voters of both parties penalize undemocratic behavior, and restricting
-journalists is the most heavily penalized undemocratic action. The
-individual-level estimates go further. Opposition is broad rather than
-universal: for every undemocratic action, all but a small minority of
-respondents place negative weight on it. What varies across the electorate
-is the intensity of that opposition, not its direction. Decomposing
-utility variance places valence, policy, and party near the top, with the
-democracy attribute below them, and the population marginal rate of
-substitution prices each violation against co-partisanship. None of these
-quantities is available from one-attribute-at-a-time effects; each follows
-from the recovered preference vector $\hat\beta_i(\mathbf Z)$.
+reduced-form AMCE:
+
+- The population averages recover the familiar finding: voters of both
+  parties penalize undemocratic behavior, and restricting journalists is
+  the most heavily penalized undemocratic action.
+- Opposition is broad rather than universal. For every undemocratic
+  action, all but a small minority of respondents place negative weight
+  on it; what varies across respondents is the intensity of that
+  opposition, not its direction.
+- Decomposing utility variance places valence, policy, and party near the
+  top, with the democracy attribute below them.
+- The population marginal rate of substitution prices each violation
+  against co-partisanship.
+
+None of these quantities is available from one-attribute-at-a-time
+effects; each follows from the recovered preference vector
+$\hat\beta_i(\mathbf Z)$.

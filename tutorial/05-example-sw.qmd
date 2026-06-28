@@ -554,15 +554,19 @@ columns in the table above.
 
 ## Summary
 
-The candidate application is the clearest illustration of why averages can
-mislead. The population marginal effect of a male candidate is close to
-zero, which a reduced-form analysis would read as voter indifference to
-gender. The recovered distribution shows the opposite: the near-zero
-average is the sum of two opposed camps, with Democrats favoring women and
-Republicans favoring men. Policy agenda dominates the importance
-decomposition, and gender is the one attribute that divides voters in
-direction rather than only in intensity. With only three tasks per
-respondent, we read this application as illustrative of what the model can
-describe in a deliberately sparse design. The paper rests its
-distributional conclusions mainly on the richer democracy and tax
-conjoints.
+The candidate application is the clearest illustration of why averages
+can mislead:
+
+- The population marginal effect of a male candidate is close to zero,
+  which a reduced-form analysis would read as voter indifference to
+  gender.
+- The recovered distribution shows the opposite: the near-zero average is
+  the sum of two opposed camps, with Democrats favoring women and
+  Republicans favoring men.
+- Policy agenda dominates the importance decomposition, and gender is the
+  one attribute that divides voters in direction rather than only in
+  intensity.
+- With only three tasks per respondent, we read this application as
+  illustrative of what the model can describe in a deliberately sparse
+  design; the paper rests its distributional conclusions mainly on the
+  richer democracy and tax conjoints.

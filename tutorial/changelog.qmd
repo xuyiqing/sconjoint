@@ -21,7 +21,7 @@ a debiased vote share for a raw attribute-dummy contrast.
 
 **Tutorial book.** The application chapters are ordered democratic norms,
 tax preferences, candidate choice, then climate treaties, and each closes
-with a short summary. A new "Structural estimands" chapter
+with a short summary. A new "Estimands" chapter
 (@sec-estimands) collects the quantities of interest into a single
 reference, organized by the recovery tiers of the design; "Plot options"
 and "Advanced options" follow it. `plot_importance()` gains an `xlim`

@@ -1,4 +1,4 @@
-# Structural estimands {#sec-estimands}
+# Estimands {#sec-estimands}
 
 ```{r}
 #| label: setup-estimands

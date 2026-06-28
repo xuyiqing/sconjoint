@@ -432,16 +432,20 @@ structural model loses nothing the AMCE provides.
 
 ## Summary
 
-The tax application uses an all-continuous design. The population estimates
-trace a steep progressive structure: voters dislike higher rates on the
-lowest brackets and mildly favor higher rates at the top, while the
-revenue indicator is only weakly positive. Recovering per-respondent rate
-schedules shows that progressivity is close to a consensus: nearly all
-respondents prefer rising rates across the brackets, and a majority do so
-even among Republicans. The partisan difference is therefore one of degree,
-with Democrats' schedules steeper than Republicans'. The by-party
-importance decomposition locates the disagreement: Democrats place the
-most weight on the top bracket, Republicans on the lower-middle brackets.
-As in the other applications, these schedule-level and subgroup quantities
-come from the individual preference vectors rather than from average
-marginal effects.
+The tax application uses an all-continuous design:
+
+- The population estimates trace a steep progressive structure: voters
+  dislike higher rates on the lowest brackets and mildly favor higher
+  rates at the top, while the revenue indicator is only weakly positive.
+- Per-respondent rate schedules show that progressivity is close to a
+  consensus: nearly all respondents prefer rising rates across the
+  brackets, and a majority do so even among Republicans.
+- The partisan difference is therefore one of degree, with Democrats'
+  schedules steeper than Republicans'.
+- The by-party importance decomposition locates the disagreement:
+  Democrats place the most weight on the top bracket, Republicans on the
+  lower-middle brackets.
+
+As in the other applications, these schedule-level and subgroup
+quantities come from the individual preference vectors rather than from
+average marginal effects.
