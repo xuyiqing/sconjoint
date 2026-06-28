@@ -388,8 +388,8 @@ plot_hetero(fit_gs, groups = gs_groups, labels = gs_labels)
 
 The penalty for each undemocratic action varies in intensity across
 respondents, but its population average is strongly negative for every
-action: on average, voters oppose democratic backsliding. Crucially,
-the opposition is also broad at the individual level --- the next
+action: on average, voters oppose democratic backsliding. The
+opposition is also broad at the individual level --- the next
 section shows that almost no respondents actively favor any undemocratic
 action.
 

@@ -35,7 +35,7 @@ test_that("normalize_deltaX = TRUE stores sd_dx and flips the flag", {
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                  rate_175_375 + rate_375P + revenue_score |
-                 resp_age + resp_female + resp_pid7,
+                 age_std + female + resp_pid7,
                data = d, respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
                normalize_deltaX = TRUE)
@@ -58,7 +58,7 @@ test_that("normalize_deltaX = TRUE: deltaX %*% theta reproduces linear index on 
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                  rate_175_375 + rate_375P + revenue_score |
-                 resp_age + resp_female + resp_pid7,
+                 age_std + female + resp_pid7,
                data = d, respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
                normalize_deltaX = TRUE)
@@ -81,7 +81,7 @@ test_that("normalize_deltaX = TRUE tames MAP per-respondent betas on BR-style da
   set.seed(1); torch::torch_manual_seed(1)
   fit_norm <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                       rate_175_375 + rate_375P + revenue_score |
-                      resp_age + resp_female + resp_pid7,
+                      age_std + female + resp_pid7,
                     data = d, respondent = "respondent", task = "task", profile = "profile",
                     K = 2L, n_epochs = 50L, seed = 1, stage2 = "map_c5",
                     normalize_deltaX = TRUE)

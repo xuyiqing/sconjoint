@@ -429,4 +429,4 @@ v_br
 Under correct logit specification, the DML $\hat\theta$ on each tax
 bracket matches the pooled logit's coefficient on the same bracket
 exactly. The pooled correlation is the cleanest summary that the
-structural model loses nothing the AMCE delivers.
+structural model loses nothing the AMCE provides.

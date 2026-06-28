@@ -6,7 +6,7 @@ estimator for forced-choice conjoint experiments developed by @acharya2026struct
 inside a random-utility logit so that each respondent's preference
 vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
 smoothly and flexibly with her observed covariates $\mathbf Z$. Double /
-debiased machine learning [DML; @chernozhukov2018double] inference delivers honest
+debiased machine learning [DML; @chernozhukov2018double] inference provides honest
 respondent-clustered standard errors on all population-level quantities.
 
 The key advance over the standard AMCE framework
@@ -111,7 +111,7 @@ The user guide is structured into the following chapters:
     each step against the true DGP.
 
 -   [Chapter @sec-sw]\
-    Full pipeline on the @saha2022ambitious candidate-choice conjoint.
+    Full walk-through of the @saha2022ambitious candidate-choice conjoint.
 
 -   [Chapter @sec-gs]\
     @graham2020democracy democratic-norms conjoint, emphasizing

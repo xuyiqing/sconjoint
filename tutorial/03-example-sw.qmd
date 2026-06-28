@@ -89,7 +89,7 @@ head(sw2022, 4)
 ```
 
 The data are in long format: one row per respondent--task--profile. Each
-respondent contributes six forced-choice tasks; within a task two
+respondent contributes three forced-choice tasks; within a task two
 candidate profiles are presented and exactly one is chosen
 (`choice == 1`).
 
@@ -252,7 +252,7 @@ ggplot(df_both, aes(x = estimate, y = label, color = source)) +
 ```
 
 The two series overlap nearly point-for-point: the structural model
-loses nothing the reduced-form AMCE delivers. The
+loses nothing the reduced-form AMCE provides. The
 `sc_validate_amce()` check at the end of the chapter quantifies this
 agreement.
 
@@ -427,7 +427,7 @@ plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
 ```
 
 Candidate gender shows highly significant variance in $\beta(Z)$ --- the
-formal counterpart to the cancellation story: the spread around the
+formal counterpart to this cancellation: the spread around the
 near-zero mean is real, not sampling noise.
 
 ### Subgroup analysis
@@ -457,7 +457,7 @@ rbind(
 )
 ```
 
-The recovered party means tell the paper's story directly: the average
+The recovered party means show the paper's finding directly: the average
 *male* coefficient is clearly **negative for Democrats** (they prefer
 women), clearly **positive for Republicans** (they prefer men), and
 **near zero for Independents**. Two camps of comparable strength pull in
