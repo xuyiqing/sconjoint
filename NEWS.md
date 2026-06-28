@@ -57,6 +57,15 @@
   options" keeps the `scfit()` knobs (Stage-2 options, seeds,
   `normalize_deltaX`, training hyperparameters, parallel execution).
 
+## Documentation
+
+* The package now passes `R CMD check --as-cran` with no errors or
+  warnings. The reference manual renders cleanly (the structural-AME help
+  used an undefined `\E` macro, and a few help pages carried literal Greek
+  letters); the bundled-data help pages now list every column
+  (`?sw2022`, `?gs2020`, `?br2017`); and the GRF learner imports
+  `stats::predict`.
+
 # sconjoint 0.2.0.9008 (2026-06-13)
 
 Public API for raw-contrast debiased vote shares; quantity coercion.

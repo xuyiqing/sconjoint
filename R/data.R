@@ -28,13 +28,15 @@
 #'     agenda dummies (reference = Very Few Changes).}
 #'   \item{cand_child1.child, cand_child2.children,
 #'     cand_child3.children}{Number of children (reference = none).}
-#'   \item{moderators (19)}{The paper's full respondent covariate set
-#'     \eqn{\mathbf Z}: `gender_num`, `age`, `income`, `educ_Middle`,
-#'     `educ_High`, `party_Republican`, `party_Independent`,
-#'     `region_NORTHEAST`, `region_SOUTH`, `region_WEST`,
-#'     `employ_parttime`, `employ_homemaker`, `employ_not_working`,
-#'     `employ_retired`, `employ_student`, `ideo_conservative`,
-#'     `vote_trump`, `vote_clinton`, `gender_att`.}
+#'   \item{gender_num, age, income, educ_Middle, educ_High,
+#'     party_Republican, party_Independent, region_NORTHEAST,
+#'     region_SOUTH, region_WEST, employ_parttime, employ_homemaker,
+#'     employ_not_working, employ_retired, employ_student,
+#'     ideo_conservative, vote_trump, vote_clinton, gender_att}{The
+#'     paper's full respondent covariate set \eqn{\mathbf Z} (19
+#'     moderators): gender, age, income, education, party, region,
+#'     employment status, ideology, vote choice, and a gender-attitudes
+#'     scale.}
 #'   \item{resp_party}{Convenience factor (Democrat / Independent /
 #'     Republican) for subgroup labelling; not part of \eqn{\mathbf Z}.}
 #' }
@@ -69,25 +71,36 @@
 #' \describe{
 #'   \item{respondent, task, profile}{Identifiers.}
 #'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-#'   \item{diff_ contrasts (30)}{Attribute contrasts differenced across the
-#'     two profiles: `diff_respParty` (co-partisan), `diff_p1_num` /
-#'     `diff_p2_num` (economic / social policy, 1-4 conservative),
-#'     `diff_dem_code_g_*` (6 good-governance codes), `diff_dem_code_u_*`
-#'     (7 undemocratic codes), `diff_dem_code_v_*` (2 valence codes),
-#'     `diff_sex_Female`, `diff_race_*` (3), and `diff_pro_*` (8
-#'     professions).  Reference levels (good governance vs. "elect
+#'   \item{diff_respParty, diff_p1_num, diff_p2_num,
+#'     diff_dem_code_g_committee, diff_dem_code_g_officestructure,
+#'     diff_dem_code_g_procedure, diff_dem_code_g_progEval,
+#'     diff_dem_code_g_record, diff_dem_code_g_schedule,
+#'     diff_dem_code_u_banProtest, diff_dem_code_u_court,
+#'     diff_dem_code_u_execRule, diff_dem_code_u_gerry2,
+#'     diff_dem_code_u_gerry10, diff_dem_code_u_journalists,
+#'     diff_dem_code_u_limitVote, diff_dem_code_v_affair,
+#'     diff_dem_code_v_tax, diff_sex_Female, diff_race_Asian,
+#'     diff_race_Black, diff_race_Hispanic, diff_pro_Farmer,
+#'     diff_pro_Lawyer, diff_pro_Legislative_staffer,
+#'     diff_pro_Police_officer, diff_pro_Served_in_the_army,
+#'     diff_pro_Served_in_the_navy, diff_pro_Small_business_owner,
+#'     diff_pro_Teacher}{Attribute contrasts differenced across the two
+#'     profiles: co-partisan, economic / social policy (1-4 conservative),
+#'     six good-governance codes (`g_*`), seven undemocratic codes
+#'     (`u_*`), two valence codes (`v_*`), candidate sex, race (3), and
+#'     profession (8).  Reference levels (good governance vs. "elect
 #'     oversight board", etc.) are absorbed by the differencing, so no
 #'     re-leveling is needed.}
-#'   \item{moderators (22)}{The paper's respondent covariate set
-#'     \eqn{\mathbf Z}: `z_ideo`, `z_pid7`, `z_trump`, `z_age`, `z_educ`,
-#'     `z_hhi`, `z_auth`, `z_knowl`, `z_female`, `z_race_black`,
-#'     `z_race_asian`, `z_race_other`; the four issue ideal points
-#'     `E_ideal`, `I_ideal`, `M_ideal`, `T_ideal`; and six direct
-#'     democracy-attitude items `dem_better`, `dem_satisfied`,
-#'     `dem_treat_journalists`, `dem_treat_banProtest`,
-#'     `dem_treat_execRule`, `dem_treat_ignoreCourt`.  The paper's main
-#'     specification holds out the six direct items and fits on the
-#'     remaining 16.}
+#'   \item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth,
+#'     z_knowl, z_female, z_race_black, z_race_asian, z_race_other,
+#'     E_ideal, I_ideal, M_ideal, T_ideal, dem_better, dem_satisfied,
+#'     dem_treat_journalists, dem_treat_banProtest, dem_treat_execRule,
+#'     dem_treat_ignoreCourt}{The paper's respondent covariate set
+#'     \eqn{\mathbf Z} (22): ideology, party, Trump approval,
+#'     demographics, authoritarianism, knowledge, and race; the four
+#'     issue ideal points (`*_ideal`); and six direct democracy-attitude
+#'     items (`dem_*`).  The paper's main specification holds out the six
+#'     direct items and fits on the remaining 16.}
 #'   \item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
 #'     -3..3 party ID, survey weight) for subgroup and weighting analyses;
 #'     not part of \eqn{\mathbf Z}.}
@@ -184,14 +197,15 @@
 #'     (1 = strong Democrat to 7 = strong Republican) for the by-party
 #'     analyses; not part of \eqn{\mathbf Z} (its standardized counterpart
 #'     `pid7_std` is).}
-#'   \item{moderators (23)}{The paper's respondent covariate set
-#'     \eqn{\mathbf Z}: `age_std`, `female`, `pid7_std`, `educ_std`,
-#'     `race_white`, `income_std`, `ineq_averse`, `work_vs_luck`,
-#'     `taxes_harm_econ`, `hardwork`, `high_econ_know`, `employed_ft`,
-#'     `conserv_ideo`, `govt_serv`, `newsint`, `numeracy`, `gen_mobile`,
-#'     `future_mobile`, `gov_assist`, `risk_averse`, `hardship`,
-#'     `children`, `trust`.  Continuous covariates are standardized and
-#'     missing values median-imputed, matching the paper's prep.}
+#'   \item{age_std, female, pid7_std, educ_std, race_white, income_std,
+#'     ineq_averse, work_vs_luck, taxes_harm_econ, hardwork,
+#'     high_econ_know, employed_ft, conserv_ideo, govt_serv, newsint,
+#'     numeracy, gen_mobile, future_mobile, gov_assist, risk_averse,
+#'     hardship, children, trust}{The paper's respondent covariate set
+#'     \eqn{\mathbf Z} (23): demographics, partisanship, ideology, and
+#'     economic attitudes and beliefs.  Continuous covariates are
+#'     standardized and missing values median-imputed, matching the
+#'     paper's prep.}
 #' }
 #' @source Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
 #'   "The Structure of American Income Tax Policy Preferences."

@@ -182,12 +182,12 @@ the user's input units.  The SDs used are stored on
 \code{fit$sd_dx} for diagnostics.
 
 Use \code{normalize_deltaX = TRUE} on designs with continuous
-attributes whose ΔX columns span very different scales (e.g.
+attributes whose \code{deltaX} columns span very different scales (e.g.
 percentage-point tax rates alongside 0/1 dummies).  The default
 v0.2 score-based MAP prior is calibrated assuming
-\code{Var(ΔX_k) ~ 1} (factor dummies under typical randomization);
+\code{Var(deltaX_k) ~ 1} (factor dummies under typical randomization);
 on large-scale continuous attributes the prior becomes loose by
-the same factor as \code{Var(ΔX_k)} and per-respondent MAP estimates
+the same factor as \code{Var(deltaX_k)} and per-respondent MAP estimates
 drift to extreme tails.  Internal standardization puts every
 coefficient on a common-variance internal scale, restoring the
 c5 prior's intended regularization strength.  For factor-dummy

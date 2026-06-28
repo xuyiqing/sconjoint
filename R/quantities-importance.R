@@ -10,7 +10,7 @@
 #'   \item `"design_variance"` (default) implements the formula as
 #'     displayed in the paper's text, \eqn{\mathrm{Imp}_{i,g} =
 #'     \sum_{k \in g} \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)},
-#'     normalized to shares across groups, with `Var(ΔX_k)` computed
+#'     normalized to shares across groups, with `Var(deltaX_k)` computed
 #'     empirically from `object$deltaX`.
 #'   \item `"uniform"` computes the variance of the attribute's utility
 #'     contribution over a uniform distribution on its levels (treating
@@ -35,7 +35,7 @@
 #' }
 #'
 #' Note `"design_variance"` and `"uniform"` answer slightly different
-#' questions and do NOT agree in general: `Var(ΔX_k)` couples dummies
+#' questions and do NOT agree in general: `Var(deltaX_k)` couples dummies
 #' of the same attribute through the realized pairing of profiles,
 #' while `"uniform"` integrates over the attribute's marginal level
 #' distribution and accounts for within-attribute covariance of the

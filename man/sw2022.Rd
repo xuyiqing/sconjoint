@@ -20,13 +20,15 @@ dummies (reference = Assertive).}
 agenda dummies (reference = Very Few Changes).}
 \item{cand_child1.child, cand_child2.children,
 cand_child3.children}{Number of children (reference = none).}
-\item{moderators (19)}{The paper's full respondent covariate set
-\eqn{\mathbf Z}: \code{gender_num}, \code{age}, \code{income}, \code{educ_Middle},
-\code{educ_High}, \code{party_Republican}, \code{party_Independent},
-\code{region_NORTHEAST}, \code{region_SOUTH}, \code{region_WEST},
-\code{employ_parttime}, \code{employ_homemaker}, \code{employ_not_working},
-\code{employ_retired}, \code{employ_student}, \code{ideo_conservative},
-\code{vote_trump}, \code{vote_clinton}, \code{gender_att}.}
+\item{gender_num, age, income, educ_Middle, educ_High,
+party_Republican, party_Independent, region_NORTHEAST,
+region_SOUTH, region_WEST, employ_parttime, employ_homemaker,
+employ_not_working, employ_retired, employ_student,
+ideo_conservative, vote_trump, vote_clinton, gender_att}{The
+paper's full respondent covariate set \eqn{\mathbf Z} (19
+moderators): gender, age, income, education, party, region,
+employment status, ideology, vote choice, and a gender-attitudes
+scale.}
 \item{resp_party}{Convenience factor (Democrat / Independent /
 Republican) for subgroup labelling; not part of \eqn{\mathbf Z}.}
 }

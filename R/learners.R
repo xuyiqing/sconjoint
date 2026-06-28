@@ -343,7 +343,7 @@
     ## (3) forest weights of each held-out respondent over held-in respondents.
     W <- grf::get_forest_weights(frst, newdata = Zr_out, num.threads = 1L)
     ## Warm start = forest's smoothed crude prediction at the held-out Z.
-    warm <- predict(frst, newdata = Zr_out)$predictions
+    warm <- stats::predict(frst, newdata = Zr_out)$predictions
     warm <- matrix(as.matrix(warm), nrow = length(ur_out), ncol = p)
 
     beta_out <- matrix(NA_real_, length(ur_out), p)

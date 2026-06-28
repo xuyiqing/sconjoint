@@ -17,14 +17,15 @@ rate_375P}{Marginal tax rate (percent) for the six income brackets.}
 (1 = strong Democrat to 7 = strong Republican) for the by-party
 analyses; not part of \eqn{\mathbf Z} (its standardized counterpart
 \code{pid7_std} is).}
-\item{moderators (23)}{The paper's respondent covariate set
-\eqn{\mathbf Z}: \code{age_std}, \code{female}, \code{pid7_std}, \code{educ_std},
-\code{race_white}, \code{income_std}, \code{ineq_averse}, \code{work_vs_luck},
-\code{taxes_harm_econ}, \code{hardwork}, \code{high_econ_know}, \code{employed_ft},
-\code{conserv_ideo}, \code{govt_serv}, \code{newsint}, \code{numeracy}, \code{gen_mobile},
-\code{future_mobile}, \code{gov_assist}, \code{risk_averse}, \code{hardship},
-\code{children}, \code{trust}.  Continuous covariates are standardized and
-missing values median-imputed, matching the paper's prep.}
+\item{age_std, female, pid7_std, educ_std, race_white, income_std,
+ineq_averse, work_vs_luck, taxes_harm_econ, hardwork,
+high_econ_know, employed_ft, conserv_ideo, govt_serv, newsint,
+numeracy, gen_mobile, future_mobile, gov_assist, risk_averse,
+hardship, children, trust}{The paper's respondent covariate set
+\eqn{\mathbf Z} (23): demographics, partisanship, ideology, and
+economic attitudes and beliefs.  Continuous covariates are
+standardized and missing values median-imputed, matching the
+paper's prep.}
 }
 }
 \source{

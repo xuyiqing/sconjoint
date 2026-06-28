@@ -3,9 +3,9 @@
 #' The structural AME of an attribute level is the average change in choice
 #' probability from turning that level on, integrated over the design law of
 #' the other attributes,
-#' \deqn{\mathrm{AME}_k = \E_Z\, \E_X\big[G(f_k(Z) + X_{-k}^\top f_{-k}(Z))
+#' \deqn{\mathrm{AME}_k = \mathrm{E}_Z\, \mathrm{E}_X\big[G(f_k(Z) + X_{-k}^\top f_{-k}(Z))
 #'   - G(X_{-k}^\top f_{-k}(Z))\big],}
-#' where the inner \eqn{\E_X} is taken over a pool of single profiles drawn
+#' where the inner \eqn{\mathrm{E}_X} is taken over a pool of single profiles drawn
 #' from the design (stored on the fit as `object$profile_pool`).  This is the
 #' debiased (orthogonal-score) estimand of the paper's Appendix C: it is
 #' computed on the Stage-1 first stage with a respondent-clustered standard

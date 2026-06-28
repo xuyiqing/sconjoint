@@ -10,25 +10,36 @@ matchups x 2 profiles) and 59 columns:
 \describe{
 \item{respondent, task, profile}{Identifiers.}
 \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-\item{diff_ contrasts (30)}{Attribute contrasts differenced across the
-two profiles: \code{diff_respParty} (co-partisan), \code{diff_p1_num} /
-\code{diff_p2_num} (economic / social policy, 1-4 conservative),
-\verb{diff_dem_code_g_*} (6 good-governance codes), \verb{diff_dem_code_u_*}
-(7 undemocratic codes), \verb{diff_dem_code_v_*} (2 valence codes),
-\code{diff_sex_Female}, \verb{diff_race_*} (3), and \verb{diff_pro_*} (8
-professions).  Reference levels (good governance vs. "elect
+\item{diff_respParty, diff_p1_num, diff_p2_num,
+diff_dem_code_g_committee, diff_dem_code_g_officestructure,
+diff_dem_code_g_procedure, diff_dem_code_g_progEval,
+diff_dem_code_g_record, diff_dem_code_g_schedule,
+diff_dem_code_u_banProtest, diff_dem_code_u_court,
+diff_dem_code_u_execRule, diff_dem_code_u_gerry2,
+diff_dem_code_u_gerry10, diff_dem_code_u_journalists,
+diff_dem_code_u_limitVote, diff_dem_code_v_affair,
+diff_dem_code_v_tax, diff_sex_Female, diff_race_Asian,
+diff_race_Black, diff_race_Hispanic, diff_pro_Farmer,
+diff_pro_Lawyer, diff_pro_Legislative_staffer,
+diff_pro_Police_officer, diff_pro_Served_in_the_army,
+diff_pro_Served_in_the_navy, diff_pro_Small_business_owner,
+diff_pro_Teacher}{Attribute contrasts differenced across the two
+profiles: co-partisan, economic / social policy (1-4 conservative),
+six good-governance codes (\verb{g_*}), seven undemocratic codes
+(\verb{u_*}), two valence codes (\verb{v_*}), candidate sex, race (3), and
+profession (8).  Reference levels (good governance vs. "elect
 oversight board", etc.) are absorbed by the differencing, so no
 re-leveling is needed.}
-\item{moderators (22)}{The paper's respondent covariate set
-\eqn{\mathbf Z}: \code{z_ideo}, \code{z_pid7}, \code{z_trump}, \code{z_age}, \code{z_educ},
-\code{z_hhi}, \code{z_auth}, \code{z_knowl}, \code{z_female}, \code{z_race_black},
-\code{z_race_asian}, \code{z_race_other}; the four issue ideal points
-\code{E_ideal}, \code{I_ideal}, \code{M_ideal}, \code{T_ideal}; and six direct
-democracy-attitude items \code{dem_better}, \code{dem_satisfied},
-\code{dem_treat_journalists}, \code{dem_treat_banProtest},
-\code{dem_treat_execRule}, \code{dem_treat_ignoreCourt}.  The paper's main
-specification holds out the six direct items and fits on the
-remaining 16.}
+\item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth,
+z_knowl, z_female, z_race_black, z_race_asian, z_race_other,
+E_ideal, I_ideal, M_ideal, T_ideal, dem_better, dem_satisfied,
+dem_treat_journalists, dem_treat_banProtest, dem_treat_execRule,
+dem_treat_ignoreCourt}{The paper's respondent covariate set
+\eqn{\mathbf Z} (22): ideology, party, Trump approval,
+demographics, authoritarianism, knowledge, and race; the four
+issue ideal points (\verb{*_ideal}); and six direct democracy-attitude
+items (\verb{dem_*}).  The paper's main specification holds out the six
+direct items and fits on the remaining 16.}
 \item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
 -3..3 party ID, survey weight) for subgroup and weighting analyses;
 not part of \eqn{\mathbf Z}.}

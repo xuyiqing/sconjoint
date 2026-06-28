@@ -139,12 +139,12 @@
 #'   `fit$sd_dx` for diagnostics.
 #'
 #'   Use `normalize_deltaX = TRUE` on designs with continuous
-#'   attributes whose ΔX columns span very different scales (e.g.
+#'   attributes whose `deltaX` columns span very different scales (e.g.
 #'   percentage-point tax rates alongside 0/1 dummies).  The default
 #'   v0.2 score-based MAP prior is calibrated assuming
-#'   `Var(ΔX_k) ~ 1` (factor dummies under typical randomization);
+#'   `Var(deltaX_k) ~ 1` (factor dummies under typical randomization);
 #'   on large-scale continuous attributes the prior becomes loose by
-#'   the same factor as `Var(ΔX_k)` and per-respondent MAP estimates
+#'   the same factor as `Var(deltaX_k)` and per-respondent MAP estimates
 #'   drift to extreme tails.  Internal standardization puts every
 #'   coefficient on a common-variance internal scale, restoring the
 #'   c5 prior's intended regularization strength.  For factor-dummy
@@ -417,12 +417,12 @@ scfit <- function(formula, data,
   ## data they supplied.
   ##
   ## Motivation: the v0.2 score-based MAP prior is calibrated assuming
-  ## ΔX columns have Var ~ 1 (true for factor dummies in {-1, 0, 1}
+  ## deltaX columns have Var ~ 1 (true for factor dummies in {-1, 0, 1}
   ## under typical balanced randomization).  On designs with
   ## large-scale continuous attributes (e.g. Ballard-Rosa tax rates in
-  ## percentage points, where Var(ΔX_k) ~ 200), `sigma_prior` blows up
+  ## percentage points, where Var(deltaX_k) ~ 200), `sigma_prior` blows up
   ## by the same factor and the MAP step barely regularizes ---
-  ## per-respondent betas drift to extreme tails.  Standardizing ΔX
+  ## per-respondent betas drift to extreme tails.  Standardizing deltaX
   ## first puts every column's variance at 1 and gives the c5 prior
   ## a uniform meaning across attribute types.
   if (isTRUE(normalize_deltaX)) {
@@ -612,9 +612,9 @@ scfit <- function(formula, data,
   ## All internal slots above ran on `deltaX_internal` (= deltaX / sd_dx
   ## column-wise when normalize_deltaX = TRUE).  Apply the inverse
   ## transform so user-facing slots are on the original-units scale:
-  ## β_orig = β_std / sd_dx (col), θ_orig = θ_std / sd_dx,
+  ## beta_orig = beta_std / sd_dx (col), theta_orig = theta_std / sd_dx,
   ## Vcov_orig[i,j] = Vcov_std[i,j] / (sd_dx[i] * sd_dx[j]),
-  ## σ²_orig = σ²_std / sd_dx^2.  No-op when normalize_deltaX = FALSE
+  ## sigma^2_orig = sigma^2_std / sd_dx^2.  No-op when normalize_deltaX = FALSE
   ## (sd_dx = 1).
   unstd_beta <- function(B) {
     if (is.null(B)) return(B)
