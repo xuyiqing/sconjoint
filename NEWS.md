@@ -35,6 +35,14 @@
 * Corrected bundled `br2017` bracket-rate data (the source file mis-stored
   the 45% level of the $175-375k bracket).
 
+## Plots
+
+* `plot_hetero()` now defaults to `facet_scales = "free_y"`, so each
+  attribute group's panel height is proportional to its number of levels
+  and bar thickness is uniform across groups (on a shared, comparable
+  variance x-axis). Pass `facet_scales = "free"` for designs that mix a
+  continuous attribute with 0/1 dummies on very different scales.
+
 # sconjoint 0.2.0.9008 (2026-06-13)
 
 Public API for raw-contrast debiased vote shares; quantity coercion.

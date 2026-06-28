@@ -10,9 +10,9 @@ book:
     - index.qmd
     - 01-installation.qmd
     - 02-sanity-check.qmd
-    - 03-example-sw.qmd
-    - 04-example-gs.qmd
-    - 05-example-br.qmd
+    - 03-example-gs.qmd
+    - 04-example-br.qmd
+    - 05-example-sw.qmd
     - 06-example-bs.qmd
     - 07-plot-options.qmd
     - 08-advanced-options.qmd

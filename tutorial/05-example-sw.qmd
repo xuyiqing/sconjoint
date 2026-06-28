@@ -85,7 +85,6 @@ Load the data and inspect its structure.
 #| label: sw-load
 data(sw2022, package = "sconjoint")
 dim(sw2022)
-head(sw2022, 4)
 ```
 
 The data are in long format: one row per respondent--task--profile. Each
@@ -265,7 +264,7 @@ default `stage2 = "map_c5"`, this is the MAP-refined hybrid view.
 #| label: sw-beta
 beta <- predict(fit_sw)
 dim(beta)
-head(beta, 3)
+round(beta[1:3, 1:6], 2)
 ```
 
 Ridgeline densities show the distribution of $\hat\beta_k(\mathbf Z_i)$
@@ -556,3 +555,18 @@ update pulls each respondent's coefficients toward the mean stage. How
 much a column's fraction moves --- and in which direction --- depends on
 how much it leaned on noisy individual variation; compare the two
 columns in the table above.
+
+## Summary
+
+The candidate application is the clearest illustration of why averages can
+mislead. The population marginal effect of a male candidate is close to
+zero, which a reduced-form analysis would read as voter indifference to
+gender. The recovered distribution shows the opposite: the near-zero
+average is the sum of two opposed camps, with Democrats favoring women and
+Republicans favoring men. Policy agenda dominates the importance
+decomposition, and gender is the one attribute that divides voters in
+direction rather than only in intensity. With only three tasks per
+respondent, we read this application as illustrative of what the model can
+describe in a deliberately sparse design; the paper rests its
+distributional conclusions mainly on the richer democracy and tax
+conjoints.

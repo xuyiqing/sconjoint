@@ -363,8 +363,9 @@ sc_importance(fit_gs, design = "uniform")$estimate[, c("attribute", "share")]
 
 ```{r}
 #| label: gs-importance-plot
-#| fig-height: 8
-plot_importance(fit_gs, labels = gs_labels)
+#| fig-height: 11
+plot_importance(fit_gs, labels = gs_labels) +
+  ggplot2::coord_cartesian(xlim = c(0, 50), clip = "off")
 ```
 
 ## Heterogeneity test
@@ -567,3 +568,19 @@ v_gs
 A correlation near $r = 1$ across the 30 attribute levels confirms
 that nothing a reduced-form AMCE analysis would deliver is lost by
 using the structural model.
+
+## Summary
+
+This application shows what the structural estimator adds beyond a
+reduced-form AMCE. The population averages recover the familiar finding:
+voters of both parties penalize undemocratic behavior, and restricting
+journalists is the most heavily penalized action. The individual-level
+estimates go further. Opposition is broad rather than universal --- for
+every undemocratic action, all but a small minority of respondents place
+negative weight on it --- and what varies across the electorate is the
+intensity of that opposition, not its direction. Decomposing utility
+variance places valence, policy, and party near the top and the democracy
+attribute below them, and the population marginal rate of substitution
+prices each violation against co-partisanship. None of these quantities is
+available from one-attribute-at-a-time effects; each follows from the
+recovered preference vector $\hat\beta_i(\mathbf Z)$.

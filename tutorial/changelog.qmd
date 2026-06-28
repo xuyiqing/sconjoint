@@ -19,6 +19,12 @@ continuous-attribute designs, and `design = "uniform"` reproduces the
 paper's factor-design importance shares. `sc_voteshare_contrast()` returns
 a debiased vote share for a raw attribute-dummy contrast.
 
+**Tutorial book.** The application chapters are ordered democratic norms,
+tax preferences, candidate choice, then climate treaties, and each closes
+with a short summary. `plot_hetero()` panels are now sized in proportion to
+each attribute group's number of levels, and the data-overview chunks drop
+`head()` in favor of `str()`.
+
 ## v0.2.0 (development)
 
 **Survey-weighted estimands (0.2.0.9007)**
