@@ -16,24 +16,24 @@ returns it, what it targets, and how its standard errors are computed,
 so you can look up the right call without re-reading a worked example.
 
 The quantities form a hierarchy by how much the design has to support to
-recover them. Population averages (the AMCE and its relatives) are
+recover them. Population averages (the AMCE and related averages) are
 available from almost any forced-choice design. Distributional quantities
-(how preferences spread across the electorate) need enough tasks per
+(how preferences spread across respondents) need enough tasks per
 respondent and enough signal in the moderators $\mathbf Z$ to separate
 real heterogeneity from noise. Individual-level quantities (one
 respondent's preference vector, their personal trade-offs) ask for more
 still. @acharya2026structural set out which quantities a given design can
-recover; the [design diagnostic](#sec-design-diagnostic) at the end of
+recover. The [design diagnostic](#sec-design-diagnostic) at the end of
 this chapter estimates which tier your own design reaches. The code below
 is reference syntax (`eval: false`); see the application chapters for the
 same calls run on real fits.
 
-## A map of the quantities
+## Overview
 
 | Estimand | Function | Targets | Inference | `which_beta` applies |
 |----|----|----|----|:--:|
-| AMCE $\hat\theta_k$ | `coef()`, `summary()`, `plot_amce()` | population part-worth (logit) | DML, clustered SE | no |
-| Average marginal effect | `sc_average()` | population AME (logit or probability) | delta-method on $\hat\theta$ | --- |
+| AMCE $\hat\theta_k$ | `coef()`, `summary()`, `plot_amce()` | population-average coefficient (logit) | DML, clustered SE | no |
+| Average marginal effect | `sc_average()` | population AME (logit or probability) | delta-method on $\hat\theta$ | no |
 | Structural AME | `sc_ame()` | population AME (probability) | debiased orthogonal score | no |
 | Counterfactual vote share | `sc_counterfactual()`, `sc_voteshare_contrast()` | $\Pr(\text{choice})$ for a profile pair or contrast | debiased orthogonal score | no |
 | Population MRS / WTP | `sc_mrs(estimand = "population")`, `sc_wtp(...)` | ratio $\theta_j/\theta_k$ | debiased, Fieller interval | no |
@@ -101,8 +101,8 @@ which is why the always-in-$[0, 1]$ plug-in shares remain the default.
 
 These describe how preferences are spread across respondents rather than
 their average. They read the per-respondent coefficients
-$\hat\beta_k(\mathbf Z_i)$, so they accept `which_beta`, and the
-fixed-$T$ summaries (fraction preferring, polarization) accept a
+$\hat\beta_k(\mathbf Z_i)$, so they accept `which_beta`. The fixed-$T$
+summaries (fraction preferring, polarization) also accept a
 respondent-cluster wild bootstrap for honest standard errors.
 
 ```{r}
@@ -116,7 +116,7 @@ sc_compensating(fit, benefit = "attr_a", cost = "attr_b")
 sc_heterogeneity_test(fit, adjust = "bh")                # Var(beta_k(Z)) > 0
 ```
 
-::: {.callout-warning}
+::: {.callout-tip}
 ### A fixed-$T$ shrinkage caveat
 
 With few tasks per respondent, the Stage-2 MAP update pulls each
@@ -124,8 +124,8 @@ respondent's coefficients toward the mean stage, so a hybrid-view
 fraction or polarization estimate is conservative: the recovered spread
 is narrower than the truth. Sanity-check distributional claims with
 `which_beta = "dnn"` (the unrefined view). If the qualitative conclusion
-flips between the two, the design is too sparse to support an
-individual-level reading, and you should report only the population
+flips between the two, the design is too sparse to support
+individual-level claims, and you should report only the population
 averages. The [design diagnostic](#sec-design-diagnostic) makes this
 concrete.
 :::
@@ -266,10 +266,11 @@ paper's design-guidance heuristics:
 | individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
 | ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
 
-The tiers line up with the three sections above: the "mean & aggregate"
-tier is the [population averages](#population-averages), and the
-"distributional" and "individual-level" tiers gate the two sections that
-follow it.
+These tiers line up with the three sections above: "mean & aggregate"
+with the [population averages](#population-averages), and
+"distributional" and "individual-level" with the two sections of those
+names. A design must reach a tier before the quantities in the matching
+section can be trusted.
 
 ```{r}
 #| label: design-diag-example
