@@ -603,10 +603,16 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
 #' @param object An \code{sc_fit} object.
 #' @param labels Optional named character vector to rename attribute names.
 #' @param title Plot title.
+#' @param xlim Numeric vector of length 2 giving x-axis limits. Applied as a
+#'   \code{coord_cartesian()} zoom (with clipping off), so the ridgeline
+#'   densities and the mean-percent labels past the cap are preserved rather
+#'   than dropped (unlike a scale limit, which would clip them). \code{NULL}
+#'   (default) shows the full range.
 #' @param ... Additional arguments passed to \code{.sc_plot_theme()}.
 #' @return A \code{ggplot} object.
 #' @export
-plot_importance <- function(object, labels = NULL, title = NULL, ...) {
+plot_importance <- function(object, labels = NULL, title = NULL,
+                            xlim = NULL, ...) {
   stopifnot(inherits(object, "sc_fit"))
   if (!requireNamespace("ggridges", quietly = TRUE)) {
     stop("plot_importance() requires the 'ggridges' package.")
@@ -675,7 +681,7 @@ plot_importance <- function(object, labels = NULL, title = NULL, ...) {
       y = NULL,
       title = if (is.null(title)) default_title else title
     ) +
-    ggplot2::coord_cartesian(clip = "off") +
+    ggplot2::coord_cartesian(xlim = xlim, clip = "off") +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(legend.position = "none",
                    plot.margin = ggplot2::margin(t = 20, r = 10, b = 5, l = 5))
