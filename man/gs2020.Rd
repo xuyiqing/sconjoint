@@ -6,40 +6,32 @@
 \title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms}
 \format{
 A data frame with 41,314 rows (1,605 respondents, ~20,657
-matchups x 2 profiles) and the following columns:
+matchups x 2 profiles) and 59 columns:
 \describe{
-\item{respondent}{Respondent id (character).}
-\item{task}{Matchup number within respondent (integer).}
-\item{profile}{Profile id within matchup (1 or 2).}
+\item{respondent, task, profile}{Identifiers.}
 \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-\item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
-\item{p1}{Numeric 1-4: economic policy position (1 = most liberal,
-4 = most conservative).}
-\item{p2}{Numeric 1-4: social policy position (1 = most liberal,
-4 = most conservative).}
-\item{dem_code}{Factor: democracy behavior code -- 7 good-governance
-codes (\verb{g_*}), 7 undemocratic codes (\verb{u_*}), 2 valence codes (\verb{v_*}).
-Reference: \code{g_boardElect}.}
-\item{cand_sex}{Factor: candidate sex (ref: \code{Male}, \code{Female}).}
-\item{cand_race}{Factor: candidate race (ref: \code{White}, \code{Black},
-\code{Hispanic}, \code{Asian}).}
-\item{cand_pro}{Factor: candidate profession (9 levels; ref:
-\code{Business_executive}).}
-\item{resp_ideo}{Numeric 1-7: respondent ideology (1 = extremely liberal,
-7 = extremely conservative).}
-\item{resp_pid}{Numeric: respondent party ID (-3 to 3).}
-\item{resp_trump}{Numeric 1-4: Trump approval (1 = strongly disapprove,
-4 = strongly approve).}
-\item{resp_age}{Numeric: respondent age in years.}
-\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
-\item{resp_race_black}{Numeric 0/1: respondent is Black.}
-\item{resp_race_asian}{Numeric 0/1: respondent is Asian.}
-\item{resp_race_other}{Numeric 0/1: respondent is other race.}
-\item{resp_educ}{Numeric 1-6: respondent education (1 = no HS,
-6 = graduate degree).}
-\item{resp_income}{Numeric 1-24: household income bracket (ordinal).}
-\item{resp_auth}{Numeric 0-4: authoritarianism score.}
-\item{resp_knowledge}{Numeric 0-8: political knowledge score.}
+\item{diff_ contrasts (30)}{Attribute contrasts differenced across the
+two profiles: \code{diff_respParty} (co-partisan), \code{diff_p1_num} /
+\code{diff_p2_num} (economic / social policy, 1-4 conservative),
+\verb{diff_dem_code_g_*} (6 good-governance codes), \verb{diff_dem_code_u_*}
+(7 undemocratic codes), \verb{diff_dem_code_v_*} (2 valence codes),
+\code{diff_sex_Female}, \verb{diff_race_*} (3), and \verb{diff_pro_*} (8
+professions).  Reference levels (good governance vs. "elect
+oversight board", etc.) are absorbed by the differencing, so no
+re-leveling is needed.}
+\item{moderators (22)}{The paper's respondent covariate set
+\eqn{\mathbf Z}: \code{z_ideo}, \code{z_pid7}, \code{z_trump}, \code{z_age}, \code{z_educ},
+\code{z_hhi}, \code{z_auth}, \code{z_knowl}, \code{z_female}, \code{z_race_black},
+\code{z_race_asian}, \code{z_race_other}; the four issue ideal points
+\code{E_ideal}, \code{I_ideal}, \code{M_ideal}, \code{T_ideal}; and six direct
+democracy-attitude items \code{dem_better}, \code{dem_satisfied},
+\code{dem_treat_journalists}, \code{dem_treat_banProtest},
+\code{dem_treat_execRule}, \code{dem_treat_ignoreCourt}.  The paper's main
+specification holds out the six direct items and fits on the
+remaining 16.}
+\item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
+-3..3 party ID, survey weight) for subgroup and weighting analyses;
+not part of \eqn{\mathbf Z}.}
 }
 }
 \source{
@@ -63,6 +55,11 @@ voters tolerate democratic backsliding by co-partisan candidates.
 \details{
 The data is cleaned from the original experiment file: respondents
 with incomplete matchups or missing moderator variables are dropped.
+
+This is the paper's full analysis frame in its two-profile differenced
+parameterization; fitting the held-out 16-covariate specification with
+the paper's configuration reproduces the published democratic-norms
+results.
 }
 \examples{
 data(gs2020)

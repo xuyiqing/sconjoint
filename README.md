@@ -26,9 +26,26 @@ remotes::install_github("xuyiqing/sconjoint")
 library(sconjoint)
 data(sw2022)
 
+# Candidate attributes (left of |) and respondent moderators Z (right of |).
+# sw2022 ships pre-coded dummy columns; dotted names are backquoted.
+attrs <- c("cand_genderMale", "cand_runYes",
+           "cand_talentCollaborative", "cand_talentDetermined.to.Succeed",
+           "cand_talentEmpathetic", "cand_talentGood.Communicator",
+           "cand_talentHard.Working", "cand_talentTough.Negotiator",
+           "cand_agendaModerate.Changes", "cand_agendaComplete.Overhaul",
+           "cand_child1.child", "cand_child2.children", "cand_child3.children")
+Zvars <- c("gender_num", "age", "income", "educ_Middle", "educ_High",
+           "party_Republican", "party_Independent", "region_NORTHEAST",
+           "region_SOUTH", "region_WEST", "employ_parttime", "employ_homemaker",
+           "employ_not_working", "employ_retired", "employ_student",
+           "ideo_conservative", "vote_trump", "vote_clinton", "gender_att")
+
+bt   <- function(x) paste0("`", x, "`")
+form <- as.formula(paste("choice ~", paste(bt(attrs), collapse = " + "),
+                         "|",        paste(bt(Zvars), collapse = " + ")))
+
 fit <- scfit(
-  choice ~ agenda + talent + children + cand_gender + prior_office |
-           resp_female + age + pid,
+  form,
   data = sw2022, respondent = "respondent",
   task = "task", profile = "profile",
   K = 5L, n_epochs = 200L, seed = 2024
