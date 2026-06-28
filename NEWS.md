@@ -1,3 +1,40 @@
+# sconjoint 0.2.1 (2026-06-28)
+
+## Full replication datasets
+
+* The bundled `sw2022`, `gs2020`, and `br2017` datasets are now the
+  paper's **full analysis frames**, carrying the complete respondent
+  moderator set Z (19, 22, and 23 covariates). Fitting them with the
+  paper's configuration reproduces the published empirical results. The
+  tutorial book's worked examples now reproduce the manuscript's numbers.
+  (`bs2013` remains a lightweight teaching example, not a paper
+  application.)
+* Attributes ship as the paper's analysis columns (SW candidate dummies
+  `cand_*`; GS differenced contrasts `diff_*`; BR numeric bracket rates),
+  and the moderator columns are the paper's standardized / median-imputed
+  Z. Raw convenience columns (`resp_party`, `resp_pid7`, `ideo7`, `pid7`,
+  `weight`) are carried for subgroup and weighting analyses but are not
+  part of Z. See `?sw2022`, `?gs2020`, `?br2017`.
+
+## Estimation and inference (since 0.2.0)
+
+* Pluggable first-stage learners: `scfit(learner = )` accepts `"dnn"`
+  (default), `"enet"` (elastic net with optional spline basis), and
+  `"grf"` (generalized random forest); all feed the same DML inference.
+* Debiased (orthogonal-score) inference for the additional quantities:
+  `sc_counterfactual()` debiased by default, `sc_ame()`, population
+  `sc_mrs()` / `sc_wtp()`, and opt-in debiased `sc_importance()`. New
+  `sc_voteshare_contrast()` returns a debiased vote share for a raw
+  attribute-dummy contrast.
+* Respondent survey weights via `scfit(respondent_weights = )`, reweighting
+  the target-population aggregation and clustered standard errors.
+* Influence-function subgroup estimates in `sc_average(subgroup = )`, and a
+  respondent-cluster wild bootstrap for the distributional quantities.
+* `sc_importance(design = )` gains `"levels"` for continuous-attribute
+  designs; `"uniform"` reproduces the paper's factor-design shares.
+* Corrected bundled `br2017` bracket-rate data (the source file mis-stored
+  the 45% level of the $175-375k bracket).
+
 # sconjoint 0.2.0.9008 (2026-06-13)
 
 Public API for raw-contrast debiased vote shares; quantity coercion.

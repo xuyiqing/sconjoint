@@ -9,7 +9,7 @@ test_that("sw2022 runs scfit() + a few quantities", {
   fit <- sconjoint::scfit(
     choice ~ agenda + talent + children + cand_gender + prior_office |
              resp_female + age + pid,
-    data = sw2022, respondent = "respondent",
+    data = sw2022_demo, respondent = "respondent",
     task = "task", profile = "profile",
     K = 2L, n_epochs = 40L, seed = 1L
   )

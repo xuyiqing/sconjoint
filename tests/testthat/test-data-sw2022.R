@@ -1,14 +1,19 @@
-test_that("sw2022 loads with expected columns and size", {
+test_that("sw2022 loads as the full-Z analysis frame", {
   data(sw2022, package = "sconjoint")
   expect_s3_class(sw2022, "data.frame")
+  ## attribute dummies + the paper's 19 moderators + convenience factor
   expect_true(all(c("respondent", "task", "profile", "choice",
-                    "agenda", "talent", "children", "cand_gender",
-                    "prior_office", "resp_female", "age", "pid")
+                    "cand_genderMale", "cand_runYes",
+                    "cand_agendaModerate.Changes", "cand_talentEmpathetic",
+                    "cand_child1.child",
+                    "gender_num", "age", "income", "party_Republican",
+                    "party_Independent", "ideo_conservative", "gender_att",
+                    "resp_party")
                   %in% names(sw2022)))
   expect_equal(nrow(sw2022), 7146L)
+  expect_equal(ncol(sw2022), 37L)
+  ## 13 attribute dummies
+  expect_equal(length(grep("^cand_", names(sw2022))), 13L)
+  ## two profiles per respondent-task
   expect_true(all(table(sw2022$respondent, sw2022$task) == 2L))
-  f <- system.file("data", "sw2022.rda", package = "sconjoint")
-  if (nzchar(f)) {
-    expect_lt(file.info(f)$size, 500L * 1024L)
-  }
 })

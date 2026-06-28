@@ -10,75 +10,73 @@ torch::torch_manual_seed(2024)
 library(sconjoint)
 library(ggplot2)
 
-## Groups and labels for plot annotations --------------------------------
+## Groups and labels for plot annotations (keyed by the diff_ contrast
+## column names; reference level = good-governance "elect oversight board",
+## already dropped in the bundled data). ------------------------------------
 gs_groups <- c(
-  "copartisanCo-partisan"      = "Party",
-  ## Good-governance items (post-relevel: g_boardElect now also a dummy)
-  "dem_codeg_boardElect"      = "Good Governance",
-  "dem_codeg_committee"       = "Good Governance",
-  "dem_codeg_officestructure" = "Good Governance",
-  "dem_codeg_procedure"       = "Good Governance",
-  "dem_codeg_progEval"        = "Good Governance",
-  "dem_codeg_record"          = "Good Governance",
-  "dem_codeg_schedule"        = "Good Governance",
-  ## Undemocratic items (post-relevel: u_gerry2 is the reference, no dummy)
-  "dem_codeu_banProtest"      = "Undemocratic",
-  "dem_codeu_court"           = "Undemocratic",
-  "dem_codeu_execRule"        = "Undemocratic",
-  "dem_codeu_gerry10"         = "Undemocratic",
-  "dem_codeu_journalists"     = "Undemocratic",
-  "dem_codeu_limitVote"       = "Undemocratic",
-  "dem_codev_affair"          = "Valence",
-  "dem_codev_tax"             = "Valence",
-  "cand_sexFemale"            = "Sex",
-  "cand_raceBlack"            = "Race",
-  "cand_raceHispanic"         = "Race",
-  "cand_raceAsian"            = "Race",
-  "p1"                        = "Policy",
-  "p2"                        = "Policy",
-  "cand_proFarmer"            = "Profession",
-  "cand_proLawyer"            = "Profession",
-  "cand_proLegislative staffer" = "Profession",
-  "cand_proPolice officer"    = "Profession",
-  "cand_proServed in the army" = "Profession",
-  "cand_proServed in the navy" = "Profession",
-  "cand_proSmall business owner" = "Profession",
-  "cand_proTeacher"           = "Profession"
+  "diff_respParty"                  = "Party",
+  "diff_p1_num"                     = "Policy",
+  "diff_p2_num"                     = "Policy",
+  "diff_dem_code_g_committee"       = "Good governance",
+  "diff_dem_code_g_officestructure" = "Good governance",
+  "diff_dem_code_g_procedure"       = "Good governance",
+  "diff_dem_code_g_progEval"        = "Good governance",
+  "diff_dem_code_g_record"          = "Good governance",
+  "diff_dem_code_g_schedule"        = "Good governance",
+  "diff_dem_code_u_banProtest"      = "Undemocratic",
+  "diff_dem_code_u_court"           = "Undemocratic",
+  "diff_dem_code_u_execRule"        = "Undemocratic",
+  "diff_dem_code_u_gerry2"          = "Undemocratic",
+  "diff_dem_code_u_gerry10"         = "Undemocratic",
+  "diff_dem_code_u_journalists"     = "Undemocratic",
+  "diff_dem_code_u_limitVote"       = "Undemocratic",
+  "diff_dem_code_v_affair"          = "Valence",
+  "diff_dem_code_v_tax"             = "Valence",
+  "diff_sex_Female"                 = "Sex",
+  "diff_race_Asian"                 = "Race",
+  "diff_race_Black"                 = "Race",
+  "diff_race_Hispanic"              = "Race",
+  "diff_pro_Farmer"                 = "Profession",
+  "diff_pro_Lawyer"                 = "Profession",
+  "diff_pro_Legislative_staffer"    = "Profession",
+  "diff_pro_Police_officer"         = "Profession",
+  "diff_pro_Served_in_the_army"     = "Profession",
+  "diff_pro_Served_in_the_navy"     = "Profession",
+  "diff_pro_Small_business_owner"   = "Profession",
+  "diff_pro_Teacher"                = "Profession"
 )
 
 gs_labels <- c(
-  "copartisanCo-partisan"      = "Co-partisan",
-  ## g_boardElect now a dummy after the re-level above
-  "dem_codeg_boardElect"      = "Elect oversight board",
-  "dem_codeg_committee"       = "Committee oversight",
-  "dem_codeg_officestructure" = "Office structure",
-  "dem_codeg_procedure"       = "Procedure",
-  "dem_codeg_progEval"        = "Program evaluation",
-  "dem_codeg_record"          = "Record-keeping",
-  "dem_codeg_schedule"        = "Schedule",
-  "dem_codeu_banProtest"      = "Ban protest",
-  "dem_codeu_court"           = "Ignore court",
-  "dem_codeu_execRule"        = "Executive rule",
-  ## u_gerry2 is the reference now — no dummy column
-  "dem_codeu_gerry10"         = "Gerrymander (10%)",
-  "dem_codeu_journalists"     = "Restrict journalists",
-  "dem_codeu_limitVote"       = "Limit voting",
-  "dem_codev_affair"          = "Affair",
-  "dem_codev_tax"             = "Tax evasion",
-  "cand_sexFemale"            = "Female",
-  "cand_raceBlack"            = "Black",
-  "cand_raceHispanic"         = "Hispanic",
-  "cand_raceAsian"            = "Asian",
-  "p1"                        = "Econ. policy (conservative)",
-  "p2"                        = "Social policy (conservative)",
-  "cand_proFarmer"            = "Farmer",
-  "cand_proLawyer"            = "Lawyer",
-  "cand_proLegislative staffer" = "Legislative staffer",
-  "cand_proPolice officer"    = "Police officer",
-  "cand_proServed in the army" = "Army veteran",
-  "cand_proServed in the navy" = "Navy veteran",
-  "cand_proSmall business owner" = "Small business owner",
-  "cand_proTeacher"           = "Teacher"
+  "diff_respParty"                  = "Co-partisan",
+  "diff_p1_num"                     = "Econ. policy (cons.)",
+  "diff_p2_num"                     = "Social policy (cons.)",
+  "diff_dem_code_g_committee"       = "Committee oversight",
+  "diff_dem_code_g_officestructure" = "Office structure",
+  "diff_dem_code_g_procedure"       = "Legislative procedure",
+  "diff_dem_code_g_progEval"        = "Program evaluation",
+  "diff_dem_code_g_record"          = "Record-keeping",
+  "diff_dem_code_g_schedule"        = "Legislative schedule",
+  "diff_dem_code_u_banProtest"      = "Ban protests",
+  "diff_dem_code_u_court"           = "Ignore courts",
+  "diff_dem_code_u_execRule"        = "Executive orders",
+  "diff_dem_code_u_gerry2"          = "Gerrymander (2 seats)",
+  "diff_dem_code_u_gerry10"         = "Gerrymander (10 seats)",
+  "diff_dem_code_u_journalists"     = "Restrict journalists",
+  "diff_dem_code_u_limitVote"       = "Limit voting",
+  "diff_dem_code_v_affair"          = "Extramarital affair",
+  "diff_dem_code_v_tax"             = "Underpaid taxes",
+  "diff_sex_Female"                 = "Female",
+  "diff_race_Asian"                 = "Asian",
+  "diff_race_Black"                 = "Black",
+  "diff_race_Hispanic"              = "Hispanic",
+  "diff_pro_Farmer"                 = "Farmer",
+  "diff_pro_Lawyer"                 = "Lawyer",
+  "diff_pro_Legislative_staffer"    = "Legislative staffer",
+  "diff_pro_Police_officer"         = "Police officer",
+  "diff_pro_Served_in_the_army"     = "Army veteran",
+  "diff_pro_Served_in_the_navy"     = "Navy veteran",
+  "diff_pro_Small_business_owner"   = "Small business owner",
+  "diff_pro_Teacher"                = "Teacher"
 )
 ```
 
@@ -96,9 +94,15 @@ population-average penalty for undemocratic behavior into direction and
 intensity, and traces the heterogeneity back to respondent-level
 partisanship --- without re-estimating on subsets.
 
+The bundled `gs2020` data is the paper's full analysis frame, and this
+chapter reproduces the paper's **main (held-out) specification**: the
+16-covariate moderator set that drops the six direct
+democracy-attitude items (see [Fitting the structural model](#fitting),
+below). The numbers reported here match the paper's Section 4.2.
+
 ## Data preparation
 
-Load the Graham-Svolik subset and inspect its structure. Each
+Load the Graham-Svolik analysis frame and inspect its structure. Each
 respondent contributes about 13 forced-choice tasks against pairs of
 hypothetical candidates.
 
@@ -106,82 +110,108 @@ hypothetical candidates.
 #| label: gs-load
 data(gs2020, package = "sconjoint")
 dim(gs2020)
-head(gs2020, 4)
-str(gs2020)
+gs2020[1:4, c("respondent", "task", "profile", "choice",
+              "diff_respParty", "diff_dem_code_u_journalists")]
 ```
 
-Each respondent sees up to 13 matchups with two candidate profiles each.
-The respondent-level moderators include ideology (`resp_ideo`, 1--7),
-party identification (`resp_pid`, -3 to 3), Trump approval (`resp_trump`,
-1--4), demographics (age, gender, race, education, income), and
-dispositional measures (authoritarianism, political knowledge) --- 12
-moderators in total. This is a reduced set relative to the paper (see
-the [overview](index.qmd)), so the numbers below are illustrative.
+The frame is already in the paper's two-profile parameterization: the
+choice outcome, the identifiers (`respondent`, `task`, `profile`), 30
+attribute contrasts (the `diff_` columns, differenced across the two
+profiles), and the respondent-level moderators $\mathbf{Z}$ (the `z_*`
+and `*_ideal` columns plus six direct democracy-attitude items).
+Because the design is differenced, the reference levels are already
+absorbed (good governance is measured against an "elect oversight
+board" baseline; the undemocratic and valence items against "absent"
+and "no scandal"). No re-leveling is needed.
 
-The `dem_code` attribute has 16 levels in three families: good-governance
-(`g_*`, 7 levels), undemocratic actions (`u_*`, 7 levels), and valence
-violations (`v_*`, 2 levels). The raw choice rates make the families
-crystal clear:
+The 16 undemocratic, good-governance, and valence contrasts split into
+three families: good-governance (`diff_dem_code_g_*`, 6 contrasts),
+undemocratic actions (`diff_dem_code_u_*`, 7 contrasts), and valence
+violations (`diff_dem_code_v_*`, 2 contrasts). Their raw conditional
+choice rates make the families clear: candidates who endorse an
+undemocratic action or carry a valence scandal are chosen far less
+often.
 
 ```{r}
 #| label: gs-dem-code-raw
-agg <- aggregate(choice ~ dem_code, data = gs2020, FUN = mean)
-agg[order(-agg$choice), ]
+u_cols <- grep("^diff_dem_code_u_", names(gs2020), value = TRUE)
+v_cols <- grep("^diff_dem_code_v_", names(gs2020), value = TRUE)
+## Mean choice rate for the profile carrying each contrast (diff == 1)
+rate_when_present <- function(col) {
+  mean(gs2020$choice[gs2020[[col]] == 1])
+}
+round(sort(sapply(c(u_cols, v_cols), rate_when_present)), 3)
 ```
 
-Every `g_*` item is chosen at rate $> 0.55$; every `u_*` item at
-rate $< 0.42$; every `v_*` item at rate $< 0.35$. The labels are
-correct. But the default factor reference is `g_boardElect`
-(alphabetically first), so when we fit the model with default
-contrasts, the `g_*` coefficients are estimated *relative to another
-good-governance item*, which makes the within-`g_` comparisons noisy
-and a few of them slightly negative.
+Every undemocratic and valence contrast is chosen well below 0.5 when
+present: voters penalize both democratic backsliding and personal
+scandal.
 
-To get a more interpretable plot that lines up with the paper's
-"voters favor good governance" finding, we **re-level `dem_code` so
-that the reference is the mildest undemocratic action,
-`u_gerry2`** (slight gerrymandering). With this baseline, every `g_*`
-item shows a clearly positive coefficient (good-governance preferred
-over mild undemocratic behavior), other `u_*` items are near-zero or
-negative (worse than mild gerry), and `v_*` valence items are
-strongly negative.
+## Fitting the structural model {#fitting}
 
-```{r}
-#| label: gs-relevel
-gs2020$dem_code <- stats::relevel(factor(gs2020$dem_code),
-                                  ref = "u_gerry2")
-levels(gs2020$dem_code)[1]   # confirm new reference
-```
-
-## Fitting the structural model
+We fit the paper's main specification: the 30 attribute contrasts in
+the first part of the formula, and the **held-out 16-covariate**
+moderator set in the second part. The held-out set drops the six direct
+democracy-attitude items (`dem_better`, `dem_satisfied`, and the four
+`dem_treat_*` items), which ask respondents directly how acceptable
+each action is; holding them out of $\mathbf{Z}$ is the more defensible
+specification, because it forces the model to recover preferences over
+undemocratic actions from the conjoint choices alone rather than from a
+near-restatement of the outcome. Attribute names are back-quoted
+because they contain characters R would otherwise parse.
 
 ```{r}
 #| label: gs-fit
+#| cache: true
 fit_gs <- scfit(
-  choice ~ copartisan + p1 + p2 + dem_code + cand_sex + cand_race + cand_pro |
-           resp_ideo + resp_pid + resp_trump + resp_age + resp_female +
-           resp_race_black + resp_race_asian + resp_race_other +
-           resp_educ + resp_income + resp_auth + resp_knowledge,
-  data        = gs2020,
-  respondent  = "respondent",
-  task        = "task",
-  profile     = "profile",
-  K           = 5L,
-  n_epochs    = 200L,
-  seed        = 2024
+  choice ~ `diff_respParty` + `diff_p1_num` + `diff_p2_num` +
+    `diff_dem_code_g_committee` + `diff_dem_code_g_officestructure` +
+    `diff_dem_code_g_procedure` + `diff_dem_code_g_progEval` +
+    `diff_dem_code_g_record` + `diff_dem_code_g_schedule` +
+    `diff_dem_code_u_banProtest` + `diff_dem_code_u_court` +
+    `diff_dem_code_u_execRule` + `diff_dem_code_u_gerry2` +
+    `diff_dem_code_u_gerry10` + `diff_dem_code_u_journalists` +
+    `diff_dem_code_u_limitVote` + `diff_dem_code_v_affair` +
+    `diff_dem_code_v_tax` + `diff_sex_Female` + `diff_race_Asian` +
+    `diff_race_Black` + `diff_race_Hispanic` + `diff_pro_Farmer` +
+    `diff_pro_Lawyer` + `diff_pro_Legislative_staffer` +
+    `diff_pro_Police_officer` + `diff_pro_Served_in_the_army` +
+    `diff_pro_Served_in_the_navy` + `diff_pro_Small_business_owner` +
+    `diff_pro_Teacher` |
+    `z_ideo` + `z_pid7` + `z_trump` + `z_age` + `z_educ` + `z_hhi` +
+    `z_auth` + `z_knowl` + `z_female` + `z_race_black` + `z_race_asian` +
+    `z_race_other` + `E_ideal` + `I_ideal` + `M_ideal` + `T_ideal`,
+  data       = gs2020,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 10L,
+  seed       = 42L,
+  stage2     = "map_c5",
+  parallel   = TRUE,
+  n_cores    = 10L
 )
 summary(fit_gs)
 ```
+
+The population-average penalty for being a co-partisan candidate is a
+large, precisely-estimated positive coefficient
+($\hat\theta_{\text{co-partisan}} \approx +0.72$ on the logit scale),
+and every undemocratic action carries a strongly negative coefficient
+(range $-0.57$ to $-0.93$). Restricting journalists is the most heavily
+penalized action ($\hat\theta \approx -0.93$); the valence scandals are
+even more damaging (extramarital affair $\approx -0.98$).
 
 ::: {.callout-note}
 ### Stage 2 is on by default (v0.2)
 
 The summary above reports `Stage 2: map_c5` --- the empirical-Bayes
-MAP refinement of paper §3. The DML co-partisan coefficient (a large,
-precisely-estimated positive effect in the paper) is computed from the
-Stage-1 DNN only; the refined respondent-level betas (used by the
-distributional and structural quantities below) sit on
-`fit_gs$beta_hat`. Pass `stage2 = "none"` to recover v0.1 behavior.
+MAP refinement of paper §3. The DML population coefficients
+$\hat\theta_k$ (the co-partisan and undemocratic-action effects above)
+are computed from the Stage-1 cross-fitted DNN; the refined
+respondent-level betas (used by the distributional and structural
+quantities below) sit on `fit_gs$beta_hat_resp`. Pass
+`stage2 = "none"` to recover v0.1 behavior.
 :::
 
 ```{r}
@@ -194,20 +224,18 @@ plot(fit_gs, "loss_trace")
 ::: {.callout-note}
 ### How to read the AMCE plot
 
-We re-leveled `dem_code` above so that the reference is `u_gerry2`
-(mild undemocratic action). All `dem_code` coefficients are now read
-relative to that baseline:
+All `dem_code` contrasts are read relative to their absent / no-scandal
+baseline:
 
-* `g_*` (good-governance) items: **positive** --- voters prefer
-  good-governance practices over mild gerrymandering.
-* Other `u_*` (undemocratic) items: **near zero or negative** ---
-  similar to or worse than mild gerry.
-* `v_*` (valence violation) items: **strongly negative** --- voters
-  reject sex affairs / tax evasion even relative to mild
-  undemocratic behavior.
+* `g_*` (good-governance) items: near zero --- voters are largely
+  indifferent across procedural good-governance features.
+* `u_*` (undemocratic) items: **strongly negative** --- voters
+  penalize every undemocratic action.
+* `v_*` (valence violation) items: **most negative** --- voters reject
+  affairs and tax evasion most sharply.
 
-This is the paper's directional finding: voters favor good governance
-and oppose democratic backsliding.
+This is the paper's directional finding: voters broadly oppose
+democratic backsliding.
 :::
 
 Plot the population-average coefficients (DML on the logit scale).
@@ -271,10 +299,11 @@ ggplot(df_both, aes(x = estimate, y = label, color = source)) +
 ## Individual-level preferences
 
 Ridgeline densities show how each per-respondent coefficient
-$\hat\beta_k(\mathbf Z_i)$ is distributed across the sample.
-Undemocratic-action densities should sit entirely left of zero;
-good-governance densities sit near zero (relative to the
-`g_boardElect` reference, see the callout above).
+$\hat\beta_k(\mathbf Z_i)$ is distributed across the sample. The
+undemocratic-action densities sit clearly left of zero for nearly every
+respondent --- opposition to backsliding is broad, not confined to a
+subgroup --- while the valence densities sit furthest left (see the
+callout above).
 
 ```{r}
 #| label: gs-ridgelines
@@ -286,29 +315,64 @@ plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
 
 ### Attribute importance
 
-Decompose utility variance by attribute group. Party and policy should
-carry most of the weight; democracy attributes should account for a
-real but smaller share.
+Decompose utility variance by attribute group. The package's
+`sc_importance()` reports a per-contrast share; the paper groups the
+contrasts into attributes (party, policy, the three democracy families,
+and the candidate demographics) and reports the variance share of each
+attribute. Computing the grouped shares from the recovered
+per-respondent coefficients reproduces the paper's decomposition.
 
 ```{r}
 #| label: gs-importance
-sc_importance(fit_gs)
+B <- fit_gs$beta_hat_resp
+attr_groups <- list(
+  party    = "diff_respParty",
+  policy   = c("diff_p1_num", "diff_p2_num"),
+  good     = grep("_g_", colnames(B), value = TRUE),
+  undem    = grep("_u_", colnames(B), value = TRUE),
+  valence  = grep("_v_", colnames(B), value = TRUE),
+  sex      = "diff_sex_Female",
+  race     = grep("^diff_race_", colnames(B), value = TRUE),
+  prof     = grep("^diff_pro_", colnames(B), value = TRUE)
+)
+## Per-respondent utility-variance per attribute over uniform level draws
+## (reference contributes beta = 0, so L = #contrasts + 1).
+imp <- sapply(attr_groups, function(cols) {
+  ba <- B[, cols, drop = FALSE]; L <- ncol(ba) + 1
+  rowSums(ba^2) / L - (rowSums(ba) / L)^2
+})
+shares <- 100 * colMeans(imp / rowSums(imp))
+round(sort(shares, decreasing = TRUE), 1)
+```
+
+The four leading shares are valence ($\approx 29\%$), policy
+($\approx 26\%$), and party ($\approx 23\%$) clustered at the top, with
+the undemocratic-action attribute ($\approx 9\%$) carrying a smaller but
+non-trivial share. Voters care most about scandal, policy, and party;
+the democracy dimension matters, but it is not what most differentiates
+candidates in this design.
+
+The package's per-contrast view (uniform design) is complementary --- it
+shows which individual contrasts within each attribute carry the
+variance:
+
+```{r}
+#| label: gs-importance-contrast
+sc_importance(fit_gs, design = "uniform")$estimate[, c("attribute", "share")]
 ```
 
 ```{r}
 #| label: gs-importance-plot
 #| fig-height: 8
-plot_importance(fit_gs, labels = c(copartisan = "Party", p1 = "Econ. Policy",
-  p2 = "Social Policy", dem_code = "Democracy",
-  cand_sex = "Sex", cand_race = "Race", cand_pro = "Profession"))
+plot_importance(fit_gs, labels = gs_labels)
 ```
 
 ## Heterogeneity test
 
 Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
-what sampling noise alone would explain? A significant result for
-`undem` levels would confirm that the penalty for undemocratic behavior
-varies meaningfully across respondents.
+what sampling noise alone would explain? A significant result for the
+`u_*` levels confirms that the intensity of the penalty for
+undemocratic behavior varies meaningfully across respondents.
 
 ```{r}
 #| label: gs-het
@@ -322,11 +386,30 @@ het_gs$estimate
 plot_hetero(fit_gs, groups = gs_groups, labels = gs_labels)
 ```
 
-Fewer than 5% of respondents have a positive coefficient on any
-undemocratic action --- opposition to democratic backsliding is
-near-universal.
+The penalty for each undemocratic action varies in intensity across
+respondents, but its population average is strongly negative for every
+action: on average, voters oppose democratic backsliding. Crucially,
+the opposition is also broad at the individual level --- the next
+section shows that almost no respondents actively favor any undemocratic
+action.
 
 ### Fraction preferring
+
+```{r}
+#| label: gs-fraction
+fr <- sc_fraction_preferring(fit_gs)
+fr_u <- fr$estimate[grepl("^diff_dem_code_u_", fr$estimate$dummy_name), ]
+fr_u$action <- sub("diff_dem_code_u_", "", fr_u$dummy_name)
+round(setNames(fr_u$frac_positive, fr_u$action), 3)
+```
+
+The fraction of respondents who actively *favor* any undemocratic
+action is tiny. The least-opposed action, a 10-seat gerrymander, is
+favored by only about 6% of respondents --- over 93% are opposed --- and
+restricting journalists, ignoring courts, and limiting voting are
+favored by essentially no one. This is the paper's individual-level
+finding: opposition to undemocratic behavior is nearly universal, not a
+property of one partisan camp.
 
 ```{r}
 #| label: gs-fraction-bar
@@ -336,35 +419,77 @@ plot_fraction(fit_gs, groups = gs_groups, labels = gs_labels)
 
 ## Direction and intensity
 
-The undemocratic levels should show a large negative average direction
-(voters penalize them) coupled with high intensity. The structural
-question is whether the *dispersion* of those coefficients concentrates
-on co-partisans, as Graham and Svolik argue.
+The undemocratic levels show a large negative average direction (voters
+penalize them) coupled with high intensity. The structural question is
+whether the *dispersion* of those coefficients concentrates on
+co-partisans, as Graham and Svolik argue.
 
 ```{r}
 #| label: gs-di
 sc_direction_intensity(fit_gs)
 ```
 
+### Marginal rate of substitution: democracy vs party
+
+How much co-partisan advantage would a candidate need to offset the
+penalty for an undemocratic action? The population MRS is the ratio of
+the action's coefficient to the co-partisan coefficient,
+$\theta_{\text{action}} / \theta_{\text{co-partisan}}$, estimated with
+the debiased orthogonal score (`estimand = "population"`).
+
+```{r}
+#| label: gs-mrs
+mrs_actions <- c("diff_dem_code_u_journalists",
+                 "diff_dem_code_u_court",
+                 "diff_dem_code_u_gerry10")
+do.call(rbind, lapply(mrs_actions, function(a) {
+  m <- sc_mrs(fit_gs, a, "diff_respParty", estimand = "population")
+  data.frame(action = sub("diff_dem_code_u_", "", a),
+             abs_mrs = round(abs(m$estimate), 2),
+             se      = round(m$se, 2),
+             row.names = NULL)
+}))
+```
+
+Restricting journalists costs about 1.3 co-partisan-advantages to
+offset; ignoring courts about 1.0; a 10-seat gerrymander about 0.95. In
+words, a candidate would have to be *more* than a co-partisan --- worth
+roughly 1.3 party switches --- to make the average voter forgive
+prosecuting journalists. Party loyalty does not buy a free pass on the
+most severe undemocratic actions.
+
 ## Subgroup analysis by partisanship
 
 We re-average the held-out $\hat\beta(\mathbf Z_i)$ separately for
 Democrats, Independents, and Republicans using `sc_subgroup()`. The
-`resp_pid` column on the standardized $\mathbf Z$ matrix preserves the
-sign of the underlying -1/0/+1 encoding.
+convenience column `pid7` carries the raw 7-point party identification
+($<0$ Democrat, $0$ Independent, $>0$ Republican). `sc_subgroup()`
+expects a logical vector aligned to the fit's task rows (one per
+respondent--task), so we map the respondent-level `pid7` onto
+`fit_gs$respondent_id`.
+
+```{r}
+#| label: gs-subgroup-setup
+## Respondent-level lookups, indexed onto the fit's task rows.
+pid_lookup  <- tapply(gs2020$pid7,  gs2020$respondent, function(x) x[1])
+ideo_lookup <- tapply(gs2020$ideo7, gs2020$respondent, function(x) x[1])
+rid       <- as.character(fit_gs$respondent_id)
+pid_row   <- unname(pid_lookup[rid])    # length = nrow(fit_gs$beta_hat)
+ideo_row  <- unname(ideo_lookup[rid])
+```
 
 ```{r}
 #| label: gs-subgroup
-pid_col <- fit_gs$Z[, "resp_pid"]
 sub <- sc_subgroup(fit_gs, list(
-  dem = pid_col < 0,
-  ind = pid_col == 0,
-  rep = pid_col > 0
+  Democrat    = pid_row < 0,
+  Independent = pid_row == 0,
+  Republican  = pid_row > 0
 ))
 do.call(rbind, lapply(names(sub), function(g) {
   e <- sub[[g]]$estimate
-  rows <- grepl("^dem_codeu_", e$dummy_name)
-  data.frame(group = g, e[rows, c("dummy_name", "theta", "se")],
+  rows <- grepl("^diff_dem_code_u_", e$dummy_name)
+  data.frame(group = g, action = sub("diff_dem_code_u_", "", e$dummy_name[rows]),
+             theta = round(e$theta[rows], 2), se = round(e$se[rows], 2),
              row.names = NULL)
 }))
 ```
@@ -372,21 +497,45 @@ do.call(rbind, lapply(names(sub), function(g) {
 ```{r}
 #| label: gs-subgroup-plot
 #| fig-height: 5
-pid_col <- fit_gs$Z[, "resp_pid"]
 plot_subgroup(
   fit_gs,
-  subgroup = list(Democrat    = pid_col < 0,
-                  Independent = pid_col == 0,
-                  Republican  = pid_col > 0),
-  dummies = grep("^dem_codeu_", fit_gs$attr_names, value = TRUE),
+  subgroup = list(Democrat    = pid_row < 0,
+                  Independent = pid_row == 0,
+                  Republican  = pid_row > 0),
+  dummies = grep("^diff_dem_code_u_", fit_gs$attr_names, value = TRUE),
   groups = gs_groups, labels = gs_labels,
   title = "Subgroup AMCE: undemocratic behavior"
 )
 ```
 
-The structural model reveals that even strong partisans penalize
-undemocratic behavior, but the intensity of the penalty varies
-meaningfully with ideology.
+The structural model reveals that strong partisans of both parties
+penalize undemocratic behavior; the intensity of the penalty varies
+across respondents, but its sign does not. We can sharpen this with
+ideology terciles, built from the raw 7-point ideology column `ideo7`
+(1--3 Liberal, 4 Moderate, 5--7 Conservative), again indexed onto the
+task rows via `ideo_row`:
+
+```{r}
+#| label: gs-ideo-tercile
+ideo_grp <- cut(ideo_row, c(0, 3, 4, 7),
+                labels = c("Liberal", "Moderate", "Conservative"))
+sub_ideo <- sc_subgroup(fit_gs, list(
+  Liberal      = ideo_grp == "Liberal",
+  Moderate     = ideo_grp == "Moderate",
+  Conservative = ideo_grp == "Conservative"
+))
+do.call(rbind, lapply(names(sub_ideo), function(g) {
+  e <- sub_ideo[[g]]$estimate
+  i <- e$dummy_name == "diff_dem_code_u_journalists"
+  data.frame(ideology = g, action = "journalists",
+             theta = round(e$theta[i], 2), se = round(e$se[i], 2),
+             row.names = NULL)
+}))
+```
+
+Every ideological tercile assigns a strong negative coefficient to
+restricting journalists: the penalty is broad across the ideological
+spectrum.
 
 ## Preference clustering
 
@@ -406,7 +555,7 @@ round(cl_gs$estimate$centers, 2)
 
 The structural model nests the standard pooled-logit AMCE: under
 correct logit specification, $\theta_k = \mathbb{E}[\beta_k(Z)]$
-equals the homogeneous-logit coefficient on attribute $k$. The new
+equals the homogeneous-logit coefficient on attribute $k$. The
 `sc_validate_amce()` export reports this comparison.
 
 ```{r}

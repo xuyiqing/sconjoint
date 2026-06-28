@@ -1,5 +1,24 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## v0.2.1 (2026-06-28)
+
+**Full replication datasets.** The bundled `sw2022`, `gs2020`, and
+`br2017` datasets are now the paper's full analysis frames, with the
+complete respondent moderator set (19, 22, and 23 covariates). The worked
+examples in this book fit the paper's production configuration and
+reproduce the published estimates. The attribute columns are the paper's
+analysis columns (candidate dummies for Saha-Weeks, differenced contrasts
+for Graham-Svolik, numeric bracket rates for Ballard-Rosa); raw
+convenience columns (`resp_party`, `resp_pid7`, `ideo7`, `pid7`, `weight`)
+are carried for subgroup and weighting analyses but are not part of the
+moderator set. `bs2013` stays a lightweight teaching example. See
+`?sw2022`, `?gs2020`, `?br2017`.
+
+**Quantity calls.** `sc_importance(design = "levels")` covers
+continuous-attribute designs, and `design = "uniform"` reproduces the
+paper's factor-design importance shares. `sc_voteshare_contrast()` returns
+a debiased vote share for a raw attribute-dummy contrast.
+
 ## v0.2.0 (development)
 
 **Survey-weighted estimands (0.2.0.9007)**
@@ -42,7 +61,7 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 **Debiased inference for the additional quantities**
 
 * The orthogonal-score debiasing now extends beyond the average
-  parameter to the quantities of Appendix C. `sc_counterfactual()`
+  parameter to the quantities of Supplementary Materials Section C. `sc_counterfactual()`
   defaults to a debiased counterfactual probability
   (`vartype = "orthogonal"`); new `sc_ame()` returns a debiased
   structural average marginal effect on the probability scale;
@@ -71,7 +90,7 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 
 * `stage2`: one of `"map_c5"` (default), `"none"`, `"varref"`,
   `"mixed_logit"`. The mixed-logit option implements the
-  `lme4::glmer` BLUP alternative from paper §A.4 with a deterministic
+  `lme4::glmer` BLUP alternative (paper Supplementary Materials) with a deterministic
   tryCatch fallback to the Stage-1 DNN on convergence failure.
 * `stage2_seed`: integer seed for the 2nd DNN in the Stage-2
   ensemble (default `12345L`); independent of `seed`, so the
@@ -97,7 +116,7 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 
 * `sc_validate_amce(object, subgroup = NULL)`: pooled (and
   optionally subgroup) homogeneous-logit comparison against the DML
-  $\hat\theta$. Mirrors paper §App-D, where the pooled correlation on
+  $\hat\theta$. Mirrors the paper's Supplementary Materials Section D, where the pooled correlation on
   the paper's external validation data is near 1.
   See \[Example: Candidate Choice\](#sec-sw-validate) for a worked
   example.

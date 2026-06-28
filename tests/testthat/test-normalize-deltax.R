@@ -4,7 +4,7 @@ test_that("normalize_deltaX = FALSE is a no-op (back-compat)", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  d <- sw2022[sw2022$respondent %in% unique(sw2022$respondent)[1:30], ]
+  d <- sw2022_demo[sw2022_demo$respondent %in% unique(sw2022_demo$respondent)[1:30], ]
 
   set.seed(1); torch::torch_manual_seed(1)
   f_off <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |

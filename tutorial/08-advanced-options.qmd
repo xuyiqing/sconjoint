@@ -34,7 +34,7 @@ The four `stage2` choices:
 | `"map_c5"` (default) | Paper EnsC5. Trains a 2nd DNN with `stage2_seed`, averages with the first DNN, runs a Newton MAP solver per respondent with a score-based diagonal prior scaled by $1/5$. | The paper's recommended default. Best individual-$\beta$ correlation under realistic conjoint designs. |
 | `"none"` | Skip Stage 2. `beta_hat` is the raw Stage-1 cross-fitted DNN. | Reproduce v0.1 behavior, or when you want the raw DNN view for downstream code that does its own refinement. |
 | `"varref"` | Use $0.5 \cdot \mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$ as the diagonal prior variance (floored at `varref_floor`, default $10^{-3}$). Otherwise identical to MAP. | Recommended for continuous-attribute designs (e.g. Ballard-Rosa tax rates); see `varref_floor` below. |
-| `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. Paper §A.4 notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
+| `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. The paper notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
 
 ```{r}
 #| label: stage2-example
@@ -97,7 +97,7 @@ unrefined respondent-level coefficients have more sampling noise.
 The population-average parameter `theta` (from `coef()` / `summary()`)
 carries double/debiased machine-learning inference: an orthogonal-score
 correction with a respondent-clustered standard error. The same
-correction, implemented for the paper's Appendix C, extends to the other
+correction, implemented for the paper's Supplementary Materials (Section C), extends to the other
 quantities of interest, so several `sc_*` functions can return debiased
 confidence intervals rather than plug-in ones:
 
@@ -155,9 +155,9 @@ then uses them in the respondent-level aggregation step:
 $$
 \hat\theta_w
 =
-\sum_{i=1}^{M} a_i\,\bar\psi_i,
+\sum_{i=1}^{N} a_i\,\bar\psi_i,
 \qquad
-a_i=\frac{w_i}{\sum_{j=1}^{M}w_j},
+a_i=\frac{w_i}{\sum_{j=1}^{N}w_j},
 \qquad
 \bar\psi_i=\frac{1}{T_i}\sum_{t=1}^{T_i}\psi_{it}.
 $$
@@ -168,8 +168,8 @@ with the usual finite-cluster factor:
 $$
 \widehat V_w
 =
-\frac{M}{M-1}
-\sum_{i=1}^{M}
+\frac{N}{N-1}
+\sum_{i=1}^{N}
 a_i^2(\bar\psi_i-\hat\theta_w)(\bar\psi_i-\hat\theta_w)'.
 $$
 
@@ -261,8 +261,8 @@ that case. For pure factor-dummy designs the option is a near-no-op.
 ## `sc_design_diagnostic()`: which recovery tiers does my design support?
 
 New in v0.2.1. Estimates per-coefficient $\hat R^2_{Z,k}$ from the
-MAP posterior and maps the design to four recovery tiers per paper
-§6 heuristics:
+MAP posterior and maps the design to four recovery tiers per the paper's
+design-guidance heuristics:
 
 | Tier | Condition | Quantities recoverable |
 |------|-----------|------------------------|
@@ -283,7 +283,7 @@ print(diag)
 Requires `stage2 != "none"` (needs the MAP Hessian's posterior
 variance). The v0.2.1 estimator is flagged `experimental = TRUE`
 in print output because it has not yet been validated against the
-paper's 5,760-cell simulation grid.
+paper's 1,872-cell simulation grid.
 
 ## Training hyperparameters
 

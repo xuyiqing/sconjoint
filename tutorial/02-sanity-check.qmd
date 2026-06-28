@@ -19,7 +19,7 @@ analytically correct value.
 
 ## Data-generating process
 
-The package ships `simdata`, a synthetic conjoint with $M = 1{,}000$
+The package ships `simdata`, a synthetic conjoint with $N = 1{,}000$
 respondents, $T = 6$ tasks per respondent, and two profiles per task
 (12,000 rows). Three binary attributes $x_1, x_2, x_3$ are drawn
 independently as Bernoulli(0.5). Two continuous moderators
@@ -199,7 +199,7 @@ beta_hat_all <- predict(fit_sim)
 
 ## One row per respondent, reordered to `beta_true`'s respondent order.
 ## `fit_sim$respondent_id` follows the package's internal row order, which
-## is not the 1..M order of the simulated truth, so align by id rather than
+## is not the 1..N order of the simulated truth, so align by id rather than
 ## by position.
 first_row <- !duplicated(fit_sim$respondent_id)
 rid       <- fit_sim$respondent_id[first_row]

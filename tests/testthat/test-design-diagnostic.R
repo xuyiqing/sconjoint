@@ -4,7 +4,7 @@ test_that("sc_design_diagnostic errors when stage2 = 'none'", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  d <- sw2022[sw2022$respondent %in% unique(sw2022$respondent)[1:30], ]
+  d <- sw2022_demo[sw2022_demo$respondent %in% unique(sw2022_demo$respondent)[1:30], ]
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -17,8 +17,8 @@ test_that("sc_design_diagnostic returns a structured result on sw2022", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:60]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:60]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -48,8 +48,8 @@ test_that("sc_design_diagnostic prints a tier banner without error", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:50]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:50]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(2); torch::torch_manual_seed(2)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -64,8 +64,8 @@ test_that("custom tier_thresholds override the defaults", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:60]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:60]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(3); torch::torch_manual_seed(3)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,

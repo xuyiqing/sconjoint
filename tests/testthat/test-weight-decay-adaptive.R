@@ -49,8 +49,8 @@ test_that("scfit() exposes the resolved weight_decay on the fit", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:30]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:30]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(1L); torch::torch_manual_seed(1L)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,

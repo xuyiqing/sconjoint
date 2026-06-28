@@ -36,7 +36,9 @@ This chapter applies the structural estimator to a tax-plan conjoint
 experiment from @ballard2017structure. Respondents evaluate pairs of
 hypothetical income tax plans varying on **six marginal tax rates** (one
 per income bracket) plus a **revenue impact** indicator, and select the
-plan they prefer.
+plan they prefer. The bundled `br2017` is the paper's full analysis
+frame (2,000 respondents, 32,000 rows), so the quantities below reproduce
+the empirical results reported in the manuscript.
 
 What makes this dataset unique among the bundled examples is that
 **every attribute is numeric** (continuous). There are no factor
@@ -59,42 +61,57 @@ str(br2017)
 ```
 
 Each respondent contributes eight forced-choice tasks with two tax-plan
-profiles each (16 rows per respondent). The respondent-level moderators
-include demographics (age, gender, education, race, income), partisanship
-(`resp_pid7`, 1--7), and economic attitudes (inequality aversion,
-work-vs-luck beliefs, taxes-harm beliefs, hard-work beliefs, economic
-knowledge, employment status) --- 12 moderators in total.
+profiles each (16 rows per respondent). The fit conditions on **23
+respondent-level moderators** ($\mathbf Z_i$): demographics (`age_std`,
+`female`, `educ_std`, `race_white`, `income_std`, `children`),
+partisanship and ideology (`pid7_std`, `conserv_ideo`), economic
+attitudes and beliefs (`ineq_averse`, `work_vs_luck`, `taxes_harm_econ`,
+`hardwork`, `high_econ_know`, `govt_serv`, `gov_assist`), economic
+position (`employed_ft`, `gen_mobile`, `future_mobile`, `hardship`,
+`risk_averse`), and engagement/competence (`newsint`, `numeracy`,
+`trust`). The raw seven-point party identification is also retained as a
+convenience column, `resp_pid7` (1 = strong Democrat to 7 = strong
+Republican), which we use below to split respondents by party. It is not
+part of the moderator set (`pid7_std` is its standardized counterpart).
 
 ## Fitting the structural model
 
 Every attribute here is continuous, with the tax rates encoded as
-percentage points (0--50). The paper handles this with the **`varref`**
+percentage points (0--55). The paper handles this with the **`varref`**
 Stage-2 prior and a low variance floor (**`varref_floor = 1e-3`**) on the
 raw rates, rather than the default score-based `map_c5` prior. We follow
-the paper's recipe here. Coefficients are in "logit utility per
+the paper's recipe exactly here. Coefficients are in "logit utility per
 percentage point" units.
 
 ```{r}
 #| label: br-fit
+#| cache: true
 fit_br <- scfit(
   choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
            rate_175_375 + rate_375P + revenue_score |
-           resp_age + resp_female + resp_pid7 + resp_educ +
-           resp_race_white + resp_income + resp_ineq_averse +
-           resp_work_vs_luck + resp_taxes_harm + resp_hardwork +
-           resp_high_econ_know + resp_employed_ft,
+           age_std + female + pid7_std + educ_std + race_white +
+           income_std + ineq_averse + work_vs_luck + taxes_harm_econ +
+           hardwork + high_econ_know + employed_ft + conserv_ideo +
+           govt_serv + newsint + numeracy + gen_mobile + future_mobile +
+           gov_assist + risk_averse + hardship + children + trust,
   data         = br2017,
   respondent   = "respondent",
   task         = "task",
   profile      = "profile",
-  K            = 5L,
-  n_epochs     = 200L,
-  seed         = 2024,
+  K            = 10L,
+  seed         = 42L,
   stage2       = "varref",
-  varref_floor = 1e-3
+  varref_floor = 1e-3,
+  parallel     = TRUE,
+  n_cores      = 10L
 )
 summary(fit_br)
 ```
+
+This is the paper's exact recipe, run on the corrected bracket-5 data
+(the distributed file mis-stored the 45% level of the $175-375k bracket;
+see `?br2017`) with `varref_floor = 1e-3`. The estimates below therefore
+reproduce the manuscript's reported numbers.
 
 ::: {.callout-note}
 ### Why `stage2 = "varref"` for continuous attributes?
@@ -125,6 +142,17 @@ DML coefficients per attribute, on the logit scale, with respondent-
 clustered SEs. With numeric attributes the coefficient is "logit
 utility per unit of the attribute" (per percentage-point of the
 rate, or per unit of the centered revenue indicator).
+
+The population pattern is the paper's headline result: a **steep
+progressive structure** in the bracket rates. The average voter dislikes
+higher rates on low brackets ($\hat\theta_{<\$10k} \approx -0.06$) and
+mildly favors higher rates on the top bracket
+($\hat\theta_{>\$375k} \approx +0.02$), with the coefficients rising
+monotonically across brackets and crossing zero around the $85-175k
+bracket. The **revenue-impact** coefficient is **weak-positive**
+($\hat\theta \approx 0.14$, $p < 0.01$, 95% CI $[0.05, 0.23]$): voters
+prefer plans that raise more revenue, but it is the least important of
+the seven attributes.
 
 ```{r}
 #| label: br-amce-plot
@@ -180,11 +208,19 @@ ggplot(df_both, aes(x = estimate, y = label, color = source)) +
         strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
 ```
 
+On the paper's reporting convention (the effect of a one-percentage-point
+rate increase evaluated at a 50% baseline, $\hat\theta_k \times 25$), the
+bottom-bracket and top-bracket AMEs are about $-1.6$ and $+0.5$
+percentage points of choice probability. Voters punish a rate hike on the
+poorest bracket **more than threefold** as hard as they reward an
+equal-sized hike on the richest bracket --- a sharp asymmetry that the
+homogeneous AMCE reproduces but cannot attribute to any subgroup.
+
 ## Individual-level preferences
 
 Ridgeline densities of $\hat\beta_k(\mathbf Z_i)$ per attribute across
-respondents. With `normalize_deltaX = TRUE` the MAP refinement is
-properly scaled --- the hybrid view shows clean per-respondent
+respondents. With the `varref` prior (the fit above) the MAP refinement
+is properly scaled --- the hybrid view shows clean per-respondent
 distributions for every bracket.
 
 ```{r}
@@ -197,9 +233,23 @@ plot(fit_br, "beta_ridgelines", groups = br_groups, labels = br_labels)
 
 ### Attribute importance
 
+For continuous attributes the paper's importance share weights each
+respondent's squared coefficient by the population variance of the
+attribute's **design level set** (e.g. `c(0, 5, 15, 25)` for the bottom
+bracket). This is `design = "levels"`, passing the six brackets' level
+sets plus the revenue scale; the default `design = "design_variance"`
+gives essentially the same shares here.
+
 ```{r}
 #| label: br-importance
-sc_importance(fit_br)
+br_levels <- list(
+  rate_L10     = c(0, 5, 15, 25),  rate_10_35   = c(5, 15, 25, 35),
+  rate_35_85   = c(5, 15, 25, 35), rate_85_175  = c(5, 15, 25, 35),
+  rate_175_375 = c(5, 15, 25, 35, 45),
+  rate_375P    = c(5, 15, 25, 35, 45, 55),
+  revenue_score = c(-2, -1, 0, 1, 2)
+)
+sc_importance(fit_br, design = "levels", levels = br_levels)
 ```
 
 ```{r}
@@ -211,6 +261,35 @@ plot_importance(fit_br, labels = c(
   rate_175_375 = "$175-375k", rate_375P = "Over $375k",
   revenue_score = "Revenue"
 ))
+```
+
+The importance shares differ sharply by party, which is the paper's
+second main finding. Among **Democrats**, the top bracket (>$375k) is the
+single most important attribute (about 29%) and the low bracket ($10-35k)
+matters much less (about 16%); among **Republicans** the ranking
+inverts, with the $10-35k bracket the most important (about 26%) and the
+top bracket far less so (about 18%). The $35-85k bracket is roughly twice
+as important to Republicans (about 18%) as to Democrats (about 8%). In
+short, Democrats weight what the rich pay, Republicans weight what the
+middle and working class pay.
+
+```{r}
+#| label: br-importance-party
+imp_by_party <- function(sel) {
+  ip <- sc_importance(fit_br, design = "levels", levels = br_levels,
+                      subgroup = sel)
+  setNames(round(100 * ip$estimate$share, 1), ip$estimate$attribute)
+}
+## raw 7-point party id, aligned to the fit's task rows
+pid7_resp <- tapply(br2017$resp_pid7, as.character(br2017$respondent),
+                    function(x) x[1])
+pid7_row  <- pid7_resp[as.character(fit_br$respondent_id)]
+pid7_row[pid7_row >= 8] <- 4          # "not sure / other" -> Independent
+rbind(
+  Democrat    = imp_by_party(pid7_row <= 3),
+  Independent = imp_by_party(pid7_row == 4),
+  Republican  = imp_by_party(pid7_row >= 5)
+)
 ```
 
 ### Direction and intensity
@@ -243,16 +322,19 @@ plot_hetero(fit_br, groups = br_groups, labels = br_labels)
 
 ### Subgroup analysis by party
 
+Party membership comes from the raw `resp_pid7` convenience column
+(Democrat $\le 3$, Independent $= 4$, Republican $\ge 5$), mapped to the
+fit's task rows. We reuse `pid7_row` from the importance chunk above.
+
 ```{r}
 #| label: br-subgroup
 #| fig-height: 6
-pid_col <- fit_br$Z[, "resp_pid7"]
 plot_subgroup(
   fit_br,
   subgroup = list(
-    Democrat    = pid_col <= 3,
-    Independent = pid_col >= 4 & pid_col <= 4,
-    Republican  = pid_col >= 5
+    Democrat    = pid7_row <= 3,
+    Independent = pid7_row == 4,
+    Republican  = pid7_row >= 5
   ),
   groups = br_groups, labels = br_labels,
   title = "Subgroup AMCE by party"
@@ -277,8 +359,8 @@ beta_hat <- predict(fit_br, type = "beta")
 first_row <- !duplicated(fit_br$respondent_id)
 beta_resp <- beta_hat[first_row, ]
 
-## Party assignment from moderator
-pid <- fit_br$Z[first_row, "resp_pid7"]
+## Party assignment from the raw resp_pid7 convenience column
+pid <- pid7_row[first_row]
 party <- ifelse(pid <= 3, "Democrat",
          ifelse(pid >= 5, "Republican", "Independent"))
 
@@ -326,12 +408,15 @@ ggplot(quant_data, aes(x = bracket, color = party, fill = party, group = party))
         strip.text  = element_text(face = "bold"))
 ```
 
-Nearly all respondents exhibit progressive tax preferences (a positive
-slope from low to high brackets), and progressivity remains the majority
-pattern even among Republicans. The partisan gap is real but modest ---
-Democrats' mean slope is somewhat steeper than Republicans'. (These
-shares are computed on the bundled data; read the exact values off the
-rendered output rather than quoting fixed numbers.)
+About **93% of respondents** exhibit progressive tax preferences (a
+positive slope from low to high brackets), and **91%** prefer a higher
+top-bracket rate than bottom-bracket rate. Progressivity remains the
+**majority pattern even among Republicans** (about 90% have a positive
+slope). The partisan gap is real but a matter of degree: the Democratic
+mean slope (about $+0.021$) is roughly **48% steeper** than the
+Republican mean slope (about $+0.014$). Progressivity is the consensus;
+the parties differ on how steep, and --- as the importance shares show
+--- on which end of the schedule they care about most.
 
 ## Validating against the homogeneous-logit AMCE
 

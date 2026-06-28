@@ -30,11 +30,11 @@ test_that("which_beta argument is exposed on all quantity functions (smoke)", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:30]
+  some_resp <- unique(sw2022_demo$respondent)[1:30]
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
-               data = sw2022[sw2022$respondent %in% some_resp, ],
+               data = sw2022_demo[sw2022$respondent %in% some_resp, ],
                respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 30L, seed = 1)
 
