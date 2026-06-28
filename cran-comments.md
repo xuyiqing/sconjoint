@@ -33,8 +33,11 @@ The single NOTE is the standard new-submission note:
 * Suggested packages used as optional first-stage learners ('glmnet',
   'grf') and the optional mixed-logit Stage 2 ('lme4') are used
   conditionally via `requireNamespace()`.
-* The bundled datasets (`sw2022`, `gs2020`, `br2017`, `bs2013`) are small
-  extracts from the published replication materials of the cited studies,
-  included for illustration and documented with their `@source`. <!-- TODO
-  (maintainer): state the redistribution license / permission for each
-  bundled dataset before submitting. -->
+* The bundled datasets are small extracts from public replication archives
+  on the Harvard Dataverse, each under a license that permits
+  redistribution and commercial use: `sw2022` (CC0 1.0,
+  doi:10.7910/DVN/KVTPVX), `gs2020` (CC BY 4.0, doi:10.7910/DVN/EEARKA),
+  `br2017` (CC0 1.0, doi:10.7910/DVN/NGRGS5), and `bs2013` (CC0 1.0,
+  doi:10.7910/DVN/UGZ2BY). Each dataset's `@source` records its citation,
+  Dataverse DOI, and license; `gs2020` (CC BY 4.0) is attributed
+  accordingly.

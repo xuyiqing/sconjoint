@@ -32,7 +32,8 @@ paper's prep.}
 Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
 "The Structure of American Income Tax Policy Preferences."
 \emph{Journal of Politics} 79(1):1-16.
-Data from published replication materials.
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/NGRGS5} (CC0 1.0).
 }
 \usage{
 br2017

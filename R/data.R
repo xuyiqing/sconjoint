@@ -43,7 +43,8 @@
 #' @source Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
 #'   Women: Gender and Voter Perceptions of Candidate Ambition."
 #'   *Political Behavior* 44(2):779-805.
-#'   Data from published replication materials (SSI survey).
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/KVTPVX} (CC0 1.0 public domain dedication).
 #' @examples
 #' data(sw2022)
 #' head(sw2022)
@@ -109,7 +110,8 @@
 #'   in America?  Partisanship, Polarization, and the Robustness of
 #'   Support for Democracy in the United States." *American Political
 #'   Science Review* 114(2):392-409.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/EEARKA} (CC BY 4.0).
 #' @examples
 #' data(gs2020)
 #' head(gs2020)
@@ -156,7 +158,8 @@
 #'   Support for Global Climate Agreements Depends on Institutional
 #'   Design." *Proceedings of the National Academy of Sciences*
 #'   110(34):13763-13768.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/UGZ2BY} (CC0 1.0).
 #' @examples
 #' data(bs2013)
 #' head(bs2013)
@@ -210,7 +213,8 @@
 #' @source Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
 #'   "The Structure of American Income Tax Policy Preferences."
 #'   *Journal of Politics* 79(1):1-16.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/NGRGS5} (CC0 1.0).
 #' @examples
 #' data(br2017)
 #' head(br2017)

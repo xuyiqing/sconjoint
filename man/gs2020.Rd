@@ -50,7 +50,8 @@ Graham, Matthew H. and Milan W. Svolik. 2020. "Democracy
 in America?  Partisanship, Polarization, and the Robustness of
 Support for Democracy in the United States." \emph{American Political
 Science Review} 114(2):392-409.
-Data from published replication materials.
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/EEARKA} (CC BY 4.0).
 }
 \usage{
 gs2020

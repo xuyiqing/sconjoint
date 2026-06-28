@@ -37,7 +37,8 @@ Republican) for subgroup labelling; not part of \eqn{\mathbf Z}.}
 Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
 Women: Gender and Voter Perceptions of Candidate Ambition."
 \emph{Political Behavior} 44(2):779-805.
-Data from published replication materials (SSI survey).
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/KVTPVX} (CC0 1.0 public domain dedication).
 }
 \usage{
 sw2022
