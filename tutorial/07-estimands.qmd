@@ -1,0 +1,287 @@
+# Structural estimands {#sec-estimands}
+
+```{r}
+#| label: setup-estimands
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+library(sconjoint)
+```
+
+The application chapters fit one model and then read several quantities
+off it: population averages, the distribution of preferences across
+respondents, and individual-level summaries. This chapter is the
+reference for those quantities. It lists each estimand, the function that
+returns it, what it targets, and how its standard errors are computed,
+so you can look up the right call without re-reading a worked example.
+
+The quantities form a hierarchy by how much the design has to support to
+recover them. Population averages (the AMCE and its relatives) are
+available from almost any forced-choice design. Distributional quantities
+(how preferences spread across the electorate) need enough tasks per
+respondent and enough signal in the moderators $\mathbf Z$ to separate
+real heterogeneity from noise. Individual-level quantities (one
+respondent's preference vector, their personal trade-offs) ask for more
+still. @acharya2026structural set out which quantities a given design can
+recover; the [design diagnostic](#sec-design-diagnostic) at the end of
+this chapter estimates which tier your own design reaches. The code below
+is reference syntax (`eval: false`); see the application chapters for the
+same calls run on real fits.
+
+## A map of the quantities
+
+| Estimand | Function | Targets | Inference | `which_beta` applies |
+|----|----|----|----|:--:|
+| AMCE $\hat\theta_k$ | `coef()`, `summary()`, `plot_amce()` | population part-worth (logit) | DML, clustered SE | no |
+| Average marginal effect | `sc_average()` | population AME (logit or probability) | delta-method on $\hat\theta$ | --- |
+| Structural AME | `sc_ame()` | population AME (probability) | debiased orthogonal score | no |
+| Counterfactual vote share | `sc_counterfactual()`, `sc_voteshare_contrast()` | $\Pr(\text{choice})$ for a profile pair or contrast | debiased orthogonal score | no |
+| Population MRS / WTP | `sc_mrs(estimand = "population")`, `sc_wtp(...)` | ratio $\theta_j/\theta_k$ | debiased, Fieller interval | no |
+| Attribute importance | `sc_importance()`, `plot_importance()` | utility-variance share per attribute | plug-in, or debiased (`vartype = "orthogonal"`) | yes (plug-in) |
+| Fraction preferring | `sc_fraction_preferring()`, `plot_fraction()` | share with $\hat\beta_k > 0$ | plug-in or wild bootstrap | yes |
+| Polarization | `sc_polarization()` | dispersion of $\hat\beta_k(\mathbf Z)$ | plug-in or wild bootstrap | yes |
+| Direction and intensity | `sc_direction_intensity()` | sign vs. magnitude split | plug-in | yes |
+| Compensating differential | `sc_compensating()` | benefit/cost trade-off | plug-in, clustered SE | yes |
+| Heterogeneity test | `sc_heterogeneity_test()`, `plot_hetero()` | $\mathrm{Var}(\hat\beta_k(\mathbf Z)) > 0$ | one-sided test | yes |
+| Per-respondent betas | `predict()` | each respondent's $\hat\beta(\mathbf Z_i)$ | model-based | yes |
+| Individual MRS / WTP | `sc_mrs()`, `sc_wtp()` (default) | respondent-averaged trimmed ratio | clustered SE | yes |
+| Optimal profile | `sc_optimal_profile()` | utility-maximizing profile | model-based | yes |
+| Preference clusters | `sc_clusters()` | latent preference types | k-means on $\hat\beta(\mathbf Z)$ | yes |
+| Subgroup AMCE | `sc_subgroup()`, `plot_subgroup()` | $\hat\beta$ re-averaged over a subset | clustered SE | yes |
+
+The `which_beta` column records whether the quantity reads the
+per-respondent coefficients (and so can be computed from either the
+Stage-2 hybrid view or the raw DNN view; see
+[below](#sec-which-beta)). The population-average estimands marked "no"
+are computed from the Stage-1 cross-fit and do not depend on that choice.
+
+## Population averages
+
+These are the quantities a standard AMCE analysis already reports, plus
+their structural counterparts. They are population averages, computed
+from the Stage-1 cross-fitted first stage, and they come with
+double/debiased machine-learning (DML) inference.
+
+The population-average parameter $\hat\theta$ (from `coef()` /
+`summary()`) carries an orthogonal-score correction with a
+respondent-clustered standard error. The same correction, implemented for
+the paper's Supplementary Materials (Section C), extends to the other
+average quantities, so several `sc_*` functions return debiased
+confidence intervals rather than plug-in ones:
+
+| Quantity | Debiased option |
+|---|---|
+| `sc_counterfactual()` | `vartype = "orthogonal"` (the **default**); `vartype = "plugin"` for the v0.1 plug-in |
+| `sc_voteshare_contrast()` | always debiased; takes a raw contrast vector in attribute-dummy space |
+| `sc_ame()` | always debiased (the structural AME on the probability scale) |
+| `sc_mrs()`, `sc_wtp()` | `estimand = "population"` (debiased ratio `theta_j/theta_k` with a Fieller interval) |
+| `sc_importance()` | `vartype = "orthogonal"` (opt-in; the plug-in shares stay the default) |
+
+```{r}
+#| label: population-example
+#| eval: false
+coef(fit)                                                # DML theta, clustered SE
+sc_average(fit, scale = "probability")                   # population AME (delta-method)
+sc_ame(fit, "attr_level")                                # debiased structural AME
+sc_counterfactual(fit, A = list(...), B = list(...))     # debiased by default
+sc_voteshare_contrast(fit, contrast = c(...))            # debiased vote share for a contrast
+sc_mrs(fit, "attr_a", "attr_b", estimand = "population") # debiased theta_j/theta_k
+sc_importance(fit, vartype = "orthogonal")               # debiased shares (opt-in)
+```
+
+The debiased estimates use the Stage-1 cross-fitted first stage and are
+population averages, so `subgroup` and `which_beta` do not apply to them.
+Applied to $\hat\theta$ itself the orthogonal score reproduces the
+average-parameter estimate and its clustered standard error exactly. For
+`sc_importance()`, the debiased shares are a ratio of orthogonal-score
+numerators and can fall outside $[0, 1]$ when the first stage is noisy,
+which is why the always-in-$[0, 1]$ plug-in shares remain the default.
+
+## Distributional quantities
+
+These describe how preferences are spread across respondents rather than
+their average. They read the per-respondent coefficients
+$\hat\beta_k(\mathbf Z_i)$, so they accept `which_beta`, and the
+fixed-$T$ summaries (fraction preferring, polarization) accept a
+respondent-cluster wild bootstrap for honest standard errors.
+
+```{r}
+#| label: distributional-example
+#| eval: false
+sc_fraction_preferring(fit)                              # share with beta_k > 0
+sc_fraction_preferring(fit, se_method = "wild_bootstrap", n_boot = 1000)
+sc_polarization(fit, se_method = "wild_bootstrap", n_boot = 1000)
+sc_direction_intensity(fit)                              # sign vs. magnitude
+sc_compensating(fit, benefit = "attr_a", cost = "attr_b")
+sc_heterogeneity_test(fit, adjust = "bh")                # Var(beta_k(Z)) > 0
+```
+
+::: {.callout-warning}
+### A fixed-$T$ shrinkage caveat
+
+With few tasks per respondent, the Stage-2 MAP update pulls each
+respondent's coefficients toward the mean stage, so a hybrid-view
+fraction or polarization estimate is conservative: the recovered spread
+is narrower than the truth. Sanity-check distributional claims with
+`which_beta = "dnn"` (the unrefined view). If the qualitative conclusion
+flips between the two, the design is too sparse to support an
+individual-level reading, and you should report only the population
+averages. The [design diagnostic](#sec-design-diagnostic) makes this
+concrete.
+:::
+
+## Individual-level quantities
+
+These summarize a single respondent's recovered preferences, or build on
+the full per-respondent coefficient matrix. They are model-based: their
+credibility rests on the first stage having learned
+$\hat\beta(\mathbf Z)$ well, which needs both enough tasks per respondent
+and moderators $\mathbf Z$ that explain a real share of the
+heterogeneity.
+
+```{r}
+#| label: individual-example
+#| eval: false
+beta <- predict(fit)                                     # N_resp x p coefficient matrix
+predict(fit, newdata = new_Z, type = "beta")            # forward pass on new respondents
+sc_mrs(fit, "attr_a", "attr_b")                          # respondent-averaged trimmed ratio
+sc_optimal_profile(fit)                                  # utility-maximizing profile
+sc_clusters(fit, k = 3L)                                 # latent preference types
+sc_subgroup(fit, list(GroupA = mask, GroupB = !mask))    # beta re-averaged over a subset
+```
+
+The trimmed ratio in `sc_mrs()` / `sc_wtp()` (the default
+respondent-level estimand, as opposed to `estimand = "population"`) is
+unbounded when the denominator coefficient is near zero, so it trims at
+$\{0.01, 0.99\}$ by default; inspect the ridgelines before reading an
+individual MRS literally.
+
+## Choosing the coefficient view: `which_beta` {#sec-which-beta}
+
+Every distributional and individual-level `sc_*` quantity accepts
+`which_beta = c("hybrid", "dnn")`. The default `"hybrid"` reads
+`fit$beta_hat` (whatever Stage 2 produced). Passing `"dnn"` reads
+`fit$beta_hat_dnn` (the raw Stage-1 view). When `stage2 = "none"` the two
+are numerically identical and the helper silently falls back.
+
+```{r}
+#| label: which-beta-example
+#| eval: false
+## Same fit, two views of the same distribution
+sc_fraction_preferring(fit)                     # MAP-shrunk
+sc_fraction_preferring(fit, which_beta = "dnn") # raw DNN
+```
+
+When the paper text says "the structural model reveals that X% of
+respondents prefer Y", it means the MAP-shrunk fraction (the `"hybrid"`
+default). The raw DNN fraction is usually wider because unrefined
+respondent-level coefficients have more sampling noise. The two views are
+the basis of the shrinkage sanity check described above.
+
+## Survey-weighted estimands
+
+By default, `sconjoint` targets the unweighted sample of respondents:
+each respondent contributes equally after averaging over that
+respondent's conjoint tasks. If the original survey supplies respondent
+weights and the target is a weighted population, pass those weights to
+`scfit()` with `respondent_weights`.
+
+```{r}
+#| label: survey-weight-example
+#| eval: false
+fit_w <- scfit(
+  formula,
+  data = dat,
+  respondent = "respondent_id",
+  task = "task_id",
+  profile = "profile_id",
+  respondent_weights = "survey_weight",
+  seed = 42
+)
+```
+
+The weight can be a column name in `data` or a numeric vector of length
+`nrow(data)`. It must be finite, non-negative, and constant within
+respondent. The package normalizes the weights across respondents and
+then uses them in the respondent-level aggregation step:
+
+$$
+\hat\theta_w
+=
+\sum_{i=1}^{N} a_i\,\bar\psi_i,
+\qquad
+a_i=\frac{w_i}{\sum_{j=1}^{N}w_j},
+\qquad
+\bar\psi_i=\frac{1}{T_i}\sum_{t=1}^{T_i}\psi_{it}.
+$$
+
+The clustered variance uses the same weighted respondent contributions,
+with the usual finite-cluster factor:
+
+$$
+\widehat V_w
+=
+\frac{N}{N-1}
+\sum_{i=1}^{N}
+a_i^2(\bar\psi_i-\hat\theta_w)(\bar\psi_i-\hat\theta_w)'.
+$$
+
+Survey weights do **not** reweight the first-stage learner. The DNN,
+elastic net, or GRF still learns the conditional preference function
+$f(\mathbf Z)$ from the observed respondent-task rows. The weights enter
+only after the orthogonal scores or respondent-level plug-in quantities
+have been formed. This is the right operation when the issue is
+target-population composition rather than a different training loss.
+
+The same weighted aggregation is used by the production-facing
+quantities: `coef()` / `summary()`, `sc_average()`,
+`sc_counterfactual()`, `sc_mrs()` / `sc_wtp()`, `sc_compensating()`,
+`sc_fraction_preferring()`, `sc_polarization()`, `sc_importance()`,
+`sc_subgroup()`, and `sc_direction_intensity()`.
+
+```{r}
+#| label: survey-weight-quantities
+#| eval: false
+coef(fit_w)
+sc_counterfactual(fit_w, A = list(...), B = list(...))
+sc_compensating(fit_w, benefit = "co_partisan", cost = "journalists")
+sc_fraction_preferring(fit_w, se_method = "wild_bootstrap", n_boot = 1000)
+```
+
+For comparison or diagnostics, fit the model once without weights and
+once with weights. A material difference means the estimand is sensitive
+to survey composition; a small difference supports reporting the
+unweighted structural estimate with a weighting robustness check.
+
+## Design diagnostic: which tiers does my design support? {#sec-design-diagnostic}
+
+`sc_design_diagnostic()` estimates per-coefficient $\hat R^2_{Z,k}$ from
+the MAP posterior and maps the design to four recovery tiers per the
+paper's design-guidance heuristics:
+
+| Tier | Condition | Quantities recoverable |
+|------|-----------|------------------------|
+| mean & aggregate | any reasonable design | AMCE, average vote shares |
+| distributional | T ≥ 5 and $\bar R^2_Z$ ≥ 0.35 | preference shares, importance rankings |
+| individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
+| ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
+
+The tiers line up with the three sections above: the "mean & aggregate"
+tier is the [population averages](#population-averages), and the
+"distributional" and "individual-level" tiers gate the two sections that
+follow it.
+
+```{r}
+#| label: design-diag-example
+#| eval: false
+diag <- sc_design_diagnostic(fit)
+print(diag)
+## Top / bottom R^2_Z attributes are also reported -- they show which
+## dummies are best-pinned by Z and which rely most on T for recovery.
+```
+
+Requires `stage2 != "none"` (it needs the MAP Hessian's posterior
+variance). The v0.2.1 estimator is flagged `experimental = TRUE` in print
+output because it has not yet been validated against the paper's
+1,872-cell simulation grid; @sec-sw shows it in action on the
+Saha-Weeks design.

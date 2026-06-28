@@ -42,6 +42,20 @@
   and bar thickness is uniform across groups (on a shared, comparable
   variance x-axis). Pass `facet_scales = "free"` for designs that mix a
   continuous attribute with 0/1 dummies on very different scales.
+* `plot_importance()` gains an `xlim` argument, applied as a
+  `coord_cartesian()` zoom so the ridgeline densities and the
+  mean-percent labels past the cap are preserved rather than clipped.
+
+## Tutorial book
+
+* New chapter "Structural estimands": a reference catalog of the
+  quantities `sconjoint` estimates, organized by the recovery tiers of
+  the design (population averages, distributional, individual-level).
+  "Plot options" and "Advanced options" now follow it. The
+  estimand-level material (debiased inference, `which_beta`, survey
+  weights, the design diagnostic) moved into the new chapter; "Advanced
+  options" keeps the `scfit()` knobs (Stage-2 options, seeds,
+  `normalize_deltaX`, training hyperparameters, parallel execution).
 
 # sconjoint 0.2.0.9008 (2026-06-13)
 

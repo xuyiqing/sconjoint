@@ -19,7 +19,8 @@ than one-attribute-at-a-time marginal effects.
 
 This book is the primary user documentation for the package. It walks
 from installation through four complete worked examples, a simulation
-sanity check, and visualization options.
+sanity check, a reference catalog of the structural estimands, and
+visualization options.
 
 ```{r}
 #| label: welcome-load
@@ -120,8 +121,16 @@ The user guide is structured into the following chapters:
     @bechtel_scheve_2013 climate-treaty conjoint (tutorial example),
     showcasing willingness-to-pay analysis with a numeric cost attribute.
 
+-   [Chapter @sec-estimands]\
+    Reference catalog of the structural estimands --- which quantity to
+    use, what it targets, and how its inference is computed.
+
 -   [Chapter @sec-plots]\
     Customizing plots with `dummies`, `labels`, `groups`, and `ggplot2`.
+
+-   [Chapter @sec-advanced]\
+    Reference for `scfit()` arguments and defaults: Stage-2 options,
+    reproducibility, training hyperparameters, and parallel execution.
 
 ## Authors
 

@@ -162,15 +162,11 @@ summary(fit_sw)
 ::: {.callout-note}
 ### The Stage-2 default
 
-`scfit()` runs an empirical-Bayes MAP refinement (paper `EnsC5`) on top
-of the Stage-1 DNN by default (`stage2 = "map_c5"`). The summary above
-reports this as `Stage 2: map_c5`. DML point estimates and clustered
-standard errors continue to use the Stage-1 single-DNN prediction
-(stored on `fit_sw$beta_hat_dnn`). The refined betas
-(`fit_sw$beta_hat`) feed every distributional and individual-level
-quantity below. Set `stage2 = "none"` to recover the unrefined
-behaviour, or `stage2 = "mixed_logit"` for the BLUP alternative from the
-paper's Supplementary Materials.
+`scfit()` reports `Stage 2: map_c5`, the empirical-Bayes MAP refinement
+that runs by default; @sec-gs explains the Stage-1 / Stage-2 split and
+the `stage2` options. DML estimates use the Stage-1 DNN
+(`fit_sw$beta_hat_dnn`); the refined `fit_sw$beta_hat` feeds the
+distributional and individual-level quantities below.
 :::
 
 ## Population-average estimates

@@ -114,11 +114,14 @@ gs2020[1:4, c("respondent", "task", "profile", "choice",
               "diff_respParty", "diff_dem_code_u_journalists")]
 ```
 
-The frame is already in the paper's two-profile parameterization: the
-choice outcome, the identifiers (`respondent`, `task`, `profile`), 30
-attribute contrasts (the `diff_` columns, differenced across the two
-profiles), and the respondent-level moderators $\mathbf{Z}$ (the `z_*`
-and `*_ideal` columns plus six direct democracy-attitude items).
+Every `sconjoint` input is in long format: one row per
+respondent--task--profile, with exactly one profile chosen in each task
+(`choice == 1`). This frame follows that convention, and it is already
+in the paper's two-profile parameterization: the choice outcome, the
+identifiers (`respondent`, `task`, `profile`), 30 attribute contrasts
+(the `diff_` columns, differenced across the two profiles), and the
+respondent-level moderators $\mathbf{Z}$ (the `z_*` and `*_ideal`
+columns plus six direct democracy-attitude items).
 Because the design is differenced, the reference levels are already
 absorbed (good governance is measured against an "elect oversight
 board" baseline; the undemocratic and valence items against "absent"
@@ -148,6 +151,17 @@ present: voters penalize both democratic backsliding and personal
 scandal.
 
 ## Fitting the structural model {#fitting}
+
+`scfit()` takes a two-part formula: the conjoint attributes go to the
+left of the `|`, and the respondent-level moderators $\mathbf Z$ go to
+its right. It then forms the within-task contrast
+$\Delta X = X_{\text{profile 1}} - X_{\text{profile 2}}$ internally, so
+in a typical conjoint you supply each profile's own attribute levels ---
+one row per profile, as in the candidate-choice example of @sec-sw ---
+and difference nothing yourself. The Graham-Svolik frame is an exception
+only because this replication ships pre-differenced columns (the `diff_`
+contrasts on the first profile, the second coded as the all-zero
+baseline); the interface is the same either way.
 
 We fit the paper's main specification: the 30 attribute contrasts in
 the first part of the formula, and the **held-out 16-covariate**
@@ -203,15 +217,20 @@ penalized action ($\hat\theta \approx -0.93$); the valence scandals are
 even more damaging (extramarital affair $\approx -0.98$).
 
 ::: {.callout-note}
-### Stage 2 is on by default (v0.2)
+### The Stage-2 default
 
-The summary above reports `Stage 2: map_c5` --- the empirical-Bayes
-MAP refinement of paper §3. The DML population coefficients
+`scfit()` runs an empirical-Bayes MAP refinement (paper `EnsC5`) on top
+of the Stage-1 DNN by default (`stage2 = "map_c5"`); the summary above
+reports it as `Stage 2: map_c5`. The DML population coefficients
 $\hat\theta_k$ (the co-partisan and undemocratic-action effects above)
-are computed from the Stage-1 cross-fitted DNN; the refined
-respondent-level betas (used by the distributional and structural
-quantities below) sit on `fit_gs$beta_hat_resp`. Pass
-`stage2 = "none"` to recover v0.1 behavior.
+and their clustered standard errors continue to use the Stage-1
+single-DNN prediction (stored on `fit_gs$beta_hat_dnn`). The refined
+betas (`fit_gs$beta_hat`, with the respondent-indexed copy on
+`fit_gs$beta_hat_resp`) feed every distributional and individual-level
+quantity below. Set `stage2 = "none"` to recover the unrefined
+behaviour, or `stage2 = "mixed_logit"` for the BLUP alternative from the
+paper's Supplementary Materials. @sec-advanced documents the full set of
+Stage-2 options.
 :::
 
 ```{r}
@@ -364,8 +383,7 @@ sc_importance(fit_gs, design = "uniform")$estimate[, c("attribute", "share")]
 ```{r}
 #| label: gs-importance-plot
 #| fig-height: 11
-plot_importance(fit_gs, labels = gs_labels) +
-  ggplot2::coord_cartesian(xlim = c(0, 50), clip = "off")
+plot_importance(fit_gs, labels = gs_labels, xlim = c(0, 50))
 ```
 
 ## Heterogeneity test

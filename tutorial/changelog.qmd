@@ -21,9 +21,14 @@ a debiased vote share for a raw attribute-dummy contrast.
 
 **Tutorial book.** The application chapters are ordered democratic norms,
 tax preferences, candidate choice, then climate treaties, and each closes
-with a short summary. `plot_hetero()` panels are now sized in proportion to
-each attribute group's number of levels, and the data-overview chunks drop
-`head()` in favor of `str()`.
+with a short summary. A new "Structural estimands" chapter
+(@sec-estimands) collects the quantities of interest into a single
+reference, organized by the recovery tiers of the design; "Plot options"
+and "Advanced options" follow it. `plot_importance()` gains an `xlim`
+argument (a `coord_cartesian()` zoom that preserves the ridgeline
+densities past the cap). `plot_hetero()` panels are now sized in
+proportion to each attribute group's number of levels, and the
+data-overview chunks drop `head()` in favor of `str()`.
 
 ## v0.2.0 (development)
 
@@ -34,7 +39,7 @@ each attribute group's number of levels, and the data-overview chunks drop
   aggregation and clustered standard errors for `theta`, the debiased
   orthogonal quantities, and the production-facing plug-in summaries.
   They do not reweight first-stage learner training. See
-  @sec-advanced for the formula and usage pattern.
+  @sec-estimands for the formula and usage pattern.
 
 **Bundled `br2017` data corrected (0.2.0.9004)**
 
@@ -75,7 +80,7 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
   ratio of average parameters with a Fieller interval; and
   `sc_importance(vartype = "orthogonal")` gives the debiased
   attribute-importance shares. `scfit()` now stores a single-profile pool
-  (`object$profile_pool`) for the AME integral. See @sec-advanced.
+  (`object$profile_pool`) for the AME integral. See @sec-estimands.
 
 **Pluggable first-stage learners**
 

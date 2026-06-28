@@ -14,8 +14,9 @@ book:
     - 04-example-br.qmd
     - 05-example-sw.qmd
     - 06-example-bs.qmd
-    - 07-plot-options.qmd
-    - 08-advanced-options.qmd
+    - 07-estimands.qmd
+    - 08-plot-options.qmd
+    - 09-advanced-options.qmd
     - references.qmd
     - changelog.qmd
 

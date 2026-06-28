@@ -12,9 +12,11 @@ This chapter is a reference for arguments to `scfit()` and the
 `sc_*` quantity functions that most users will never need to change.
 Read it when you need to deviate from defaults: alternative Stage-2
 estimators, manual tuning of training hyperparameters, parallel
-execution, or reproducibility audits.
+execution, or reproducibility audits. For the catalog of estimands
+themselves --- which quantity to use, what it targets, and how its
+inference works --- see @sec-estimands.
 
-The four example chapters (Saha-Weeks, Graham-Svolik, Ballard-Rosa,
+The four example chapters (Graham-Svolik, Ballard-Rosa, Saha-Weeks,
 Bechtel-Scheve) all use the defaults. This chapter explains what those
 defaults are and when you might override them.
 
@@ -70,135 +72,6 @@ fit$sigma_prior       # diagonal prior variance used in MAP (length p)
 fit$sigma_post_diag   # mean posterior variance from MAP Hessian (length p)
 fit$stage2_warnings   # character vector of glmer warnings, if any
 ```
-
-## `which_beta`: hybrid vs raw DNN view on quantities
-
-Every `sc_*` quantity now accepts
-`which_beta = c("hybrid", "dnn")`. The default `"hybrid"` reads
-`fit$beta_hat` (whatever Stage 2 produced). Passing `"dnn"` reads
-`fit$beta_hat_dnn` (the raw Stage-1 view). When `stage2 = "none"` the
-two are numerically identical and the helper silently falls back.
-
-```{r}
-#| label: which-beta-example
-#| eval: false
-## Same fit, two views of the same distribution
-sc_fraction_preferring(fit)                     # MAP-shrunk
-sc_fraction_preferring(fit, which_beta = "dnn") # raw DNN
-```
-
-When the paper text says "the structural model reveals that X% of
-respondents prefer Y", it means the MAP-shrunk fraction (the
-`"hybrid"` default). The raw DNN fraction is usually wider because
-unrefined respondent-level coefficients have more sampling noise.
-
-## Debiased inference for the additional quantities
-
-The population-average parameter `theta` (from `coef()` / `summary()`)
-carries double/debiased machine-learning inference: an orthogonal-score
-correction with a respondent-clustered standard error. The same
-correction, implemented for the paper's Supplementary Materials (Section C), extends to the other
-quantities of interest, so several `sc_*` functions can return debiased
-confidence intervals rather than plug-in ones:
-
-| Quantity | Debiased option |
-|---|---|
-| `sc_counterfactual()` | `vartype = "orthogonal"` (the **default**); `vartype = "plugin"` for the v0.1 plug-in |
-| `sc_ame()` | always debiased (the structural AME on the probability scale) |
-| `sc_mrs()`, `sc_wtp()` | `estimand = "population"` (debiased ratio `theta_j/theta_k` with a Fieller interval) |
-| `sc_importance()` | `vartype = "orthogonal"` (opt-in; the plug-in shares stay the default) |
-
-```{r}
-#| label: debiased-example
-#| eval: false
-sc_counterfactual(fit, A = list(...), B = list(...))     # debiased by default
-sc_ame(fit, "attr_level")                                # debiased structural AME
-sc_mrs(fit, "attr_a", "attr_b", estimand = "population") # debiased theta_j/theta_k
-sc_importance(fit, vartype = "orthogonal")               # debiased shares (opt-in)
-```
-
-These debiased estimates use the Stage-1 cross-fitted first stage and are
-population averages, so `subgroup` and `which_beta` do not apply to them.
-Applied to `theta` itself the orthogonal score reproduces the
-average-parameter estimate and its clustered standard error exactly. For
-`sc_importance()`, the debiased shares are a ratio of orthogonal-score
-numerators and can fall outside `[0, 1]` when the first stage is noisy,
-which is why the always-in-`[0, 1]` plug-in shares remain the default.
-
-## Survey-weighted estimands
-
-By default, `sconjoint` targets the unweighted sample of respondents:
-each respondent contributes equally after averaging over that
-respondent's conjoint tasks. If the original survey supplies respondent
-weights and the target is a weighted population, pass those weights to
-`scfit()` with `respondent_weights`.
-
-```{r}
-#| label: survey-weight-example
-#| eval: false
-fit_w <- scfit(
-  formula,
-  data = dat,
-  respondent = "respondent_id",
-  task = "task_id",
-  profile = "profile_id",
-  respondent_weights = "survey_weight",
-  seed = 42
-)
-```
-
-The weight can be a column name in `data` or a numeric vector of length
-`nrow(data)`. It must be finite, non-negative, and constant within
-respondent. The package normalizes the weights across respondents and
-then uses them in the respondent-level aggregation step:
-
-$$
-\hat\theta_w
-=
-\sum_{i=1}^{N} a_i\,\bar\psi_i,
-\qquad
-a_i=\frac{w_i}{\sum_{j=1}^{N}w_j},
-\qquad
-\bar\psi_i=\frac{1}{T_i}\sum_{t=1}^{T_i}\psi_{it}.
-$$
-
-The clustered variance uses the same weighted respondent contributions,
-with the usual finite-cluster factor:
-
-$$
-\widehat V_w
-=
-\frac{N}{N-1}
-\sum_{i=1}^{N}
-a_i^2(\bar\psi_i-\hat\theta_w)(\bar\psi_i-\hat\theta_w)'.
-$$
-
-Survey weights do **not** reweight the first-stage learner. The DNN,
-elastic net, or GRF still learns the conditional preference function
-$f(\mathbf Z)$ from the observed respondent-task rows. The weights enter
-only after the orthogonal scores or respondent-level plug-in quantities
-have been formed. This is the right operation when the issue is
-target-population composition rather than a different training loss.
-
-The same weighted aggregation is used by the production-facing
-quantities: `coef()` / `summary()`, `sc_average()`,
-`sc_counterfactual()`, `sc_mrs()` / `sc_wtp()`, `sc_compensating()`,
-`sc_fraction_preferring()`, `sc_polarization()`, `sc_importance()`,
-`sc_subgroup()`, and `sc_direction_intensity()`.
-
-```{r}
-#| label: survey-weight-quantities
-#| eval: false
-coef(fit_w)
-sc_counterfactual(fit_w, A = list(...), B = list(...))
-sc_compensating(fit_w, benefit = "co_partisan", cost = "journalists")
-sc_fraction_preferring(fit_w, se_method = "wild_bootstrap", n_boot = 1000)
-```
-
-For comparison or diagnostics, fit the model once without weights and
-once with weights. A material difference means the estimand is sensitive
-to survey composition; a small difference supports reporting the
-unweighted structural estimate with a weighting robustness check.
 
 ## Reproducibility: `seed` and `stage2_seed`
 
@@ -257,33 +130,6 @@ points). On continuous-attribute designs the v0.2 score-based prior
 can leave per-respondent MAP estimates with extreme tails when
 $\mathrm{Var}(\Delta X_k) \gg 1$; pass `normalize_deltaX = TRUE` in
 that case. For pure factor-dummy designs the option is a near-no-op.
-
-## `sc_design_diagnostic()`: which recovery tiers does my design support?
-
-New in v0.2.1. Estimates per-coefficient $\hat R^2_{Z,k}$ from the
-MAP posterior and maps the design to four recovery tiers per the paper's
-design-guidance heuristics:
-
-| Tier | Condition | Quantities recoverable |
-|------|-----------|------------------------|
-| mean & aggregate | any reasonable design | AMCE, average vote shares |
-| distributional | T ≥ 5 and $\bar R^2_Z$ ≥ 0.35 | preference shares, importance rankings |
-| individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
-| ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
-
-```{r}
-#| label: design-diag-example
-#| eval: false
-diag <- sc_design_diagnostic(fit)
-print(diag)
-## Top / bottom R^2_Z attributes also reported -- helps spot which
-## dummies are best-pinned by Z and which rely most on T for recovery.
-```
-
-Requires `stage2 != "none"` (needs the MAP Hessian's posterior
-variance). The v0.2.1 estimator is flagged `experimental = TRUE`
-in print output because it has not yet been validated against the
-paper's 1,872-cell simulation grid.
 
 ## Training hyperparameters
 
