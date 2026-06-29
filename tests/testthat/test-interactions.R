@@ -374,3 +374,50 @@ test_that("expanded orthogonal score: mean zero at the estimate; MC coverage of 
   expect_true(all(cov_rate >= 0.87))
   expect_true(all(cov_rate <= 1.00))
 })
+
+## ==========================================================================
+## 6. Survey weights compose with the interaction inference path
+## ==========================================================================
+
+test_that("respondent_weights thread through the interaction inference path", {
+  skip_on_cran()
+  skip_if_not_installed("torch")
+  skip_if_not(torch::torch_is_installed())
+
+  ## This combination -- survey weights AND an interaction term -- is the
+  ## one created when the low-rank feature was rebased onto the
+  ## survey-weighted DML base. The expanded-representation inference reuses
+  ## the same weighted helpers as the no-interaction path, so the weights
+  ## must reach the respondent-level aggregation here too. Same seed => same
+  ## first stage (weights never reweight training), so any change in theta
+  ## isolates the weighted aggregation on the expanded objects.
+  dgp <- .make_int_dgp(M = 120L, T_i = 4L, w_true = 0.8, seed = 19L)
+  dat <- dgp$long
+  rid_levels <- sort(unique(dat$rid))
+  w_resp <- stats::setNames(
+    seq(0.5, 2.0, length.out = length(rid_levels)), rid_levels)
+  dat$w <- as.numeric(w_resp[as.character(dat$rid)])
+
+  args <- list(
+    formula = y ~ a1 + a2 + a3 | z1 + z2, data = dat,
+    respondent = "rid", task = "tid", profile = "pos",
+    K = 2L, n_epochs = 150L, seed = 23L, stage2 = "none",
+    interactions = "explicit", lambda_V = 1e-3
+  )
+  fit_w <- do.call(scfit, c(args, list(respondent_weights = "w")))
+  fit_u <- do.call(scfit, args)
+
+  ## The interaction term is fitted and the user-facing inference is finite.
+  expect_false(is.null(fit_w$interaction))
+  expect_true(all(is.finite(fit_w$theta)))
+  expect_true(all(is.finite(diag(fit_w$vcov))))
+  expect_true(all(diag(fit_w$vcov) >= 0))
+  expect_true(all(is.finite(fit_w$interaction$theta)))
+
+  ## Weights take effect on the expanded path: both the weighted main
+  ## effects and the interaction block differ from the equal-weight fit at
+  ## the same seed (identical first stage).
+  expect_false(isTRUE(all.equal(unname(fit_w$theta), unname(fit_u$theta))))
+  expect_false(isTRUE(all.equal(unname(fit_w$interaction$theta),
+                                unname(fit_u$interaction$theta))))
+})
