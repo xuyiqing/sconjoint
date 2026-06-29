@@ -174,17 +174,60 @@
 #' @return Scalar numeric (NA if `M_S < 2`).
 #' @keywords internal
 #' @noRd
-.sc_cluster_se <- function(q, resp) {
+.sc_cluster_se <- function(q, resp, weights = NULL) {
   n <- length(q)
   if (n == 0L) return(NA_real_)
-  q_bar <- mean(q)
-  dev <- q - q_bar
-  resp_f <- as.factor(resp)
-  M_S <- nlevels(resp_f)
-  if (M_S < 2L) return(NA_real_)
-  c_m <- as.numeric(tapply(dev, resp_f, sum))
-  c_m[is.na(c_m)] <- 0
-  sqrt((M_S / (M_S - 1)) * sum(c_m^2) / n^2)
+  if (is.null(weights)) {
+    q_bar <- mean(q)
+    dev <- q - q_bar
+    resp_f <- as.factor(resp)
+    M_S <- nlevels(resp_f)
+    if (M_S < 2L) return(NA_real_)
+    c_m <- as.numeric(tapply(dev, resp_f, sum))
+    c_m[is.na(c_m)] <- 0
+    return(sqrt((M_S / (M_S - 1)) * sum(c_m^2) / n^2))
+  }
+  st <- .sc_weighted_task_stats(q, resp, weights)
+  st$se
+}
+
+#' Weighted respondent-level mean of a per-task quantity
+#'
+#' The quantity is first averaged within respondent, then averaged across
+#' respondents using normalized survey weights. With `weights = NULL`, this
+#' intentionally falls back to the legacy task-row mean.
+#' @keywords internal
+#' @noRd
+.sc_weighted_task_mean <- function(q, resp, weights = NULL) {
+  if (is.null(weights)) return(mean(q))
+  .sc_weighted_task_stats(q, resp, weights)$estimate
+}
+
+#' Weighted respondent-level mean and clustered SE of a per-task quantity
+#' @keywords internal
+#' @noRd
+.sc_weighted_task_stats <- function(q, resp, weights = NULL) {
+  if (length(q) != length(resp)) {
+    stop(".sc_weighted_task_stats(): `q` and `resp` lengths differ.")
+  }
+  if (is.null(weights)) {
+    return(list(estimate = mean(q), se = .sc_cluster_se(q, resp)))
+  }
+  w_obj <- .sc_respondent_weight_object(resp, weights)
+  key <- as.character(resp)
+  cnt <- w_obj$count
+  qbar <- as.numeric(rowsum(as.numeric(q), group = key, reorder = TRUE) / cnt)
+  st <- .sc_weighted_cluster_stats(matrix(qbar, ncol = 1L), w_obj$w)
+  list(estimate = st$estimate[1L], se = st$se[1L],
+       respondent_values = qbar, respondent_weights = w_obj$w)
+}
+
+#' Respondent weights aligned to a subgroup row index
+#' @keywords internal
+#' @noRd
+.sc_weights_for_rows <- function(object, S) {
+  w <- object$respondent_weights
+  if (is.null(w)) NULL else w[S]
 }
 
 #' Normal-approximation confidence bounds

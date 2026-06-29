@@ -6,35 +6,39 @@
 \title{Saha-Weeks (2022) candidate-choice conjoint}
 \format{
 A data frame with 7,146 rows (1,191 respondents x 3 tasks x
-2 profiles) and the following columns:
+2 profiles) and 37 columns:
 \describe{
-\item{respondent}{Respondent id (character).}
-\item{task}{Task id within respondent (integer).}
-\item{profile}{Profile id within task (1 or 2).}
-\item{choice}{Binary outcome (1 = this profile was chosen in the
-task, 0 = not chosen).}
-\item{agenda}{Factor: candidate's policy agenda
-(ref: \verb{Very Few Changes}, \verb{Moderate Changes}, \verb{Complete Overhaul}).}
-\item{talent}{Factor: candidate's talent description
-(ref: \code{Assertive}, \code{Collaborative}, \verb{Determined to Succeed},
-\code{Empathetic}, \verb{Good Communicator}, \code{Hard-Working},
-\verb{Tough Negotiator}).}
-\item{children}{Factor: candidate has children
-(ref: \verb{No children}, \verb{1 child}, \verb{2 children}, \verb{3 children}).}
-\item{cand_gender}{Factor: candidate gender (ref: \code{Male}, \code{Female}).}
-\item{prior_office}{Factor: candidate's prior elected office
-(ref: \code{No}, \code{Yes}).}
-\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
-\item{age}{Numeric: respondent age in years.}
-\item{pid}{Factor: party identification
-(\code{Democrat}, \code{Republican (GOP)}, \code{Independent}).}
+\item{respondent, task, profile}{Identifiers (character / integer).}
+\item{choice}{Binary outcome (1 = this profile chosen, 0 = not).}
+\item{cand_genderMale, cand_runYes}{Candidate is male / has run for
+office before (0/1; references female / never run).}
+\item{cand_talentCollaborative, cand_talentDetermined.to.Succeed,
+cand_talentEmpathetic, cand_talentGood.Communicator,
+cand_talentHard.Working, cand_talentTough.Negotiator}{Talent
+dummies (reference = Assertive).}
+\item{cand_agendaModerate.Changes, cand_agendaComplete.Overhaul}{Policy
+agenda dummies (reference = Very Few Changes).}
+\item{cand_child1.child, cand_child2.children,
+cand_child3.children}{Number of children (reference = none).}
+\item{gender_num, age, income, educ_Middle, educ_High,
+party_Republican, party_Independent, region_NORTHEAST,
+region_SOUTH, region_WEST, employ_parttime, employ_homemaker,
+employ_not_working, employ_retired, employ_student,
+ideo_conservative, vote_trump, vote_clinton, gender_att}{The
+paper's full respondent covariate set \eqn{\mathbf Z} (19
+moderators): gender, age, income, education, party, region,
+employment status, ideology, vote choice, and a gender-attitudes
+scale.}
+\item{resp_party}{Convenience factor (Democrat / Independent /
+Republican) for subgroup labelling; not part of \eqn{\mathbf Z}.}
 }
 }
 \source{
 Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
 Women: Gender and Voter Perceptions of Candidate Ambition."
 \emph{Political Behavior} 44(2):779-805.
-Data from published replication materials (SSI survey).
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/KVTPVX} (CC0 1.0 public domain dedication).
 }
 \usage{
 sw2022
@@ -48,24 +52,14 @@ original study was to understand voter perceptions of women
 candidates' ambition.
 }
 \details{
-The data is cleaned from the original SSI survey: respondents with
-fewer than 3 elections or invalid demographics are dropped.
+This is the paper's full analysis frame: respondents with fewer than
+three tasks or invalid demographics are dropped, and the moderator set
+is the complete 19-covariate \eqn{\mathbf Z} used in
+Acharya, Hainmueller, and Xu (2026).  Fitting it with the paper's
+configuration reproduces the published candidate-choice results.
 }
 \examples{
 data(sw2022)
 head(sw2022)
-\donttest{
-if (requireNamespace("torch", quietly = TRUE) &&
-    torch::torch_is_installed()) {
-  fit <- scfit(
-    choice ~ agenda + talent + children + cand_gender + prior_office |
-             resp_female + age + pid,
-    data = sw2022, respondent = "respondent",
-    task = "task", profile = "profile",
-    K = 2L, n_epochs = 50L, seed = 1L
-  )
-  sc_importance(fit)
-}
-}
 }
 \keyword{datasets}

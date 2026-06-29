@@ -1,13 +1,15 @@
-test_that("gs2020 loads with expected columns and size", {
+test_that("gs2020 loads as the full-Z analysis frame", {
   data(gs2020, package = "sconjoint")
   expect_s3_class(gs2020, "data.frame")
+  ## differenced attribute contrasts + the paper's 22 moderators + convenience
   expect_true(all(c("respondent", "task", "profile", "choice",
-                    "copartisan", "p1", "p2", "dem_code", "cand_sex",
-                    "cand_race", "cand_pro",
-                    "resp_ideo", "resp_pid", "resp_trump", "resp_age",
-                    "resp_female", "resp_race_black", "resp_race_asian",
-                    "resp_race_other", "resp_educ", "resp_income",
-                    "resp_auth", "resp_knowledge") %in% names(gs2020)))
+                    "diff_respParty", "diff_p1_num",
+                    "diff_dem_code_u_journalists", "diff_sex_Female",
+                    "diff_pro_Lawyer",
+                    "z_ideo", "z_pid7", "z_female", "E_ideal",
+                    "dem_treat_journalists",
+                    "ideo7", "pid7", "weight") %in% names(gs2020)))
   expect_equal(nrow(gs2020), 41314L)
   expect_equal(length(unique(gs2020$respondent)), 1605L)
+  expect_equal(length(grep("^diff_", names(gs2020))), 30L)
 })

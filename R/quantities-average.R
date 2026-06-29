@@ -12,10 +12,17 @@
 #'
 #' @param object An `sc_fit`.
 #' @param scale One of `"logit"` or `"probability"`.
-#' @param subgroup Optional row selector.
+#' @param subgroup Optional row selector.  With `scale = "logit"`, a
+#'   non-`NULL` subgroup returns the influence-function subgroup estimate:
+#'   the mean of the task-level orthogonal-score contributions within the
+#'   subgroup, with a respondent-clustered standard error.  This is the
+#'   debiased subgroup average of \eqn{f(Z)} (the construction used for the
+#'   party-level estimates in the paper's candidate application), not the
+#'   subgroup mean of the MAP \eqn{\hat\beta_i}.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #'   Only affects `scale = "probability"`; the `"logit"` scale uses
-#'   `object$theta` from the DML fit.
+#'   `object$theta` from the DML fit (or its influence-function subgroup
+#'   version when `subgroup` is supplied).
 #' @return An `sc_quantity` with a data.frame estimate containing
 #'   per-attribute AMEs and clustered SEs.
 #' @export
@@ -28,18 +35,49 @@ sc_average <- function(object, scale = c("logit", "probability"),
   S <- .sc_resolve_subgroup(object, subgroup)
   Bs <- .sc_pick_beta(object, which_beta)[S, , drop = FALSE]
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   p <- ncol(Bs)
   if (scale == "logit") {
-    ## Just wrap theta + clustered SE
-    est_vec <- object$theta
-    se_vec  <- sqrt(diag(object$vcov))
     ci_q <- stats::qnorm(0.975)
+    if (is.null(subgroup)) {
+      ## Full population: wrap theta + clustered SE from the DML fit.
+      est_vec <- object$theta
+      se_vec  <- sqrt(diag(object$vcov))
+      se_method <- "DML, respondent-clustered"
+    } else {
+      ## Influence-function subgroup estimate: mean of the task-level
+      ## orthogonal-score contributions within the subgroup, with a
+      ## respondent-clustered SE (cluster sums of the centered influence,
+      ## M_S/(M_S - 1) * sum_m s_m^2 / n_S^2).
+      inf <- object$influence_raw
+      if (is.null(inf)) {
+        stop("sc_average(scale = 'logit', subgroup = ...): ",
+             "`object$influence_raw` is not stored; refit with a current ",
+             "version of scfit().", call. = FALSE)
+      }
+      inf_s  <- inf[S, , drop = FALSE]
+      resp_s <- object$respondent_id[S]
+      if (is.null(w_s)) {
+        est_vec <- colMeans(inf_s)
+        centered <- sweep(inf_s, 2L, est_vec)
+        sums <- rowsum(centered, group = as.character(resp_s))
+        M_s  <- nrow(sums)
+        se_vec <- sqrt(M_s / (M_s - 1) * colSums(sums^2) / length(S)^2)
+      } else {
+        w_obj <- .sc_respondent_weight_object(resp_s, w_s)
+        phi_s <- rowsum(inf_s, group = as.character(resp_s), reorder = TRUE) / w_obj$count
+        st <- .sc_weighted_cluster_stats(phi_s, w_obj$w)
+        est_vec <- st$estimate
+        se_vec <- st$se
+      }
+      se_method <- "influence-function subgroup mean, respondent-clustered"
+    }
     df <- data.frame(
       dummy_name = object$attr_names,
-      estimate   = est_vec,
-      se         = se_vec,
-      ci_lo      = est_vec - ci_q * se_vec,
-      ci_hi      = est_vec + ci_q * se_vec,
+      estimate   = unname(est_vec),
+      se         = unname(se_vec),
+      ci_lo      = unname(est_vec - ci_q * se_vec),
+      ci_hi      = unname(est_vec + ci_q * se_vec),
       stringsAsFactors = FALSE,
       row.names  = NULL
     )
@@ -47,7 +85,8 @@ sc_average <- function(object, scale = c("logit", "probability"),
       name = "average_logit",
       estimate = df,
       se = NA_real_,
-      details = list(scale = "logit", subgroup_size = length(S)),
+      details = list(scale = "logit", subgroup_size = length(S),
+                     se_method = se_method),
       call = match.call()
     ))
   }
@@ -70,7 +109,7 @@ sc_average <- function(object, scale = c("logit", "probability"),
   theta_vec <- as.numeric(object$theta)
   lin    <- as.numeric(dX_s %*% theta_vec)
   gprime <- stats::plogis(lin) * (1 - stats::plogis(lin))
-  gprime_avg <- mean(gprime)
+  gprime_avg <- .sc_weighted_task_mean(gprime, object$respondent_id[S], w_s)
   ## Point estimate: scale theta_hat by mean(G').
   est_vec <- theta_vec * gprime_avg
   ## SE via delta-method: Var(AME_k) = gprime_avg^2 * Var(theta_k).

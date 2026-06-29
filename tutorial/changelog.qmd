@@ -1,6 +1,60 @@
 # Changelog {#sec-changelog .unnumbered}
 
-## v0.2.0 (development)
+## v0.2.1
+
+**Full replication datasets.** The bundled `sw2022`, `gs2020`, and
+`br2017` datasets are now the paper's full analysis frames, with the
+complete respondent moderator set (19, 22, and 23 covariates). The worked
+examples in this book fit the paper's production configuration and
+reproduce the published estimates. The attribute columns are the paper's
+analysis columns (candidate dummies for Saha-Weeks, differenced contrasts
+for Graham-Svolik, numeric bracket rates for Ballard-Rosa); raw
+convenience columns (`resp_party`, `resp_pid7`, `ideo7`, `pid7`, `weight`)
+are carried for subgroup and weighting analyses but are not part of the
+moderator set. `bs2013` stays a lightweight teaching example. See
+`?sw2022`, `?gs2020`, `?br2017`.
+
+**Quantity calls.** `sc_importance(design = "levels")` covers
+continuous-attribute designs, and `design = "uniform"` reproduces the
+paper's factor-design importance shares. `sc_voteshare_contrast()` returns
+a debiased vote share for a raw attribute-dummy contrast.
+
+**Tutorial book.** The application chapters are ordered democratic norms,
+tax preferences, candidate choice, then climate treaties, and each closes
+with a short summary. A new "Estimands" chapter
+(@sec-estimands) collects the quantities of interest into a single
+reference, organized by the recovery tiers of the design; "Plot options"
+and "Advanced options" follow it. `plot_importance()` gains an `xlim`
+argument (a `coord_cartesian()` zoom that preserves the ridgeline
+densities past the cap). `plot_hetero()` panels are now sized in
+proportion to each attribute group's number of levels, and the
+data-overview chunks drop `head()` in favor of `str()`.
+
+## v0.2.0
+
+**Survey-weighted estimands (0.2.0.9007)**
+
+* `scfit()` gains `respondent_weights` for respondent-level
+  survey/design weights. The weights reweight the target-population
+  aggregation and clustered standard errors for `theta`, the debiased
+  orthogonal quantities, and the production-facing plug-in summaries.
+  They do not reweight first-stage learner training. See
+  @sec-estimands for the formula and usage pattern.
+
+**Bundled `br2017` data corrected (0.2.0.9004)**
+
+* The source replication file stores the 45% level of the \$175--375k
+  bracket as the number 5 in its derived rate column; the bundled
+  `br2017` inherited this on 19.9% of rows. The build now rebuilds all
+  six bracket rates from the coded variables and their value labels.
+  Estimates involving the \$175--375k bracket (and, through the
+  design's correlation, the revenue coefficient) change under the
+  corrected data; @sec-br was re-rendered accordingly.
+* `sc_importance()` gains `design = "levels"` (with a `levels`
+  argument) for continuous-attribute designs; the documentation now
+  states which weighting convention reproduces the paper's reported
+  shares (`"uniform"` for factor designs, `"levels"` for continuous
+  ones).
 
 Paper-catchup release: brings the package up to the algorithmic defaults
 in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
@@ -15,11 +69,39 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
   the Stage-1 single-DNN prediction.
 * Set `stage2 = "none"` on `scfit()` to recover v0.1 behavior exactly.
 
+**Debiased inference for the additional quantities**
+
+* The orthogonal-score debiasing now extends beyond the average
+  parameter to the quantities of Supplementary Materials Section C. `sc_counterfactual()`
+  defaults to a debiased counterfactual probability
+  (`vartype = "orthogonal"`); new `sc_ame()` returns a debiased
+  structural average marginal effect on the probability scale;
+  `sc_mrs()` / `sc_wtp()` add `estimand = "population"` for the debiased
+  ratio of average parameters with a Fieller interval; and
+  `sc_importance(vartype = "orthogonal")` gives the debiased
+  attribute-importance shares. `scfit()` now stores a single-profile pool
+  (`object$profile_pool`) for the AME integral. See @sec-estimands.
+
+**Pluggable first-stage learners**
+
+* `scfit(learner = ...)` selects the first-stage estimator of
+  $\beta(\mathbf Z)$: `"dnn"` (default, the cross-fitted deep network),
+  `"enet"` (cross-fitted elastic-net logit with an automatically
+  spline-expanded moderator basis; needs `glmnet`), or `"grf"`
+  (a generalized-random-forest local logit; needs `grf`). All three feed
+  the identical DML inference; only the first stage changes. The Stage-2
+  refinement is specific to the network, so `stage2` is forced to
+  `"none"` for the alternative learners.
+* `enet_alpha`, `enet_df`, `enet_interactions`: the elastic-net mixing
+  parameter and its spline basis-expansion controls (`enet_df = 1` with
+  `enet_interactions = FALSE` recovers a linear-in-moderators first
+  stage). See @sec-sanity for a worked recovery comparison.
+
 **New `scfit()` arguments**
 
 * `stage2`: one of `"map_c5"` (default), `"none"`, `"varref"`,
   `"mixed_logit"`. The mixed-logit option implements the
-  `lme4::glmer` BLUP alternative from paper §A.4 with a deterministic
+  `lme4::glmer` BLUP alternative (paper Supplementary Materials) with a deterministic
   tryCatch fallback to the Stage-1 DNN on convergence failure.
 * `stage2_seed`: integer seed for the 2nd DNN in the Stage-2
   ensemble (default `12345L`); independent of `seed`, so the
@@ -45,7 +127,7 @@ in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
 
 * `sc_validate_amce(object, subgroup = NULL)`: pooled (and
   optionally subgroup) homogeneous-logit comparison against the DML
-  $\hat\theta$. Mirrors paper §App-D, where the pooled correlation on
+  $\hat\theta$. Mirrors the paper's Supplementary Materials Section D, where the pooled correlation on
   the paper's external validation data is near 1.
   See \[Example: Candidate Choice\](#sec-sw-validate) for a worked
   example.

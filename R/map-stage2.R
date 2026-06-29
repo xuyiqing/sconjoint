@@ -1,9 +1,5 @@
-## Stage-2 empirical-Bayes MAP update (paper "EnsC5").
-##
-## Algorithm reference: see
-## `statsclaw-workspace/sconjoint/ref/map-stage2-algorithm.md` in the
-## workbench, and `code/04b_map_update.R` in the ConjointStructural
-## prototype.
+## Stage-2 empirical-Bayes MAP update (paper "EnsC5"; Acharya,
+## Hainmueller & Xu 2026, Section 3).
 ##
 ## All functions are internal.  The user-facing entry point is the
 ## `stage2 = "map_c5"` (or `"varref"`) argument on `scfit()`, which

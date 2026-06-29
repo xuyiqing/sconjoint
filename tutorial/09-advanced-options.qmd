@@ -12,9 +12,11 @@ This chapter is a reference for arguments to `scfit()` and the
 `sc_*` quantity functions that most users will never need to change.
 Read it when you need to deviate from defaults: alternative Stage-2
 estimators, manual tuning of training hyperparameters, parallel
-execution, or reproducibility audits.
+execution, or reproducibility audits. For the catalog of estimands
+themselves --- which quantity to use, what it targets, and how its
+inference works --- see @sec-estimands.
 
-The four example chapters (Saha-Weeks, Graham-Svolik, Ballard-Rosa,
+The four example chapters (Graham-Svolik, Ballard-Rosa, Saha-Weeks,
 Bechtel-Scheve) all use the defaults. This chapter explains what those
 defaults are and when you might override them.
 
@@ -34,7 +36,7 @@ The four `stage2` choices:
 | `"map_c5"` (default) | Paper EnsC5. Trains a 2nd DNN with `stage2_seed`, averages with the first DNN, runs a Newton MAP solver per respondent with a score-based diagonal prior scaled by $1/5$. | The paper's recommended default. Best individual-$\beta$ correlation under realistic conjoint designs. |
 | `"none"` | Skip Stage 2. `beta_hat` is the raw Stage-1 cross-fitted DNN. | Reproduce v0.1 behavior, or when you want the raw DNN view for downstream code that does its own refinement. |
 | `"varref"` | Use $0.5 \cdot \mathrm{Var}_i(\hat\beta_{\text{ens},i,k})$ as the diagonal prior variance (floored at `varref_floor`, default $10^{-3}$). Otherwise identical to MAP. | Recommended for continuous-attribute designs (e.g. Ballard-Rosa tax rates); see `varref_floor` below. |
-| `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. Paper §A.4 notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
+| `"mixed_logit"` | DNN-offset BLUP via `lme4::glmer`. Treats the DNN prediction as a fixed offset and fits respondent-specific random slopes by Laplace approximation. | When you want a likelihood-based BLUP as a robustness check. The paper notes this is more competitive when $T$ is large, $p$ is modest, and $\mathbf{Z}$ already explains most heterogeneity. |
 
 ```{r}
 #| label: stage2-example
@@ -70,27 +72,6 @@ fit$sigma_prior       # diagonal prior variance used in MAP (length p)
 fit$sigma_post_diag   # mean posterior variance from MAP Hessian (length p)
 fit$stage2_warnings   # character vector of glmer warnings, if any
 ```
-
-## `which_beta`: hybrid vs raw DNN view on quantities
-
-Every `sc_*` quantity now accepts
-`which_beta = c("hybrid", "dnn")`. The default `"hybrid"` reads
-`fit$beta_hat` (whatever Stage 2 produced). Passing `"dnn"` reads
-`fit$beta_hat_dnn` (the raw Stage-1 view). When `stage2 = "none"` the
-two are numerically identical and the helper silently falls back.
-
-```{r}
-#| label: which-beta-example
-#| eval: false
-## Same fit, two views of the same distribution
-sc_fraction_preferring(fit)                     # MAP-shrunk
-sc_fraction_preferring(fit, which_beta = "dnn") # raw DNN
-```
-
-When the paper text says "the structural model reveals that X% of
-respondents prefer Y", it means the MAP-shrunk fraction (the
-`"hybrid"` default). The raw DNN fraction is usually wider because
-unrefined respondent-level coefficients have more sampling noise.
 
 ## Reproducibility: `seed` and `stage2_seed`
 
@@ -130,7 +111,7 @@ the MAP solver leaves per-respondent estimates with extreme tails.
 SD before training / Lambda(Z) / DML / MAP, then un-standardizes all
 coefficient-bearing slots at assembly time. The user-facing surface
 (`coef(fit)`, `vcov(fit)`, `fit$beta_hat`, etc.) is on the original
-units; only the internal pipeline runs on a common-variance scale.
+units; only the internal computation runs on a common-variance scale.
 
 ```{r}
 #| label: normalize-example
@@ -149,33 +130,6 @@ points). On continuous-attribute designs the v0.2 score-based prior
 can leave per-respondent MAP estimates with extreme tails when
 $\mathrm{Var}(\Delta X_k) \gg 1$; pass `normalize_deltaX = TRUE` in
 that case. For pure factor-dummy designs the option is a near-no-op.
-
-## `sc_design_diagnostic()`: which recovery tiers does my design support?
-
-New in v0.2.1. Estimates per-coefficient $\hat R^2_{Z,k}$ from the
-MAP posterior and maps the design to four recovery tiers per paper
-§6 heuristics:
-
-| Tier | Condition | Quantities recoverable |
-|------|-----------|------------------------|
-| mean & aggregate | any reasonable design | AMCE, average vote shares |
-| distributional | T ≥ 5 and $\bar R^2_Z$ ≥ 0.35 | preference shares, importance rankings |
-| individual-level | T ≥ 8 and $\bar R^2_Z$ ≥ 0.55 | respondent-specific quantities |
-| ratio (MRS / WTP) | T ≥ 10 and $\bar R^2_Z$ ≥ 0.55 and N ≥ 5000 | individual MRS / WTP |
-
-```{r}
-#| label: design-diag-example
-#| eval: false
-diag <- sc_design_diagnostic(fit)
-print(diag)
-## Top / bottom R^2_Z attributes also reported -- helps spot which
-## dummies are best-pinned by Z and which rely most on T for recovery.
-```
-
-Requires `stage2 != "none"` (needs the MAP Hessian's posterior
-variance). The v0.2.1 estimator is flagged `experimental = TRUE`
-in print output because it has not yet been validated against the
-paper's 5,760-cell simulation grid.
 
 ## Training hyperparameters
 

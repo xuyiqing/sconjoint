@@ -5,8 +5,8 @@ test_that("sc_validate_amce returns a structured result on sw2022 subset", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:60]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:60]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -35,8 +35,8 @@ test_that("sc_validate_amce DML column is exactly object$theta", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:60]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:60]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(2); torch::torch_manual_seed(2)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -51,8 +51,8 @@ test_that("sc_validate_amce print method runs without error", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:60]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:60]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(3); torch::torch_manual_seed(3)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,

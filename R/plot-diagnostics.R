@@ -329,12 +329,15 @@ plot_fraction <- function(object, dummies = NULL, labels = NULL,
 #'   Forwarded to \code{sc_heterogeneity_test()}.  Use \code{"dnn"}
 #'   when MAP-shrunk per-respondent variances on continuous-attribute
 #'   designs are dominated by a single large-scale attribute.
-#' @param facet_scales Passed to \code{facet_grid()}/\code{facet_wrap()}'s
-#'   \code{scales} when \code{groups} is supplied.  One of
-#'   \code{"free"} (default; per-attribute-group x-axis via
-#'   \code{facet_wrap}, which handles the common case of a continuous
-#'   attribute alongside 0/1 dummies), \code{"free_y"} (v0.1 behavior:
-#'   shared x), \code{"free_x"}, or \code{"fixed"}.
+#' @param facet_scales Faceting behavior when \code{groups} is supplied.
+#'   \code{"free_y"} (default) uses \code{facet_grid()} with
+#'   \code{space = "free_y"}, so each attribute group's panel height is
+#'   proportional to its number of levels.  This keeps the bar thickness
+#'   uniform across groups, on a shared x-axis -- appropriate here because
+#'   \eqn{\mathrm{Var}(\hat\beta_k)} is comparable across attributes.
+#'   \code{"free"} (or \code{"free_x"}) uses \code{facet_wrap()} with a
+#'   per-panel x-axis, for designs that mix a continuous attribute with
+#'   0/1 dummies; \code{"fixed"} shares both axes.
 #' @param ... Unused.
 #' @return A \code{ggplot} object.
 #' @export
@@ -347,7 +350,7 @@ plot_hetero <- function(object, dummies = NULL, labels = NULL,
                         cex.main = NULL, cex.axis = NULL, cex.lab = NULL,
                         legendOff = FALSE, legend.pos = NULL,
                         which_beta = c("hybrid", "dnn"),
-                        facet_scales = c("free", "free_y", "free_x", "fixed"),
+                        facet_scales = c("free_y", "free", "free_x", "fixed"),
                         ...) {
   stopifnot(inherits(object, "sc_fit"))
   which_beta <- match.arg(which_beta)
@@ -600,10 +603,16 @@ plot_subgroup <- function(object, subgroup, dummies = NULL, labels = NULL,
 #' @param object An \code{sc_fit} object.
 #' @param labels Optional named character vector to rename attribute names.
 #' @param title Plot title.
+#' @param xlim Numeric vector of length 2 giving x-axis limits. Applied as a
+#'   \code{coord_cartesian()} zoom (with clipping off), so the ridgeline
+#'   densities and the mean-percent labels past the cap are preserved rather
+#'   than dropped (unlike a scale limit, which would clip them). \code{NULL}
+#'   (default) shows the full range.
 #' @param ... Additional arguments passed to \code{.sc_plot_theme()}.
 #' @return A \code{ggplot} object.
 #' @export
-plot_importance <- function(object, labels = NULL, title = NULL, ...) {
+plot_importance <- function(object, labels = NULL, title = NULL,
+                            xlim = NULL, ...) {
   stopifnot(inherits(object, "sc_fit"))
   if (!requireNamespace("ggridges", quietly = TRUE)) {
     stop("plot_importance() requires the 'ggridges' package.")
@@ -672,7 +681,7 @@ plot_importance <- function(object, labels = NULL, title = NULL, ...) {
       y = NULL,
       title = if (is.null(title)) default_title else title
     ) +
-    ggplot2::coord_cartesian(clip = "off") +
+    ggplot2::coord_cartesian(xlim = xlim, clip = "off") +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(legend.position = "none",
                    plot.margin = ggplot2::margin(t = 20, r = 10, b = 5, l = 5))

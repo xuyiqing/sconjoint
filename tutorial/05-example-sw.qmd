@@ -1,0 +1,572 @@
+# Example: Candidate Choice {#sec-sw}
+
+```{r}
+#| label: setup-sw
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+library(ggplot2)
+
+## Groups and labels for plot annotations --------------------------------
+## Keyed by the attribute-dummy column names in the bundled data.
+sw_groups <- c(
+  cand_agendaModerate.Changes      = "Agenda",
+  cand_agendaComplete.Overhaul     = "Agenda",
+  cand_talentCollaborative         = "Talent",
+  cand_talentDetermined.to.Succeed = "Talent",
+  cand_talentEmpathetic            = "Talent",
+  cand_talentGood.Communicator     = "Talent",
+  cand_talentHard.Working          = "Talent",
+  cand_talentTough.Negotiator      = "Talent",
+  cand_child1.child                = "Children",
+  cand_child2.children             = "Children",
+  cand_child3.children             = "Children",
+  cand_genderMale                  = "Gender",
+  cand_runYes                      = "Prior run"
+)
+
+sw_labels <- c(
+  cand_agendaModerate.Changes      = "Moderate changes",
+  cand_agendaComplete.Overhaul     = "Complete overhaul",
+  cand_talentCollaborative         = "Collaborative",
+  cand_talentDetermined.to.Succeed = "Determined to succeed",
+  cand_talentEmpathetic            = "Empathetic",
+  cand_talentGood.Communicator     = "Good communicator",
+  cand_talentHard.Working          = "Hard-working",
+  cand_talentTough.Negotiator      = "Tough negotiator",
+  cand_child1.child                = "1 child",
+  cand_child2.children             = "2 children",
+  cand_child3.children             = "3 children",
+  cand_genderMale                  = "Male",
+  cand_runYes                      = "Ran before"
+)
+
+## Attribute grouping for the variance-decomposition importance ----------
+## The bundled formula enters each level as its own dummy, so we tell
+## sc_importance() which dummies belong to the same attribute before
+## computing the (paper-convention) share. sw_attr_map below is reused in
+## the "Attribute importance" section.
+sw_attr_map <- function(fit) {
+  an  <- fit$attr_names
+  map <- list(
+    cand_gender = which(an == "cand_genderMale"),
+    cand_run    = which(an == "cand_runYes"),
+    cand_talent = which(grepl("^cand_talent",  an)),
+    cand_agenda = which(grepl("^cand_agenda",  an)),
+    cand_child  = which(grepl("^cand_child",   an))
+  )
+  fit$attr_map  <- map
+  fit$attr_vars <- names(map)
+  fit
+}
+```
+
+This chapter walks through a complete `sconjoint` analysis of the
+candidate-choice conjoint experiment of @saha2022ambitious. Respondents
+evaluate pairs of hypothetical political candidates and select one. The
+structural decomposition into direction and intensity lets us ask
+whether a near-zero average effect for candidate gender masks genuine
+heterogeneity --- opposing camps of voters who prefer women and men.
+
+The bundled `sw2022` is the paper's full analysis frame, so the
+quantities below reproduce the published estimates. The fit uses the
+paper's production configuration (`K = 10` cross-fitting folds and the
+default 1,000 Adam epochs); it is heavier than a quick demo and takes a
+couple of minutes to run.
+
+## Data preparation
+
+Load the data and inspect its structure.
+
+```{r}
+#| label: sw-load
+data(sw2022, package = "sconjoint")
+dim(sw2022)
+```
+
+The data are in long format: one row per respondent--task--profile. Each
+respondent contributes three forced-choice tasks; within a task two
+candidate profiles are presented and exactly one is chosen
+(`choice == 1`).
+
+```{r}
+#| label: sw-structure
+str(sw2022, list.len = 12)
+table(table(sw2022$respondent))
+```
+
+The thirteen candidate attributes are already coded as 0/1 dummies, with
+the omitted level of each attribute serving as its reference (Female for
+gender, no prior run for ambition, and so on). The
+respondent-level moderators in $\mathbf Z$ are the full set of nineteen
+covariates from the paper --- gender, age, income, education, party,
+region, employment status, ideology, vote choice, and a gender-attitudes
+scale. The convenience factor `resp_party` (Democrat / Independent /
+Republican) is carried alongside for subgroup labelling but is not part
+of $\mathbf Z$.
+
+The formula interface puts conjoint attributes to the left of `|` and
+moderators to the right. Column names containing dots are backquoted:
+
+```{r}
+#| label: sw-formula
+attrs <- c("cand_genderMale", "cand_runYes",
+           "cand_talentCollaborative", "cand_talentDetermined.to.Succeed",
+           "cand_talentEmpathetic", "cand_talentGood.Communicator",
+           "cand_talentHard.Working", "cand_talentTough.Negotiator",
+           "cand_agendaModerate.Changes", "cand_agendaComplete.Overhaul",
+           "cand_child1.child", "cand_child2.children", "cand_child3.children")
+Zvars <- c("gender_num", "age", "income", "educ_Middle", "educ_High",
+           "party_Republican", "party_Independent", "region_NORTHEAST",
+           "region_SOUTH", "region_WEST", "employ_parttime",
+           "employ_homemaker", "employ_not_working", "employ_retired",
+           "employ_student", "ideo_conservative", "vote_trump",
+           "vote_clinton", "gender_att")
+
+bt  <- function(x) paste0("`", x, "`")
+sw_formula <- stats::as.formula(
+  paste("choice ~", paste(bt(attrs), collapse = " + "),
+        "|",       paste(bt(Zvars), collapse = " + "))
+)
+```
+
+## Fitting
+
+We fit the production configuration: `K = 10` cross-fitting folds and the
+default 1,000 Adam epochs. This is the recipe that reproduces the paper,
+so the chunk is cached --- rendering reuses the saved fit rather than
+retraining each time. The loss trace later in the chapter shows the
+per-fold training curves.
+
+```{r}
+#| label: sw-fit
+#| cache: true
+fit_sw <- scfit(
+  sw_formula,
+  data       = sw2022,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 10L,
+  seed       = 42L,
+  stage2     = "map_c5",
+  parallel   = TRUE,
+  n_cores    = 10L
+)
+summary(fit_sw)
+```
+
+::: {.callout-note}
+### The Stage-2 default
+
+`scfit()` reports `Stage 2: map_c5`, the empirical-Bayes MAP refinement
+that runs by default; @sec-gs explains the Stage-1 / Stage-2 split and
+the `stage2` options. DML estimates use the Stage-1 DNN
+(`fit_sw$beta_hat_dnn`); the refined `fit_sw$beta_hat` feeds the
+distributional and individual-level quantities below.
+:::
+
+## Population-average estimates
+
+The DML point estimates $\hat\theta_k$ on the logit scale. Inspect
+numerically, then visualize as a coefficient plot grouped by attribute.
+
+```{r}
+#| label: sw-coef
+coef(fit_sw)
+```
+
+Agenda dominates: relative to keeping the status quo, both *moderate
+changes* and a *complete overhaul* raise candidate utility by about 0.95
+on the logit scale. Among the talent cues, *hard-working* is the
+strongest (about +0.55). The average effect of a *male* candidate is
+small and negative (about $-0.10$, confidence interval covering zero) ---
+the near-zero average we return to below.
+
+```{r}
+#| label: sw-amce-plot
+#| fig-height: 6
+plot_amce(fit_sw, groups = sw_groups, labels = sw_labels)
+```
+
+### Structural AME vs reduced-form AMCE
+
+The structural model's average marginal effect (AME) on the
+*probability* scale nearly coincides with the standard
+linear-probability-model AMCE, confirming that the structural estimator
+nests reduced-form AMCE analysis. We compute both and overlay them as
+point-ranges on the probability scale.
+
+```{r}
+#| label: sw-ame-vs-amce
+#| fig-height: 6
+## Structural AME on the probability scale (delta-method via plogis')
+ame_struct <- sc_average(fit_sw, scale = "probability")
+ame_df     <- ame_struct$estimate
+ame_df$source <- "Structural AME"
+
+## Linear-probability-model AMCE
+lpm        <- sc_baseline_lpm(fit_sw)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[amce_df$dummy_name %in% names(sw_labels),
+          c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- sw_labels[df_both$dummy_name]
+df_both$label <- factor(df_both$label, levels = rev(unname(sw_labels)))
+df_both$group <- sw_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(sw_groups))
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.35, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
+The two series overlap nearly point-for-point: the structural model
+loses nothing the reduced-form AMCE provides. The
+`sc_validate_amce()` check at the end of the chapter quantifies this
+agreement.
+
+## Individual-level preferences
+
+Pull the respondent-level $\hat\beta(\mathbf Z_i)$ matrix. With the
+default `stage2 = "map_c5"`, this is the MAP-refined hybrid view.
+
+```{r}
+#| label: sw-beta
+beta <- predict(fit_sw)
+dim(beta)
+round(beta[1:3, 1:6], 2)
+```
+
+Ridgeline densities show the distribution of $\hat\beta_k(\mathbf Z_i)$
+per dummy across respondents. The vertical dashed line is at zero; the
+solid line in each density is the median.
+
+```{r}
+#| label: sw-ridgelines
+#| fig-height: 11
+plot(fit_sw, "beta_ridgelines", groups = sw_groups, labels = sw_labels)
+```
+
+The gender density is centred just left of zero but spreads to both
+sides --- the visual signature of two opposing camps rather than a
+shared near-indifference, a pattern we make precise next.
+
+## Structural quantities
+
+### Attribute importance
+
+The variance-decomposition share of utility carried by each *attribute*,
+averaged across respondents. Importance answers: which attribute moves
+the choice the most? Because the bundled formula enters each level as a
+separate dummy, we first tell `sc_importance()` which dummies belong to
+the same attribute (via the `sw_attr_map()` helper defined in the setup
+chunk), then read off the paper's five-attribute decomposition.
+
+```{r}
+#| label: sw-importance
+fit_grp <- sw_attr_map(fit_sw)
+imp <- sc_importance(fit_grp, design = "uniform")
+imp$estimate[, c("attribute", "share", "se")]
+```
+
+```{r}
+#| label: sw-importance-plot
+#| fig-height: 6
+plot_importance(fit_grp, labels = c(
+  cand_agenda = "Agenda", cand_talent = "Talent",
+  cand_child = "Children", cand_gender = "Gender", cand_run = "Prior run"))
+```
+
+Policy agenda dominates the decision variance, carrying roughly half the
+explained variation. Candidate gender accounts for about **16%** of the
+variance --- the third-largest attribute, behind agenda and talent and
+well ahead of children and prior office. This is the first sign that
+gender matters far more than its near-zero average effect suggests: the
+variance is large precisely because respondents disagree about its sign.
+
+### Direction and intensity
+
+For each dummy, decompose preference into a *direction* (the sign of
+$\hat\beta_{ik}$) and an *intensity* (its magnitude). A near-zero
+average effect can hide either consensus (everyone close to zero) or
+polarization (large opposing intensities cancelling).
+
+```{r}
+#| label: sw-di
+sc_direction_intensity(fit_sw)
+```
+
+Candidate gender is the paper's clearest example of cancellation: its
+direction summary sits near zero (a slim majority lean toward female
+candidates), but its intensity is substantial --- the opposing camps
+hold their preferences with real strength, and they cancel in the
+average.
+
+### Fraction preferring
+
+What share of respondents have a positive coefficient on each dummy?
+This is the direction-only summary --- it ignores intensity.
+
+```{r}
+#| label: sw-fraction
+frac <- sc_fraction_preferring(fit_sw, threshold = 0)
+frac$estimate[, c("dummy_name", "frac_positive", "frac_negative")]
+```
+
+```{r}
+#| label: sw-fraction-bar
+#| fig-height: 6
+plot_fraction(fit_sw, groups = sw_groups, labels = sw_labels)
+```
+
+The directional finding for gender: the population-average effect for
+*male* is near zero, yet a clear majority of respondents have
+$\hat\beta_{\text{Male}} < 0$ --- about **54%** prefer female candidates
+against **46%** who prefer men. The electorate is split close to evenly
+on gender, not indifferent to it. The partisan structure behind that
+split appears in the subgroup section below.
+
+### Marginal rate of substitution
+
+The respondent-averaged trimmed ratio $\hat\beta_j / \hat\beta_k$
+between two dummies, with respondent-clustered SE. Trimming at
+$\{0.01, 0.99\}$ guards the unbounded ratio when the denominator is
+near zero.
+
+```{r}
+#| label: sw-mrs
+sc_mrs(fit_sw, numerator = 1L, denominator = 2L)
+```
+
+::: {.callout-tip}
+### Large trimmed mean?
+
+The ratio $\hat\beta_j / \hat\beta_k$ is unbounded when the
+denominator is near zero. Here the numerator is the *male* dummy, whose
+recovered effect is near zero for many respondents, so the ratio is
+noisy; inspect the ridgelines above to confirm the denominator column
+is well-separated from zero before reading a MRS literally.
+:::
+
+### Counterfactual choice probability
+
+Predicted choice probability for a *specific* head-to-head profile pair,
+averaged across respondents. Each profile is a named list of dummy
+settings; unmentioned dummies stay at zero (the reference level).
+
+```{r}
+#| label: sw-counterfactual
+sc_counterfactual(
+  fit_sw,
+  ## Profile A: a Female, Empathetic candidate proposing a Complete
+  ## Overhaul, with two children and a prior run for office. Female is
+  ## the reference level, so cand_genderMale stays 0.
+  ## Profile B: a Male, Tough-Negotiator candidate with no prior run and
+  ## the omitted (status-quo) agenda.
+  A = list(cand_talentEmpathetic = 1, cand_agendaComplete.Overhaul = 1,
+           cand_child2.children = 1, cand_runYes = 1),
+  B = list(cand_genderMale = 1, cand_talentTough.Negotiator = 1)
+)
+```
+
+### Optimal profile
+
+The single profile that maximizes the population-average utility (greedy
+attribute-by-attribute selection over the discrete attribute levels).
+
+```{r}
+#| label: sw-optimal
+sc_optimal_profile(fit_sw)
+```
+
+### Heterogeneity test
+
+For each dummy, the one-sided test that $\mathrm{Var}(\beta_k(Z)) > 0$.
+Useful for screening which attributes genuinely vary across respondents.
+
+```{r}
+#| label: sw-het
+sc_heterogeneity_test(fit_sw, adjust = "bh")
+```
+
+```{r}
+#| label: sw-het-bar
+#| fig-height: 6
+plot_hetero(fit_sw, groups = sw_groups, labels = sw_labels)
+```
+
+Candidate gender shows highly significant variance in $\beta(Z)$ --- the
+formal counterpart to this cancellation: the spread around the
+near-zero mean is real, not sampling noise.
+
+### Subgroup analysis
+
+Re-average the respondent-level betas over a subset of respondents, then
+compare across subsets. The paper's main result is partisan: the
+null average effect of gender masks Democrats who prefer women and
+Republicans who prefer men. We recover it by splitting on `resp_party`.
+Subgroup masks are aligned to the rows of `fit_sw$beta_hat`, which `Z`
+shares, so we build them from the party indicators in `fit_sw$Z`.
+
+```{r}
+#| label: sw-subgroup
+Z   <- fit_sw$Z
+dem <- Z[, "party_Republican"] == 0 & Z[, "party_Independent"] == 0
+ind <- Z[, "party_Independent"] == 1
+rep <- Z[, "party_Republican"] == 1
+
+male_row <- function(mask) {
+  s <- sc_subgroup(fit_sw, mask)
+  s$estimate[s$estimate$dummy_name == "cand_genderMale", c("theta", "se")]
+}
+rbind(
+  Democrat    = male_row(dem),
+  Independent = male_row(ind),
+  Republican  = male_row(rep)
+)
+```
+
+The recovered party means show the paper's finding directly: the average
+*male* coefficient is clearly **negative for Democrats** (they prefer
+women), clearly **positive for Republicans** (they prefer men), and
+**near zero for Independents**. Two camps of comparable strength pull in
+opposite directions, and the overall average lands near zero by
+cancellation, not by indifference.
+
+```{r}
+#| label: sw-subgroup-plot
+#| fig-height: 6
+plot_subgroup(
+  fit_sw,
+  subgroup = list(Democrat = dem, Independent = ind, Republican = rep),
+  dummies  = "cand_genderMale",
+  labels   = sw_labels,
+  title    = "Recovered male-candidate preference, by party"
+)
+```
+
+We can run the same split on the respondent's own gender, coded in the
+standardized moderator `gender_num` (its two levels label the two
+coded groups; the package does not store which sign is female, so we
+keep the labels neutral):
+
+```{r}
+#| label: sw-subgroup-gender
+g_lo <- fit_sw$Z[, "gender_num"] < 0
+g_hi <- fit_sw$Z[, "gender_num"] > 0
+rbind(
+  `gender_num < 0` = male_row(g_lo),
+  `gender_num > 0` = male_row(g_hi)
+)
+```
+
+### Loss trace
+
+```{r}
+#| label: sw-loss
+plot(fit_sw, "loss_trace")
+```
+
+### Design diagnostic (R²_Z + recovery-tier hint)
+
+`sc_design_diagnostic()` estimates per-coefficient $\hat R^2_{Z,k}$ from
+the MAP posterior and reports which recovery tiers the design supports
+(mean / distributional / individual / ratio) per the paper's
+design-guidance heuristics. On the Saha-Weeks design (three tasks per
+respondent, the full nineteen-covariate set) the talent attributes are
+well pinned by $\mathbf Z$, while gender, prior run, and children rely
+most on the within-respondent task variation.
+
+```{r}
+#| label: sw-design-diag
+sc_design_diagnostic(fit_sw)
+```
+
+### Validating against the homogeneous-logit AMCE {#sec-sw-validate}
+
+The paper's Supplementary Materials (Section D) show that the structural
+model nests the standard reduced-form AMCE: the DML population-average
+parameter $\theta_k = \mathbb{E}[\beta_k(Z)]$ equals the pooled
+homogeneous-logit coefficient on attribute $k$ when the logit
+specification holds. The `sc_validate_amce()` export turns this into a
+one-line sanity check.
+
+```{r}
+#| label: sw-validate
+v <- sc_validate_amce(fit_sw)
+v
+```
+
+At the production configuration used here (`K = 10`, 1,000 epochs) the
+correlation across attribute levels is very high (close to 1), confirming
+that the structural estimator reproduces the reduced-form benchmark. A
+material drop would signal either insufficient training or a genuinely
+non-logit data-generating process.
+
+### Comparing the Stage-2 view to the raw DNN view
+
+Every `sc_*` quantity accepts a `which_beta` argument with default
+`"hybrid"` (Stage-2 refined). Passing `"dnn"` reads the unrefined
+Stage-1 DNN mean, which lives in `fit_sw$beta_hat_dnn`.
+
+```{r}
+#| label: sw-which-beta
+frac_hyb <- sc_fraction_preferring(fit_sw, which_beta = "hybrid")
+frac_dnn <- sc_fraction_preferring(fit_sw, which_beta = "dnn")
+data.frame(
+  attribute   = frac_hyb$estimate$dummy_name,
+  hybrid_pref = round(frac_hyb$estimate$frac_positive, 3),
+  dnn_pref    = round(frac_dnn$estimate$frac_positive, 3)
+)
+```
+
+The hybrid and raw-DNN fractions can differ because the Stage-2 MAP
+update pulls each respondent's coefficients toward the mean stage. How
+much a column's fraction moves --- and in which direction --- depends on
+how much it leaned on noisy individual variation; compare the two
+columns in the table above.
+
+## Summary
+
+The candidate application is the clearest illustration of why averages
+can mislead:
+
+- The population marginal effect of a male candidate is close to zero,
+  which a reduced-form analysis would read as voter indifference to
+  gender.
+- The recovered distribution shows the opposite: the near-zero average is
+  the sum of two opposed camps, with Democrats favoring women and
+  Republicans favoring men.
+- Policy agenda dominates the importance decomposition, and gender is the
+  one attribute that divides voters in direction rather than only in
+  intensity.
+- With only three tasks per respondent, we read this application as
+  illustrative of what the model can describe in a deliberately sparse
+  design; the paper rests its distributional conclusions mainly on the
+  richer democracy and tax conjoints.

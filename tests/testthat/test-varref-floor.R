@@ -7,8 +7,8 @@
 
 scfit_small_varref <- function(varref_floor = 1e-3, seed = 1L) {
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:40]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:40]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(seed)
   torch::torch_manual_seed(seed)
   scfit(choice ~ agenda + talent + children + cand_gender + prior_office |

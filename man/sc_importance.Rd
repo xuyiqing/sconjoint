@@ -6,22 +6,38 @@
 \usage{
 sc_importance(
   object,
-  design = c("design_variance", "uniform", "empirical"),
+  design = c("design_variance", "uniform", "empirical", "levels"),
+  vartype = c("plugin", "orthogonal"),
   subgroup = NULL,
-  which_beta = c("hybrid", "dnn")
+  which_beta = c("hybrid", "dnn"),
+  levels = NULL
 )
 }
 \arguments{
 \item{object}{An \code{sc_fit}.}
 
-\item{design}{One of \code{"design_variance"} (default, paper formula),
-\code{"uniform"} (prototype's symmetric-levels formula), or
-\code{"empirical"} (variance of \eqn{\beta} over realized level
-distribution).}
+\item{design}{One of \code{"design_variance"} (default; the paper-text
+formula), \code{"uniform"} (production formula for factor designs),
+\code{"levels"} (production formula with explicit level sets for
+continuous attributes), or \code{"empirical"}.}
+
+\item{vartype}{Variance type for the shares. \code{"plugin"} (default) uses the
+plug-in importance shares from the recovered coefficients, which always lie
+between 0 and 1. \code{"orthogonal"} uses the debiased orthogonal-score shares
+(the paper's Appendix-C estimand) with a respondent-clustered standard
+error; these are opt-in because, as a ratio of debiased quantities, they can
+fall outside the unit interval when the first stage is noisy, and are
+implemented only for \code{design = "design_variance"}.}
 
 \item{subgroup}{Row selector.}
 
 \item{which_beta}{Either \code{"hybrid"} (default) or \code{"dnn"}. See \code{?sc_mrs}.}
+
+\item{levels}{Named list of numeric vectors, used by
+\code{design = "levels"}: names are attribute names (as in
+\code{names(object$attr_map)}) of \emph{single-column continuous}
+attributes; values are the attribute's design level sets.
+Attributes not listed fall back to the \code{"uniform"} formula.}
 }
 \value{
 An \code{sc_quantity} whose \code{estimate} is a data.frame with one
@@ -34,35 +50,41 @@ utility-variance share \eqn{\mathrm{share}_{i,g}}, then averages
 over the subgroup.
 }
 \details{
-Three weighting conventions are supported, selected by \code{design}:
+Four weighting conventions are supported, selected by \code{design}:
 
 \itemize{
-\item \code{"design_variance"} (default) implements the paper's
-formula \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g}
-    \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)}, normalized to
-shares across groups.  Here \code{Var(ΔX_k)} is computed empirically
-from \code{object$deltaX}, so each dummy contributes scaled by the
-spread of its presentation in the realized design.  This is the
-formula reported in Acharya, Hainmueller, and Xu (2026) and is
-what reproduces the paper's sw2022 agenda share (~0.65).
-\item \code{"uniform"} computes the variance of \eqn{\beta_{i,\cdot}}
-over a uniform distribution on levels (treating the reference
-level as \eqn{\beta = 0}).  This is the prototype's default
-used in v0.1 / v0.2.0; it diverges from the paper because the
-paper weights each dummy by its empirical design variance
-instead of treating levels symmetrically.
+\item \code{"design_variance"} (default) implements the formula as
+displayed in the paper's text, \eqn{\mathrm{Imp}_{i,g} =
+    \sum_{k \in g} \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)},
+normalized to shares across groups, with \code{Var(deltaX_k)} computed
+empirically from \code{object$deltaX}.
+\item \code{"uniform"} computes the variance of the attribute's utility
+contribution over a uniform distribution on its levels (treating
+the reference level as \eqn{\beta = 0}).  \strong{This is the formula
+behind the importance shares reported in Acharya, Hainmueller,
+and Xu (2026) for the factor-attribute applications} (Saha-Weeks
+agenda 52/talent 21/gender 17; Graham-Svolik policy 28/valence
+26/party 25/undemocratic 8): the production pipeline decomposes
+utility variance per attribute over uniform level draws.
+\item \code{"levels"} extends \code{"uniform"} to continuous attributes:
+attributes named in the \code{levels} argument contribute
+\eqn{\hat\beta_{ik}^2 \cdot \mathrm{Var}(L_k)}, where
+\eqn{\mathrm{Var}(L_k)} is the population variance of the
+attribute's design level set \eqn{L_k} (e.g.
+\code{c(0, 5, 15, 25)} for a tax-rate bracket); all other attributes
+use the \code{"uniform"} formula.  This reproduces the production
+pipeline's importance for continuous-attribute designs (the
+Ballard-Rosa by-party importance in the paper).
 \item \code{"empirical"} computes the variance of \eqn{\beta_{i,\cdot}}
 over the empirical level distribution (level frequencies read
-off \code{object$deltaX}).  Different functional from \code{"design_variance"}:
-it asks "how do per-respondent \eqn{\beta} values vary across
-levels under the realized design," not "how much does each
-dummy contribute to utility variance."
+off \code{object$deltaX}).
 }
 
-For factor designs with uniform level randomization, \code{"uniform"}
-and \code{"design_variance"} agree up to normalization (the empirical
-\eqn{\mathrm{Var}(\Delta X_k)} is the same across dummies within an
-attribute), but they disagree across attributes when level counts
-differ.  For continuous-attribute designs (e.g. BR tax-rate
-brackets), they diverge substantially.
+Note \code{"design_variance"} and \code{"uniform"} answer slightly different
+questions and do NOT agree in general: \code{Var(deltaX_k)} couples dummies
+of the same attribute through the realized pairing of profiles,
+while \code{"uniform"} integrates over the attribute's marginal level
+distribution and accounts for within-attribute covariance of the
+dummies.  When reproducing the paper's reported shares, use
+\code{"uniform"} (factor designs) or \code{"levels"} (continuous designs).
 }

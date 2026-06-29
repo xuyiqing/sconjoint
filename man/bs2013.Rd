@@ -35,7 +35,8 @@ Bechtel, Michael M. and Kenneth F. Scheve. 2013. "Mass
 Support for Global Climate Agreements Depends on Institutional
 Design." \emph{Proceedings of the National Academy of Sciences}
 110(34):13763-13768.
-Data from published replication materials.
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/UGZ2BY} (CC0 1.0).
 }
 \usage{
 bs2013

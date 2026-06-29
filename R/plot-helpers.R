@@ -54,8 +54,8 @@ utils::globalVariables(c("x", "group"))
   ## drives) reflects the bulk of the distribution, not a handful of
   ## outlier respondents.  Important on continuous-attribute designs
   ## (e.g. BR's revenue_score and tax-bracket rates) where the v0.2
-  ## score-based MAP prior is mis-calibrated for large-scale ΔX and
-  ## can produce extreme respondent-level β values whose tails would
+  ## score-based MAP prior is mis-calibrated for large-scale deltaX and
+  ## can produce extreme respondent-level beta values whose tails would
   ## otherwise dominate the axis.
   ##
   ## Disabled when the caller passes `xlim` (manual axis takes priority)

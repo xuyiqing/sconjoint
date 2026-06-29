@@ -54,7 +54,7 @@ random initialization.
 }
 \details{
 Columns of \code{beta_hat} are optionally standardized (\code{scale = TRUE},
-the default) so that dummies with wider β ranges do not dominate
+the default) so that dummies with wider \eqn{\beta} ranges do not dominate
 the Euclidean distance.  This matches the prototype's clustering
 recipe in \verb{07b_structural_quantities.R} §7.
 }

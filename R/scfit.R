@@ -28,6 +28,19 @@
 #'   respondent id in `data`.
 #' @param task Column name of the task id in `data`.
 #' @param profile Column name of the within-task profile id in `data`.
+#' @param learner First-stage learner for `beta(Z)`.  One of `"dnn"`
+#'   (default; the cross-fitted structural deep network), `"enet"`
+#'   (cross-fitted elastic-net logit on attribute differences and their
+#'   first-order moderator interactions; requires the `glmnet` package), or
+#'   `"grf"` (a generalized-random-forest localized logit; requires the
+#'   `grf` package).  All three feed the identical DML inference layer ---
+#'   only the first-stage `beta_hat` differs.  The DNN is the estimator used
+#'   throughout the paper's applications; `"enet"` and `"grf"` are provided
+#'   so the same debiased quantities can be computed with a flexible learner
+#'   of the user's choice (see the package vignette / paper appendix).  The
+#'   DNN-specific arguments (`hidden`, `n_epochs`, `learning_rate`,
+#'   `weight_decay`, `device`, `keep_modules`, and the `stage2` family) are
+#'   ignored when `learner != "dnn"`, and `stage2` is forced to `"none"`.
 #' @param hidden Either the character string `"auto"` (default, picks
 #'   a three-tier default from `N*T`, see `.sc_auto_hidden()`), or an
 #'   integer vector of hidden-layer widths.
@@ -54,6 +67,23 @@
 #'   Lambda(Z) regression and in the Lambda inversion.  Distinct from
 #'   `weight_decay`, which regularises the DNN; this regularises the
 #'   Lambda(Z) ridge.
+#' @param respondent_weights Optional survey/design weights for respondents.
+#'   May be `NULL` (equal respondent weights), a column name in `data`, or a
+#'   numeric vector of length `nrow(data)`. Weights must be finite,
+#'   non-negative, and constant within respondent. They affect the
+#'   respondent-level estimand aggregation and clustered standard errors; they
+#'   do not reweight first-stage learner training.
+#' @param enet_alpha Elastic-net mixing parameter in `[0, 1]` used when
+#'   `learner = "enet"` (`1` = lasso, `0` = ridge).  Default `0.5`.
+#'   Ignored for other learners.
+#' @param enet_df,enet_interactions Basis-expansion controls for
+#'   `learner = "enet"`.  Each continuous moderator is expanded into a natural
+#'   cubic spline with `enet_df` degrees of freedom (default `4`), and pairwise
+#'   moderator products are added when `enet_interactions = TRUE` (default).
+#'   This lets the elastic-net first stage approximate a nonlinear `beta(Z)`,
+#'   with the penalty selecting among the expanded terms.  Set `enet_df = 1`
+#'   and `enet_interactions = FALSE` for a linear-in-moderators first stage.
+#'   Ignored for other learners.
 #' @param seed Integer master seed.  When supplied, the cross-fit
 #'   output is bit-identical on 1 core and on N cores.  The function
 #'   saves and restores the R and torch RNG states on exit.
@@ -80,6 +110,12 @@
 #'   matrix is kept on `object$beta_hat_dnn`.  DML point estimates and
 #'   clustered SEs are unchanged across `stage2` choices on the same
 #'   `seed`: they are always computed from the Stage-1 cross-fit.
+#'
+#'   Stage 2 is only implemented for `learner = "dnn"`.  With
+#'   `learner = "enet"` or `"grf"` it is forced to `"none"` and a
+#'   once-per-session warning is emitted, because the per-respondent
+#'   betas then carry no empirical-Bayes shrinkage (see the `learner`
+#'   argument and the *Inference validity by quantity* section below).
 #' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
 #'   ensemble.  Independent of `seed`.  Default `12345L`.
 #' @param varref_floor Numeric lower bound on the per-coefficient prior
@@ -103,12 +139,12 @@
 #'   `fit$sd_dx` for diagnostics.
 #'
 #'   Use `normalize_deltaX = TRUE` on designs with continuous
-#'   attributes whose ΔX columns span very different scales (e.g.
+#'   attributes whose `deltaX` columns span very different scales (e.g.
 #'   percentage-point tax rates alongside 0/1 dummies).  The default
 #'   v0.2 score-based MAP prior is calibrated assuming
-#'   `Var(ΔX_k) ~ 1` (factor dummies under typical randomization);
+#'   `Var(deltaX_k) ~ 1` (factor dummies under typical randomization);
 #'   on large-scale continuous attributes the prior becomes loose by
-#'   the same factor as `Var(ΔX_k)` and per-respondent MAP estimates
+#'   the same factor as `Var(deltaX_k)` and per-respondent MAP estimates
 #'   drift to extreme tails.  Internal standardization puts every
 #'   coefficient on a common-variance internal scale, restoring the
 #'   c5 prior's intended regularization strength.  For factor-dummy
@@ -132,6 +168,33 @@
 #' * `K`, `hidden`, `seed`, `n_epochs`, `learning_rate`, `device`,
 #'   `parallel`, `n_cores`;
 #' * `loss_traces` -- list of per-fold training loss curves.
+#'
+#' @section Inference validity by quantity:
+#' The `sc_*` quantity functions fall into two groups with different
+#' inferential status, and it is worth being explicit about which is which.
+#'
+#' \strong{DML quantities (valid debiased inference).} The average
+#' structural parameters and the functionals built on the orthogonal
+#' (Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
+#' standard errors and confidence intervals: `coef()` / `summary()` /
+#' `vcov()` (the average `theta`), and the debiased quantities
+#' `sc_average()`, `sc_ame()`, `sc_counterfactual(vartype = "orthogonal")`,
+#' and `sc_mrs()` / `sc_wtp()`. Their SEs come from the cross-fitted
+#' influence function and are unchanged across `stage2` choices.
+#'
+#' \strong{Model-based / empirical-Bayes summaries (descriptive, not
+#' debiased).} The distribution-over-respondents quantities are plug-in
+#' functionals of the recovered per-respondent `beta(Z_i)` and inherit that
+#' object's finite-`T` shrinkage. They are descriptive summaries, not
+#' debiased estimators: `sc_polarization()`, `sc_fraction_preferring()`,
+#' `sc_direction_intensity()`, `sc_heterogeneity_test()`, `sc_clusters()`,
+#' `sc_optimal_profile()`, and the other per-respondent quantities. For the
+#' threshold/fraction quantities (`sc_polarization()`,
+#' `sc_fraction_preferring()`) a respondent-cluster wild bootstrap is
+#' available via `se_method = "wild_bootstrap"`, which quantifies the
+#' \emph{sampling} variability of the fraction; it does not remove the
+#' shrinkage bias that pulls each `beta_i` toward the population mean (and so
+#' biases these fractions toward consensus under short panels).
 #'
 #' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
 #' @examples
@@ -176,12 +239,17 @@
 #' @export
 scfit <- function(formula, data,
                   respondent, task, profile,
+                  learner = c("dnn", "enet", "grf"),
                   hidden = "auto",
                   K = 10L,
                   n_epochs = 1000L,
                   learning_rate = 0.01,
                   weight_decay = "adaptive",
                   ridge_lambda = 1e-4,
+                  respondent_weights = NULL,
+                  enet_alpha = 0.5,
+                  enet_df = 4L,
+                  enet_interactions = TRUE,
                   seed = NULL,
                   parallel = FALSE,
                   n_cores = NULL,
@@ -193,7 +261,44 @@ scfit <- function(formula, data,
                   varref_floor = 1e-3,
                   normalize_deltaX = FALSE) {
   call <- match.call()
+  learner <- match.arg(learner)
+  stage2_supplied <- !missing(stage2)
   stage2 <- match.arg(stage2)
+
+  ## Stage 2 (the MAP/varref/mixed-logit refinement) is DNN-specific: its
+  ## ensemble retrains a second DNN.  For the flexible alternative learners
+  ## the first-stage matrix `beta_hat` already is the estimate every quantity
+  ## function reads, so we pass it through unchanged.  DML point estimates and
+  ## clustered SEs (theta / vcov, and the debiased quantities built on them)
+  ## are computed from the Stage-1 cross-fit regardless of `stage2`, so the
+  ## downgrade does not affect the inferential quantities.  What it does
+  ## affect is the empirical-Bayes shrinkage of the per-respondent beta(Z):
+  ## with stage2 = "none" the model-based / distributional summaries
+  ## (sc_polarization, sc_fraction_preferring, sc_clusters, ...) read the
+  ## raw first-stage betas rather than the Stage-2-refined ones.  Users
+  ## should know this happened, so warn once per session whenever the
+  ## downgrade actually applies (not only when stage2 was passed explicitly).
+  if (learner != "dnn" && stage2 != "none") {
+    reason <- if (stage2_supplied) {
+      sprintf("you requested stage2 = \"%s\"", stage2)
+    } else {
+      sprintf("the default stage2 = \"%s\"", stage2)
+    }
+    .sc_warn_once(
+      "stage2_downgrade",
+      sprintf(paste0(
+        "scfit(): stage2 (%s) is only implemented for learner = \"dnn\"; ",
+        "for learner = \"%s\" it has been set to \"none\", so the per-respondent ",
+        "beta(Z) receive no empirical-Bayes / MAP shrinkage. The DML quantities ",
+        "(theta from coef()/summary(), and the debiased quantities) are computed ",
+        "from the Stage-1 cross-fit and are unaffected. The model-based, ",
+        "distribution-over-respondents summaries (sc_polarization(), ",
+        "sc_fraction_preferring(), sc_clusters(), and the other per-respondent ",
+        "quantities) will read the un-shrunk first-stage betas. ",
+        "(This warning is shown once per session.)"),
+        reason, learner))
+    stage2 <- "none"
+  }
 
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop("scfit(): the 'torch' package is required.")
@@ -207,6 +312,23 @@ scfit <- function(formula, data,
   respondent <- .sc_coerce_colname(respondent, "respondent")
   task       <- .sc_coerce_colname(task, "task")
   profile    <- .sc_coerce_colname(profile, "profile")
+  weight_col <- NULL
+  if (!is.null(respondent_weights)) {
+    if (is.character(respondent_weights) && length(respondent_weights) == 1L) {
+      weight_col <- respondent_weights
+      if (!weight_col %in% names(data)) {
+        stop(sprintf("scfit(): respondent_weights column '%s' not found in `data`.", weight_col))
+      }
+    } else if (is.numeric(respondent_weights) && length(respondent_weights) == nrow(data)) {
+      weight_col <- ".sc_tmp_respondent_weight"
+      while (weight_col %in% names(data)) {
+        weight_col <- paste0(weight_col, "_")
+      }
+      data[[weight_col]] <- respondent_weights
+    } else {
+      stop("scfit(): `respondent_weights` must be NULL, a column name, or a numeric vector with length nrow(data).")
+    }
+  }
 
   K <- as.integer(K)
   if (is.na(K) || K < 2L) {
@@ -222,7 +344,7 @@ scfit <- function(formula, data,
     stop("scfit(): at least one Z variable (after `|`) is required by the DML estimator.")
   }
   for (nm in c(response, attr_vars, z_vars,
-               respondent, task, profile)) {
+               respondent, task, profile, weight_col)) {
     if (!nm %in% names(data)) {
       stop(sprintf("scfit(): column '%s' not found in `data`.", nm))
     }
@@ -255,6 +377,35 @@ scfit <- function(formula, data,
   colnames(deltaX) <- x_names
   colnames(Z_task) <- z_names
 
+  respondent_weight_task <- NULL
+  if (!is.null(weight_col)) {
+    w_profile <- as.numeric(data_sorted[[weight_col]])
+    if (any(!is.finite(w_profile)) || any(w_profile < 0) || sum(w_profile) <= 0) {
+      stop("scfit(): `respondent_weights` must be finite, non-negative, and not all zero.")
+    }
+    key_w <- as.character(data_sorted[[respondent]])
+    dev_w <- tapply(w_profile, key_w, function(z) max(abs(z - z[1L])), simplify = TRUE)
+    if (any(dev_w > 1e-8)) {
+      stop("scfit(): `respondent_weights` must be constant within respondent.")
+    }
+    key_task <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
+    ord_task <- order(key_task, data_sorted[[profile]])
+    respondent_weight_task <- w_profile[ord_task][seq(1L, length(w_profile), by = 2L)]
+    if (length(respondent_weight_task) != nrow(deltaX)) {
+      stop("scfit(): internal error aligning respondent_weights with task rows.")
+    }
+  }
+
+  ## Single-profile pool for debiased AME integration (the E_X integral over
+  ## the design law P_X). A capped, deterministic subsample of the encoded
+  ## single profiles, on the same original attribute scale as `deltaX`.
+  n_pool   <- min(1000L, nrow(X))
+  pool_idx <- if (nrow(X) > n_pool) {
+    round(seq(1, nrow(X), length.out = n_pool))
+  } else seq_len(nrow(X))
+  profile_pool <- X[pool_idx, , drop = FALSE]
+  colnames(profile_pool) <- x_names
+
   ## ---- 4b. Optional internal standardization of deltaX ----
   ## When `normalize_deltaX = TRUE`, divide each deltaX column by its
   ## sample SD so the internal training / Lambda(Z) / DML / MAP pipeline
@@ -266,12 +417,12 @@ scfit <- function(formula, data,
   ## data they supplied.
   ##
   ## Motivation: the v0.2 score-based MAP prior is calibrated assuming
-  ## ΔX columns have Var ~ 1 (true for factor dummies in {-1, 0, 1}
+  ## deltaX columns have Var ~ 1 (true for factor dummies in {-1, 0, 1}
   ## under typical balanced randomization).  On designs with
   ## large-scale continuous attributes (e.g. Ballard-Rosa tax rates in
-  ## percentage points, where Var(ΔX_k) ~ 200), `sigma_prior` blows up
+  ## percentage points, where Var(deltaX_k) ~ 200), `sigma_prior` blows up
   ## by the same factor and the MAP step barely regularizes ---
-  ## per-respondent betas drift to extreme tails.  Standardizing ΔX
+  ## per-respondent betas drift to extreme tails.  Standardizing deltaX
   ## first puts every column's variance at 1 and gives the c5 prior
   ## a uniform meaning across attribute types.
   if (isTRUE(normalize_deltaX)) {
@@ -349,25 +500,48 @@ scfit <- function(formula, data,
   ## ---- 8. Fold assignment ----
   fold_id <- .sc_make_folds(respondent_task, K = K, seed = seed)
 
-  ## ---- 9. Cross-fitting ----
+  ## ---- 9. Cross-fitting (first stage) ----
   ## All internal computations downstream use `deltaX_internal` (the
   ## standardized matrix when normalize_deltaX = TRUE; identical to
   ## deltaX otherwise).  We un-standardize the user-facing slots at
-  ## assembly time using `sd_dx`.
-  cf <- .sc_crossfit(
-    deltaX        = deltaX_internal,
-    y             = y,
-    Z             = Z_task,
-    fold_id       = fold_id,
-    hidden        = hidden_use,
-    n_epochs      = n_epochs,
-    learning_rate = learning_rate,
-    weight_decay  = weight_decay_use,
-    seed          = seed,
-    parallel      = parallel,
-    n_cores       = n_cores,
-    device        = device,
-    verbose       = verbose
+  ## assembly time using `sd_dx`.  The first stage is pluggable: the DNN
+  ## (default) or a flexible alternative learner.  Each produces the same
+  ## out-of-sample `beta_hat` (N x p) that the DML layer consumes.
+  cf <- switch(
+    learner,
+    dnn = .sc_crossfit(
+      deltaX        = deltaX_internal,
+      y             = y,
+      Z             = Z_task,
+      fold_id       = fold_id,
+      hidden        = hidden_use,
+      n_epochs      = n_epochs,
+      learning_rate = learning_rate,
+      weight_decay  = weight_decay_use,
+      seed          = seed,
+      parallel      = parallel,
+      n_cores       = n_cores,
+      device        = device,
+      verbose       = verbose
+    ),
+    enet = .sc_crossfit_enet(
+      deltaX       = deltaX_internal,
+      y            = y,
+      Z            = Z_task,
+      fold_id      = fold_id,
+      alpha        = enet_alpha,
+      df           = enet_df,
+      interactions = enet_interactions,
+      seed         = seed
+    ),
+    grf = .sc_crossfit_grf(
+      deltaX        = deltaX_internal,
+      y             = y,
+      Z             = Z_task,
+      fold_id       = fold_id,
+      respondent_id = respondent_task,
+      seed          = seed
+    )
   )
   beta_hat <- cf$beta_hat
   colnames(beta_hat) <- x_names
@@ -382,10 +556,12 @@ scfit <- function(formula, data,
 
   ## ---- 11. DML influence and point estimates ----
   infl <- .sc_influence_function(
-    beta_hat   = beta_hat,
-    lambda_obj = lambda_obj,
-    deltaX     = deltaX_internal,
-    y          = y
+    beta_hat      = beta_hat,
+    lambda_obj    = lambda_obj,
+    deltaX        = deltaX_internal,
+    y             = y,
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   theta <- infl$theta_hat
   names(theta) <- x_names
@@ -394,11 +570,14 @@ scfit <- function(formula, data,
   vcov_cluster <- .sc_cluster_vcov(
     influence_raw = infl$influence_raw,
     theta_hat     = theta,
-    respondent_id = respondent_task
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   vcov_iid <- .sc_iid_vcov(
     influence_raw = infl$influence_raw,
-    theta_hat     = theta
+    theta_hat     = theta,
+    respondent_id = respondent_task,
+    respondent_weights = respondent_weight_task
   )
   rownames(vcov_cluster$vcov) <- colnames(vcov_cluster$vcov) <- x_names
   rownames(vcov_iid$vcov)     <- colnames(vcov_iid$vcov)     <- x_names
@@ -433,9 +612,9 @@ scfit <- function(formula, data,
   ## All internal slots above ran on `deltaX_internal` (= deltaX / sd_dx
   ## column-wise when normalize_deltaX = TRUE).  Apply the inverse
   ## transform so user-facing slots are on the original-units scale:
-  ## β_orig = β_std / sd_dx (col), θ_orig = θ_std / sd_dx,
+  ## beta_orig = beta_std / sd_dx (col), theta_orig = theta_std / sd_dx,
   ## Vcov_orig[i,j] = Vcov_std[i,j] / (sd_dx[i] * sd_dx[j]),
-  ## σ²_orig = σ²_std / sd_dx^2.  No-op when normalize_deltaX = FALSE
+  ## sigma^2_orig = sigma^2_std / sd_dx^2.  No-op when normalize_deltaX = FALSE
   ## (sd_dx = 1).
   unstd_beta <- function(B) {
     if (is.null(B)) return(B)
@@ -483,6 +662,7 @@ scfit <- function(formula, data,
     stage2_seed        = as.integer(stage2_seed),
     Z                  = Z_task,
     deltaX             = deltaX,
+    profile_pool       = profile_pool,
     y                  = y,
     plugin             = plugin_orig,
     correction         = correction_orig,
@@ -497,6 +677,7 @@ scfit <- function(formula, data,
     attr_map           = attr_map_enc,
     z_names            = z_names,
     respondent_id      = respondent_task,
+    respondent_weights = respondent_weight_task,
     K                  = K,
     hidden             = hidden_use,
     seed               = seed,
@@ -507,7 +688,9 @@ scfit <- function(formula, data,
     parallel           = isTRUE(parallel),
     n_cores            = n_cores,
     loss_traces        = cf$loss_traces,
-    nets               = if (isTRUE(keep_modules)) cf$nets else NULL,
+    learner            = learner,
+    nets               = if (learner == "dnn" && isTRUE(keep_modules)) cf$nets else NULL,
+    fold_models        = if (learner != "dnn" && isTRUE(keep_modules)) cf$nets else NULL,
     keep_modules       = isTRUE(keep_modules)
   )
   class(fit) <- c("sc_fit", "list")

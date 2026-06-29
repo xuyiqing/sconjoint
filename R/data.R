@@ -7,53 +7,47 @@
 #' original study was to understand voter perceptions of women
 #' candidates' ambition.
 #'
-#' The data is cleaned from the original SSI survey: respondents with
-#' fewer than 3 elections or invalid demographics are dropped.
+#' This is the paper's full analysis frame: respondents with fewer than
+#' three tasks or invalid demographics are dropped, and the moderator set
+#' is the complete 19-covariate \eqn{\mathbf Z} used in
+#' Acharya, Hainmueller, and Xu (2026).  Fitting it with the paper's
+#' configuration reproduces the published candidate-choice results.
 #'
 #' @format A data frame with 7,146 rows (1,191 respondents x 3 tasks x
-#'   2 profiles) and the following columns:
+#'   2 profiles) and 37 columns:
 #' \describe{
-#'   \item{respondent}{Respondent id (character).}
-#'   \item{task}{Task id within respondent (integer).}
-#'   \item{profile}{Profile id within task (1 or 2).}
-#'   \item{choice}{Binary outcome (1 = this profile was chosen in the
-#'     task, 0 = not chosen).}
-#'   \item{agenda}{Factor: candidate's policy agenda
-#'     (ref: `Very Few Changes`, `Moderate Changes`, `Complete Overhaul`).}
-#'   \item{talent}{Factor: candidate's talent description
-#'     (ref: `Assertive`, `Collaborative`, `Determined to Succeed`,
-#'     `Empathetic`, `Good Communicator`, `Hard-Working`,
-#'     `Tough Negotiator`).}
-#'   \item{children}{Factor: candidate has children
-#'     (ref: `No children`, `1 child`, `2 children`, `3 children`).}
-#'   \item{cand_gender}{Factor: candidate gender (ref: `Male`, `Female`).}
-#'   \item{prior_office}{Factor: candidate's prior elected office
-#'     (ref: `No`, `Yes`).}
-#'   \item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
-#'   \item{age}{Numeric: respondent age in years.}
-#'   \item{pid}{Factor: party identification
-#'     (`Democrat`, `Republican (GOP)`, `Independent`).}
+#'   \item{respondent, task, profile}{Identifiers (character / integer).}
+#'   \item{choice}{Binary outcome (1 = this profile chosen, 0 = not).}
+#'   \item{cand_genderMale, cand_runYes}{Candidate is male / has run for
+#'     office before (0/1; references female / never run).}
+#'   \item{cand_talentCollaborative, cand_talentDetermined.to.Succeed,
+#'     cand_talentEmpathetic, cand_talentGood.Communicator,
+#'     cand_talentHard.Working, cand_talentTough.Negotiator}{Talent
+#'     dummies (reference = Assertive).}
+#'   \item{cand_agendaModerate.Changes, cand_agendaComplete.Overhaul}{Policy
+#'     agenda dummies (reference = Very Few Changes).}
+#'   \item{cand_child1.child, cand_child2.children,
+#'     cand_child3.children}{Number of children (reference = none).}
+#'   \item{gender_num, age, income, educ_Middle, educ_High,
+#'     party_Republican, party_Independent, region_NORTHEAST,
+#'     region_SOUTH, region_WEST, employ_parttime, employ_homemaker,
+#'     employ_not_working, employ_retired, employ_student,
+#'     ideo_conservative, vote_trump, vote_clinton, gender_att}{The
+#'     paper's full respondent covariate set \eqn{\mathbf Z} (19
+#'     moderators): gender, age, income, education, party, region,
+#'     employment status, ideology, vote choice, and a gender-attitudes
+#'     scale.}
+#'   \item{resp_party}{Convenience factor (Democrat / Independent /
+#'     Republican) for subgroup labelling; not part of \eqn{\mathbf Z}.}
 #' }
 #' @source Saha, Sparsha and Jessica L. P. Weeks. 2022. "Ambitious
 #'   Women: Gender and Voter Perceptions of Candidate Ambition."
 #'   *Political Behavior* 44(2):779-805.
-#'   Data from published replication materials (SSI survey).
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/KVTPVX} (CC0 1.0 public domain dedication).
 #' @examples
 #' data(sw2022)
 #' head(sw2022)
-#' \donttest{
-#' if (requireNamespace("torch", quietly = TRUE) &&
-#'     torch::torch_is_installed()) {
-#'   fit <- scfit(
-#'     choice ~ agenda + talent + children + cand_gender + prior_office |
-#'              resp_female + age + pid,
-#'     data = sw2022, respondent = "respondent",
-#'     task = "task", profile = "profile",
-#'     K = 2L, n_epochs = 50L, seed = 1L
-#'   )
-#'   sc_importance(fit)
-#' }
-#' }
 "sw2022"
 
 #' Graham-Svolik (2020) candidate-choice conjoint on democratic norms
@@ -68,47 +62,56 @@
 #' The data is cleaned from the original experiment file: respondents
 #' with incomplete matchups or missing moderator variables are dropped.
 #'
+#' This is the paper's full analysis frame in its two-profile differenced
+#' parameterization; fitting the held-out 16-covariate specification with
+#' the paper's configuration reproduces the published democratic-norms
+#' results.
+#'
 #' @format A data frame with 41,314 rows (1,605 respondents, ~20,657
-#'   matchups x 2 profiles) and the following columns:
+#'   matchups x 2 profiles) and 59 columns:
 #' \describe{
-#'   \item{respondent}{Respondent id (character).}
-#'   \item{task}{Matchup number within respondent (integer).}
-#'   \item{profile}{Profile id within matchup (1 or 2).}
+#'   \item{respondent, task, profile}{Identifiers.}
 #'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-#'   \item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
-#'   \item{p1}{Numeric 1-4: economic policy position (1 = most liberal,
-#'     4 = most conservative).}
-#'   \item{p2}{Numeric 1-4: social policy position (1 = most liberal,
-#'     4 = most conservative).}
-#'   \item{dem_code}{Factor: democracy behavior code -- 7 good-governance
-#'     codes (`g_*`), 7 undemocratic codes (`u_*`), 2 valence codes (`v_*`).
-#'     Reference: `g_boardElect`.}
-#'   \item{cand_sex}{Factor: candidate sex (ref: `Male`, `Female`).}
-#'   \item{cand_race}{Factor: candidate race (ref: `White`, `Black`,
-#'     `Hispanic`, `Asian`).}
-#'   \item{cand_pro}{Factor: candidate profession (9 levels; ref:
-#'     `Business_executive`).}
-#'   \item{resp_ideo}{Numeric 1-7: respondent ideology (1 = extremely liberal,
-#'     7 = extremely conservative).}
-#'   \item{resp_pid}{Numeric: respondent party ID (-3 to 3).}
-#'   \item{resp_trump}{Numeric 1-4: Trump approval (1 = strongly disapprove,
-#'     4 = strongly approve).}
-#'   \item{resp_age}{Numeric: respondent age in years.}
-#'   \item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
-#'   \item{resp_race_black}{Numeric 0/1: respondent is Black.}
-#'   \item{resp_race_asian}{Numeric 0/1: respondent is Asian.}
-#'   \item{resp_race_other}{Numeric 0/1: respondent is other race.}
-#'   \item{resp_educ}{Numeric 1-6: respondent education (1 = no HS,
-#'     6 = graduate degree).}
-#'   \item{resp_income}{Numeric 1-24: household income bracket (ordinal).}
-#'   \item{resp_auth}{Numeric 0-4: authoritarianism score.}
-#'   \item{resp_knowledge}{Numeric 0-8: political knowledge score.}
+#'   \item{diff_respParty, diff_p1_num, diff_p2_num,
+#'     diff_dem_code_g_committee, diff_dem_code_g_officestructure,
+#'     diff_dem_code_g_procedure, diff_dem_code_g_progEval,
+#'     diff_dem_code_g_record, diff_dem_code_g_schedule,
+#'     diff_dem_code_u_banProtest, diff_dem_code_u_court,
+#'     diff_dem_code_u_execRule, diff_dem_code_u_gerry2,
+#'     diff_dem_code_u_gerry10, diff_dem_code_u_journalists,
+#'     diff_dem_code_u_limitVote, diff_dem_code_v_affair,
+#'     diff_dem_code_v_tax, diff_sex_Female, diff_race_Asian,
+#'     diff_race_Black, diff_race_Hispanic, diff_pro_Farmer,
+#'     diff_pro_Lawyer, diff_pro_Legislative_staffer,
+#'     diff_pro_Police_officer, diff_pro_Served_in_the_army,
+#'     diff_pro_Served_in_the_navy, diff_pro_Small_business_owner,
+#'     diff_pro_Teacher}{Attribute contrasts differenced across the two
+#'     profiles: co-partisan, economic / social policy (1-4 conservative),
+#'     six good-governance codes (`g_*`), seven undemocratic codes
+#'     (`u_*`), two valence codes (`v_*`), candidate sex, race (3), and
+#'     profession (8).  Reference levels (good governance vs. "elect
+#'     oversight board", etc.) are absorbed by the differencing, so no
+#'     re-leveling is needed.}
+#'   \item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth,
+#'     z_knowl, z_female, z_race_black, z_race_asian, z_race_other,
+#'     E_ideal, I_ideal, M_ideal, T_ideal, dem_better, dem_satisfied,
+#'     dem_treat_journalists, dem_treat_banProtest, dem_treat_execRule,
+#'     dem_treat_ignoreCourt}{The paper's respondent covariate set
+#'     \eqn{\mathbf Z} (22): ideology, party, Trump approval,
+#'     demographics, authoritarianism, knowledge, and race; the four
+#'     issue ideal points (`*_ideal`); and six direct democracy-attitude
+#'     items (`dem_*`).  The paper's main specification holds out the six
+#'     direct items and fits on the remaining 16.}
+#'   \item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
+#'     -3..3 party ID, survey weight) for subgroup and weighting analyses;
+#'     not part of \eqn{\mathbf Z}.}
 #' }
 #' @source Graham, Matthew H. and Milan W. Svolik. 2020. "Democracy
 #'   in America?  Partisanship, Polarization, and the Robustness of
 #'   Support for Democracy in the United States." *American Political
 #'   Science Review* 114(2):392-409.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/EEARKA} (CC BY 4.0).
 #' @examples
 #' data(gs2020)
 #' head(gs2020)
@@ -155,7 +158,8 @@
 #'   Support for Global Climate Agreements Depends on Institutional
 #'   Design." *Proceedings of the National Academy of Sciences*
 #'   110(34):13763-13768.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/UGZ2BY} (CC0 1.0).
 #' @examples
 #' data(bs2013)
 #' head(bs2013)
@@ -173,37 +177,44 @@
 #' The sample is restricted to respondents who saw the revenue
 #' column (saw_revenue == 1).
 #'
+#' All six bracket rates are rebuilt from the source file's coded
+#' variables and their value labels rather than its derived rate
+#' columns: the distributed file stores the 45 percent level of the
+#' $175-375k bracket as the number 5 in its derived column, which
+#' affected 19.9 percent of rows in copies of this dataset bundled
+#' before version 0.2.0.9004.
+#'
+#' This is the paper's full analysis frame; fitting it with the paper's
+#' `varref` recipe (`varref_floor = 1e-3`) reproduces the published
+#' tax-preference results.
+#'
 #' @format A data frame with 32,000 rows (2,000 respondents x 8 tasks x
-#'   2 profiles) and the following columns:
+#'   2 profiles) and 35 columns:
 #' \describe{
-#'   \item{respondent}{Respondent id (character).}
-#'   \item{task}{Task id within respondent (1..8).}
-#'   \item{profile}{Profile id within task (1 or 2).}
+#'   \item{respondent, task, profile}{Identifiers.}
 #'   \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-#'   \item{rate_L10}{Marginal tax rate (percent) for under-$10k bracket.}
-#'   \item{rate_10_35}{Rate for $10-35k bracket.}
-#'   \item{rate_35_85}{Rate for $35-85k bracket.}
-#'   \item{rate_85_175}{Rate for $85-175k bracket.}
-#'   \item{rate_175_375}{Rate for $175-375k bracket.}
-#'   \item{rate_375P}{Rate for over-$375k bracket.}
+#'   \item{rate_L10, rate_10_35, rate_35_85, rate_85_175, rate_175_375,
+#'     rate_375P}{Marginal tax rate (percent) for the six income brackets.}
 #'   \item{revenue_score}{Revenue impact: -2 (much less) to +2 (much more).}
-#'   \item{resp_age}{Respondent age in years.}
-#'   \item{resp_female}{Respondent gender (0/1, 1 = female).}
-#'   \item{resp_pid7}{Respondent party ID (1=Strong Dem to 7=Strong Rep).}
-#'   \item{resp_educ}{Respondent education (1-6 ordinal).}
-#'   \item{resp_race_white}{Respondent is white (0/1).}
-#'   \item{resp_income}{Household income (1-13 ordinal).}
-#'   \item{resp_ineq_averse}{Inequality averse (0/1).}
-#'   \item{resp_work_vs_luck}{Work-vs-luck belief (ordinal, higher = hard work).}
-#'   \item{resp_taxes_harm}{Taxes-harm-economy belief (ordinal, higher = more harmful).}
-#'   \item{resp_hardwork}{Hard work leads to success (0/1).}
-#'   \item{resp_high_econ_know}{High economic knowledge (0/1).}
-#'   \item{resp_employed_ft}{Employed full-time (0/1).}
+#'   \item{resp_pid7}{Convenience column: raw seven-point party ID
+#'     (1 = strong Democrat to 7 = strong Republican) for the by-party
+#'     analyses; not part of \eqn{\mathbf Z} (its standardized counterpart
+#'     `pid7_std` is).}
+#'   \item{age_std, female, pid7_std, educ_std, race_white, income_std,
+#'     ineq_averse, work_vs_luck, taxes_harm_econ, hardwork,
+#'     high_econ_know, employed_ft, conserv_ideo, govt_serv, newsint,
+#'     numeracy, gen_mobile, future_mobile, gov_assist, risk_averse,
+#'     hardship, children, trust}{The paper's respondent covariate set
+#'     \eqn{\mathbf Z} (23): demographics, partisanship, ideology, and
+#'     economic attitudes and beliefs.  Continuous covariates are
+#'     standardized and missing values median-imputed, matching the
+#'     paper's prep.}
 #' }
 #' @source Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
 #'   "The Structure of American Income Tax Policy Preferences."
 #'   *Journal of Politics* 79(1):1-16.
-#'   Data from published replication materials.
+#'   Data from the published replication materials, Harvard Dataverse
+#'   \doi{10.7910/DVN/NGRGS5} (CC0 1.0).
 #' @examples
 #' data(br2017)
 #' head(br2017)

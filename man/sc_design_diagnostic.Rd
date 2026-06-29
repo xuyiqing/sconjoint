@@ -19,9 +19,7 @@ in c("map_c5", "varref").}
 \item{experimental}{Logical; if \code{TRUE} the print method shows
 an "experimental" banner.  Default \code{TRUE}.
 
-A build-time validation against a controlled 18-cell sim grid
-(see \code{inst/benchmarks/validate_design_diagnostic.R} and the
-companion memo in \verb{statsclaw-workspace/sconjoint/ref/}) gives
+A validation against a controlled 18-cell simulation grid gives
 Pearson rho(R^2_hat, R^2_true) = 0.76 across the grid but a mean
 absolute bias of 0.23, with the bias concentrated at low true
 R^2_Z (true R^2_Z = 0.10 gets mean R^2_hat = 0.52).  The

@@ -6,40 +6,43 @@
 \title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms}
 \format{
 A data frame with 41,314 rows (1,605 respondents, ~20,657
-matchups x 2 profiles) and the following columns:
+matchups x 2 profiles) and 59 columns:
 \describe{
-\item{respondent}{Respondent id (character).}
-\item{task}{Matchup number within respondent (integer).}
-\item{profile}{Profile id within matchup (1 or 2).}
+\item{respondent, task, profile}{Identifiers.}
 \item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-\item{copartisan}{Factor: co-partisan indicator (Not or Co-partisan).}
-\item{p1}{Numeric 1-4: economic policy position (1 = most liberal,
-4 = most conservative).}
-\item{p2}{Numeric 1-4: social policy position (1 = most liberal,
-4 = most conservative).}
-\item{dem_code}{Factor: democracy behavior code -- 7 good-governance
-codes (\verb{g_*}), 7 undemocratic codes (\verb{u_*}), 2 valence codes (\verb{v_*}).
-Reference: \code{g_boardElect}.}
-\item{cand_sex}{Factor: candidate sex (ref: \code{Male}, \code{Female}).}
-\item{cand_race}{Factor: candidate race (ref: \code{White}, \code{Black},
-\code{Hispanic}, \code{Asian}).}
-\item{cand_pro}{Factor: candidate profession (9 levels; ref:
-\code{Business_executive}).}
-\item{resp_ideo}{Numeric 1-7: respondent ideology (1 = extremely liberal,
-7 = extremely conservative).}
-\item{resp_pid}{Numeric: respondent party ID (-3 to 3).}
-\item{resp_trump}{Numeric 1-4: Trump approval (1 = strongly disapprove,
-4 = strongly approve).}
-\item{resp_age}{Numeric: respondent age in years.}
-\item{resp_female}{Numeric 0/1: respondent gender (1 = female).}
-\item{resp_race_black}{Numeric 0/1: respondent is Black.}
-\item{resp_race_asian}{Numeric 0/1: respondent is Asian.}
-\item{resp_race_other}{Numeric 0/1: respondent is other race.}
-\item{resp_educ}{Numeric 1-6: respondent education (1 = no HS,
-6 = graduate degree).}
-\item{resp_income}{Numeric 1-24: household income bracket (ordinal).}
-\item{resp_auth}{Numeric 0-4: authoritarianism score.}
-\item{resp_knowledge}{Numeric 0-8: political knowledge score.}
+\item{diff_respParty, diff_p1_num, diff_p2_num,
+diff_dem_code_g_committee, diff_dem_code_g_officestructure,
+diff_dem_code_g_procedure, diff_dem_code_g_progEval,
+diff_dem_code_g_record, diff_dem_code_g_schedule,
+diff_dem_code_u_banProtest, diff_dem_code_u_court,
+diff_dem_code_u_execRule, diff_dem_code_u_gerry2,
+diff_dem_code_u_gerry10, diff_dem_code_u_journalists,
+diff_dem_code_u_limitVote, diff_dem_code_v_affair,
+diff_dem_code_v_tax, diff_sex_Female, diff_race_Asian,
+diff_race_Black, diff_race_Hispanic, diff_pro_Farmer,
+diff_pro_Lawyer, diff_pro_Legislative_staffer,
+diff_pro_Police_officer, diff_pro_Served_in_the_army,
+diff_pro_Served_in_the_navy, diff_pro_Small_business_owner,
+diff_pro_Teacher}{Attribute contrasts differenced across the two
+profiles: co-partisan, economic / social policy (1-4 conservative),
+six good-governance codes (\verb{g_*}), seven undemocratic codes
+(\verb{u_*}), two valence codes (\verb{v_*}), candidate sex, race (3), and
+profession (8).  Reference levels (good governance vs. "elect
+oversight board", etc.) are absorbed by the differencing, so no
+re-leveling is needed.}
+\item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth,
+z_knowl, z_female, z_race_black, z_race_asian, z_race_other,
+E_ideal, I_ideal, M_ideal, T_ideal, dem_better, dem_satisfied,
+dem_treat_journalists, dem_treat_banProtest, dem_treat_execRule,
+dem_treat_ignoreCourt}{The paper's respondent covariate set
+\eqn{\mathbf Z} (22): ideology, party, Trump approval,
+demographics, authoritarianism, knowledge, and race; the four
+issue ideal points (\verb{*_ideal}); and six direct democracy-attitude
+items (\verb{dem_*}).  The paper's main specification holds out the six
+direct items and fits on the remaining 16.}
+\item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
+-3..3 party ID, survey weight) for subgroup and weighting analyses;
+not part of \eqn{\mathbf Z}.}
 }
 }
 \source{
@@ -47,7 +50,8 @@ Graham, Matthew H. and Milan W. Svolik. 2020. "Democracy
 in America?  Partisanship, Polarization, and the Robustness of
 Support for Democracy in the United States." \emph{American Political
 Science Review} 114(2):392-409.
-Data from published replication materials.
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/EEARKA} (CC BY 4.0).
 }
 \usage{
 gs2020
@@ -63,6 +67,11 @@ voters tolerate democratic backsliding by co-partisan candidates.
 \details{
 The data is cleaned from the original experiment file: respondents
 with incomplete matchups or missing moderator variables are dropped.
+
+This is the paper's full analysis frame in its two-profile differenced
+parameterization; fitting the held-out 16-covariate specification with
+the paper's configuration reproduces the published democratic-norms
+results.
 }
 \examples{
 data(gs2020)

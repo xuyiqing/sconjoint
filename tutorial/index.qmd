@@ -6,7 +6,7 @@ estimator for forced-choice conjoint experiments developed by @acharya2026struct
 inside a random-utility logit so that each respondent's preference
 vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
 smoothly and flexibly with her observed covariates $\mathbf Z$. Double /
-debiased machine learning [DML; @chernozhukov2018double] inference delivers honest
+debiased machine learning [DML; @chernozhukov2018double] inference provides honest
 respondent-clustered standard errors on all population-level quantities.
 
 The key advance over the standard AMCE framework
@@ -19,7 +19,8 @@ than one-attribute-at-a-time marginal effects.
 
 This book is the primary user documentation for the package. It walks
 from installation through four complete worked examples, a simulation
-sanity check, and visualization options.
+sanity check, a reference catalog of the structural estimands, and
+visualization options.
 
 ```{r}
 #| label: welcome-load
@@ -31,82 +32,67 @@ data(package = "sconjoint")$results[, c("Item", "Title")]
 ## Bundled datasets
 
 The package ships four conjoint datasets from published replication
-materials, covering candidate choice, democratic norms, tax preferences,
+materials, covering democratic norms, tax preferences, candidate choice,
 and climate treaties.
 
-::: {.callout-important}
-### Bundled data are reduced-$\mathbf Z$ illustrations
+::: {.callout-note}
+### These are the paper's analysis datasets
 
-These bundled datasets carry a **smaller set of respondent moderators
-($\mathbf Z$)** than the full replication data used in the paper (for
-example, `sw2022` here exposes 3 moderators versus 19 in the paper).
-The worked examples are therefore **illustrative of the workflow and
-API**, not exact reproductions: the structural quantities they produce
-will differ from the paper's published numbers, and the chapters
-deliberately avoid quoting fixed figures. Consult the paper for the
-definitive estimates. The examples also use light training settings
-(small `K`, `n_epochs`) for fast rendering; production fits use `K = 10`
-and `n_epochs >= 1000`.
+The bundled `gs2020`, `br2017`, and `sw2022` datasets are the full
+analysis frames used in @acharya2026structural, carrying the paper's
+complete respondent-moderator set $\mathbf Z$ (22, 23, and 19 covariates).
+The worked examples fit the paper's production configuration --- `K = 10`
+cross-fitting folds, the default 1,000 Adam epochs, and the
+per-application Stage-2 prior --- so the structural quantities they report
+reproduce the manuscript's empirical results. These fits are heavier than
+a quick demo, so each example chunk is cached and the book reuses the
+saved fit on re-render. (`bs2013` is a lightweight teaching example, not
+one of the paper's applications.)
 :::
-
-### `sw2022` --- @saha2022ambitious: candidate choice
-
-1,191 respondents $\times$ 3 tasks $\times$ 2 profiles = 7,146 rows.
-
-| Column | Role | Levels |
-|--------|------|--------|
-| `agenda` | Attribute | 3 levels |
-| `talent` | Attribute | 7 levels |
-| `children` | Attribute | 4 levels |
-| `cand_gender` | Attribute | 2 levels |
-| `prior_office` | Attribute | 2 levels |
-| `resp_female` | Moderator ($\mathbf Z$) | binary |
-| `age` | Moderator ($\mathbf Z$) | age in years |
-| `pid` | Moderator ($\mathbf Z$) | factor: Democrat, Republican (GOP), Independent |
 
 ### `gs2020` --- @graham2020democracy: democratic norms
 
 1,605 respondents $\times$ $\sim$13 matchups $\times$ 2 profiles = 41,314 rows.
-
-| Column | Role | Levels |
-|--------|------|--------|
-| `copartisan` | Attribute | Not, Co-partisan |
-| `p1` | Attribute | numeric 1--4 (econ. policy position) |
-| `p2` | Attribute | numeric 1--4 (social policy position) |
-| `dem_code` | Attribute | 16-level factor (good governance, undemocratic, valence) |
-| `cand_sex` | Attribute | Male, Female |
-| `cand_race` | Attribute | White, Black, Hispanic, Asian |
-| `cand_pro` | Attribute | 9-level factor (profession) |
-| `resp_ideo` | Moderator ($\mathbf Z$) | 1--7 ideology |
-| `resp_pid` | Moderator ($\mathbf Z$) | party ID (-3 to 3) |
-| + 10 more | Moderator ($\mathbf Z$) | Trump approval, demographics, attitudes |
+Thirty attribute contrasts (the `diff_` columns: party, two policy
+dimensions, the 16-level democracy code, candidate sex, race, and
+profession) and the paper's **22 respondent moderators** ($\mathbf Z$):
+ideology, party, Trump approval, demographics, authoritarianism, political
+knowledge, issue ideal points, and six direct democracy-attitude items.
+The paper's main specification holds out the six direct items and fits on
+the remaining 16. Raw `ideo7`, `pid7`, and the survey `weight` are carried
+as convenience columns for subgroup and weighting analyses.
 
 ### `br2017` --- @ballard2017structure: tax preferences
 
 2,000 respondents $\times$ 8 tasks $\times$ 2 profiles = 32,000 rows.
+Seven numeric attributes (six bracket rates plus a revenue-impact
+indicator) and the paper's **23 respondent moderators** ($\mathbf Z$):
+demographics, partisanship, ideology, and economic attitudes and beliefs.
+Bracket rates are rebuilt from the source file's coded variables and value
+labels; the distributed file's derived rate column stores the 45% level of
+the \$175--375k bracket as 5, which affected bundled copies before
+0.2.0.9004 (see `?br2017`). Raw seven-point `resp_pid7` is carried as a
+convenience column for the by-party analyses.
 
-| Column | Role | Levels |
-|--------|------|--------|
-| `rate_L10` ... `rate_375P` | Attribute | numeric (tax rate %) |
-| `revenue_score` | Attribute | numeric ($-2$ to $+2$) |
-| `resp_pid7` | Moderator ($\mathbf Z$) | 1--7 party ID |
-| + 11 more | Moderator ($\mathbf Z$) | demographics, beliefs, attitudes |
+### `sw2022` --- @saha2022ambitious: candidate choice
+
+1,191 respondents $\times$ 3 tasks $\times$ 2 profiles = 7,146 rows.
+Thirteen candidate-attribute dummies (gender, prior run, talent, agenda,
+children) and the paper's full set of **19 respondent moderators**
+($\mathbf Z$): gender, age, income, education, party, region, employment
+status, ideology, vote choice, and a gender-attitudes scale. A
+convenience factor `resp_party` (Democrat / Independent / Republican) is
+carried for subgroup labelling and is not part of $\mathbf Z$.
 
 ### `bs2013` --- @bechtel_scheve_2013: climate treaties
 
-2,500 respondents $\times$ 4 tasks $\times$ 2 profiles = 20,000 rows.
-
-| Column | Role | Levels |
-|--------|------|--------|
-| `distribution` | Attribute | categorical |
-| `emissions` | Attribute | categorical |
-| `monitoring` | Attribute | categorical |
-| `participation` | Attribute | categorical |
-| `sanctions` | Attribute | categorical |
-| `cost_usd` | Attribute | numeric (USD/month) |
-| `resp_female` | Moderator ($\mathbf Z$) | binary |
-| `resp_age` | Moderator ($\mathbf Z$) | age in years |
-| `resp_ideo` | Moderator ($\mathbf Z$) | 0--10 ideology |
+2,500 respondents $\times$ 4 tasks $\times$ 2 profiles = 20,000 rows. Five
+categorical treaty attributes (burden distribution, emissions target,
+monitoring body, participation, and sanctions) plus a numeric monthly
+`cost_usd` attribute, and three respondent moderators (`resp_female`,
+`resp_age`, and 0--10 `resp_ideo`). The numeric cost supports dollar-scale
+willingness-to-pay analysis. This is a lightweight teaching example, not
+one of the paper's applications.
 
 ## Organization
 
@@ -119,9 +105,6 @@ The user guide is structured into the following chapters:
     Full workflow on simulated data with known ground truth, verifying
     each step against the true DGP.
 
--   [Chapter @sec-sw]\
-    Full pipeline on the @saha2022ambitious candidate-choice conjoint.
-
 -   [Chapter @sec-gs]\
     @graham2020democracy democratic-norms conjoint, emphasizing
     heterogeneity testing, partisan subgroup analysis, and preference
@@ -131,12 +114,23 @@ The user guide is structured into the following chapters:
     @ballard2017structure tax-plan conjoint, showcasing all-numeric
     (continuous) attributes and partisan tax-schedule preferences.
 
+-   [Chapter @sec-sw]\
+    Full walk-through of the @saha2022ambitious candidate-choice conjoint.
+
 -   [Chapter @sec-bs]\
     @bechtel_scheve_2013 climate-treaty conjoint (tutorial example),
     showcasing willingness-to-pay analysis with a numeric cost attribute.
 
+-   [Chapter @sec-estimands]\
+    Reference catalog of the structural estimands --- which quantity to
+    use, what it targets, and how its inference is computed.
+
 -   [Chapter @sec-plots]\
     Customizing plots with `dummies`, `labels`, `groups`, and `ggplot2`.
+
+-   [Chapter @sec-advanced]\
+    Reference for `scfit()` arguments and defaults: Stage-2 options,
+    reproducibility, training hyperparameters, and parallel execution.
 
 ## Authors
 

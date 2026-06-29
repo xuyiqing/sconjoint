@@ -4,7 +4,7 @@ test_that("normalize_deltaX = FALSE is a no-op (back-compat)", {
   skip_if_not_installed("torch")
   skip_if(!torch::torch_is_installed())
   data(sw2022, package = "sconjoint")
-  d <- sw2022[sw2022$respondent %in% unique(sw2022$respondent)[1:30], ]
+  d <- sw2022_demo[sw2022_demo$respondent %in% unique(sw2022_demo$respondent)[1:30], ]
 
   set.seed(1); torch::torch_manual_seed(1)
   f_off <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
@@ -35,7 +35,7 @@ test_that("normalize_deltaX = TRUE stores sd_dx and flips the flag", {
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                  rate_175_375 + rate_375P + revenue_score |
-                 resp_age + resp_female + resp_pid7,
+                 age_std + female + resp_pid7,
                data = d, respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
                normalize_deltaX = TRUE)
@@ -58,7 +58,7 @@ test_that("normalize_deltaX = TRUE: deltaX %*% theta reproduces linear index on 
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                  rate_175_375 + rate_375P + revenue_score |
-                 resp_age + resp_female + resp_pid7,
+                 age_std + female + resp_pid7,
                data = d, respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 30L, seed = 1, stage2 = "none",
                normalize_deltaX = TRUE)
@@ -81,7 +81,7 @@ test_that("normalize_deltaX = TRUE tames MAP per-respondent betas on BR-style da
   set.seed(1); torch::torch_manual_seed(1)
   fit_norm <- scfit(choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
                       rate_175_375 + rate_375P + revenue_score |
-                      resp_age + resp_female + resp_pid7,
+                      age_std + female + resp_pid7,
                     data = d, respondent = "respondent", task = "task", profile = "profile",
                     K = 2L, n_epochs = 50L, seed = 1, stage2 = "map_c5",
                     normalize_deltaX = TRUE)

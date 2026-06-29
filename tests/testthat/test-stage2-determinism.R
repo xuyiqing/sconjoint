@@ -7,8 +7,8 @@ scfit_for_determinism <- function(seed = 1L, stage2_seed = 12345L,
                                   stage2 = "map_c5",
                                   parallel = FALSE, n_cores = NULL) {
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:30]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:30]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(seed)
   torch::torch_manual_seed(seed)
   scfit(choice ~ agenda + talent + children + cand_gender + prior_office |

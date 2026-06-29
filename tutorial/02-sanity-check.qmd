@@ -19,7 +19,7 @@ analytically correct value.
 
 ## Data-generating process
 
-The package ships `simdata`, a synthetic conjoint with $M = 1{,}000$
+The package ships `simdata`, a synthetic conjoint with $N = 1{,}000$
 respondents, $T = 6$ tasks per respondent, and two profiles per task
 (12,000 rows). Three binary attributes $x_1, x_2, x_3$ are drawn
 independently as Bernoulli(0.5). Two continuous moderators
@@ -140,6 +140,54 @@ plot makes the pattern visual:
 plot_amce(fit_sim)
 ```
 
+## First-stage learners
+
+The debiased population averages come from the orthogonal score and
+respondent-clustered cross-fitting, which do not depend on *how* the
+first-stage mean $\hat\beta(\mathbf Z)$ is estimated. The default is the
+cross-fitted deep network used throughout this book; `scfit()` also
+provides two flexible alternatives through the `learner` argument.
+Setting `learner = "enet"` uses a cross-fitted elastic-net logit that
+expands the moderators into a spline basis, so $\hat\beta(\mathbf Z)$ can
+be nonlinear; `learner = "grf"` uses a generalized-random-forest local
+logit. The two options need the `glmnet` and `grf` packages. Only the
+first stage changes --- the cross-fitting, the orthogonal correction, and
+the clustered standard errors are identical.
+
+Refitting `simdata` with each learner and comparing the recovered
+population averages against the known truth:
+
+```{r}
+#| label: sim-learners
+#| eval: !expr requireNamespace("glmnet", quietly = TRUE) && requireNamespace("grf", quietly = TRUE)
+fit_en <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data = simdata, respondent = "respondent", task = "task",
+  profile = "profile", learner = "enet", K = 5L, seed = 42
+)
+fit_grf <- scfit(
+  choice ~ x1 + x2 + x3 | z1 + z2,
+  data = simdata, respondent = "respondent", task = "task",
+  profile = "profile", learner = "grf", K = 5L, seed = 42
+)
+
+data.frame(
+  attribute = names(theta_true),
+  true      = unname(theta_true),
+  dnn       = round(unname(coef(fit_sim)), 3),
+  enet      = round(unname(coef(fit_en)), 3),
+  grf       = round(unname(coef(fit_grf)), 3),
+  row.names = NULL
+)
+```
+
+All three learners recover $E[\beta_1] = 0.5$, $E[\beta_2] = -0.8$, and
+$E[\beta_3] = 0.3$ closely: valid debiased inference is a property of the
+cross-fitted orthogonal score, not of the particular first stage. The
+deep network is the default because it is the most robust across the
+shape of preference heterogeneity; the elastic-net and forest learners
+are lighter-weight alternatives.
+
 ## Individual-level recovery
 
 The per-respondent $\hat\beta(\mathbf Z_i)$ matrix is the structural
@@ -149,9 +197,13 @@ payoff --- it gives a complete preference vector for each respondent.
 #| label: sim-beta-recovery
 beta_hat_all <- predict(fit_sim)
 
-## De-duplicate to respondent level
+## One row per respondent, reordered to `beta_true`'s respondent order.
+## `fit_sim$respondent_id` follows the package's internal row order, which
+## is not the 1..N order of the simulated truth, so align by id rather than
+## by position.
 first_row <- !duplicated(fit_sim$respondent_id)
-beta_hat <- beta_hat_all[first_row, ]
+rid       <- fit_sim$respondent_id[first_row]
+beta_hat  <- beta_hat_all[first_row, ][order(rid), ]
 
 ## Correlation between true and estimated beta
 data.frame(
@@ -165,10 +217,13 @@ data.frame(
 )
 ```
 
-High correlations for $x_1$ and $x_2$ confirm that the DNN recovers
-the individual-level mapping $\beta(Z)$. The correlation for $x_3$ is
-low because $\beta_3$ is constant --- there is no heterogeneity to
-recover.
+The clear positive correlations for $x_1$ and $x_2$ confirm that the DNN
+recovers the individual-level mapping $\beta(Z)$; the magnitudes are
+moderate because individual coefficients are recovered more noisily than
+the population averages with only $T = 6$ tasks per respondent. The
+correlation for $x_3$ is undefined (`NA`) because $\beta_3$ is constant
+--- with no variation in the truth, there is nothing to correlate
+against.
 
 ```{r}
 #| label: sim-scatter
@@ -188,9 +243,9 @@ ggplot(df_compare, aes(x = true, y = estimated)) +
   theme_minimal(base_size = 12)
 ```
 
-The point cloud tracks the 45-degree line, confirming recovery of both
-**direction** and **magnitude**. The beta ridgelines below show the
-full distribution:
+The point cloud slopes along the 45-degree line, confirming recovery of
+the **direction** and, more roughly, the **magnitude** of $\beta_1(Z)$.
+The beta ridgelines below show the full distribution:
 
 ```{r}
 #| label: sim-ridgelines

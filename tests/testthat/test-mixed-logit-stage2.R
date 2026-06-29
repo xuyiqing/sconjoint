@@ -26,8 +26,8 @@ test_that("stage2 = 'mixed_logit' end-to-end via scfit on sw2022 subset", {
   skip_if(!torch::torch_is_installed())
   skip_if_not_installed("lme4")
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:40]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:40]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(1); torch::torch_manual_seed(1)
   fit <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
                  resp_female + age + pid,
@@ -48,8 +48,8 @@ test_that("mixed_logit preserves DML orthogonality (theta and vcov)", {
   skip_if(!torch::torch_is_installed())
   skip_if_not_installed("lme4")
   data(sw2022, package = "sconjoint")
-  some_resp <- unique(sw2022$respondent)[1:40]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:40]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   ## Same seed, two different stage2 choices: theta and vcov match
   set.seed(1); torch::torch_manual_seed(1)
   fit_none <- scfit(choice ~ agenda + talent + children + cand_gender + prior_office |
@@ -79,8 +79,8 @@ test_that("mixed_logit failure fallback path is exercised", {
   skip_if_not_installed("lme4")
   data(sw2022, package = "sconjoint")
   ## Tiny subset, very few tasks: glmer often complains here.
-  some_resp <- unique(sw2022$respondent)[1:10]
-  d <- sw2022[sw2022$respondent %in% some_resp, ]
+  some_resp <- unique(sw2022_demo$respondent)[1:10]
+  d <- sw2022_demo[sw2022_demo$respondent %in% some_resp, ]
   set.seed(7); torch::torch_manual_seed(7)
   res <- tryCatch(
     withCallingHandlers(

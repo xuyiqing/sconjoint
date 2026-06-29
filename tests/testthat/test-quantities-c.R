@@ -156,3 +156,21 @@ test_that("sc_baseline_lpm returns sc_baseline", {
   expect_s3_class(bl, "sc_baseline")
   expect_equal(length(coef(bl)), length(coef(fit)))
 })
+
+test_that("sc_average logit subgroup returns the influence-function estimate", {
+  fit <- .get_toy_fit()
+  S <- which(seq_along(fit$respondent_id) %% 2L == 1L)  # arbitrary task subgroup
+  a <- sc_average(fit, scale = "logit", subgroup = S)
+  inf <- fit$influence_raw[S, , drop = FALSE]
+  est <- colMeans(inf)
+  expect_equal(a$estimate$estimate, unname(est), tolerance = 1e-12)
+  cent <- sweep(inf, 2L, est)
+  sums <- rowsum(cent, group = as.character(fit$respondent_id[S]))
+  M <- nrow(sums)
+  se <- sqrt(M / (M - 1) * colSums(sums^2) / length(S)^2)
+  expect_equal(a$estimate$se, unname(se), tolerance = 1e-12)
+  expect_match(a$details$se_method, "influence-function subgroup")
+  # full-population path unchanged
+  a0 <- sc_average(fit, scale = "logit")
+  expect_equal(a0$estimate$estimate, unname(as.numeric(fit$theta)), tolerance = 1e-12)
+})

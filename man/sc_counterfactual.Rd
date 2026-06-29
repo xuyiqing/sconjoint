@@ -8,6 +8,7 @@ sc_counterfactual(
   object,
   A,
   B,
+  vartype = c("orthogonal", "plugin"),
   subgroup = NULL,
   which_beta = c("hybrid", "dnn")
 )
@@ -16,6 +17,14 @@ sc_counterfactual(
 \item{object}{An \code{sc_fit}.}
 
 \item{A, B}{Named lists describing the two profiles.}
+
+\item{vartype}{Either \code{"orthogonal"} (default) for the debiased
+counterfactual probability \eqn{E[G((X_A - X_B)^\top f(Z))]} -- the
+orthogonal score on the Stage-1 first stage, with a respondent-clustered
+standard error that propagates first-stage uncertainty -- or \code{"plugin"}
+for the v0.1 average of per-respondent probabilities (which does not).
+The \code{"orthogonal"} estimand is a population average and ignores
+\code{subgroup} and \code{which_beta}.}
 
 \item{subgroup}{Optional row selector, see \code{sc_mrs}.}
 

@@ -4,7 +4,7 @@
 \alias{plot_importance}
 \title{Attribute importance ridgeline plot}
 \usage{
-plot_importance(object, labels = NULL, title = NULL, ...)
+plot_importance(object, labels = NULL, title = NULL, xlim = NULL, ...)
 }
 \arguments{
 \item{object}{An \code{sc_fit} object.}
@@ -12,6 +12,12 @@ plot_importance(object, labels = NULL, title = NULL, ...)
 \item{labels}{Optional named character vector to rename attribute names.}
 
 \item{title}{Plot title.}
+
+\item{xlim}{Numeric vector of length 2 giving x-axis limits. Applied as a
+\code{coord_cartesian()} zoom (with clipping off), so the ridgeline
+densities and the mean-percent labels past the cap are preserved rather
+than dropped (unlike a scale limit, which would clip them). \code{NULL}
+(default) shows the full range.}
 
 \item{...}{Additional arguments passed to \code{.sc_plot_theme()}.}
 }

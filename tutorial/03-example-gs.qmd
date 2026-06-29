@@ -1,0 +1,626 @@
+# Example: Democratic Norms {#sec-gs}
+
+```{r}
+#| label: setup-gs
+#| include: false
+Sys.setenv(TORCH_SERIALIZE_VERSION = "2")
+options(width = 78)
+set.seed(2024)
+torch::torch_manual_seed(2024)
+library(sconjoint)
+library(ggplot2)
+
+## Groups and labels for plot annotations (keyed by the diff_ contrast
+## column names; reference level = good-governance "elect oversight board",
+## already dropped in the bundled data). ------------------------------------
+gs_groups <- c(
+  "diff_respParty"                  = "Party",
+  "diff_p1_num"                     = "Policy",
+  "diff_p2_num"                     = "Policy",
+  "diff_dem_code_g_committee"       = "Good governance",
+  "diff_dem_code_g_officestructure" = "Good governance",
+  "diff_dem_code_g_procedure"       = "Good governance",
+  "diff_dem_code_g_progEval"        = "Good governance",
+  "diff_dem_code_g_record"          = "Good governance",
+  "diff_dem_code_g_schedule"        = "Good governance",
+  "diff_dem_code_u_banProtest"      = "Undemocratic",
+  "diff_dem_code_u_court"           = "Undemocratic",
+  "diff_dem_code_u_execRule"        = "Undemocratic",
+  "diff_dem_code_u_gerry2"          = "Undemocratic",
+  "diff_dem_code_u_gerry10"         = "Undemocratic",
+  "diff_dem_code_u_journalists"     = "Undemocratic",
+  "diff_dem_code_u_limitVote"       = "Undemocratic",
+  "diff_dem_code_v_affair"          = "Valence",
+  "diff_dem_code_v_tax"             = "Valence",
+  "diff_sex_Female"                 = "Sex",
+  "diff_race_Asian"                 = "Race",
+  "diff_race_Black"                 = "Race",
+  "diff_race_Hispanic"              = "Race",
+  "diff_pro_Farmer"                 = "Profession",
+  "diff_pro_Lawyer"                 = "Profession",
+  "diff_pro_Legislative_staffer"    = "Profession",
+  "diff_pro_Police_officer"         = "Profession",
+  "diff_pro_Served_in_the_army"     = "Profession",
+  "diff_pro_Served_in_the_navy"     = "Profession",
+  "diff_pro_Small_business_owner"   = "Profession",
+  "diff_pro_Teacher"                = "Profession"
+)
+
+gs_labels <- c(
+  "diff_respParty"                  = "Co-partisan",
+  "diff_p1_num"                     = "Econ. policy (cons.)",
+  "diff_p2_num"                     = "Social policy (cons.)",
+  "diff_dem_code_g_committee"       = "Committee oversight",
+  "diff_dem_code_g_officestructure" = "Office structure",
+  "diff_dem_code_g_procedure"       = "Legislative procedure",
+  "diff_dem_code_g_progEval"        = "Program evaluation",
+  "diff_dem_code_g_record"          = "Record-keeping",
+  "diff_dem_code_g_schedule"        = "Legislative schedule",
+  "diff_dem_code_u_banProtest"      = "Ban protests",
+  "diff_dem_code_u_court"           = "Ignore courts",
+  "diff_dem_code_u_execRule"        = "Executive orders",
+  "diff_dem_code_u_gerry2"          = "Gerrymander (2 seats)",
+  "diff_dem_code_u_gerry10"         = "Gerrymander (10 seats)",
+  "diff_dem_code_u_journalists"     = "Restrict journalists",
+  "diff_dem_code_u_limitVote"       = "Limit voting",
+  "diff_dem_code_v_affair"          = "Extramarital affair",
+  "diff_dem_code_v_tax"             = "Underpaid taxes",
+  "diff_sex_Female"                 = "Female",
+  "diff_race_Asian"                 = "Asian",
+  "diff_race_Black"                 = "Black",
+  "diff_race_Hispanic"              = "Hispanic",
+  "diff_pro_Farmer"                 = "Farmer",
+  "diff_pro_Lawyer"                 = "Lawyer",
+  "diff_pro_Legislative_staffer"    = "Legislative staffer",
+  "diff_pro_Police_officer"         = "Police officer",
+  "diff_pro_Served_in_the_army"     = "Army veteran",
+  "diff_pro_Served_in_the_navy"     = "Navy veteran",
+  "diff_pro_Small_business_owner"   = "Small business owner",
+  "diff_pro_Teacher"                = "Teacher"
+)
+```
+
+This chapter applies the structural estimator to a candidate-choice
+conjoint whose design follows @graham2020democracy. Respondents
+choose between pairs of hypothetical U.S. candidates; one attribute
+captures the candidate's willingness to engage in undemocratic behavior
+(ignoring a court ruling, restricting the opposition press, or banning
+an opposition rally). The original study asks how much voters penalize
+co-partisan candidates for violating democratic norms, and whether
+strong partisanship leads to tolerance of such violations.
+
+The structural model adds value here because it decomposes the
+population-average penalty for undemocratic behavior into direction and
+intensity, and traces the heterogeneity back to respondent-level
+partisanship --- without re-estimating on subsets.
+
+The bundled `gs2020` data is the paper's full analysis frame, and this
+chapter reproduces the paper's **main (held-out) specification**: the
+16-covariate moderator set that drops the six direct
+democracy-attitude items (see [Fitting the structural model](#fitting),
+below). The numbers reported here match the paper's Section 4.2.
+
+## Data preparation
+
+Load the Graham-Svolik analysis frame and inspect its structure. Each
+respondent contributes about 13 forced-choice tasks against pairs of
+hypothetical candidates.
+
+```{r}
+#| label: gs-load
+data(gs2020, package = "sconjoint")
+dim(gs2020)
+gs2020[1:4, c("respondent", "task", "profile", "choice",
+              "diff_respParty", "diff_dem_code_u_journalists")]
+```
+
+Every `sconjoint` input is in long format: one row per
+respondent--task--profile, with exactly one profile chosen in each task
+(`choice == 1`). This frame follows that convention, and it is already
+in the paper's two-profile parameterization: the choice outcome, the
+identifiers (`respondent`, `task`, `profile`), 30 attribute contrasts
+(the `diff_` columns, differenced across the two profiles), and the
+respondent-level moderators $\mathbf{Z}$ (the `z_*` and `*_ideal`
+columns plus six direct democracy-attitude items).
+Because the design is differenced, the reference levels are already
+absorbed (good governance is measured against an "elect oversight
+board" baseline; the undemocratic and valence items against "absent"
+and "no scandal"). No re-leveling is needed.
+
+The 15 undemocratic, good-governance, and valence contrasts split into
+three families: good-governance (`diff_dem_code_g_*`, 6 contrasts),
+undemocratic actions (`diff_dem_code_u_*`, 7 contrasts), and valence
+violations (`diff_dem_code_v_*`, 2 contrasts). Their raw conditional
+choice rates make the families clear: candidates who endorse an
+undemocratic action or carry a valence scandal are chosen far less
+often.
+
+```{r}
+#| label: gs-dem-code-raw
+u_cols <- grep("^diff_dem_code_u_", names(gs2020), value = TRUE)
+v_cols <- grep("^diff_dem_code_v_", names(gs2020), value = TRUE)
+## Mean choice rate for the profile carrying each contrast (diff == 1)
+rate_when_present <- function(col) {
+  mean(gs2020$choice[gs2020[[col]] == 1])
+}
+round(sort(sapply(c(u_cols, v_cols), rate_when_present)), 3)
+```
+
+Every undemocratic and valence contrast is chosen well below 0.5 when
+present: voters penalize both democratic backsliding and personal
+scandal.
+
+## Fitting the structural model {#fitting}
+
+`scfit()` takes a two-part formula: the conjoint attributes go to the
+left of the `|`, and the respondent-level moderators $\mathbf Z$ go to
+its right. It then forms the within-task contrast
+$\Delta X = X_{\text{profile 1}} - X_{\text{profile 2}}$ internally, so
+in a typical conjoint you supply each profile's own attribute levels ---
+one row per profile, as in the candidate-choice example of @sec-sw ---
+and difference nothing yourself. The Graham-Svolik frame is an exception
+only because this replication ships pre-differenced columns (the `diff_`
+contrasts on the first profile, the second coded as the all-zero
+baseline); the interface is the same either way.
+
+We fit the paper's main specification: the 30 attribute contrasts in
+the first part of the formula, and the **held-out 16-covariate**
+moderator set in the second part. The held-out set drops the six direct
+democracy-attitude items (`dem_better`, `dem_satisfied`, and the four
+`dem_treat_*` items), which ask respondents directly how acceptable
+each action is; holding them out of $\mathbf{Z}$ is the more defensible
+specification, because it forces the model to recover preferences over
+undemocratic actions from the conjoint choices alone rather than from a
+near-restatement of the outcome. Attribute names are back-quoted
+because they contain characters R would otherwise parse.
+
+```{r}
+#| label: gs-fit
+#| cache: true
+fit_gs <- scfit(
+  choice ~ `diff_respParty` + `diff_p1_num` + `diff_p2_num` +
+    `diff_dem_code_g_committee` + `diff_dem_code_g_officestructure` +
+    `diff_dem_code_g_procedure` + `diff_dem_code_g_progEval` +
+    `diff_dem_code_g_record` + `diff_dem_code_g_schedule` +
+    `diff_dem_code_u_banProtest` + `diff_dem_code_u_court` +
+    `diff_dem_code_u_execRule` + `diff_dem_code_u_gerry2` +
+    `diff_dem_code_u_gerry10` + `diff_dem_code_u_journalists` +
+    `diff_dem_code_u_limitVote` + `diff_dem_code_v_affair` +
+    `diff_dem_code_v_tax` + `diff_sex_Female` + `diff_race_Asian` +
+    `diff_race_Black` + `diff_race_Hispanic` + `diff_pro_Farmer` +
+    `diff_pro_Lawyer` + `diff_pro_Legislative_staffer` +
+    `diff_pro_Police_officer` + `diff_pro_Served_in_the_army` +
+    `diff_pro_Served_in_the_navy` + `diff_pro_Small_business_owner` +
+    `diff_pro_Teacher` |
+    `z_ideo` + `z_pid7` + `z_trump` + `z_age` + `z_educ` + `z_hhi` +
+    `z_auth` + `z_knowl` + `z_female` + `z_race_black` + `z_race_asian` +
+    `z_race_other` + `E_ideal` + `I_ideal` + `M_ideal` + `T_ideal`,
+  data       = gs2020,
+  respondent = "respondent",
+  task       = "task",
+  profile    = "profile",
+  K          = 10L,
+  seed       = 42L,
+  stage2     = "map_c5",
+  parallel   = TRUE,
+  n_cores    = 10L
+)
+summary(fit_gs)
+```
+
+The population-average penalty for being a co-partisan candidate is a
+large, precisely-estimated positive coefficient
+($\hat\theta_{\text{co-partisan}} \approx +0.72$ on the logit scale),
+and every undemocratic action carries a strongly negative coefficient
+(range $-0.57$ to $-0.93$). Restricting journalists is the most heavily
+penalized action ($\hat\theta \approx -0.93$); the valence scandals are
+even more damaging (extramarital affair $\approx -0.98$).
+
+::: {.callout-note}
+### The Stage-2 default
+
+`scfit()` runs an empirical-Bayes MAP refinement (paper `EnsC5`) on top
+of the Stage-1 DNN by default (`stage2 = "map_c5"`); the summary above
+reports it as `Stage 2: map_c5`. The DML population coefficients
+$\hat\theta_k$ (the co-partisan and undemocratic-action effects above)
+and their clustered standard errors continue to use the Stage-1
+single-DNN prediction (stored on `fit_gs$beta_hat_dnn`). The refined
+betas (`fit_gs$beta_hat`, with the respondent-indexed copy on
+`fit_gs$beta_hat_resp`) feed every distributional and individual-level
+quantity below. Set `stage2 = "none"` to recover the unrefined
+behaviour, or `stage2 = "mixed_logit"` for the BLUP alternative from the
+paper's Supplementary Materials. @sec-advanced documents the full set of
+Stage-2 options.
+:::
+
+```{r}
+#| label: gs-loss
+plot(fit_gs, "loss_trace")
+```
+
+## Population-average estimates
+
+::: {.callout-note}
+### How to read the AMCE plot
+
+All `dem_code` contrasts are read relative to their absent / no-scandal
+baseline:
+
+* `g_*` (good-governance) items: near zero --- voters are largely
+  indifferent across procedural good-governance features.
+* `u_*` (undemocratic) items: **strongly negative** --- voters
+  penalize every undemocratic action.
+* `v_*` (valence violation) items: **most negative** --- voters reject
+  affairs and tax evasion most sharply.
+
+This is the paper's directional finding: voters broadly oppose
+democratic backsliding.
+:::
+
+Plot the population-average coefficients (DML on the logit scale).
+
+```{r}
+#| label: gs-amce-plot
+#| fig-height: 8
+plot_amce(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+### Structural AME vs reduced-form AMCE
+
+Overlay the structural model's average marginal effects (probability
+scale) against the linear-probability-model AMCE. Under correct
+specification the two coincide.
+
+```{r}
+#| label: gs-ame-vs-amce
+#| fig-height: 9
+ame_struct <- sc_average(fit_gs, scale = "probability")
+ame_df     <- ame_struct$estimate; ame_df$source <- "Structural AME"
+lpm        <- sc_baseline_lpm(fit_gs)
+amce_df    <- data.frame(
+  dummy_name = names(stats::coef(lpm)),
+  estimate   = unname(stats::coef(lpm)),
+  se         = sqrt(diag(stats::vcov(lpm))),
+  source     = "LPM AMCE",
+  stringsAsFactors = FALSE
+)
+amce_df$ci_lo <- amce_df$estimate - 1.96 * amce_df$se
+amce_df$ci_hi <- amce_df$estimate + 1.96 * amce_df$se
+df_both <- rbind(
+  ame_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")],
+  amce_df[, c("dummy_name", "estimate", "se", "ci_lo", "ci_hi", "source")]
+)
+df_both$label <- ifelse(df_both$dummy_name %in% names(gs_labels),
+                        gs_labels[df_both$dummy_name],
+                        df_both$dummy_name)
+df_both$label <- factor(df_both$label,
+                        levels = rev(intersect(unname(gs_labels), df_both$label)))
+df_both$group <- gs_groups[df_both$dummy_name]
+df_both$group <- factor(df_both$group, levels = unique(gs_groups))
+df_both <- df_both[!is.na(df_both$group), ]
+
+ggplot(df_both, aes(x = estimate, y = label, color = source)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(xmin = ci_lo, xmax = ci_hi),
+                  position = position_dodge(width = 0.5),
+                  size = 0.3, fatten = 2) +
+  scale_color_manual(values = c("Structural AME" = "#2166AC",
+                                "LPM AMCE"        = "#B2182B")) +
+  facet_grid(group ~ ., scales = "free_y", space = "free_y") +
+  labs(x = "Effect on Pr(choice)",
+       y = NULL, color = NULL,
+       title = "Structural AME vs LPM AMCE (probability scale)") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom",
+        strip.text.y    = element_text(angle = 0, hjust = 0, face = "bold"))
+```
+
+## Individual-level preferences
+
+Ridgeline densities show how each per-respondent coefficient
+$\hat\beta_k(\mathbf Z_i)$ is distributed across the sample. The
+undemocratic-action densities sit clearly left of zero for nearly every
+respondent --- opposition to backsliding is broad, not confined to a
+subgroup --- while the valence densities sit furthest left (see the
+callout above).
+
+```{r}
+#| label: gs-ridgelines
+#| fig-height: 16
+plot(fit_gs, "beta_ridgelines", groups = gs_groups, labels = gs_labels)
+```
+
+## Structural quantities
+
+### Attribute importance
+
+Decompose utility variance by attribute group. The package's
+`sc_importance()` reports a per-contrast share; the paper groups the
+contrasts into attributes (party, policy, the three democracy families,
+and the candidate demographics) and reports the variance share of each
+attribute. Computing the grouped shares from the recovered
+per-respondent coefficients reproduces the paper's decomposition.
+
+```{r}
+#| label: gs-importance
+B <- fit_gs$beta_hat_resp
+attr_groups <- list(
+  party    = "diff_respParty",
+  policy   = c("diff_p1_num", "diff_p2_num"),
+  good     = grep("_g_", colnames(B), value = TRUE),
+  undem    = grep("_u_", colnames(B), value = TRUE),
+  valence  = grep("_v_", colnames(B), value = TRUE),
+  sex      = "diff_sex_Female",
+  race     = grep("^diff_race_", colnames(B), value = TRUE),
+  prof     = grep("^diff_pro_", colnames(B), value = TRUE)
+)
+## Per-respondent utility-variance per attribute over uniform level draws
+## (reference contributes beta = 0, so L = #contrasts + 1).
+imp <- sapply(attr_groups, function(cols) {
+  ba <- B[, cols, drop = FALSE]; L <- ncol(ba) + 1
+  rowSums(ba^2) / L - (rowSums(ba) / L)^2
+})
+shares <- 100 * colMeans(imp / rowSums(imp))
+round(sort(shares, decreasing = TRUE), 1)
+```
+
+The leading shares are valence ($\approx 29\%$), policy
+($\approx 26\%$), and party ($\approx 23\%$) clustered at the top, with
+the undemocratic-action attribute ($\approx 9\%$) carrying a smaller but
+non-trivial share. Voters care most about scandal, policy, and party;
+the democracy dimension matters, but it is not what most differentiates
+candidates in this design.
+
+The package's per-contrast view (uniform design) is complementary --- it
+shows which individual contrasts within each attribute carry the
+variance:
+
+```{r}
+#| label: gs-importance-contrast
+sc_importance(fit_gs, design = "uniform")$estimate[, c("attribute", "share")]
+```
+
+```{r}
+#| label: gs-importance-plot
+#| fig-height: 16
+plot_importance(fit_gs, labels = gs_labels, xlim = c(0, 40))
+```
+
+## Heterogeneity test
+
+Does the per-attribute dispersion of $\hat\beta_k(\mathbf Z_i)$ exceed
+what sampling noise alone would explain? A significant result for the
+`u_*` levels confirms that the intensity of the penalty for
+undemocratic behavior varies meaningfully across respondents.
+
+```{r}
+#| label: gs-het
+het_gs <- sc_heterogeneity_test(fit_gs, adjust = "bh")
+het_gs$estimate
+```
+
+The two policy contrasts are continuous (a 1--4 conservatism scale), so
+their coefficient variances are far larger than those of the binary
+attribute dummies and would compress every other bar onto an unreadable
+scale. We plot the dummies and the two policy contrasts separately.
+
+```{r}
+#| label: gs-het-bar
+#| fig-height: 8
+policy_contrasts <- c("diff_p1_num", "diff_p2_num")
+plot_hetero(fit_gs,
+            dummies = setdiff(fit_gs$attr_names, policy_contrasts),
+            groups = gs_groups, labels = gs_labels,
+            title = "Preference heterogeneity: attribute dummies")
+```
+
+```{r}
+#| label: gs-het-bar-policy
+#| fig-height: 2.5
+plot_hetero(fit_gs, dummies = policy_contrasts,
+            groups = gs_groups, labels = gs_labels,
+            title = "Preference heterogeneity: policy contrasts")
+```
+
+The penalty for each undemocratic action varies in intensity across
+respondents, but its population average is strongly negative for every
+action: on average, voters oppose democratic backsliding. The
+opposition is also broad at the individual level --- the next
+section shows that almost no respondents actively favor any undemocratic
+action.
+
+### Fraction preferring
+
+```{r}
+#| label: gs-fraction
+fr <- sc_fraction_preferring(fit_gs)
+fr_u <- fr$estimate[grepl("^diff_dem_code_u_", fr$estimate$dummy_name), ]
+fr_u$action <- sub("diff_dem_code_u_", "", fr_u$dummy_name)
+round(setNames(fr_u$frac_positive, fr_u$action), 3)
+```
+
+The fraction of respondents who actively *favor* any undemocratic
+action is tiny. The least-opposed action, a 10-seat gerrymander, is
+favored by only about 6% of respondents --- over 93% are opposed --- and
+restricting journalists, ignoring courts, and limiting voting are
+favored by essentially no one. This is the paper's individual-level
+finding: opposition to undemocratic behavior is nearly universal, not a
+property of one partisan camp.
+
+```{r}
+#| label: gs-fraction-bar
+#| fig-height: 8
+plot_fraction(fit_gs, groups = gs_groups, labels = gs_labels)
+```
+
+## Direction and intensity
+
+The undemocratic levels show a large negative average direction (voters
+penalize them) coupled with high intensity. The structural question is
+whether the *dispersion* of those coefficients concentrates on
+co-partisans, as Graham and Svolik argue.
+
+```{r}
+#| label: gs-di
+sc_direction_intensity(fit_gs)
+```
+
+### Marginal rate of substitution: democracy vs party
+
+How much co-partisan advantage would a candidate need to offset the
+penalty for an undemocratic action? The population MRS is the ratio of
+the action's coefficient to the co-partisan coefficient,
+$\theta_{\text{action}} / \theta_{\text{co-partisan}}$, estimated with
+the debiased orthogonal score (`estimand = "population"`).
+
+```{r}
+#| label: gs-mrs
+mrs_actions <- c("diff_dem_code_u_journalists",
+                 "diff_dem_code_u_court",
+                 "diff_dem_code_u_gerry10")
+do.call(rbind, lapply(mrs_actions, function(a) {
+  m <- sc_mrs(fit_gs, a, "diff_respParty", estimand = "population")
+  data.frame(action = sub("diff_dem_code_u_", "", a),
+             abs_mrs = round(abs(m$estimate), 2),
+             se      = round(m$se, 2),
+             row.names = NULL)
+}))
+```
+
+Restricting journalists costs about 1.3 co-partisan-advantages to
+offset; ignoring courts about 1.0; a 10-seat gerrymander about 0.95. In
+words, a candidate would have to be *more* than a co-partisan --- worth
+roughly 1.3 party switches --- to make the average voter forgive
+prosecuting journalists. Party loyalty does not buy a free pass on the
+most severe undemocratic actions.
+
+## Subgroup analysis by partisanship
+
+We re-average the held-out $\hat\beta(\mathbf Z_i)$ separately for
+Democrats, Independents, and Republicans using `sc_subgroup()`. The
+convenience column `pid7` carries the raw 7-point party identification
+($<0$ Democrat, $0$ Independent, $>0$ Republican). `sc_subgroup()`
+expects a logical vector aligned to the fit's task rows (one per
+respondent--task), so we map the respondent-level `pid7` onto
+`fit_gs$respondent_id`.
+
+```{r}
+#| label: gs-subgroup-setup
+## Respondent-level lookups, indexed onto the fit's task rows.
+pid_lookup  <- tapply(gs2020$pid7,  gs2020$respondent, function(x) x[1])
+ideo_lookup <- tapply(gs2020$ideo7, gs2020$respondent, function(x) x[1])
+rid       <- as.character(fit_gs$respondent_id)
+pid_row   <- unname(pid_lookup[rid])    # length = nrow(fit_gs$beta_hat)
+ideo_row  <- unname(ideo_lookup[rid])
+```
+
+```{r}
+#| label: gs-subgroup
+sub <- sc_subgroup(fit_gs, list(
+  Democrat    = pid_row < 0,
+  Independent = pid_row == 0,
+  Republican  = pid_row > 0
+))
+do.call(rbind, lapply(names(sub), function(g) {
+  e <- sub[[g]]$estimate
+  rows <- grepl("^diff_dem_code_u_", e$dummy_name)
+  data.frame(group = g, action = sub("diff_dem_code_u_", "", e$dummy_name[rows]),
+             theta = round(e$theta[rows], 2), se = round(e$se[rows], 2),
+             row.names = NULL)
+}))
+```
+
+```{r}
+#| label: gs-subgroup-plot
+#| fig-height: 5
+plot_subgroup(
+  fit_gs,
+  subgroup = list(Democrat    = pid_row < 0,
+                  Independent = pid_row == 0,
+                  Republican  = pid_row > 0),
+  dummies = grep("^diff_dem_code_u_", fit_gs$attr_names, value = TRUE),
+  groups = gs_groups, labels = gs_labels,
+  title = "Subgroup AMCE: undemocratic behavior"
+)
+```
+
+The structural model reveals that strong partisans of both parties
+penalize undemocratic behavior; the intensity of the penalty varies
+across respondents, but its sign does not. We can sharpen this with
+ideology terciles, built from the raw 7-point ideology column `ideo7`
+(1--3 Liberal, 4 Moderate, 5--7 Conservative), again indexed onto the
+task rows via `ideo_row`:
+
+```{r}
+#| label: gs-ideo-tercile
+ideo_grp <- cut(ideo_row, c(0, 3, 4, 7),
+                labels = c("Liberal", "Moderate", "Conservative"))
+sub_ideo <- sc_subgroup(fit_gs, list(
+  Liberal      = ideo_grp == "Liberal",
+  Moderate     = ideo_grp == "Moderate",
+  Conservative = ideo_grp == "Conservative"
+))
+do.call(rbind, lapply(names(sub_ideo), function(g) {
+  e <- sub_ideo[[g]]$estimate
+  i <- e$dummy_name == "diff_dem_code_u_journalists"
+  data.frame(ideology = g, action = "journalists",
+             theta = round(e$theta[i], 2), se = round(e$se[i], 2),
+             row.names = NULL)
+}))
+```
+
+Every ideological tercile assigns a strong negative coefficient to
+restricting journalists: the penalty is broad across the ideological
+spectrum.
+
+## Preference clustering
+
+A complementary view on latent preference types: run k-means on the
+per-respondent $\hat\beta(\mathbf Z_i)$ matrix to find clusters of
+respondents with similar preference profiles.
+
+```{r}
+#| label: gs-clusters
+cl_gs <- sc_clusters(fit_gs, k = 3L, seed = 2024)
+cl_gs$estimate$sizes
+round(cl_gs$estimate$centers, 2)
+```
+
+
+## Validating against the homogeneous-logit AMCE
+
+The structural model nests the standard pooled-logit AMCE: under
+correct logit specification, $\theta_k = \mathbb{E}[\beta_k(Z)]$
+equals the homogeneous-logit coefficient on attribute $k$. The
+`sc_validate_amce()` export reports this comparison.
+
+```{r}
+#| label: gs-validate
+v_gs <- sc_validate_amce(fit_gs)
+v_gs
+```
+
+A correlation near $r = 1$ across the 30 attribute levels confirms
+that nothing a reduced-form AMCE analysis would deliver is lost by
+using the structural model.
+
+## Summary
+
+This application shows what the structural estimator adds beyond a
+reduced-form AMCE:
+
+- The population averages recover the familiar finding: voters of both
+  parties penalize undemocratic behavior, and restricting journalists is
+  the most heavily penalized undemocratic action.
+- Opposition is broad rather than universal. For every undemocratic
+  action, all but a small minority of respondents place negative weight
+  on it; what varies across respondents is the intensity of that
+  opposition, not its direction.
+- Decomposing utility variance places valence, policy, and party near the
+  top, with the democracy attribute below them.
+- The population marginal rate of substitution prices each violation
+  against co-partisanship.
+
+None of these quantities is available from one-attribute-at-a-time
+effects; each follows from the recovered preference vector
+$\hat\beta_i(\mathbf Z)$.

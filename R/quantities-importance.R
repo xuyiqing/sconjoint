@@ -4,43 +4,61 @@
 #' utility-variance share \eqn{\mathrm{share}_{i,g}}, then averages
 #' over the subgroup.
 #'
-#' Three weighting conventions are supported, selected by `design`:
+#' Four weighting conventions are supported, selected by `design`:
 #'
 #' \itemize{
-#'   \item `"design_variance"` (default) implements the paper's
-#'     formula \eqn{\mathrm{Imp}_{i,g} = \sum_{k \in g}
-#'     \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)}, normalized to
-#'     shares across groups.  Here `Var(ΔX_k)` is computed empirically
-#'     from `object$deltaX`, so each dummy contributes scaled by the
-#'     spread of its presentation in the realized design.  This is the
-#'     formula reported in Acharya, Hainmueller, and Xu (2026) and is
-#'     what reproduces the paper's sw2022 agenda share (~0.65).
-#'   \item `"uniform"` computes the variance of \eqn{\beta_{i,\cdot}}
-#'     over a uniform distribution on levels (treating the reference
-#'     level as \eqn{\beta = 0}).  This is the prototype's default
-#'     used in v0.1 / v0.2.0; it diverges from the paper because the
-#'     paper weights each dummy by its empirical design variance
-#'     instead of treating levels symmetrically.
+#'   \item `"design_variance"` (default) implements the formula as
+#'     displayed in the paper's text, \eqn{\mathrm{Imp}_{i,g} =
+#'     \sum_{k \in g} \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)},
+#'     normalized to shares across groups, with `Var(deltaX_k)` computed
+#'     empirically from `object$deltaX`.
+#'   \item `"uniform"` computes the variance of the attribute's utility
+#'     contribution over a uniform distribution on its levels (treating
+#'     the reference level as \eqn{\beta = 0}).  **This is the formula
+#'     behind the importance shares reported in Acharya, Hainmueller,
+#'     and Xu (2026) for the factor-attribute applications** (Saha-Weeks
+#'     agenda 52/talent 21/gender 17; Graham-Svolik policy 28/valence
+#'     26/party 25/undemocratic 8): the production pipeline decomposes
+#'     utility variance per attribute over uniform level draws.
+#'   \item `"levels"` extends `"uniform"` to continuous attributes:
+#'     attributes named in the `levels` argument contribute
+#'     \eqn{\hat\beta_{ik}^2 \cdot \mathrm{Var}(L_k)}, where
+#'     \eqn{\mathrm{Var}(L_k)} is the population variance of the
+#'     attribute's design level set \eqn{L_k} (e.g.
+#'     `c(0, 5, 15, 25)` for a tax-rate bracket); all other attributes
+#'     use the `"uniform"` formula.  This reproduces the production
+#'     pipeline's importance for continuous-attribute designs (the
+#'     Ballard-Rosa by-party importance in the paper).
 #'   \item `"empirical"` computes the variance of \eqn{\beta_{i,\cdot}}
 #'     over the empirical level distribution (level frequencies read
-#'     off `object$deltaX`).  Different functional from `"design_variance"`:
-#'     it asks "how do per-respondent \eqn{\beta} values vary across
-#'     levels under the realized design," not "how much does each
-#'     dummy contribute to utility variance."
+#'     off `object$deltaX`).
 #' }
 #'
-#' For factor designs with uniform level randomization, `"uniform"`
-#' and `"design_variance"` agree up to normalization (the empirical
-#' \eqn{\mathrm{Var}(\Delta X_k)} is the same across dummies within an
-#' attribute), but they disagree across attributes when level counts
-#' differ.  For continuous-attribute designs (e.g. BR tax-rate
-#' brackets), they diverge substantially.
+#' Note `"design_variance"` and `"uniform"` answer slightly different
+#' questions and do NOT agree in general: `Var(deltaX_k)` couples dummies
+#' of the same attribute through the realized pairing of profiles,
+#' while `"uniform"` integrates over the attribute's marginal level
+#' distribution and accounts for within-attribute covariance of the
+#' dummies.  When reproducing the paper's reported shares, use
+#' `"uniform"` (factor designs) or `"levels"` (continuous designs).
 #'
 #' @param object An `sc_fit`.
-#' @param design One of `"design_variance"` (default, paper formula),
-#'   `"uniform"` (prototype's symmetric-levels formula), or
-#'   `"empirical"` (variance of \eqn{\beta} over realized level
-#'   distribution).
+#' @param design One of `"design_variance"` (default; the paper-text
+#'   formula), `"uniform"` (production formula for factor designs),
+#'   `"levels"` (production formula with explicit level sets for
+#'   continuous attributes), or `"empirical"`.
+#' @param vartype Variance type for the shares. `"plugin"` (default) uses the
+#'   plug-in importance shares from the recovered coefficients, which always lie
+#'   between 0 and 1. `"orthogonal"` uses the debiased orthogonal-score shares
+#'   (the paper's Appendix-C estimand) with a respondent-clustered standard
+#'   error; these are opt-in because, as a ratio of debiased quantities, they can
+#'   fall outside the unit interval when the first stage is noisy, and are
+#'   implemented only for `design = "design_variance"`.
+#' @param levels Named list of numeric vectors, used by
+#'   `design = "levels"`: names are attribute names (as in
+#'   `names(object$attr_map)`) of *single-column continuous*
+#'   attributes; values are the attribute's design level sets.
+#'   Attributes not listed fall back to the `"uniform"` formula.
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` whose `estimate` is a data.frame with one
@@ -48,19 +66,70 @@
 #'   `ci_hi`).
 #' @export
 sc_importance <- function(object,
-                          design = c("design_variance", "uniform", "empirical"),
+                          design = c("design_variance", "uniform", "empirical",
+                                     "levels"),
+                          vartype = c("plugin", "orthogonal"),
                           subgroup = NULL,
-                          which_beta = c("hybrid", "dnn")) {
+                          which_beta = c("hybrid", "dnn"),
+                          levels = NULL) {
   stopifnot(inherits(object, "sc_fit"))
   design <- match.arg(design)
+  vartype <- match.arg(vartype)
   which_beta <- match.arg(which_beta)
   map <- .sc_attr_map(object)
+
+  ## Opt-in debiased (orthogonal-score) shares -- the paper's Appendix C
+  ## estimand: share_a = N_a / sum_a N_a with N_a = E[f_a' S_a f_a] and a
+  ## clustered simplex-Jacobian standard error, on the Stage-1 f-hat
+  ## (`subgroup`/`which_beta` do not apply; it is a population functional).
+  ## The default plug-in shares below are always in [0, 1]; the debiased
+  ## shares are a ratio and can fall outside [0, 1] when the first stage is
+  ## noisy or under-fit, so they are opt-in via vartype = "orthogonal".
+  if (vartype == "orthogonal") {
+    if (design != "design_variance") {
+      stop("sc_importance(): vartype = \"orthogonal\" is implemented only for ",
+           "design = \"design_variance\" (the paper's weighting).", call. = FALSE)
+    }
+    df <- .sc_debiased_importance(object, map)
+    return(.sc_quantity(
+      name = "importance", estimate = df, se = NA_real_,
+      details = list(design = design, vartype = "orthogonal",
+                     se_method = "debiased orthogonal score, respondent-clustered"),
+      call = match.call()))
+  }
+
   B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)
   resp_s <- object$respondent_id[S]
+  w_s <- .sc_weights_for_rows(object, S)
   attrs <- names(map)
   K <- length(attrs)
   n_S <- length(S)
+
+  if (identical(design, "levels")) {
+    if (!is.null(levels)) {
+      if (is.null(names(levels)) || !all(nzchar(names(levels))))
+        stop("sc_importance(design = \"levels\"): `levels` must be a named list.",
+             call. = FALSE)
+      bad <- setdiff(names(levels), attrs)
+      if (length(bad))
+        stop("sc_importance(): unknown attribute(s) in `levels`: ",
+             paste(bad, collapse = ", "), call. = FALSE)
+      for (nm in names(levels)) {
+        if (length(map[[nm]]) != 1L)
+          stop("sc_importance(): `levels` applies to single-column ",
+               "(continuous) attributes; '", nm, "' has ",
+               length(map[[nm]]), " columns.", call. = FALSE)
+        if (!is.numeric(levels[[nm]]) || length(levels[[nm]]) < 2L)
+          stop("sc_importance(): `levels$", nm,
+               "` must be a numeric vector of at least 2 design levels.",
+               call. = FALSE)
+      }
+    }
+  } else if (!is.null(levels)) {
+    warning("sc_importance(): `levels` is ignored unless design = \"levels\".",
+            call. = FALSE)
+  }
 
   ## design_variance and empirical both need deltaX
   if (design %in% c("design_variance", "empirical")) {
@@ -84,7 +153,9 @@ sc_importance <- function(object,
       dvar <- apply(dX[, cols, drop = FALSE], 2L, stats::var)
       bsub <- B[S, cols, drop = FALSE]
       V_mat[, a] <- as.numeric((bsub^2) %*% dvar)
-    } else if (identical(design, "uniform")) {
+    } else if (identical(design, "uniform") ||
+               (identical(design, "levels") &&
+                !(attrs[a] %in% names(levels)))) {
       ## L_a = number of levels including reference; dummy contribution
       ## for the reference level is 0.
       L_a <- length(cols) + 1L
@@ -92,6 +163,13 @@ sc_importance <- function(object,
       m1 <- rowSums(bsub) / L_a
       m2 <- rowSums(bsub^2) / L_a
       V_mat[, a] <- m2 - m1^2
+    } else if (identical(design, "levels")) {
+      ## Continuous attribute with an explicit design level set:
+      ## beta^2 * population variance of the level values.
+      l <- levels[[attrs[a]]]
+      var_lvl <- mean((l - mean(l))^2)
+      bsub <- B[S, cols, drop = FALSE]
+      V_mat[, a] <- as.numeric(bsub^2) * var_lvl
     } else {
       ## "empirical": variance of beta over empirical level distribution.
       w <- colMeans(abs(dX[, cols, drop = FALSE]))
@@ -113,9 +191,15 @@ sc_importance <- function(object,
   row_sum[row_sum == 0] <- NA_real_
   share_mat <- V_mat / row_sum
   share_mat[is.na(share_mat)] <- 0
-  est <- colMeans(share_mat)
+  est <- if (is.null(w_s)) {
+    colMeans(share_mat)
+  } else {
+    vapply(seq_len(K), function(a)
+      .sc_weighted_task_mean(share_mat[, a], resp_s, w_s),
+      numeric(1L))
+  }
   se  <- vapply(seq_len(K), function(a) {
-    .sc_cluster_se(share_mat[, a], resp_s)
+    .sc_cluster_se(share_mat[, a], resp_s, w_s)
   }, numeric(1L))
   ci_q <- stats::qnorm(0.975)
   df <- data.frame(
