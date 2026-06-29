@@ -20,42 +20,73 @@ bit-exact determinism guarantee --- identical `sc_fit` output regardless
 of `n_cores` --- applies only on CPU; on GPU, cuDNN introduces
 nondeterminism that the package cannot fully eliminate.
 
-Install `sconjoint` itself from GitHub:
+Then install `sconjoint`. The table summarizes the available sources; pick
+one and run the matching code.
 
-```r
+| Source | Version | Notes |
+|--------|---------|-------|
+| CRAN | 0.2.1 | Submitted; pending acceptance --- use a GitHub source until then |
+| GitHub `@dev` | 0.2.1 | Development version (currently matches the CRAN submission) |
+| GitHub `@feat/torch-threads` | 0.2.1.9000 | Newest in-progress features: the `torch_threads` Windows-stability control and the attribute-interaction extension, pending merge to `dev` after the release |
+
+Once `sconjoint` is on CRAN you can install the released version directly.
+It has been submitted; this is commented out until it is accepted:
+
+```{r install-cran, eval=FALSE}
+# install.packages("sconjoint")
+```
+
+For the development version, install from the `dev` branch on GitHub:
+
+```{r install-dev, eval=FALSE}
 # install.packages("remotes")
-remotes::install_github("xuyiqing/sconjoint")
+remotes::install_github("xuyiqing/sconjoint@dev")
+```
+
+After installing, check the version to confirm you have the features you
+expect:
+
+```{r check-version}
+packageVersion("sconjoint")
 ```
 
 The package pulls in `ggplot2`, `ggridges`, and related plotting
 infrastructure as Imports; no extra setup is required for the
 visualization methods described in the Plot Options chapter.
 
-## Troubleshooting
+::: {.callout-warning}
+## Troubleshooting: the R session aborts when calling `scfit()`
 
-**The R session aborts when calling `scfit()`.** A session *abort* (the R
-process exits, rather than throwing an R error) almost always comes from the
-native `libtorch` backend, not from `sconjoint` itself. It has been reported
-on some Windows systems while the same code runs fine on macOS. Things to
-try, in order:
+A session *abort* (the R process exits, rather than throwing an R error)
+almost always comes from the native `libtorch` backend, not from
+`sconjoint` itself. It has been reported on some Windows systems while the
+same code runs fine on macOS. Things to try, in order:
 
-1. Confirm `torch` works in isolation. In a fresh session, run
+1. **Confirm `torch` works in isolation.** In a fresh session, run
    `library(torch); x <- torch_randn(3, 3); x %*% x`. If *that* aborts, the
    problem is the `torch` / `libtorch` installation or your environment, not
    `sconjoint`: reinstall with `torch::install_torch()`, and check whether
    security or endpoint-protection software is blocking the `libtorch` DLLs
    (a common cause on managed corporate Windows machines).
-2. Cap torch's threads. torch's default multi-threaded CPU backend aborts
-   the session on some Windows configurations, and running it
-   single-threaded often avoids it. Pass `torch_threads = 1` to `scfit()`
-   (this changes only the threading, not the results):
+
+2. **Cap torch's threads with `torch_threads = 1`.** torch's default
+   multi-threaded CPU backend aborts the session on some Windows
+   configurations, and running it single-threaded often avoids it. The
+   `torch_threads` argument to `scfit()` is the targeted fix for this
+   ([issue #7](https://github.com/xuyiqing/sconjoint/issues/7)). It
+   currently lives on the `feat/torch-threads` branch, pending merge to
+   `dev` after the next release, so install that branch first:
 
    ```r
+   remotes::install_github("xuyiqing/sconjoint@feat/torch-threads")
    library(sconjoint)
    fit <- scfit(formula, data, ..., torch_threads = 1)
    ```
 
-   torch honors the thread count only on the *first* such call of a session,
-   so set it before running any other torch work.
-3. Try plain `R` (`Rterm` or the console) rather than an IDE, to rule out an
-   IDE-specific interaction.
+   `torch_threads = 1` changes only the threading, not the results, and
+   torch honors the thread count only on the *first* such call of a
+   session --- so set it before running any other torch work.
+
+3. **Try plain `R`** (`Rterm` or the console) rather than an IDE, to rule
+   out an IDE-specific interaction.
+:::
