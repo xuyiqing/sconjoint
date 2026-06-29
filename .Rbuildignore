@@ -72,3 +72,6 @@
 ^tests/testthat/_problems$
 ^tests/testthat/testthat-problems\.rds$
 ^tests/testthat/_snaps$
+
+# README is optional on CRAN; keep it on GitHub but do not ship it to CRAN.
+^README\.md$
