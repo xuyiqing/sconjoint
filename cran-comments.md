@@ -23,6 +23,12 @@ The single NOTE is the standard new-submission note:
   New submission
 ```
 
+On win-builder the same NOTE also lists possibly-misspelled words in the
+Description: `Acharya`, `Hainmueller`, and `Xu` (the cited authors'
+surnames) and `debiased` (a standard term from the double/debiased
+machine-learning literature of Chernozhukov et al., 2018). All are spelled
+correctly.
+
 ## Notes for the reviewer
 
 * The package depends on 'torch'. Every example that fits a model is

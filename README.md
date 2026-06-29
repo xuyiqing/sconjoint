@@ -96,7 +96,7 @@ customization. See the Plot Options chapter in the tutorial.
 
 ## Documentation
 
-The primary documentation is a [Quarto book](tutorial/) with
+The primary documentation is a [Quarto book](https://yiqingxu.org/packages/sconjoint/) with
 worked examples:
 
 1. **Get Started** --- installation
