@@ -1,5 +1,13 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## v0.2.1.9000
+
+**Robustness.** `scfit()` gains a `torch_threads` argument that caps torch's
+intra-op thread count (the results are unchanged); the main use is
+`torch_threads = 1` to work around the rare R-session abort some Windows
+users hit with torch's default multi-threaded CPU backend (issue #7). See
+the Get Started chapter's troubleshooting notes.
+
 ## v0.2.1
 
 **Full replication datasets.** The bundled `sw2022`, `gs2020`, and

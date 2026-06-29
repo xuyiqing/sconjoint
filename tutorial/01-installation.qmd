@@ -30,3 +30,32 @@ remotes::install_github("xuyiqing/sconjoint")
 The package pulls in `ggplot2`, `ggridges`, and related plotting
 infrastructure as Imports; no extra setup is required for the
 visualization methods described in the Plot Options chapter.
+
+## Troubleshooting
+
+**The R session aborts when calling `scfit()`.** A session *abort* (the R
+process exits, rather than throwing an R error) almost always comes from the
+native `libtorch` backend, not from `sconjoint` itself. It has been reported
+on some Windows systems while the same code runs fine on macOS. Things to
+try, in order:
+
+1. Confirm `torch` works in isolation. In a fresh session, run
+   `library(torch); x <- torch_randn(3, 3); x %*% x`. If *that* aborts, the
+   problem is the `torch` / `libtorch` installation or your environment, not
+   `sconjoint`: reinstall with `torch::install_torch()`, and check whether
+   security or endpoint-protection software is blocking the `libtorch` DLLs
+   (a common cause on managed corporate Windows machines).
+2. Cap torch's threads. torch's default multi-threaded CPU backend aborts
+   the session on some Windows configurations, and running it
+   single-threaded often avoids it. Pass `torch_threads = 1` to `scfit()`
+   (this changes only the threading, not the results):
+
+   ```r
+   library(sconjoint)
+   fit <- scfit(formula, data, ..., torch_threads = 1)
+   ```
+
+   torch honors the thread count only on the *first* such call of a session,
+   so set it before running any other torch work.
+3. Try plain `R` (`Rterm` or the console) rather than an IDE, to rule out an
+   IDE-specific interaction.

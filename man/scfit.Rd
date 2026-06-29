@@ -25,6 +25,7 @@ scfit(
   parallel = FALSE,
   n_cores = NULL,
   device = "cpu",
+  torch_threads = NULL,
   keep_modules = TRUE,
   verbose = FALSE,
   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
@@ -131,6 +132,17 @@ L'Ecuyer-CMRG streams.}
 
 \item{device}{Character \code{"cpu"} (default) or \code{"cuda"}.  The
 bit-exact determinism guarantee applies only on CPU.}
+
+\item{torch_threads}{Optional integer; if supplied, caps the number of
+intra-op threads torch uses (\code{torch::torch_set_num_threads()}).
+Results are invariant to the thread count, so this is purely a
+stability / performance control. The main use is \code{torch_threads = 1}
+as a workaround for the rare case where torch's default multi-threaded
+CPU backend aborts the R session (reported on some Windows systems).
+torch honors the thread count only on the first such call of a session,
+so set it on your first \code{scfit()} call in a fresh session; later calls
+are silently ignored. \code{NULL} (the default) leaves torch's setting
+unchanged.}
 
 \item{keep_modules}{Logical. If \code{TRUE} (the default), the
 per-fold trained torch \code{nn_module} objects are stored on the

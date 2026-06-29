@@ -94,6 +94,16 @@
 #'   `parallel = TRUE`).  Defaults to 2.
 #' @param device Character `"cpu"` (default) or `"cuda"`.  The
 #'   bit-exact determinism guarantee applies only on CPU.
+#' @param torch_threads Optional integer; if supplied, caps the number of
+#'   intra-op threads torch uses (`torch::torch_set_num_threads()`).
+#'   Results are invariant to the thread count, so this is purely a
+#'   stability / performance control. The main use is `torch_threads = 1`
+#'   as a workaround for the rare case where torch's default multi-threaded
+#'   CPU backend aborts the R session (reported on some Windows systems).
+#'   torch honors the thread count only on the first such call of a session,
+#'   so set it on your first `scfit()` call in a fresh session; later calls
+#'   are silently ignored. `NULL` (the default) leaves torch's setting
+#'   unchanged.
 #' @param keep_modules Logical. If \code{TRUE} (the default), the
 #'   per-fold trained torch \code{nn_module} objects are stored on the
 #'   returned \code{sc_fit} object, enabling
@@ -254,6 +264,7 @@ scfit <- function(formula, data,
                   parallel = FALSE,
                   n_cores = NULL,
                   device = "cpu",
+                  torch_threads = NULL,
                   keep_modules = TRUE,
                   verbose = FALSE,
                   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
@@ -264,6 +275,26 @@ scfit <- function(formula, data,
   learner <- match.arg(learner)
   stage2_supplied <- !missing(stage2)
   stage2 <- match.arg(stage2)
+
+  ## Optional cap on torch's intra-op thread count.  torch honors this only
+  ## on the first torch_set_num_threads() of a session (before any torch
+  ## work); later calls warn and are ignored.  Results are invariant to the
+  ## count (the determinism guarantee holds), so this is purely a
+  ## stability / performance control --- e.g. `torch_threads = 1` works
+  ## around the R-session abort some users hit with torch's default
+  ## multi-threaded backend on Windows.  No restore: the count is
+  ## process-global and cannot be reset once torch work has started.
+  if (!is.null(torch_threads)) {
+    if (!is.numeric(torch_threads) || length(torch_threads) != 1L ||
+        is.na(torch_threads) || torch_threads < 1) {
+      stop("`torch_threads` must be a single positive integer, or NULL.")
+    }
+    torch_threads <- as.integer(torch_threads)
+    if (torch::torch_get_num_threads() != torch_threads) {
+      suppressWarnings(try(torch::torch_set_num_threads(torch_threads),
+                           silent = TRUE))
+    }
+  }
 
   ## Stage 2 (the MAP/varref/mixed-logit refinement) is DNN-specific: its
   ## ensemble retrains a second DNN.  For the flexible alternative learners
