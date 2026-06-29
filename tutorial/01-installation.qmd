@@ -1,58 +1,61 @@
 # Get Started {#sec-start}
 
-`sconjoint` depends on the `torch` R package for the deep-learning
-backend. `torch` in turn bundles its own copy of `libtorch` which is
-downloaded on first use. Before installing `sconjoint` itself,
-confirm that `torch` can load its native library:
+## Installation
 
-```r
+`sconjoint` runs on the `torch` deep-learning backend, which bundles its
+own copy of `libtorch` (downloaded on first use). Install `torch` first
+and confirm its native library loads:
+
+```{r install-torch, eval=FALSE}
 install.packages("torch")
-torch::install_torch()  # downloads libtorch the first time it is run
-torch::torch_is_installed()
+torch::install_torch()        # downloads libtorch the first time
+torch::torch_is_installed()   # should return TRUE
 ```
 
-On CPU-only machines the default installation is sufficient. On
-machines with a CUDA-enabled GPU, follow the instructions at
-<https://torch.mlverse.org> to install the CUDA build of `libtorch`;
-`sconjoint` will then pick up GPU acceleration automatically when you
-pass `device = "cuda"` to `scfit()`. Note that the package's
-bit-exact determinism guarantee --- identical `sc_fit` output regardless
-of `n_cores` --- applies only on CPU; on GPU, cuDNN introduces
-nondeterminism that the package cannot fully eliminate.
-
-Then install `sconjoint`. The table summarizes the available sources; pick
-one and run the matching code.
-
-| Source | Version | Notes |
-|--------|---------|-------|
-| CRAN | 0.2.1 | Submitted; pending acceptance --- use a GitHub source until then |
-| GitHub `@dev` | 0.2.1 | Development version (currently matches the CRAN submission) |
-| GitHub `@feat/torch-threads` | 0.2.1.9000 | Newest in-progress features: the `torch_threads` Windows-stability control and the attribute-interaction extension, pending merge to `dev` after the release |
-
-Once `sconjoint` is on CRAN you can install the released version directly.
-It has been submitted; this is commented out until it is accepted:
+Then install `sconjoint` from CRAN. It has been submitted; until it is
+accepted this line stays commented out --- install a development version
+instead (see @sec-versions):
 
 ```{r install-cran, eval=FALSE}
 # install.packages("sconjoint")
 ```
 
-For the development version, install from the `dev` branch on GitHub:
+On CPU-only machines this is all you need. On a CUDA-enabled GPU, follow
+<https://torch.mlverse.org> to install the CUDA build of `libtorch`;
+`scfit(device = "cuda")` then uses it automatically. (The bit-exact
+determinism guarantee --- identical `sc_fit` output regardless of
+`n_cores` --- holds only on CPU.)
 
-```{r install-dev, eval=FALSE}
+## Versions {#sec-versions}
+
+Until the CRAN release, install from GitHub. The development branches
+carry features ahead of CRAN:
+
+| Source | Version | What it adds |
+|:--------------------|:------------|:------------------------------------------------------------|
+| CRAN | 0.2.1 | The released version (default), pending acceptance |
+| GitHub `@dev` | 0.2.1 | Development version; currently matches the CRAN submission |
+| GitHub `@feat/torch-threads` | 0.2.1.9000 | Newest in-progress work: the `torch_threads` Windows-stability control and the attribute-interaction extension, pending merge to `dev` after the release |
+
+Install a specific source with the `@branch` suffix:
+
+```{r install-github, eval=FALSE}
 # install.packages("remotes")
-remotes::install_github("xuyiqing/sconjoint@dev")
+remotes::install_github("xuyiqing/sconjoint@dev")                 # development version
+remotes::install_github("xuyiqing/sconjoint@feat/torch-threads")  # newest features
 ```
 
-After installing, check the version to confirm you have the features you
-expect:
+Check which version is installed on this computer:
 
 ```{r check-version}
 packageVersion("sconjoint")
 ```
 
-The package pulls in `ggplot2`, `ggridges`, and related plotting
-infrastructure as Imports; no extra setup is required for the
-visualization methods described in the Plot Options chapter.
+Once `sconjoint` is on CRAN, `install.packages("sconjoint")` gives the
+latest release and `remotes::install_version("sconjoint", "0.2.1")` pins a
+specific one. Installing `sconjoint` pulls in `ggplot2`, `ggridges`, and
+related plotting packages automatically; no extra setup is needed for the
+visualization methods in the Plot Options chapter.
 
 ::: {.callout-warning}
 ## Troubleshooting: the R session aborts when calling `scfit()`
