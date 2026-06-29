@@ -1,7 +1,6 @@
-## Stage-2: DNN-offset mixed-logit BLUP via lme4::glmer (paper §A.4).
-##
-## See `statsclaw-workspace/sconjoint/ref/mixed-logit-stage2.md` for the
-## algorithm reference.  Used when `scfit(..., stage2 = "mixed_logit")`.
+## Stage-2: DNN-offset mixed-logit BLUP via lme4::glmer (paper Section A.4;
+## Acharya, Hainmueller & Xu 2026).  Used when
+## `scfit(..., stage2 = "mixed_logit")`.
 
 #' Stage 2 via DNN-offset mixed-logit BLUP (`lme4::glmer`)
 #'

@@ -75,3 +75,5 @@
 
 # README is optional on CRAN; keep it on GitHub but do not ship it to CRAN.
 ^README\.md$
+^inst/benchmarks$
+^inst/dev$

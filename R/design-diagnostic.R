@@ -1,8 +1,5 @@
 ## sc_design_diagnostic(): estimate R²_Z per coefficient + recovery
-## tier hint per paper §6 heuristics.
-##
-## Algorithm reference: see
-## `statsclaw-workspace/sconjoint/ref/design-diagnostic.md`.
+## tier hint per paper Section 6 heuristics (Acharya, Hainmueller & Xu 2026).
 
 #' Estimate per-coefficient R^2_Z and a recovery-tier hint
 #'
@@ -35,9 +32,7 @@
 #' @param experimental Logical; if `TRUE` the print method shows
 #'   an "experimental" banner.  Default `TRUE`.
 #'
-#'   A build-time validation against a controlled 18-cell sim grid
-#'   (see `inst/benchmarks/validate_design_diagnostic.R` and the
-#'   companion memo in `statsclaw-workspace/sconjoint/ref/`) gives
+#'   A validation against a controlled 18-cell simulation grid gives
 #'   Pearson rho(R^2_hat, R^2_true) = 0.76 across the grid but a mean
 #'   absolute bias of 0.23, with the bias concentrated at low true
 #'   R^2_Z (true R^2_Z = 0.10 gets mean R^2_hat = 0.52).  The
