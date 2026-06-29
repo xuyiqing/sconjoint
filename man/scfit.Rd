@@ -17,6 +17,7 @@ scfit(
   learning_rate = 0.01,
   weight_decay = "adaptive",
   ridge_lambda = 1e-04,
+  respondent_weights = NULL,
   enet_alpha = 0.5,
   enet_df = 4L,
   enet_interactions = TRUE,
@@ -24,6 +25,7 @@ scfit(
   parallel = FALSE,
   n_cores = NULL,
   device = "cpu",
+  torch_threads = NULL,
   keep_modules = TRUE,
   verbose = FALSE,
   stage2 = c("map_c5", "none", "varref", "mixed_logit"),
@@ -100,6 +102,13 @@ Lambda(Z) regression and in the Lambda inversion.  Distinct from
 \code{weight_decay}, which regularises the DNN; this regularises the
 Lambda(Z) ridge.}
 
+\item{respondent_weights}{Optional survey/design weights for respondents.
+May be \code{NULL} (equal respondent weights), a column name in \code{data}, or a
+numeric vector of length \code{nrow(data)}. Weights must be finite,
+non-negative, and constant within respondent. They affect the
+respondent-level estimand aggregation and clustered standard errors; they
+do not reweight first-stage learner training.}
+
 \item{enet_alpha}{Elastic-net mixing parameter in \verb{[0, 1]} used when
 \code{learner = "enet"} (\code{1} = lasso, \code{0} = ridge).  Default \code{0.5}.
 Ignored for other learners.}
@@ -127,6 +136,17 @@ L'Ecuyer-CMRG streams.}
 \item{device}{Character \code{"cpu"} (default) or \code{"cuda"}.  The
 bit-exact determinism guarantee applies only on CPU.}
 
+\item{torch_threads}{Optional integer; if supplied, caps the number of
+intra-op threads torch uses (\code{torch::torch_set_num_threads()}).
+Results are invariant to the thread count, so this is purely a
+stability / performance control. The main use is \code{torch_threads = 1}
+as a workaround for the rare case where torch's default multi-threaded
+CPU backend aborts the R session (reported on some Windows systems).
+torch honors the thread count only on the first such call of a session,
+so set it on your first \code{scfit()} call in a fresh session; later calls
+are silently ignored. \code{NULL} (the default) leaves torch's setting
+unchanged.}
+
 \item{keep_modules}{Logical. If \code{TRUE} (the default), the
 per-fold trained torch \code{nn_module} objects are stored on the
 returned \code{sc_fit} object, enabling
@@ -144,7 +164,13 @@ The Stage-2 result is what \code{object$beta_hat} holds and what all
 \verb{sc_*} quantity functions read by default; the Stage-1 single-DNN
 matrix is kept on \code{object$beta_hat_dnn}.  DML point estimates and
 clustered SEs are unchanged across \code{stage2} choices on the same
-\code{seed}: they are always computed from the Stage-1 cross-fit.}
+\code{seed}: they are always computed from the Stage-1 cross-fit.
+
+Stage 2 is only implemented for \code{learner = "dnn"}.  With
+\code{learner = "enet"} or \code{"grf"} it is forced to \code{"none"} and a
+once-per-session warning is emitted, because the per-respondent
+betas then carry no empirical-Bayes shrinkage (see the \code{learner}
+argument and the \emph{Inference validity by quantity} section below).}
 
 \item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
 ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
@@ -171,12 +197,12 @@ the user's input units.  The SDs used are stored on
 \code{fit$sd_dx} for diagnostics.
 
 Use \code{normalize_deltaX = TRUE} on designs with continuous
-attributes whose ΔX columns span very different scales (e.g.
+attributes whose \code{deltaX} columns span very different scales (e.g.
 percentage-point tax rates alongside 0/1 dummies).  The default
 v0.2 score-based MAP prior is calibrated assuming
-\code{Var(ΔX_k) ~ 1} (factor dummies under typical randomization);
+\code{Var(deltaX_k) ~ 1} (factor dummies under typical randomization);
 on large-scale continuous attributes the prior becomes loose by
-the same factor as \code{Var(ΔX_k)} and per-respondent MAP estimates
+the same factor as \code{Var(deltaX_k)} and per-respondent MAP estimates
 drift to extreme tails.  Internal standardization puts every
 coefficient on a common-variance internal scale, restoring the
 c5 prior's intended regularization strength.  For factor-dummy
@@ -276,9 +302,38 @@ is), the realized-task features \code{F_int} and cross-fitted offsets
 (\code{g_offset}, \code{g_offset_ens}, \code{g_offset_task}), and the interaction
 block of the orthogonal-score correction (\code{correction_int}).
 }
+}
+\section{Inference validity by quantity}{
+
+The \verb{sc_*} quantity functions fall into two groups with different
+inferential status, and it is worth being explicit about which is which.
+
+\strong{DML quantities (valid debiased inference).} The average
+structural parameters and the functionals built on the orthogonal
+(Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
+standard errors and confidence intervals: \code{coef()} / \code{summary()} /
+\code{vcov()} (the average \code{theta}), and the debiased quantities
+\code{sc_average()}, \code{sc_ame()}, \code{sc_counterfactual(vartype = "orthogonal")},
+and \code{sc_mrs()} / \code{sc_wtp()}. Their SEs come from the cross-fitted
+influence function and are unchanged across \code{stage2} choices.
+
+\strong{Model-based / empirical-Bayes summaries (descriptive, not
+debiased).} The distribution-over-respondents quantities are plug-in
+functionals of the recovered per-respondent \code{beta(Z_i)} and inherit that
+object's finite-\code{T} shrinkage. They are descriptive summaries, not
+debiased estimators: \code{sc_polarization()}, \code{sc_fraction_preferring()},
+\code{sc_direction_intensity()}, \code{sc_heterogeneity_test()}, \code{sc_clusters()},
+\code{sc_optimal_profile()}, and the other per-respondent quantities. For the
+threshold/fraction quantities (\code{sc_polarization()},
+\code{sc_fraction_preferring()}) a respondent-cluster wild bootstrap is
+available via \code{se_method = "wild_bootstrap"}, which quantifies the
+\emph{sampling} variability of the fraction; it does not remove the
+shrinkage bias that pulls each \code{beta_i} toward the population mean (and so
+biases these fractions toward consensus under short panels).
 
 See \code{summary.sc_fit()}, \code{predict.sc_fit()}, and \code{plot.sc_fit()}.
 }
+
 \section{Plugin-path attenuation under interactions}{
 
 \strong{Under \code{interactions != "none"} the package carries two estimates of

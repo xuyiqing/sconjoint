@@ -21,10 +21,13 @@ formula), \code{"uniform"} (production formula for factor designs),
 \code{"levels"} (production formula with explicit level sets for
 continuous attributes), or \code{"empirical"}.}
 
-\item{vartype}{Either \code{"plugin"} (default; per-respondent shares
-averaged with a respondent-clustered SE) or \code{"orthogonal"} (the
-debiased Appendix C shares with a clustered simplex-Jacobian SE;
-only available for \code{design = "design_variance"}).}
+\item{vartype}{Variance type for the shares. \code{"plugin"} (default) uses the
+plug-in importance shares from the recovered coefficients, which always lie
+between 0 and 1. \code{"orthogonal"} uses the debiased orthogonal-score shares
+(the paper's Appendix-C estimand) with a respondent-clustered standard
+error; these are opt-in because, as a ratio of debiased quantities, they can
+fall outside the unit interval when the first stage is noisy, and are
+implemented only for \code{design = "design_variance"}.}
 
 \item{subgroup}{Row selector.}
 
@@ -53,7 +56,7 @@ Four weighting conventions are supported, selected by \code{design}:
 \item \code{"design_variance"} (default) implements the formula as
 displayed in the paper's text, \eqn{\mathrm{Imp}_{i,g} =
     \sum_{k \in g} \hat\beta_{ik}^2 \cdot \mathrm{Var}(\Delta X_k)},
-normalized to shares across groups, with \code{Var(ΔX_k)} computed
+normalized to shares across groups, with \code{Var(deltaX_k)} computed
 empirically from \code{object$deltaX}.
 \item \code{"uniform"} computes the variance of the attribute's utility
 contribution over a uniform distribution on its levels (treating
@@ -78,7 +81,7 @@ off \code{object$deltaX}).
 }
 
 Note \code{"design_variance"} and \code{"uniform"} answer slightly different
-questions and do NOT agree in general: \code{Var(ΔX_k)} couples dummies
+questions and do NOT agree in general: \code{Var(deltaX_k)} couples dummies
 of the same attribute through the realized pairing of profiles,
 while \code{"uniform"} integrates over the attribute's marginal level
 distribution and accounts for within-attribute covariance of the
