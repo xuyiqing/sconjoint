@@ -7,15 +7,13 @@ deep-learning conjoint estimator of Acharya, Hainmueller, and Xu (2026).
 
 ## Test environments
 
-* local macOS (aarch64-apple-darwin20), R 4.5.3 -- `R CMD check --as-cran`
-* TODO before submitting: win-builder (R-devel) and the macbuilder
-  service (macos-arm64), per CRAN policy.
+* local macOS (aarch64-apple-darwin20 / arm64), R 4.5.3 -- `R CMD check --as-cran`
+* win-builder (R-devel) -- `R CMD check --as-cran`
 
 ## R CMD check results
 
-`R CMD check --as-cran`: 0 errors | 0 warnings | 1 note.
-
-The single NOTE is the standard new-submission note:
+On both environments, `R CMD check --as-cran` gives 0 errors | 0 warnings |
+1 note. The single NOTE is the standard new-submission note:
 
 ```
 * checking CRAN incoming feasibility ... NOTE
