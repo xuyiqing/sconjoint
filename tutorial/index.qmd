@@ -143,7 +143,7 @@ The user guide is structured into the following chapters:
 
 > Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
 > *sconjoint: Structural Deep-Learning Estimation for Conjoint
-> Experiments --- User Manual (v0.2.0).*
+> Experiments --- User Manual (v0.2.2).*
 > <https://github.com/xuyiqing/sconjoint>
 
 ```bibtex
@@ -151,7 +151,7 @@ The user guide is structured into the following chapters:
   title = {sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments --- User Manual},
   author = {Acharya, Avidit and Hainmueller, Jens and Xu, Yiqing},
   year = {2026},
-  note = {R package version 0.2.0},
+  note = {R package version 0.2.2},
   url = {https://github.com/xuyiqing/sconjoint}
 }
 ```

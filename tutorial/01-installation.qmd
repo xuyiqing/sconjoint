@@ -28,21 +28,18 @@ determinism guarantee --- identical `sc_fit` output regardless of
 
 ## Versions {#sec-versions}
 
-Until the CRAN release, install from GitHub. The development branches
-carry features ahead of CRAN:
+Until the CRAN release, install from GitHub:
 
 | Source | Version | What it adds |
 |:--------------------|:------------|:------------------------------------------------------------|
-| CRAN | 0.2.1 | The released version (default), pending acceptance |
-| GitHub `@dev` | 0.2.1 | Development version; currently matches the CRAN submission |
-| GitHub `@feat/torch-threads` | 0.2.1.9000 | Newest in-progress work: the `torch_threads` Windows-stability control and the attribute-interaction extension, pending merge to `dev` after the release |
+| CRAN | 0.2.2 | The released version (default), pending acceptance |
+| GitHub `@dev` | 0.2.2 | Development version; currently matches the CRAN submission, including the `torch_threads` Windows-stability control and the attribute-interaction extension |
 
-Install a specific source with the `@branch` suffix:
+Install the development version with the `@branch` suffix:
 
 ```{r install-github, eval=FALSE}
 # install.packages("remotes")
-remotes::install_github("xuyiqing/sconjoint@dev")                 # development version
-remotes::install_github("xuyiqing/sconjoint@feat/torch-threads")  # newest features
+remotes::install_github("xuyiqing/sconjoint@dev")   # development version
 ```
 
 Check which version is installed on this computer:
@@ -52,7 +49,7 @@ packageVersion("sconjoint")
 ```
 
 Once `sconjoint` is on CRAN, `install.packages("sconjoint")` gives the
-latest release and `remotes::install_version("sconjoint", "0.2.1")` pins a
+latest release and `remotes::install_version("sconjoint", "0.2.2")` pins a
 specific one. Installing `sconjoint` pulls in `ggplot2`, `ggridges`, and
 related plotting packages automatically; no extra setup is needed for the
 visualization methods in the Plot Options chapter.
@@ -76,13 +73,10 @@ same code runs fine on macOS. Things to try, in order:
    multi-threaded CPU backend aborts the session on some Windows
    configurations, and running it single-threaded often avoids it. The
    `torch_threads` argument to `scfit()` is the targeted fix for this
-   ([issue #7](https://github.com/xuyiqing/sconjoint/issues/7)). It
-   currently lives on the `feat/torch-threads` branch, pending merge to
-   `dev` after the next release, so install that branch first:
+   ([issue #7](https://github.com/xuyiqing/sconjoint/issues/7)); it is
+   available in v0.2.2 (any install source in @sec-versions):
 
    ```r
-   remotes::install_github("xuyiqing/sconjoint@feat/torch-threads")
-   library(sconjoint)
    fit <- scfit(formula, data, ..., torch_threads = 1)
    ```
 
