@@ -475,19 +475,7 @@ scfit <- function(formula, data,
   )
 
   ## ---- 7. Master RNG state save/restore (R-level via withr) ----
-  ## `withr::defer()` is tied to the calling frame and guarantees
-  ## cleanup order regardless of how the function exits.
-  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had_seed) {
-    old_r_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  }
-  withr::defer({
-    if (had_seed) {
-      assign(".Random.seed", old_r_seed, envir = globalenv())
-    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      rm(".Random.seed", envir = globalenv())
-    }
-  })
+  withr::local_preserve_seed()
   old_torch_state <- tryCatch(torch::torch_get_rng_state(),
                               error = function(e) NULL)
   withr::defer({

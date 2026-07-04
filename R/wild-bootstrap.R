@@ -117,17 +117,9 @@
   est <- fun(theta_obs)
   q <- length(est)
 
-  ## Save / restore RNG so the bootstrap does not perturb the caller's
+  ## Preserve the caller's RNG state so the bootstrap does not perturb
   ## reproducibility (mirrors the .sc_* RNG-hygiene helpers).
-  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had_seed) old_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  on.exit({
-    if (had_seed) {
-      assign(".Random.seed", old_seed, envir = globalenv())
-    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      rm(".Random.seed", envir = globalenv())
-    }
-  }, add = TRUE)
+  withr::local_preserve_seed()
   if (!is.null(seed)) set.seed(as.integer(seed))
 
   draws <- matrix(NA_real_, nrow = q, ncol = n_boot)

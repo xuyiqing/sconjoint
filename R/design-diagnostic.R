@@ -48,10 +48,36 @@
 #'     `N_tasks`, `tier_passes` (named logical), and the threshold
 #'     list used.
 #' @examples
-#' \dontrun{
-#' fit <- scfit(..., stage2 = "map_c5")
-#' diag <- sc_design_diagnostic(fit)
-#' print(diag)
+#' \donttest{
+#' if (requireNamespace("torch", quietly = TRUE) &&
+#'     torch::torch_is_installed()) {
+#'   ## Tiny synthetic conjoint: 40 respondents, 2 tasks, 2 attributes,
+#'   ## 1 respondent covariate (see ?scfit for a larger example).
+#'   set.seed(1)
+#'   M <- 40; T_i <- 2; p <- 2
+#'   Z_mat <- matrix(stats::rnorm(M), M, 1)
+#'   rid <- rep(seq_len(M), each = T_i)
+#'   dX  <- matrix(sample(c(-1, 0, 1), M * T_i * p, replace = TRUE),
+#'                 M * T_i, p)
+#'   logit <- 0.5 * dX[, 1] * (1 + Z_mat[rid, 1]) - 0.4 * dX[, 2]
+#'   y <- stats::rbinom(M * T_i, 1, stats::plogis(logit))
+#'   long <- data.frame(
+#'     rid = rep(rid, each = 2),
+#'     tid = rep(rep(seq_len(T_i), M), each = 2),
+#'     pos = rep(c(1L, 2L), M * T_i),
+#'     a1  = as.vector(rbind(dX[, 1], 0)),
+#'     a2  = as.vector(rbind(dX[, 2], 0)),
+#'     z1  = rep(Z_mat[rid, 1], each = 2),
+#'     y   = as.vector(rbind(y, 1 - y))
+#'   )
+#'   ## The default stage2 = "map_c5" supplies the posterior-variance
+#'   ## diagonal the diagnostic needs.
+#'   fit <- scfit(y ~ a1 + a2 | z1, data = long,
+#'                respondent = "rid", task = "tid", profile = "pos",
+#'                K = 2, n_epochs = 20, seed = 1)
+#'   diag <- sc_design_diagnostic(fit)
+#'   print(diag)
+#' }
 #' }
 #' @export
 sc_design_diagnostic <- function(object,

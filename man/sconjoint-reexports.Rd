@@ -7,7 +7,14 @@
 \usage{
 autoplot(object, ...)
 }
+\value{
+The re-exported \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} generic. When called on
+an \code{sc_fit} object it dispatches to \code{\link[=autoplot.sc_fit]{autoplot.sc_fit()}} and returns
+a ggplot object.
+}
 \description{
-Re-exported functions from other packages
+The \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} generic is re-exported so that \code{autoplot()}
+methods for sconjoint objects (see \code{\link[=autoplot.sc_fit]{autoplot.sc_fit()}}) can be called
+without attaching ggplot2.
 }
 \keyword{internal}

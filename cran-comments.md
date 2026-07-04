@@ -1,9 +1,32 @@
 # CRAN submission comments
 
-## Submission
+## Resubmission
 
-This is a new submission. `sconjoint` implements the structural
-deep-learning conjoint estimator of Acharya, Hainmueller, and Xu (2026).
+This is a resubmission of a new package (previous submission: 0.2.1,
+reviewed 2026-07). `sconjoint` implements the structural deep-learning
+conjoint estimator of Acharya, Hainmueller, and Xu (2026). All three
+review comments have been addressed:
+
+* **Missing \value in sconjoint-reexports.Rd**: added. The topic now
+  documents that it re-exports the `ggplot2::autoplot()` generic and
+  what calling it on an `sc_fit` object returns.
+
+* **\dontrun{} examples**: all five topics that used `\dontrun{}` with
+  schematic code (`sc_ame`, `sc_mrs`, `sc_profile`, `sc_validate_amce`,
+  `sc_design_diagnostic`) now carry complete, executable examples that
+  simulate a small conjoint dataset, fit the model, and call the
+  documented function. They are wrapped in `\donttest{}` (not unwrapped)
+  only because they require the 'torch' backend, which is not available
+  on all check machines; each is additionally guarded by
+  `torch::torch_is_installed()`. No `\dontrun{}` remains in the package.
+
+* **Modifying the .GlobalEnv**: the package no longer touches the global
+  environment. The previous version contained hand-rolled save/restore
+  blocks for `.Random.seed` (assign/rm into `globalenv()`), intended to
+  keep seeded fits from perturbing the caller's RNG state. These have
+  all been replaced with `withr::local_seed()` /
+  `withr::local_preserve_seed()`. No `assign()`, `rm()`, or `<<-` into
+  the global environment remains.
 
 ## Test environments
 

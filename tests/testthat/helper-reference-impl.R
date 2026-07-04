@@ -218,17 +218,7 @@
   } else {
     X <- B
   }
-  old_rng <- if (exists(".Random.seed", envir = .GlobalEnv))
-    .GlobalEnv$.Random.seed else NULL
-  on.exit({
-    if (is.null(old_rng)) {
-      if (exists(".Random.seed", envir = .GlobalEnv)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    } else {
-      assign(".Random.seed", old_rng, envir = .GlobalEnv)
-    }
-  }, add = TRUE)
+  withr::local_preserve_seed()
   if (!is.null(seed)) set.seed(as.integer(seed))
   km <- stats::kmeans(X, centers = k, nstart = nstart, iter.max = 50L)
   list(assignment = as.integer(km$cluster),

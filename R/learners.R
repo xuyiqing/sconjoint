@@ -385,13 +385,7 @@
 #' @keywords internal
 #' @noRd
 .sc_inner_cv_foldid <- function(n, nfolds, seed) {
-  had <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had) old <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  on.exit({
-    if (had) assign(".Random.seed", old, envir = globalenv())
-    else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE))
-      rm(".Random.seed", envir = globalenv())
-  }, add = TRUE)
+  withr::local_preserve_seed()
   set.seed(seed)
   sample(rep_len(seq_len(nfolds), n))
 }

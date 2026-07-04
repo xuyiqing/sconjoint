@@ -65,22 +65,11 @@
   }
 
   ## ------- RNG state capture + seeding ---------
-  restore_R <- FALSE
   if (!is.null(seed)) {
-    if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      old_r_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-      restore_R <- TRUE
-    } else {
-      old_r_seed <- NULL
-    }
+    withr::local_preserve_seed()
     set.seed(seed)
     torch::torch_manual_seed(seed)
   }
-  on.exit({
-    if (restore_R) {
-      assign(".Random.seed", old_r_seed, envir = globalenv())
-    }
-  }, add = TRUE)
 
   dev <- torch::torch_device(device)
   dx  <- torch::torch_tensor(deltaX, dtype = torch::torch_float(), device = dev)

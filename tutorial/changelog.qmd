@@ -1,5 +1,17 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## v0.2.2
+
+**CRAN review fixes.** Documentation and hygiene changes requested in the
+CRAN review of the 0.2.1 submission; no estimation code paths changed.
+The reference topics for `sc_ame()`, `sc_mrs()`, `sc_profile()`,
+`sc_validate_amce()`, and `sc_design_diagnostic()` now carry complete
+runnable examples that simulate a small conjoint dataset and fit the
+model. The internal random-seed handling was rewritten on top of
+`withr::local_preserve_seed()`, so the package never writes to the global
+environment; seeded fits still leave the caller's random-number state
+exactly as they found it.
+
 ## v0.2.1
 
 **Full replication datasets.** The bundled `sw2022`, `gs2020`, and

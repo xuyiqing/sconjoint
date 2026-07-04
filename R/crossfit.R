@@ -49,17 +49,7 @@
     ))
   }
 
-  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had_seed) {
-    old_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  }
-  on.exit({
-    if (had_seed) {
-      assign(".Random.seed", old_seed, envir = globalenv())
-    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      rm(".Random.seed", envir = globalenv())
-    }
-  }, add = TRUE)
+  withr::local_preserve_seed()
 
   if (!is.null(seed)) {
     set.seed(seed)

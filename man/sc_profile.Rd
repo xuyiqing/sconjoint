@@ -26,7 +26,33 @@ the encoded dummy vector — ready to pass into \code{sc_counterfactual()}
 or \code{sc_mrs()}-driven workflows.
 }
 \examples{
-\dontrun{
-sc_profile(fit, gender = "female", talent = "hard_working")
+\donttest{
+if (requireNamespace("torch", quietly = TRUE) &&
+    torch::torch_is_installed()) {
+  ## Tiny synthetic conjoint: 40 respondents, 2 tasks, 2 attributes,
+  ## 1 respondent covariate (see ?scfit for a larger example).
+  set.seed(1)
+  M <- 40; T_i <- 2; p <- 2
+  Z_mat <- matrix(stats::rnorm(M), M, 1)
+  rid <- rep(seq_len(M), each = T_i)
+  dX  <- matrix(sample(c(-1, 0, 1), M * T_i * p, replace = TRUE),
+                M * T_i, p)
+  logit <- 0.5 * dX[, 1] * (1 + Z_mat[rid, 1]) - 0.4 * dX[, 2]
+  y <- stats::rbinom(M * T_i, 1, stats::plogis(logit))
+  long <- data.frame(
+    rid = rep(rid, each = 2),
+    tid = rep(rep(seq_len(T_i), M), each = 2),
+    pos = rep(c(1L, 2L), M * T_i),
+    a1  = as.vector(rbind(dX[, 1], 0)),
+    a2  = as.vector(rbind(dX[, 2], 0)),
+    z1  = rep(Z_mat[rid, 1], each = 2),
+    y   = as.vector(rbind(y, 1 - y))
+  )
+  fit <- scfit(y ~ a1 + a2 | z1, data = long,
+               respondent = "rid", task = "tid", profile = "pos",
+               K = 2, n_epochs = 20, seed = 1)
+  ## Profile with a1 set to 1, a2 left at its reference value.
+  sc_profile(fit, a1 = 1)
+}
 }
 }

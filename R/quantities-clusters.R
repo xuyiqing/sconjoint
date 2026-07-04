@@ -75,17 +75,7 @@ sc_clusters <- function(object,
   }
 
   if (!is.null(seed)) {
-    old_rng <- if (exists(".Random.seed", envir = .GlobalEnv))
-                 .GlobalEnv$.Random.seed else NULL
-    on.exit({
-      if (is.null(old_rng)) {
-        if (exists(".Random.seed", envir = .GlobalEnv)) {
-          rm(".Random.seed", envir = .GlobalEnv)
-        }
-      } else {
-        assign(".Random.seed", old_rng, envir = .GlobalEnv)
-      }
-    }, add = TRUE)
+    withr::local_preserve_seed()
     set.seed(as.integer(seed))
   }
 

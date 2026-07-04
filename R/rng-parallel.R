@@ -39,22 +39,18 @@
   }
   n_streams <- as.integer(n_streams)
 
+  ## Preserve the caller's full RNG state. withr restores .Random.seed
+  ## (which encodes the kind) on exit; the extra defer restores the kind
+  ## for the corner case where the caller had no .Random.seed at all.
+  ## (withr::local_seed() is avoided: in withr 3.0.2 its restore handler
+  ## never fires -- an on.exit() registered inside a defer handler.)
   old_kind <- RNGkind()
-  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had_seed) {
-    old_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  }
-  on.exit({
-    suppressWarnings(RNGkind(kind = old_kind[1L], normal.kind = old_kind[2L],
-                             sample.kind = old_kind[3L]))
-    if (had_seed) {
-      assign(".Random.seed", old_seed, envir = globalenv())
-    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      rm(".Random.seed", envir = globalenv())
-    }
-  }, add = TRUE)
-
-  RNGkind("L'Ecuyer-CMRG")
+  withr::local_preserve_seed()
+  withr::defer(suppressWarnings(
+    RNGkind(kind = old_kind[1L], normal.kind = old_kind[2L],
+            sample.kind = old_kind[3L])
+  ))
+  suppressWarnings(RNGkind("L'Ecuyer-CMRG"))
   set.seed(seed)
   current <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
 
@@ -82,10 +78,7 @@
   expr <- substitute(expr)
   env  <- parent.frame()
 
-  had_r_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (had_r_seed) {
-    old_r_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-  }
+  withr::local_preserve_seed()
 
   old_torch_state <- NULL
   torch_ok <- requireNamespace("torch", quietly = TRUE)
@@ -95,11 +88,6 @@
   }
 
   on.exit({
-    if (had_r_seed) {
-      assign(".Random.seed", old_r_seed, envir = globalenv())
-    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-      rm(".Random.seed", envir = globalenv())
-    }
     if (torch_ok && !is.null(old_torch_state)) {
       tryCatch(torch::torch_set_rng_state(old_torch_state),
                error = function(e) NULL)
