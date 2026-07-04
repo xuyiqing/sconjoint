@@ -12,6 +12,13 @@
 #'   accepted by [sc_counterfactual()]).
 #' @param subgroup Optional row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#' @details
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), each profile utility
+#' \eqn{V_{ij}} includes the population-level interaction contribution
+#' \eqn{g(X_j)} (the all-reference profile has \eqn{g = 0}).  The
+#' interaction term enters via the regularized mean-stage estimate
+#' (`w_hat`); see `?scfit` for the attenuation caveat.
 #' @return An `sc_quantity` with scalar estimate, clustered SE, and
 #'   normal-approx CI.
 #' @export
@@ -27,12 +34,15 @@ sc_surplus <- function(object, profiles, subgroup = NULL,
   Bm <- .sc_pick_beta(object, which_beta)
   S  <- .sc_resolve_subgroup(object, subgroup)
   Bs <- Bm[S, , drop = FALSE]
-  ## For each respondent, compute V_j for every profile, then logsumexp
+  ## For each respondent, compute V_j for every profile, then logsumexp.
+  ## V_j includes the population-level interaction contribution g(X_j)
+  ## when the fit carries one (g of the all-reference profile is 0).
   J <- length(dummies)
   ## V matrix: |S| x J
   V <- matrix(NA_real_, nrow = length(S), ncol = J)
   for (j in seq_len(J)) {
-    V[, j] <- as.numeric(Bs %*% dummies[[j]])
+    V[, j] <- as.numeric(Bs %*% dummies[[j]]) +
+      .sc_int_pair_offset(object, dummies[[j]])
   }
   cs_i <- apply(V, 1L, .sc_logsumexp)
   est <- mean(cs_i)

@@ -20,6 +20,17 @@
 #' @param search Either `"greedy"` (default) or `"exhaustive"`.
 #' @param subgroup Row selector.
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
+#' @details
+#' When the fit carries an attribute-interaction term, every profile
+#' evaluation includes the population-level interaction contribution
+#' \eqn{g(X)} (the all-reference profile has \eqn{g = 0}).  The
+#' `"exhaustive"` search ranks candidate profiles with the interaction
+#' included; the `"greedy"` selection remains a per-attribute argmax on
+#' the main effects (interactions enter its reported probability but
+#' not the level picks), so prefer `"exhaustive"` when interactions are
+#' substantively important.  The interaction term enters via the
+#' regularized mean-stage estimate (`w_hat`); see `?scfit` for the
+#' attenuation caveat.
 #' @return An `sc_quantity` with scalar estimate and rich `details`.
 #' @export
 sc_optimal_profile <- function(object,
@@ -59,7 +70,8 @@ sc_optimal_profile <- function(object,
         sel <- as.integer(grid[r, a])
         if (sel > 0L) x_star[map[[attrs[a]]][sel]] <- 1
       }
-      lin <- as.numeric(B[S, , drop = FALSE] %*% x_star)
+      lin <- as.numeric(B[S, , drop = FALSE] %*% x_star) +
+        .sc_int_pair_offset(object, x_star)
       pv <- mean(stats::plogis(lin))
       if (pv > best_val) {
         best_val <- pv
@@ -88,7 +100,8 @@ sc_optimal_profile <- function(object,
       }
     }
   }
-  lin_star <- as.numeric(B[S, , drop = FALSE] %*% x_star)
+  lin_star <- as.numeric(B[S, , drop = FALSE] %*% x_star) +
+    .sc_int_pair_offset(object, x_star)
   p_i <- stats::plogis(lin_star)
   est <- mean(p_i)
   se  <- .sc_cluster_se(p_i, resp_s)
@@ -116,7 +129,10 @@ sc_optimal_profile <- function(object,
       }
     }
   }
-  worst_prob_mean <- mean(stats::plogis(as.numeric(B[S, , drop = FALSE] %*% x_worst)))
+  worst_prob_mean <- mean(stats::plogis(
+    as.numeric(B[S, , drop = FALSE] %*% x_worst) +
+      .sc_int_pair_offset(object, x_worst)
+  ))
   .sc_quantity(
     name = "optimal_profile",
     estimate = est,

@@ -12,6 +12,13 @@
 #' factor).  Multi-level cost attributes require calling `sc_mrs()`
 #' directly with the user-chosen level pair.
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the WTP -- like the MRS it
+#' wraps -- is a ratio of MAIN-EFFECT quantities and is
+#' reference-profile-specific: the marginal rate at the no-interaction
+#' baseline.  A `reference_profile` argument is future work; see
+#' [sc_mrs()].
+#'
 #' @param object An `sc_fit`.
 #' @param attr Numerator attribute level.
 #' @param cost_attr Single-column cost attribute.

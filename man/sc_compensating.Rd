@@ -53,4 +53,12 @@ spec §3.3 B2).
 Dummy identifiers follow the same rules as \code{sc_mrs}: either
 \code{"attribute:level"}, a bare dummy name matching \code{object$attr_names},
 or an integer column index.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the compensating
+differential -- like the MRS it mirrors -- is a ratio of
+MAIN-EFFECT quantities and is therefore reference-profile-specific:
+the trade-off at the no-interaction baseline (all other attributes
+at their reference levels), not an all-else-equal constant.  See
+\code{\link[=sc_mrs]{sc_mrs()}}.
 }

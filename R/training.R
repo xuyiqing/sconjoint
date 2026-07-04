@@ -36,6 +36,19 @@
 #' @param device Character, `"cpu"` (default) or `"cuda"`.  Only CPU
 #'   is bit-exact.
 #' @param verbose Logical, print per-epoch summary if `TRUE`.
+#' @param interactions One of `"none"` (default; historical behavior,
+#'   bit-identical), `"lowrank"`, or `"explicit"`.  See
+#'   `.sc_build_network()`.
+#' @param X_A,X_B Numeric `n x p` profile-level dummy matrices (first /
+#'   second profile of each task).  Required for
+#'   `interactions = "lowrank"`.
+#' @param F_int Numeric `n x q` matrix of identified interaction
+#'   features `q_A - q_B`.  Required for `interactions = "explicit"`.
+#' @param interaction_rank Integer rank of the low-rank head.
+#' @param lambda_V Non-negative ridge penalty added to the loss for the
+#'   interaction head (`lambda_V * sum(V^2)` or `lambda_V * sum(w^2)`),
+#'   on top of the optimizer-level `weight_decay` shared by all
+#'   parameters.
 #' @return A list with `net` (trained `nn_module`), `loss_trace`
 #'   (numeric vector of per-epoch training losses), and `final_loss`.
 #' @keywords internal
@@ -47,7 +60,13 @@
                           weight_decay = 1e-4,
                           seed = NULL,
                           device = "cpu",
-                          verbose = FALSE) {
+                          verbose = FALSE,
+                          interactions = "none",
+                          X_A = NULL,
+                          X_B = NULL,
+                          F_int = NULL,
+                          interaction_rank = 2L,
+                          lambda_V = 1e-2) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_train_one(): the 'torch' package is required.")
   }
@@ -63,6 +82,20 @@
   if (is.null(hidden)) {
     hidden <- .sc_auto_hidden(nrow(deltaX))
   }
+  interactions <- match.arg(interactions, c("none", "lowrank", "explicit"))
+  if (identical(interactions, "lowrank")) {
+    if (is.null(X_A) || is.null(X_B) ||
+        nrow(X_A) != nrow(deltaX) || nrow(X_B) != nrow(deltaX)) {
+      stop(".sc_train_one(): interactions = \"lowrank\" requires `X_A`, ",
+           "`X_B` matching nrow(deltaX).")
+    }
+  }
+  if (identical(interactions, "explicit")) {
+    if (is.null(F_int) || nrow(F_int) != nrow(deltaX)) {
+      stop(".sc_train_one(): interactions = \"explicit\" requires `F_int` ",
+           "matching nrow(deltaX).")
+    }
+  }
 
   ## ------- RNG state capture + seeding ---------
   if (!is.null(seed)) {
@@ -75,10 +108,20 @@
   dx  <- torch::torch_tensor(deltaX, dtype = torch::torch_float(), device = dev)
   zt  <- torch::torch_tensor(Z,      dtype = torch::torch_float(), device = dev)
   yt  <- torch::torch_tensor(as.numeric(y), dtype = torch::torch_float(), device = dev)
+  xa_t <- xb_t <- fint_t <- NULL
+  if (identical(interactions, "lowrank")) {
+    xa_t <- torch::torch_tensor(X_A, dtype = torch::torch_float(), device = dev)
+    xb_t <- torch::torch_tensor(X_B, dtype = torch::torch_float(), device = dev)
+  } else if (identical(interactions, "explicit")) {
+    fint_t <- torch::torch_tensor(F_int, dtype = torch::torch_float(), device = dev)
+  }
 
   p_beta <- ncol(deltaX)
   p_z    <- ncol(Z)
-  net <- .sc_build_network(p = p_beta, p_Z = p_z, hidden = hidden)
+  net <- .sc_build_network(p = p_beta, p_Z = p_z, hidden = hidden,
+                           interactions = interactions,
+                           interaction_rank = interaction_rank,
+                           n_int_features = if (is.null(F_int)) 0L else ncol(F_int))
   net$to(device = dev)
 
   optimizer <- torch::optim_adam(net$parameters, lr = learning_rate,
@@ -89,8 +132,19 @@
   for (epoch in seq_len(n_epochs)) {
     net$train()
     optimizer$zero_grad()
-    logit <- net$forward(dx, zt)
+    logit <- if (identical(interactions, "none")) {
+      net$forward(dx, zt)
+    } else if (identical(interactions, "lowrank")) {
+      net$forward(dx, zt, x_a = xa_t, x_b = xb_t)
+    } else {
+      net$forward(dx, zt, f_int = fint_t)
+    }
     loss  <- loss_fn(logit, yt)
+    if (identical(interactions, "lowrank")) {
+      loss <- loss + lambda_V * torch::torch_sum(net$V^2)
+    } else if (identical(interactions, "explicit")) {
+      loss <- loss + lambda_V * torch::torch_sum(net$w_int^2)
+    }
     loss$backward()
     optimizer$step()
     loss_trace[epoch] <- as.numeric(loss$item())

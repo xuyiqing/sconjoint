@@ -77,4 +77,10 @@ and reflects \strong{sampling variability of the fraction}, not the
 finite-\eqn{T} shrinkage bias that pulls each \eqn{\hat\beta_i}
 toward consensus and so biases the fraction toward agreement.
 }
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

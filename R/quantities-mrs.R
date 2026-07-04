@@ -11,6 +11,15 @@
 #' is new in sconjoint v0.1 (the prototype reports a plain delta-method
 #' SE which is retained inside `$details$delta_se` as a diagnostic).
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the MRS remains a ratio of
+#' MAIN-EFFECT quantities and is therefore reference-profile-specific:
+#' it is the marginal rate of substitution at the no-interaction
+#' baseline (all other attributes at their reference levels), not an
+#' all-else-equal constant.  A `reference_profile` argument that
+#' evaluates the ratio of full index gradients at an analyst-chosen
+#' profile is future work.
+#'
 #' @param object An `sc_fit`.
 #' @param numerator,denominator Character of form `"attribute:level"`,
 #'   or a bare dummy column name matching `object$attr_names`, or an

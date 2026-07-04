@@ -24,10 +24,21 @@
 #'   variance when `stage2 = "varref"`.  Default `1e-3`.  Ignored for
 #'   other Stage-2 methods.
 #' @param parallel,n_cores,device,verbose Same as in `scfit()`.
+#' @param interactions,X_A,X_B,F_int,int_pairs,interaction_rank,lambda_V
+#'   Attribute-interaction configuration (see `.sc_crossfit()`).  When
+#'   `interactions != "none"` the 2nd DNN is trained with the same
+#'   interaction head, and the per-task interaction offset used by the
+#'   MAP update / sigma-score estimator is the ensemble average
+#'   `(g_offset_stage1 + g_offset_stage2) / 2`, mirroring the beta
+#'   ensemble.  `stage2 = "mixed_logit"` is rejected upstream when an
+#'   interaction term is requested.
+#' @param g_offset_stage1 Numeric N-vector of Stage-1 cross-fitted
+#'   interaction offsets (or NULL).
 #' @return A named list of slots to merge into the `sc_fit` object:
 #'   `beta_hat`, `beta_hat_dnn`, `beta_hat_dnn2`, `beta_hat_ens`,
 #'   `beta_hat_resp`, `sigma_prior`, `sigma_post_diag`,
-#'   `stage2_method`, `stage2_warnings`.
+#'   `stage2_method`, `stage2_warnings`, plus `g_offset_ens` and
+#'   `w_fold2` when an interaction term is present.
 #' @keywords internal
 #' @noRd
 .sc_run_stage2 <- function(stage2,
@@ -39,7 +50,15 @@
                            parallel = FALSE,
                            n_cores = NULL,
                            device = "cpu",
-                           verbose = FALSE) {
+                           verbose = FALSE,
+                           interactions = "none",
+                           X_A = NULL,
+                           X_B = NULL,
+                           F_int = NULL,
+                           int_pairs = NULL,
+                           interaction_rank = 2L,
+                           lambda_V = 1e-2,
+                           g_offset_stage1 = NULL) {
   stage2 <- match.arg(stage2,
                       choices = c("map_c5", "none", "varref", "mixed_logit"))
 
@@ -76,7 +95,14 @@
     parallel      = parallel,
     n_cores       = n_cores,
     device        = device,
-    verbose       = verbose
+    verbose       = verbose,
+    interactions  = interactions,
+    X_A           = X_A,
+    X_B           = X_B,
+    F_int         = F_int,
+    int_pairs     = int_pairs,
+    interaction_rank = interaction_rank,
+    lambda_V         = lambda_V
   )
   beta_hat_dnn2 <- cf2$beta_hat
   colnames(beta_hat_dnn2) <- colnames(beta_hat_dnn)
@@ -88,14 +114,24 @@
                                             respondent_idx,
                                             n_resp = n_resp)
 
+  ## Ensemble interaction offset: average of the two cross-fitted
+  ## population-level g terms, mirroring the beta ensemble.  NULL when
+  ## no interaction term is present (preserves the historical paths).
+  g_offset_ens <- NULL
+  if (!identical(interactions, "none")) {
+    g_offset_ens <- (as.numeric(g_offset_stage1) + as.numeric(cf2$g_offset)) / 2
+  }
+
   ## --- Stage-2 algorithm dispatch --------------------------------------
   if (identical(stage2, "map_c5")) {
     sigma_score <- .sc_estimate_sigma_score(
-      deltaX, y, beta_hat_ens_resp, respondent_idx
+      deltaX, y, beta_hat_ens_resp, respondent_idx,
+      offset = g_offset_ens
     )
     sigma_prior <- sigma_score / 5
     out <- .sc_map_all(
-      deltaX, y, beta_hat_ens_resp, respondent_idx, sigma_prior
+      deltaX, y, beta_hat_ens_resp, respondent_idx, sigma_prior,
+      offset = g_offset_ens
     )
     beta_hat_resp <- out$beta_hat_resp_map
     sigma_post_diag <- colMeans(out$post_var_resp_diag, na.rm = TRUE)
@@ -105,7 +141,8 @@
     sigma_prior <- .sc_estimate_sigma_varref(beta_hat_ens_resp,
                                              floor = varref_floor)
     out <- .sc_map_all(
-      deltaX, y, beta_hat_ens_resp, respondent_idx, sigma_prior
+      deltaX, y, beta_hat_ens_resp, respondent_idx, sigma_prior,
+      offset = g_offset_ens
     )
     beta_hat_resp <- out$beta_hat_resp_map
     sigma_post_diag <- colMeans(out$post_var_resp_diag, na.rm = TRUE)
@@ -158,6 +195,8 @@
     sigma_prior     = sigma_prior,
     sigma_post_diag = sigma_post_diag,
     stage2_method   = stage2_method,
-    stage2_warnings = warns
+    stage2_warnings = warns,
+    g_offset_ens    = g_offset_ens,
+    w_fold2         = cf2$w_fold
   )
 }

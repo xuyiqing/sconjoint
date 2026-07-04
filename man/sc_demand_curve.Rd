@@ -47,4 +47,13 @@ For each cost value \eqn{c} and respondent \eqn{i}:
   \mathrm{profile}_k}
 \deqn{\mathrm{demand}(c) = \frac{1}{N_S}\sum_{i\in S}
   \mathrm{plogis}(V_i(c))}
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the population-level
+interaction offset is NOT applied on this path: the demand index is
+a MAIN-EFFECT-ONLY evaluation of the per-respondent \code{beta_i} (the
+coefficient on \code{deltaX} at the no-interaction baseline), so the
+profile's interaction contribution \eqn{g(X)} is omitted from
+\eqn{V_i(c)}.  See \code{?scfit} for how interactions enter the other
+index-evaluating quantities.
 }

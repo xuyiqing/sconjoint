@@ -112,12 +112,36 @@
 #' @param n_cores Integer number of workers to request when parallel.
 #' @param device Character `"cpu"` or `"cuda"`.
 #' @param verbose Logical, per-epoch training noise.
+#' @param interactions One of `"none"` (default; historical behavior,
+#'   bit-identical), `"lowrank"`, or `"explicit"`.
+#' @param X_A,X_B Numeric N x p profile-level dummy matrices (required
+#'   for `"lowrank"`).
+#' @param F_int Numeric N x q identified interaction features `q_A - q_B`
+#'   (required for `"lowrank"` and `"explicit"`; under `"lowrank"` it is
+#'   used to form the held-out interaction offset from the extracted
+#'   cross-attribute blocks of `V V'`).
+#' @param int_pairs q x 2 integer matrix of identified pairs (from
+#'   `.sc_int_pairs()`), required when `interactions != "none"`.
+#' @param interaction_rank,lambda_V Interaction-head hyperparameters,
+#'   forwarded to `.sc_train_one()`.
 #' @return A list with:
-#'   * `beta_hat` -- N x p matrix of out-of-sample beta predictions;
+#'   * `beta_hat` -- N x p matrix of out-of-sample beta predictions.
+#'     When `interactions = "lowrank"` the per-fold diagonal of `V V'`
+#'     is absorbed into the held-out rows, so `beta_hat` is the main-
+#'     effect coefficient of the identified linear-in-parameters
+#'     representation;
 #'   * `nets` -- list of length K, the trained networks per fold;
 #'   * `loss_traces` -- list of length K, per-fold training loss curves;
 #'   * `fold_id` -- integer vector of length N (copy of input);
-#'   * `K` -- integer number of folds.
+#'   * `K` -- integer number of folds;
+#'   and, when `interactions != "none"`:
+#'   * `g_offset` -- N-vector of held-out interaction offsets
+#'     `g(X_A) - g(X_B)` (cross-attribute part only; the diagonal is in
+#'     `beta_hat`);
+#'   * `w_fold` -- K x q matrix of per-fold interaction coefficients on
+#'     the identified features;
+#'   * `V_fold`, `W_fold` -- per-fold `V` and `W = V V'` (lowrank only,
+#'     lists of length K; otherwise NULL).
 #' @keywords internal
 #' @noRd
 .sc_crossfit <- function(deltaX, y, Z, fold_id,
@@ -129,7 +153,14 @@
                          parallel = FALSE,
                          n_cores = NULL,
                          device = "cpu",
-                         verbose = FALSE) {
+                         verbose = FALSE,
+                         interactions = "none",
+                         X_A = NULL,
+                         X_B = NULL,
+                         F_int = NULL,
+                         int_pairs = NULL,
+                         interaction_rank = 2L,
+                         lambda_V = 1e-2) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_crossfit(): the 'torch' package is required.")
   }
@@ -150,6 +181,20 @@
   }
   if (is.null(hidden)) {
     hidden <- .sc_auto_hidden(n)
+  }
+  interactions <- match.arg(interactions, c("none", "lowrank", "explicit"))
+  if (!identical(interactions, "none")) {
+    if (is.null(F_int) || nrow(F_int) != n) {
+      stop(".sc_crossfit(): interactions != \"none\" requires `F_int` with N rows.")
+    }
+    if (is.null(int_pairs) || nrow(int_pairs) != ncol(F_int)) {
+      stop(".sc_crossfit(): `int_pairs` must have one row per F_int column.")
+    }
+    if (identical(interactions, "lowrank") &&
+        (is.null(X_A) || is.null(X_B) ||
+         nrow(X_A) != n || nrow(X_B) != n)) {
+      stop(".sc_crossfit(): interactions = \"lowrank\" requires `X_A`, `X_B` with N rows.")
+    }
   }
 
   ## Pre-generate K L'Ecuyer-CMRG streams in the parent process.  These
@@ -189,15 +234,33 @@
       weight_decay  = weight_decay,
       seed          = fold_seeds[k],
       device        = device,
-      verbose       = verbose
+      verbose       = verbose,
+      interactions  = interactions,
+      X_A   = if (is.null(X_A))   NULL else X_A[train_in, , drop = FALSE],
+      X_B   = if (is.null(X_B))   NULL else X_B[train_in, , drop = FALSE],
+      F_int = if (is.null(F_int)) NULL else F_int[train_in, , drop = FALSE],
+      interaction_rank = interaction_rank,
+      lambda_V         = lambda_V
     )
     beta_holdout <- .sc_predict_beta(trained$net, Z[holdout, , drop = FALSE])
+    int_out <- NULL
+    if (!identical(interactions, "none")) {
+      ext <- .sc_int_extract(trained$net, interactions, int_pairs,
+                             p = ncol(deltaX))
+      ## Absorb the diagonal of W = VV' into the held-out main effects
+      ## (lowrank; zero shift under "explicit"), so beta_holdout is the
+      ## coefficient on deltaX in the identified linear representation.
+      beta_holdout <- sweep(beta_holdout, 2L, ext$beta_shift, FUN = "+")
+      g_holdout <- as.numeric(F_int[holdout, , drop = FALSE] %*% ext$w)
+      int_out <- list(w = ext$w, V = ext$V, W = ext$W, g_holdout = g_holdout)
+    }
     list(
       k            = k,
       holdout      = holdout,
       beta_holdout = beta_holdout,
       net          = trained$net,
-      loss_trace   = trained$loss_trace
+      loss_trace   = trained$loss_trace,
+      int          = int_out
     )
   }
 
@@ -234,11 +297,31 @@
   colnames(beta_hat) <- colnames(deltaX)
   nets        <- vector("list", K)
   loss_traces <- vector("list", K)
+  g_offset <- NULL
+  w_fold   <- NULL
+  V_fold   <- NULL
+  W_fold   <- NULL
+  if (!identical(interactions, "none")) {
+    g_offset <- rep(NA_real_, n)
+    w_fold   <- matrix(NA_real_, K, ncol(F_int))
+    if (identical(interactions, "lowrank")) {
+      V_fold <- vector("list", K)
+      W_fold <- vector("list", K)
+    }
+  }
   for (res in results) {
     k <- res$k
     beta_hat[res$holdout, ] <- res$beta_holdout
     nets[[k]]        <- res$net
     loss_traces[[k]] <- res$loss_trace
+    if (!is.null(res$int)) {
+      g_offset[res$holdout] <- res$int$g_holdout
+      w_fold[k, ] <- res$int$w
+      if (!is.null(V_fold)) {
+        V_fold[[k]] <- res$int$V
+        W_fold[[k]] <- res$int$W
+      }
+    }
   }
 
   if (any(is.na(beta_hat))) {
@@ -250,6 +333,10 @@
     nets        = nets,
     loss_traces = loss_traces,
     fold_id     = fold_id,
-    K           = K
+    K           = K,
+    g_offset    = g_offset,
+    w_fold      = w_fold,
+    V_fold      = V_fold,
+    W_fold      = W_fold
   )
 }

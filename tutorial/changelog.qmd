@@ -12,6 +12,27 @@ model. The internal random-seed handling was rewritten on top of
 environment; seeded fits still leave the caller's random-number state
 exactly as they found it.
 
+**Robustness.** `scfit()` gains a `torch_threads` argument that caps torch's
+intra-op thread count (the results are unchanged); the main use is
+`torch_threads = 1` to work around the rare R-session abort some Windows
+users hit with torch's default multi-threaded CPU backend (issue #7). See
+the Get Started chapter's troubleshooting notes.
+
+**Attribute interactions.** `scfit()` gains an `interactions` argument
+(`"none"`, the default; `"lowrank"`; or `"explicit"`) that adds a
+population-level cross-attribute term `g(X)` to the profile utility, with
+`interaction_rank` and `lambda_V` controlling the low-rank head and its
+ridge penalty. The default reproduces previous behavior exactly. With an
+interaction term, DML inference runs on the expanded linear-in-parameters
+representation and carries the interaction coefficients and clustered
+covariance on `fit$interaction`; the Stage-2 MAP update absorbs the
+cross-fitted interaction as a known per-task offset; and the
+index-evaluating quantities (`sc_ame()`, `sc_counterfactual()`,
+`sc_optimal_profile()`, `sc_surplus()`, `sc_welfare_change()`, and
+`predict()`) include the offset. `sc_mrs()` and `sc_wtp()` are
+reference-profile-specific under interactions, and importance shares stay
+main-effect-only.
+
 ## v0.2.1
 
 **Full replication datasets.** The bundled `sw2022`, `gs2020`, and

@@ -28,6 +28,15 @@ print.sc_fit <- function(x, ...) {
   ))
   stage2_str <- if (is.null(x$stage2_method)) "(legacy fit)" else x$stage2_method
   cat(sprintf("Stage 2: %s\n", stage2_str))
+  if (!is.null(x$interaction)) {
+    cat(sprintf(
+      "Interactions: %s (%d identified cross-attribute features%s)\n",
+      x$interaction$type,
+      x$interaction$n_features,
+      if (identical(x$interaction$type, "lowrank"))
+        sprintf(", rank %d", x$interaction$rank) else ""
+    ))
+  }
   ## Show the last few training losses of fold 1 as a pipeline health hint.
   if (length(x$loss_traces) >= 1L && length(x$loss_traces[[1L]]) > 0L) {
     tail_losses <- utils::tail(x$loss_traces[[1L]], n = 3L)
@@ -170,6 +179,17 @@ print.sc_fit_summary <- function(x, digits = 4L, ...) {
 #'   \code{"beta"} is supported (logit and prob require task-level
 #'   deltaX which is unavailable for new respondents).
 #' @param ... Unused.
+#' @details
+#' When the fit carries an attribute-interaction term
+#' (\code{scfit(..., interactions != "none")}), the stored
+#' \code{"logit"} / \code{"prob"} predictions include the per-task
+#' interaction offset \eqn{g(X_A) - g(X_B)}
+#' (\code{object$interaction$g_offset_task}), and \code{"beta"} (both
+#' stored and \code{newdata} forward-pass) returns the main-effect
+#' coefficient of the identified representation (under
+#' \code{"lowrank"}, the diagonal of \eqn{VV'} is absorbed).  The
+#' interaction term enters via the regularized mean-stage estimate
+#' (\code{w_hat}); see \code{?scfit} for the attenuation caveat.
 #' @return When \code{type = "beta"}: an \eqn{N \times p} numeric matrix
 #'   of preference parameters.
 #'   When \code{type = "logit"} (only \code{newdata = NULL}): a numeric
@@ -182,10 +202,15 @@ predict.sc_fit <- function(object, newdata = NULL, type = c("beta", "logit", "pr
 
   if (is.null(newdata)) {
     ## ---- Stored predictions (backward-compatible) ----
+    ## Index evaluations include the per-task interaction offset when
+    ## the fit carries one (0-length / NULL-safe otherwise).
+    g_off <- if (!is.null(object$interaction)) {
+      object$interaction$g_offset_task
+    } else 0
     switch(type,
       beta  = object$beta_hat,
-      logit = as.numeric(rowSums(object$deltaX * object$beta_hat)),
-      prob  = as.numeric(stats::plogis(rowSums(object$deltaX * object$beta_hat)))
+      logit = as.numeric(rowSums(object$deltaX * object$beta_hat) + g_off),
+      prob  = as.numeric(stats::plogis(rowSums(object$deltaX * object$beta_hat) + g_off))
     )
   } else {
     ## ---- Forward-pass on new Z ----
@@ -232,6 +257,17 @@ predict.sc_fit <- function(object, newdata = NULL, type = c("beta", "logit", "pr
       }
     }
     beta_avg <- beta_sum / K
+    ## Under interactions = "lowrank" the network's beta head is the
+    ## un-absorbed coefficient; add the fold-averaged diagonal of VV'
+    ## so the result matches the identified main-effect representation
+    ## stored on the fit (see .sc_crossfit()).
+    int <- object$interaction
+    if (!is.null(int) && identical(int$type, "lowrank") &&
+        !is.null(int$V_fold)) {
+      shift <- Reduce(`+`, lapply(int$V_fold, function(V) rowSums(V^2))) /
+        length(int$V_fold)
+      beta_avg <- sweep(beta_avg, 2L, shift, FUN = "+")
+    }
     colnames(beta_avg) <- object$attr_names
     beta_avg
   }

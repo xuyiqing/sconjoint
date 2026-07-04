@@ -70,4 +70,10 @@ resampled. As with \code{sc_fraction_preferring()}, fixed-\eqn{T}
 shrinkage biases the plug-in fractions toward consensus, so the
 interval reflects \strong{sampling variability}, not the shrinkage
 bias. See the \emph{Inference validity by quantity} section of \code{?scfit}.
+
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), this quantity is computed from
+the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
+the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
+the no-interaction baseline), not the all-else-equal effect.
 }

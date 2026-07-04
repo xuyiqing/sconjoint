@@ -24,6 +24,13 @@
 #'   across coordinates if scalar).  This is the *variance*, not the precision.
 #' @param max_iter Integer maximum Newton iterations (default 20).
 #' @param tol Numeric convergence tolerance on `max |gradient|` (default 1e-6).
+#' @param offset Optional numeric length-`T_i` vector of KNOWN per-task
+#'   index offsets `o_it = g(X_A,it) - g(X_B,it)` from the cross-fitted
+#'   population-level interaction term.  The respondent update on
+#'   `beta_i` is otherwise unchanged: the index is
+#'   `DX_i %*% (f_i + eta) + offset`.  `NULL` (default) means no offset.
+#'   The interaction term enters via the regularized mean-stage estimate
+#'   (`w_hat`); see `?scfit` for the attenuation caveat.
 #' @return A list with:
 #'   * `eta`: numeric length-`P` residual, so that `beta_hat = f_i + eta`;
 #'   * `post_var_diag`: numeric length-`P` diagonal of the posterior
@@ -34,12 +41,13 @@
 #' @keywords internal
 #' @noRd
 .sc_map_one <- function(DX_i, y_i, f_i, sigma_prior,
-                        max_iter = 20L, tol = 1e-6) {
+                        max_iter = 20L, tol = 1e-6, offset = NULL) {
   P <- length(f_i)
   if (length(sigma_prior) == 1L) {
     sigma_prior <- rep(sigma_prior, P)
   }
   prec <- 1 / sigma_prior  # diagonal prior precision
+  off <- if (is.null(offset)) 0 else as.numeric(offset)
 
   eta <- rep(0, P)
   converged <- FALSE
@@ -47,7 +55,7 @@
 
   for (it in seq_len(as.integer(max_iter))) {
     iters <- it
-    v <- as.numeric(DX_i %*% (f_i + eta))
+    v <- as.numeric(DX_i %*% (f_i + eta)) + off
     p <- 1 / (1 + exp(-v))
     r <- y_i - p
     g <- as.numeric(crossprod(DX_i, r)) - prec * eta
@@ -65,7 +73,7 @@
   }
 
   ## Final Hessian + posterior var at the optimum
-  v <- as.numeric(DX_i %*% (f_i + eta))
+  v <- as.numeric(DX_i %*% (f_i + eta)) + off
   p <- 1 / (1 + exp(-v))
   w <- p * (1 - p)
   H <- -crossprod(DX_i * w, DX_i) - diag(prec, nrow = P)
@@ -96,6 +104,8 @@
 #' @param respondent_idx Integer vector of length `n_task`; the
 #'   respondent number (1..n_resp) of each task row.
 #' @param sigma_prior Numeric length-`P` (or scalar) diagonal prior variance.
+#' @param offset Optional numeric length-`n_task` vector of known per-task
+#'   interaction offsets, forwarded row-subset to `.sc_map_one()`.
 #' @return A list with:
 #'   * `beta_hat_resp_map`: numeric `n_resp` x `P` matrix of MAP estimates;
 #'   * `post_var_resp_diag`: numeric `n_resp` x `P` matrix of posterior
@@ -106,7 +116,7 @@
 #' @noRd
 .sc_map_all <- function(deltaX, y, beta_hat_resp,
                         respondent_idx, sigma_prior,
-                        max_iter = 20L, tol = 1e-6) {
+                        max_iter = 20L, tol = 1e-6, offset = NULL) {
   n_resp <- nrow(beta_hat_resp)
   P <- ncol(beta_hat_resp)
   if (length(sigma_prior) == 1L) {
@@ -133,7 +143,8 @@
       f_i         = beta_hat_resp[i, ],
       sigma_prior = sigma_prior,
       max_iter    = max_iter,
-      tol         = tol
+      tol         = tol,
+      offset      = if (is.null(offset)) NULL else offset[rows]
     )
     beta_map[i, ] <- beta_hat_resp[i, ] + res$eta
     pv[i, ]       <- res$post_var_diag
@@ -176,11 +187,15 @@
 #' @param respondent_idx Integer length-`n_task` vector of respondent index.
 #' @param floor Numeric lower bound for the per-coefficient variance.
 #'   Default 0.01.
+#' @param offset Optional numeric length-`n_task` vector of known per-task
+#'   interaction offsets `o_it = g(X_A,it) - g(X_B,it)`, added to the
+#'   fitted index before forming the residual.
 #' @return Numeric length-`P` vector of floored score-based variances.
 #' @keywords internal
 #' @noRd
 .sc_estimate_sigma_score <- function(deltaX, y, beta_hat_resp,
-                                     respondent_idx, floor = 0.01) {
+                                     respondent_idx, floor = 0.01,
+                                     offset = NULL) {
   P <- ncol(deltaX)
   n_resp <- nrow(beta_hat_resp)
   n_task <- nrow(deltaX)
@@ -189,6 +204,7 @@
   ## Task-level fitted prob using the respondent-indexed prior mean
   bht <- beta_hat_resp[respondent_idx, , drop = FALSE]
   v   <- rowSums(deltaX * bht)
+  if (!is.null(offset)) v <- v + as.numeric(offset)
   p   <- 1 / (1 + exp(-v))
   r   <- y - p
   w_bar <- mean(p * (1 - p))

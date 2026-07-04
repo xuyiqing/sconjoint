@@ -34,6 +34,14 @@
 #' `"attribute:level"`, a bare dummy name matching `object$attr_names`,
 #' or an integer column index.
 #'
+#' When the fit carries an attribute-interaction term
+#' (`scfit(..., interactions != "none")`), the compensating
+#' differential -- like the MRS it mirrors -- is a ratio of
+#' MAIN-EFFECT quantities and is therefore reference-profile-specific:
+#' the trade-off at the no-interaction baseline (all other attributes
+#' at their reference levels), not an all-else-equal constant.  See
+#' [sc_mrs()].
+#'
 #' @param object An `sc_fit`.
 #' @param benefit Dummy identifier for the benefit attribute level.
 #' @param cost Dummy identifier for the cost attribute level.

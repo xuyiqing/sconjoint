@@ -32,6 +32,15 @@ specification it agrees with the nonparametric AMCE (see
 \code{\link[=sc_validate_amce]{sc_validate_amce()}}), so a discrepancy beyond the combined uncertainty is
 a misspecification signal.
 }
+\details{
+When the fit carries an attribute-interaction term
+(\code{scfit(..., interactions != "none")}), the on/off index evaluations
+include the interaction contribution of the on/off profiles,
+\eqn{g(X_{on}) - g(X_{off})}, marginalized over the same design pool,
+and the orthogonal score runs on the expanded coefficient vector
+(main effects plus identified interaction coefficients) with
+cross-fitted nuisances.
+}
 \examples{
 \donttest{
 if (requireNamespace("torch", quietly = TRUE) &&
