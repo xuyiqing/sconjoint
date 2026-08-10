@@ -57,10 +57,32 @@
     I_AAeff_bar <- I_AAeff_bar +
       (info$I_AA[[b]] - crossprod(info$I_muA[[b]], B_bin[[b]])) / N
   }
-  ## ridge-guarded inverse of the effective loading information
-  eA <- eigen(I_AAeff_bar, symmetric = TRUE)
-  vals <- pmax(eA$values, 1e-8 * max(eA$values, 1e-12))
-  I_AAeff_inv <- eA$vectors %*% diag(1 / vals, pq) %*% t(eA$vectors)
+  ## Truncating pseudo-inverse of the effective loading information,
+  ## compared on the standardized scale (mixed attribute units must not
+  ## decide which directions count as identified).  Directions with
+  ## near-zero effective information correspond to unidentified loading
+  ## components (for example a collapsed fold loading); their influence
+  ## is projected OUT rather than amplified --- a ridge here turns a
+  ## rank deficiency into a silent explosion of the correction.
+  sd_dxA <- fit$sd_dx
+  if (is.null(sd_dxA)) {
+    sd_dxA <- apply(fit$deltaX, 2L, stats::sd)
+    sd_dxA[!is.finite(sd_dxA) | sd_dxA < 1e-12] <- 1
+  }
+  q_A <- pq / p
+  D_A <- diag(rep(1 / sd_dxA, q_A), pq)
+  I_std_A <- D_A %*% I_AAeff_bar %*% D_A
+  eA <- eigen(I_std_A, symmetric = TRUE)
+  keep_A <- eA$values > 1e-6 * max(eA$values, 1e-12)
+  if (any(!keep_A)) {
+    warning(".scmix_prep(): ", sum(!keep_A), " loading direction(s) have",
+            " near-zero effective information (unidentified, e.g. a",
+            " collapsed fold loading); their influence is projected out",
+            " of the correction.")
+  }
+  inv_vals <- ifelse(keep_A, 1 / eA$values, 0)
+  I_AAeff_inv <- D_A %*% (eA$vectors %*% diag(inv_vals, pq) %*%
+                            t(eA$vectors)) %*% D_A
   ## influence of the loading estimate per respondent
   IF_A <- S_Aeff %*% I_AAeff_inv
   list(sc = sc, info = info, mu_resp = mu_resp, C = C, N = N, p = p,
@@ -77,12 +99,18 @@
 #' loading-perturbation transmission check in the test suite).
 #' @keywords internal
 #' @noRd
-.scmix_A_adjust <- function(pr, a_rows) {
+.scmix_A_adjust <- function(pr, a_rows, dA_rows = NULL) {
   N <- pr$N
   GammaA <- matrix(0, 1L, pr$pq)
   for (i in seq_len(N)) {
     GammaA <- GammaA + (a_rows[i, , drop = FALSE] %*%
                           pr$B_bin[[pr$info$bin_of[i]]]) / N
+  }
+  ## the complete first-order term is (Gamma_A - D_A) IF_A, where D_A is
+  ## the mean DIRECT gradient of H in vec(A); estimands whose H does not
+  ## involve the loading (theta) pass dA_rows = NULL
+  if (!is.null(dA_rows)) {
+    GammaA <- GammaA - matrix(colMeans(dA_rows), nrow = 1L)
   }
   as.numeric(pr$IF_A %*% t(GammaA))
 }
@@ -172,6 +200,7 @@ scmix_theta <- function(fit, n_bins = 40L, M = 2000L, seed = 1L) {
 #' @export
 scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
                                sd_floor = 0.05) {
+  fit <- .scmix_canon(fit)
   pr <- .scmix_prep(fit, n_bins = n_bins, M = M, seed = seed)
   sd_folds <- vapply(fit$A_folds,
                      function(A) sqrt(pmax(diag(tcrossprod(A)), 1e-12)),
@@ -210,9 +239,19 @@ scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
     a_all[i, ] <- a
     psi[i, ] <- h + a * pr$C[i, ]
   }
+  q <- ncol(fit$A_folds[[1L]])
   for (k in seq_len(pr$p)) {
     ak <- matrix(0, pr$N, pr$p); ak[, k] <- a_all[, k]
-    psi[, k] <- psi[, k] - .scmix_A_adjust(pr, ak)
+    ## direct channel: dH/dA_{kr} = -phi(z) z A_{kr} / sigma_k^2
+    dA <- matrix(0, pr$N, pr$p * q)
+    for (i in seq_len(pr$N)) {
+      Af <- fit$A_folds[[fold_resp[i]]]
+      s_i <- sd_folds[k, fold_resp[i]]
+      z_i <- pr$mu_resp[i, k] / s_i
+      dA[i, (seq_len(q) - 1L) * pr$p + k] <-
+        -stats::dnorm(z_i) * z_i * Af[k, ] / s_i^2
+    }
+    psi[, k] <- psi[, k] - .scmix_A_adjust(pr, ak, dA_rows = dA)
   }
   psi[, floored] <- NA_real_
   out <- .scmix_wrap(psi, fit$attr_names, "pi (share with beta_k > 0)", fit,
@@ -263,6 +302,7 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
     cv <- as.numeric(contrast)
   }
 
+  fit <- .scmix_canon(fit)
   pr <- .scmix_prep(fit, n_bins = n_bins, M = M, seed = seed)
   gh <- fit$gh
   sigm <- function(x) 1 / (1 + exp(-x))
@@ -270,16 +310,23 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
 
   psi <- matrix(0, pr$N, 1L)
   a_all <- matrix(0, pr$N, pr$p)
+  qq <- ncol(fit$A_folds[[1L]])
+  dA_all <- matrix(0, pr$N, pr$p * qq)
   for (i in seq_len(pr$N)) {
     A <- fit$A_folds[[fold_resp[i]]]
     idx <- sum(cv * pr$mu_resp[i, ]) + as.numeric((t(cv) %*% A) %*% t(gh$U))
     pg <- sigm(idx)
     h <- sum(gh$w * pg)
-    aZ <- sum(gh$w * pg * (1 - pg)) * cv
+    gprime <- gh$w * pg * (1 - pg)
+    aZ <- sum(gprime) * cv
     a_all[i, ] <- aZ
+    for (r in seq_len(qq)) {
+      dA_all[i, (r - 1L) * pr$p + seq_len(pr$p)] <-
+        sum(gprime * gh$U[, r]) * cv
+    }
     psi[i, 1L] <- h + sum(aZ * pr$C[i, ])
   }
-  psi[, 1L] <- psi[, 1L] - .scmix_A_adjust(pr, a_all)
+  psi[, 1L] <- psi[, 1L] - .scmix_A_adjust(pr, a_all, dA_rows = dA_all)
   .scmix_wrap(psi, "V(c)", "eta-integrated counterfactual share", fit,
               extra = list(contrast = stats::setNames(cv, fit$attr_names)))
 }
@@ -353,13 +400,8 @@ scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
   for (r in seq_len(R)) {
     pr <- stats::plogis(rowSums(fit$deltaX * mu_resp[ridx, , drop = FALSE]))
     ysim <- as.numeric(stats::runif(n) < pr)
-    dat <- data.frame(
-      respondent = fit$respondent_id,
-      task = stats::ave(seq_len(n), fit$respondent_id, FUN = seq_along),
-      y = ysim)
-    ## rebuild a long-format frame around the existing contrasts: reuse
-    ## the internal training path directly instead of round-tripping
-    ## through the formula interface
+    ## reuse the internal training path directly on the existing
+    ## contrasts instead of round-tripping through the formula interface
     gh <- fit$gh
     fold_id <- fit$fold_id
     A_zero_folds <- vector("list", fit$K)

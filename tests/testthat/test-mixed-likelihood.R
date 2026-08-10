@@ -139,3 +139,38 @@ test_that("print methods run quietly", {
   th <- scmix_theta(fw$fit, n_bins = 10L, M = 100L, seed = 2L)
   expect_output(print(th), "orthogonal estimate")
 })
+
+test_that("loading score matches finite-difference d logL / dA", {
+  skip_if_not_installed("torch")
+  fw <- .fit_mixed_fixture()
+  fit <- fw$fit
+  sc <- sconjoint:::.scmix_scores(fit)
+  eps <- 1e-5
+  worst <- 0
+  for (i in 1:2) {
+    for (kr in 1:2) {
+      f_up <- fit; f_dn <- fit
+      k_fold <- sc$fold_resp[i]
+      dA <- matrix(0, 2, 1); dA[kr, 1] <- eps
+      f_up$A_folds[[k_fold]] <- fit$A_folds[[k_fold]] + dA
+      f_dn$A_folds[[k_fold]] <- fit$A_folds[[k_fold]] - dA
+      ll_up <- sconjoint:::.scmix_scores(f_up)$loglik[i]
+      ll_dn <- sconjoint:::.scmix_scores(f_dn)$loglik[i]
+      fd <- (ll_up - ll_dn) / (2 * eps)
+      worst <- max(worst, abs(fd - sc$S_A[i, kr]))
+    }
+  }
+  expect_lt(worst, 1e-6)
+})
+
+test_that("estimates are invariant to a global loading sign flip", {
+  skip_if_not_installed("torch")
+  fw <- .fit_mixed_fixture()
+  fit <- fw$fit
+  f2 <- fit
+  f2$A_folds <- lapply(fit$A_folds, function(A) -A)
+  th1 <- scmix_theta(fit, n_bins = 15L, M = 400L, seed = 2L)
+  th2 <- scmix_theta(f2, n_bins = 15L, M = 400L, seed = 2L)
+  expect_equal(unname(th1$estimate), unname(th2$estimate), tolerance = 1e-10)
+  expect_equal(unname(th1$se), unname(th2$se), tolerance = 1e-10)
+})

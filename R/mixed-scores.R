@@ -31,7 +31,36 @@
 #'   first-appearance order), `S`, `loglik`, `post_mean`, `T_i`.
 #' @keywords internal
 #' @noRd
+#' Canonical orientation for the fold loadings
+#'
+#' A is identified only up to right-rotation; the fit stores one
+#' arbitrary orientation.  Inference must not depend on it, so every
+#' entry point re-orients a copy of `A_folds` deterministically within
+#' the equivalence class: column r of every fold is flipped so that the
+#' largest-magnitude standardized component of fold 1's column r is
+#' positive.
+#' @keywords internal
+#' @noRd
+.scmix_canon <- function(fit) {
+  sdx <- fit$sd_dx
+  if (is.null(sdx)) {
+    sdx <- apply(fit$deltaX, 2L, stats::sd)
+    sdx[!is.finite(sdx) | sdx < 1e-12] <- 1
+  }
+  A1 <- fit$A_folds[[1L]] * sdx
+  for (r in seq_len(ncol(A1))) {
+    j <- which.max(abs(A1[, r]))
+    if (A1[j, r] < 0) {
+      for (k in seq_along(fit$A_folds)) {
+        fit$A_folds[[k]][, r] <- -fit$A_folds[[k]][, r]
+      }
+    }
+  }
+  fit
+}
+
 .scmix_scores <- function(fit, mu_override = NULL) {
+  fit <- .scmix_canon(fit)
   deltaX <- fit$deltaX
   y <- fit$y
   mu <- if (is.null(mu_override)) fit$mu_hat else mu_override
@@ -165,6 +194,7 @@
 #' @noRd
 .scmix_information <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
                                eig_floor = 1e-3) {
+  fit <- .scmix_canon(fit)
   withr::local_preserve_seed()
   set.seed(seed)
 
@@ -175,12 +205,28 @@
   N <- nrow(mu_resp)
   p <- ncol(mu_resp)
 
-  ## rotation-invariant residual covariance, refactored to rank q
+  ## rotation-invariant residual covariance, refactored to rank q on the
+  ## STANDARDIZED scale (raw-units eigen-truncation makes the retained
+  ## subspace, and with it every downstream correction, unit-dependent)
+  sd_dxS <- fit$sd_dx
+  if (is.null(sd_dxS)) {
+    sd_dxS <- apply(fit$deltaX, 2L, stats::sd)
+    sd_dxS[!is.finite(sd_dxS) | sd_dxS < 1e-12] <- 1
+  }
   Sig <- Reduce(`+`, lapply(fit$A_folds, tcrossprod)) / length(fit$A_folds)
-  eS <- eigen(Sig, symmetric = TRUE)
+  D_S <- diag(sd_dxS, ncol(Sig))
+  Sig_std <- D_S %*% Sig %*% D_S
+  eS <- eigen(Sig_std, symmetric = TRUE)
   qq <- fit$q
-  A_sim <- eS$vectors[, seq_len(qq), drop = FALSE] %*%
-    diag(sqrt(pmax(eS$values[seq_len(qq)], 0)), qq)
+  A_sim <- diag(1 / sd_dxS, ncol(Sig)) %*%
+    (eS$vectors[, seq_len(qq), drop = FALSE] %*%
+       diag(sqrt(pmax(eS$values[seq_len(qq)], 0)), qq))
+  ## orient the simulation loading to the (Procrustes-aligned) fold
+  ## loadings: the eigenvector sign is arbitrary, and a sim-vs-data
+  ## orientation mismatch corrupts the cross-information blocks
+  M_p <- crossprod(A_sim, fit$A_folds[[1L]])
+  sv <- svd(M_p)
+  A_sim <- A_sim %*% (sv$u %*% t(sv$v))
 
   ## bin on the standardized scale so the partition (and with it every
   ## downstream correction) is invariant to attribute units
