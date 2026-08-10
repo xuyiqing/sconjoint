@@ -21,11 +21,10 @@ theta_overlay <- function(res, title) {
   df$attr <- factor(df$attr, levels = rev(nm))
   ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
     geom_vline(xintercept = 0, linewidth = 0.3, color = "grey70") +
-    geom_errorbarh(aes(xmin = est - 1.96 * se, xmax = est + 1.96 * se),
-                   height = 0, linewidth = 0.5,
-                   position = position_dodge2v(height = 0.55, reverse = TRUE)) +
-    geom_point(size = 2.4, fill = "white", stroke = 0.9,
-               position = position_dodge2v(height = 0.55, reverse = TRUE)) +
+    geom_pointrange(aes(xmin = est - 1.96 * se, xmax = est + 1.96 * se),
+                    orientation = "y", linewidth = 0.5, size = 0.45,
+                    fill = "white", stroke = 0.9,
+                    position = position_dodge(width = 0.55)) +
     scale_color_manual(values = c("Two-stage (projection)" = GRAY,
                                   "Mixed logit (latent mean)" = ACCENT)) +
     scale_shape_manual(values = c("Two-stage (projection)" = 21,
@@ -49,11 +48,11 @@ sign_overlay <- function(res, title) {
   df$attr <- factor(df$attr, levels = rev(nm))
   ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
     geom_vline(xintercept = 0.5, linewidth = 0.3, color = "grey70") +
-    geom_errorbarh(data = subset(df, !is.na(se)),
-                   aes(xmin = pmax(est - 1.96 * se, 0),
-                       xmax = pmin(est + 1.96 * se, 1)),
-                   height = 0, linewidth = 0.5) +
-    geom_point(size = 2.4, fill = "white", stroke = 0.9) +
+    geom_pointrange(aes(xmin = ifelse(is.na(se), est, pmax(est - 1.96 * se, 0)),
+                        xmax = ifelse(is.na(se), est, pmin(est + 1.96 * se, 1))),
+                    orientation = "y", linewidth = 0.5, size = 0.45,
+                    fill = "white", stroke = 0.9,
+                    position = position_dodge(width = 0.55)) +
     scale_color_manual(values = c("Two-stage MAP sign fraction" = GRAY,
                                   "Mixed logit pi (debiased)" = ACCENT)) +
     scale_shape_manual(values = c("Two-stage MAP sign fraction" = 21,
