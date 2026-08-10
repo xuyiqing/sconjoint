@@ -11,7 +11,7 @@ scmix(
   task = "task_id",
   profile = "profile_id",
   q = 1L,
-  n_nodes = 15L,
+  n_nodes = 31L,
   K = 5L,
   hidden = "auto",
   n_epochs = 400L,
@@ -46,7 +46,7 @@ respondent id in \code{data}.}
 \item{q}{Integer, dimension of the residual factor (1, 2, or 3).}
 
 \item{n_nodes}{Integer, univariate Gauss-Hermite nodes per factor
-dimension (default 15; the q-dim grid is the tensor product).}
+dimension (default 31; the q-dim grid is the tensor product).}
 
 \item{K}{Integer, respondent-clustered folds (default 5).}
 

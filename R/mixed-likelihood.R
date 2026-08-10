@@ -64,9 +64,13 @@
     U <- matrix(x[idx], ncol = q)
     wq <- apply(matrix(w[idx], ncol = q), 1L, prod)
   }
-  keep <- wq >= prune
-  U <- U[keep, , drop = FALSE]
-  wq <- wq[keep] / sum(wq[keep])
+  ## prune only the q = 3 tensor grid; at q <= 2 keep every node so the
+  ## deployed grids retain full Gauss accuracy
+  if (q == 3L) {
+    keep <- wq >= prune
+    U <- U[keep, , drop = FALSE]
+    wq <- wq[keep] / sum(wq[keep])
+  }
   list(U = U, w = wq)
 }
 
@@ -136,7 +140,8 @@
   ## log G(idx)^y (1-G)^{1-y} = -softplus(-idx)*y - softplus(idx)*(1-y)
   lp <- -torch::nnf_softplus(-idx) * yt$unsqueeze(2L) -
     torch::nnf_softplus(idx) * (1 - yt)$unsqueeze(2L)      # n x G
-  agg <- torch::torch_zeros(N, lp$shape[2], dtype = lp$dtype)
+  agg <- torch::torch_zeros(N, lp$shape[2], dtype = lp$dtype,
+                            device = lp$device)
   agg <- agg$index_add(1L, resp_index1, lp)                # N x G, sum over tasks
   ll_i <- torch::torch_logsumexp(agg + logw_t$unsqueeze(1L), dim = 2L)  # N
   -torch::torch_mean(ll_i)
@@ -353,7 +358,7 @@
 #' @inheritParams scfit
 #' @param q Integer, dimension of the residual factor (1, 2, or 3).
 #' @param n_nodes Integer, univariate Gauss-Hermite nodes per factor
-#'   dimension (default 15; the q-dim grid is the tensor product).
+#'   dimension (default 31; the q-dim grid is the tensor product).
 #' @param K Integer, respondent-clustered folds (default 5).
 #' @param n_epochs Adam epochs per fold (default 400; the marginal
 #'   likelihood typically converges faster per epoch than the
@@ -367,7 +372,7 @@
 scmix <- function(formula, data,
                   respondent = "resp_id", task = "task_id", profile = "profile_id",
                   q = 1L,
-                  n_nodes = 15L,
+                  n_nodes = 31L,
                   K = 5L,
                   hidden = "auto",
                   n_epochs = 400L,
@@ -401,9 +406,16 @@ scmix <- function(formula, data,
   y_long <- data[[parsed$response]]
   ord <- order(paste(data[[respondent]], data[[task]], sep = "\r"),
                data[[profile]])
-  y_first <- y_long[ord][seq(1L, length(y_long), by = 2L)]
+  y_sorted <- y_long[ord]
+  idx1 <- seq(1L, length(y_sorted), by = 2L)
+  y_first <- y_sorted[idx1]
+  y_second <- y_sorted[idx1 + 1L]
   if (!all(y_first %in% c(0, 1))) {
     stop("scmix(): the response must be a 0/1 choice indicator on profile rows.")
+  }
+  if (!all(y_first + y_second == 1)) {
+    stop("scmix(): the two profile rows of each task must have complementary ",
+         "0/1 choices (exactly one profile chosen per task).")
   }
   y <- as.numeric(y_first)
 
@@ -432,6 +444,16 @@ scmix <- function(formula, data,
       warning("scmix(): `init` has no stored nets; warm start skipped.")
     } else {
       warm_state <- init$nets[[1L]]$state_dict()
+      ## the scfit trunk predicts beta on the RAW deltaX scale (its default
+      ## normalize_deltaX = FALSE); scmix trains on standardized contrasts,
+      ## where mu_std = mu_raw * sd_dx, so rescale the output layer rows
+      if ("param_layer.weight" %in% names(warm_state)) {
+        sd_t <- torch::torch_tensor(sd_dx, dtype = torch::torch_float())
+        warm_state[["param_layer.weight"]] <-
+          warm_state[["param_layer.weight"]] * sd_t$unsqueeze(2L)
+        warm_state[["param_layer.bias"]] <-
+          warm_state[["param_layer.bias"]] * sd_t
+      }
     }
   }
 
@@ -470,9 +492,24 @@ scmix <- function(formula, data,
     }
   }
 
+  ## Orient the fold loadings consistently: A is identified only up to
+  ## right-rotation (sign, for q = 1), and downstream aggregation of
+  ## loading scores across folds needs one common orientation.  Align
+  ## every fold to fold 1 by the orthogonal Procrustes rotation; AA' is
+  ## unchanged.
+  if (K >= 2L) {
+    A_ref <- A_folds[[1L]]
+    for (k in 2L:K) {
+      M_p <- crossprod(A_folds[[k]], A_ref)
+      sv <- svd(M_p)
+      A_folds[[k]] <- A_folds[[k]] %*% (sv$u %*% t(sv$v))
+    }
+  }
+
   fit <- list(
     mu_hat = mu_hat,               # task rows; constant within respondent
     A_folds = A_folds,
+    sd_dx = sd_dx,
     q = as.integer(q),
     gh = gh,
     deltaX = deltaX,

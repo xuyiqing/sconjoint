@@ -46,7 +46,9 @@
   ## respondent-level fold: constant within respondent by construction
   fold_resp <- tapply(fit$fold_id, ridx, function(v) v[1L])
 
+  q <- ncol(fit$A_folds[[1L]])
   S <- matrix(0, N, p)
+  S_A <- matrix(0, N, p * q)
   loglik <- numeric(N)
   post_mean <- matrix(0, N, p)
   T_i <- as.integer(table(ridx))
@@ -62,7 +64,9 @@
       (dxk %*% A) %*% t(gh$U)                       # n_k x G
     yk <- y[rows]
     ## log per-task choice prob at each node, numerically stable
-    lp <- ifelse(rep(yk, G) == 1, -log1p(exp(-idx)), -log1p(exp(idx)))
+    lp <- ifelse(rep(yk, G) == 1,
+                 stats::plogis(idx, log.p = TRUE),
+                 stats::plogis(-idx, log.p = TRUE))
     dim(lp) <- dim(idx)
 
     rk <- ridx[rows]
@@ -73,14 +77,24 @@
     ll <- m + log(rowSums(exp(lw - m)))
     postw <- exp(lw - ll)                            # N_k x G, rows sum to 1
 
-    resp_ids_k <- as.integer(levels(factor(rk)))     # unique respondent indices
     ## map each task row to its within-fold respondent position
     pos <- match(rk, as.integer(levels(rk_f)))
 
     ## residual r_t = y_t - sum_g postw_{i(t),g} sigma(idx_tg)
     sig <- sigm(idx)
-    rbar <- yk - rowSums(postw[pos, , drop = FALSE] * sig)
+    resid_g <- yk - sig                              # n_k x G residual at each node
+    rbar <- rowSums(postw[pos, , drop = FALSE] * resid_g)
     Sk <- rowsum(dxk * rbar, rk_f, reorder = FALSE)  # N_k x p
+
+    ## loading score: d logL_i / d A_{kr} =
+    ## E_post[ sum_t deltaX_tk * u_r * (y_t - G(idx)) ]
+    SAk <- matrix(0, nlevels(rk_f), p * q)
+    for (r in seq_len(q)) {
+      s_r <- rowSums(postw[pos, , drop = FALSE] *
+                       sweep(resid_g, 2L, gh$U[, r], `*`))
+      SAk[, (r - 1L) * p + seq_len(p)] <-
+        rowsum(dxk * s_r, rk_f, reorder = FALSE)
+    }
 
     ## posterior mean of beta = mu + A E[u | data]
     Eu <- postw %*% gh$U                             # N_k x q
@@ -89,11 +103,12 @@
 
     tgt <- as.integer(levels(rk_f))
     S[tgt, ] <- Sk
+    S_A[tgt, ] <- SAk
     loglik[tgt] <- ll
     post_mean[tgt, ] <- pm
   }
 
-  list(resp = levels(resp_f), S = S, loglik = loglik,
+  list(resp = levels(resp_f), S = S, S_A = S_A, loglik = loglik,
        post_mean = post_mean, T_i = T_i,
        fold_resp = as.integer(fold_resp))
 }
@@ -148,7 +163,7 @@
 #'   and `bin_of` (length-N bin index per respondent).
 #' @keywords internal
 #' @noRd
-.scmix_information <- function(fit, n_bins = 40L, M = 300L, seed = 1L,
+.scmix_information <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
                                eig_floor = 1e-3) {
   withr::local_preserve_seed()
   set.seed(seed)
@@ -167,12 +182,27 @@
   A_sim <- eS$vectors[, seq_len(qq), drop = FALSE] %*%
     diag(sqrt(pmax(eS$values[seq_len(qq)], 0)), qq)
 
-  n_bins <- min(as.integer(n_bins), N)
-  km <- suppressWarnings(
-    stats::kmeans(mu_resp, centers = n_bins, iter.max = 100L, nstart = 3L,
-                  algorithm = "Lloyd")
-  )
-  bin_of <- km$cluster
+  ## bin on the standardized scale so the partition (and with it every
+  ## downstream correction) is invariant to attribute units
+  sd_dx0 <- fit$sd_dx
+  if (is.null(sd_dx0)) {
+    sd_dx0 <- apply(fit$deltaX, 2L, stats::sd)
+    sd_dx0[!is.finite(sd_dx0) | sd_dx0 < 1e-12] <- 1
+  }
+  mu_std <- sweep(mu_resp, 2L, sd_dx0, `*`)
+  n_distinct <- nrow(unique(mu_std))
+  n_bins <- min(as.integer(n_bins), N, n_distinct)
+  if (n_distinct <= n_bins) {
+    ## coarse Z: every distinct mu row is its own bin, no kmeans needed
+    key_mu <- apply(round(mu_std, 10L), 1L, paste, collapse = ":")
+    bin_of <- match(key_mu, unique(key_mu))
+  } else {
+    km <- suppressWarnings(
+      stats::kmeans(mu_std, centers = n_bins, iter.max = 100L, nstart = 3L,
+                    algorithm = "Lloyd")
+    )
+    bin_of <- km$cluster
+  }
   ## split bins further by distinct task count when unbalanced
   T_i <- sc$T_i
   key <- paste(bin_of, T_i, sep = ":")
@@ -182,7 +212,22 @@
   gh <- fit$gh
   sigm <- function(x) 1 / (1 + exp(-x))
   pool <- fit$deltaX
+  ## The eigenvalue floor must not compare eigenvalues across contrast
+  ## columns with very different scales (a small-variance column's true
+  ## information can sit far below the floor set by large-variance
+  ## columns, silently degrading the correction to the plug-in there).
+  ## Floor on the standardized scale instead: I_std = D I D with
+  ## D = diag(sd_dx), floor I_std's eigenvalues, map back.
+  sd_dx <- fit$sd_dx
+  if (is.null(sd_dx)) {
+    sd_dx <- apply(pool, 2L, stats::sd)
+    sd_dx[!is.finite(sd_dx) | sd_dx < 1e-12] <- 1
+  }
+  D_inv <- diag(1 / sd_dx, p)
+  floor_hits <- 0L
   I_inv <- vector("list", length(ukey))
+  I_muA <- vector("list", length(ukey))
+  I_AA <- vector("list", length(ukey))
 
   for (b in seq_along(ukey)) {
     members <- which(bin_of == b)
@@ -197,10 +242,13 @@
     pr <- sigm(rowSums(dx * beta[rid, , drop = FALSE]))
     ysim <- as.numeric(stats::runif(length(pr)) < pr)
 
-    ## Fisher-identity score for each simulated respondent under (mu_c, A_sim)
+    ## Fisher-identity scores (location and loading) for each simulated
+    ## respondent under (mu_c, A_sim)
     idx <- rowSums(dx * matrix(mu_c, length(rid), p, byrow = TRUE)) +
       (dx %*% A_sim) %*% t(gh$U)
-    lp <- ifelse(rep(ysim, length(gh$w)) == 1, -log1p(exp(-idx)), -log1p(exp(idx)))
+    lp <- ifelse(rep(ysim, length(gh$w)) == 1,
+                 stats::plogis(idx, log.p = TRUE),
+                 stats::plogis(-idx, log.p = TRUE))
     dim(lp) <- dim(idx)
     agg <- rowsum(lp, rid, reorder = TRUE)
     lw <- sweep(agg, 2L, log(gh$w), `+`)
@@ -208,16 +256,35 @@
     ll <- mrow + log(rowSums(exp(lw - mrow)))
     postw <- exp(lw - ll)
     sig <- sigm(idx)
-    rbar <- ysim - rowSums(postw[rid, , drop = FALSE] * sig)
+    resid_g <- ysim - sig
+    rbar <- rowSums(postw[rid, , drop = FALSE] * resid_g)
     Ssim <- rowsum(dx * rbar, rid, reorder = TRUE)
+    SAsim <- matrix(0, M, p * qq)
+    for (r in seq_len(qq)) {
+      s_r <- rowSums(postw[rid, , drop = FALSE] *
+                       sweep(resid_g, 2L, gh$U[, r], `*`))
+      SAsim[, (r - 1L) * p + seq_len(p)] <- rowsum(dx * s_r, rid,
+                                                   reorder = TRUE)
+    }
 
+    I_muA[[b]] <- crossprod(Ssim, SAsim) / M
+    I_AA[[b]] <- crossprod(SAsim) / M
     I_b <- crossprod(Ssim) / M
-    ## eigenvalue floor
-    eI <- eigen(I_b, symmetric = TRUE)
-    floor_val <- eig_floor * mean(diag(I_b))
+    ## eigenvalue floor on the standardized information
+    I_std <- D_inv %*% I_b %*% D_inv
+    eI <- eigen(I_std, symmetric = TRUE)
+    floor_val <- eig_floor * mean(diag(I_std))
+    floor_hits <- floor_hits + sum(eI$values < floor_val)
     vals <- pmax(eI$values, floor_val)
-    I_inv[[b]] <- eI$vectors %*% diag(1 / vals, p) %*% t(eI$vectors)
+    Istd_inv <- eI$vectors %*% diag(1 / vals, p) %*% t(eI$vectors)
+    I_inv[[b]] <- D_inv %*% Istd_inv %*% D_inv
+  }
+  if (floor_hits > 0L) {
+    warning(".scmix_information(): the eigenvalue floor bound ", floor_hits,
+            " eigenvalue(s); the orthogonal correction is damped in those",
+            " directions. Inspect the design scaling before trusting the",
+            " affected coordinates.")
   }
 
-  list(I_inv = I_inv, bin_of = bin_of)
+  list(I_inv = I_inv, I_muA = I_muA, I_AA = I_AA, bin_of = bin_of)
 }

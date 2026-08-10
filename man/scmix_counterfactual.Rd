@@ -4,7 +4,7 @@
 \alias{scmix_counterfactual}
 \title{Debiased eta-integrated counterfactual choice share}
 \usage{
-scmix_counterfactual(fit, contrast, n_bins = 40L, M = 300L, seed = 1L)
+scmix_counterfactual(fit, contrast, n_bins = 40L, M = 2000L, seed = 1L)
 }
 \arguments{
 \item{fit}{An \code{scmix} object.}

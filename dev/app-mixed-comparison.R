@@ -45,14 +45,15 @@ run_app <- function(name, formula, data, scfit_args, n_epochs, contrast_name) {
               as.numeric(difftime(Sys.time(), t0, units = "mins"))))
 
   th <- scmix_theta(mx, n_bins = 50L, seed = 7L)
-  pol <- suppressWarnings(scmix_polarization(mx, n_bins = 50L, seed = 7L))
+  pol <- scmix_polarization(mx, n_bins = 50L, seed = 7L)
   cv <- stats::setNames(numeric(length(mx$attr_names)), mx$attr_names)
   cv[contrast_name] <- 1
   vc <- scmix_counterfactual(mx, contrast = cv, n_bins = 50L, seed = 7L)
 
   stopifnot(identical(names(before$theta), mx$attr_names))
   before_se <- sqrt(pmax(diag(before$vcov), 0))
-  before_sign <- colMeans(before$beta_hat > 0)
+  first_bh <- !duplicated(before$respondent_id)
+  before_sign <- colMeans(before$beta_hat[first_bh, , drop = FALSE] > 0)
   cvb <- stats::setNames(numeric(length(before$theta)), names(before$theta))
   cvb[contrast_name] <- 1
   before_share <- mean(stats::plogis(before$beta_hat %*% cvb))

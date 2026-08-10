@@ -4,7 +4,7 @@
 \alias{scmix_theta}
 \title{Debiased population-average preferences from an scmix fit}
 \usage{
-scmix_theta(fit, n_bins = 40L, M = 300L, seed = 1L)
+scmix_theta(fit, n_bins = 40L, M = 2000L, seed = 1L)
 }
 \arguments{
 \item{fit}{An \code{scmix} object.}

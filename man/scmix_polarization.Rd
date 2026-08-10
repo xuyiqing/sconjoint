@@ -4,7 +4,7 @@
 \alias{scmix_polarization}
 \title{Debiased population sign shares (polarization) from an scmix fit}
 \usage{
-scmix_polarization(fit, n_bins = 40L, M = 300L, seed = 1L, sd_floor = 0.05)
+scmix_polarization(fit, n_bins = 40L, M = 2000L, seed = 1L, sd_floor = 0.05)
 }
 \arguments{
 \item{fit}{An \code{scmix} object.}
@@ -12,8 +12,9 @@ scmix_polarization(fit, n_bins = 40L, M = 300L, seed = 1L, sd_floor = 0.05)
 \item{n_bins, M, seed}{Controls for the model-implied information
 simulation (see \code{.scmix_information()}).}
 
-\item{sd_floor}{Lower bound on the conditional residual SD used in
-\code{H = Phi(mu_k/sigma_k)}.  When \verb{(AA')_kk} is at or near zero the
+\item{sd_floor}{Lower bound on the INDEX-SCALE residual SD (the
+per-unit SD times the contrast SD, so the threshold is invariant to
+attribute units) used in \code{H = Phi(mu_k/sigma_k)}.  When \verb{(AA')_kk} is at or near zero the
 sign-share functional degenerates to the step \verb{1\{mu_k(Z) > 0\}} and
 is no longer smooth in \code{mu} --- the gradient \code{phi/sigma_k} blows up
 and the orthogonal correction can push the estimate outside

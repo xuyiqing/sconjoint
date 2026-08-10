@@ -107,14 +107,17 @@ test_that("scmix_theta is near the truth with sane inference output", {
 test_that("polarization respects [0,1] and floors zero-variance coords", {
   skip_if_not_installed("torch")
   fw <- .fit_mixed_fixture()
-  pol <- scmix_polarization(fw$fit, n_bins = 15L, M = 200L, seed = 2L)
-  expect_true(all(pol$estimate > -0.02 & pol$estimate < 1.02))
-  ## forcing an absurd floor triggers the warning path
+  pol <- suppressWarnings(
+    scmix_polarization(fw$fit, n_bins = 15L, M = 200L, seed = 2L))
+  ok <- !is.na(pol$estimate)
+  expect_true(all(pol$estimate[ok] > -0.02 & pol$estimate[ok] < 1.02))
+  ## forcing an absurd floor: every coordinate floored -> all NA + warning
   expect_warning(
-    scmix_polarization(fw$fit, n_bins = 15L, M = 200L, seed = 2L,
-                       sd_floor = 10),
-    "floored"
+    pol10 <- scmix_polarization(fw$fit, n_bins = 15L, M = 200L, seed = 2L,
+                                sd_floor = 10),
+    "floor"
   )
+  expect_true(all(is.na(pol10$estimate)))
 })
 
 test_that("counterfactual share accepts named contrasts and stays in [0,1]", {

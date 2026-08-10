@@ -45,18 +45,24 @@ sign_overlay <- function(res, title) {
   ## stay in the .rds.
   pi_raw <- res$after$pi
   pi_disp <- pmin(pmax(pi_raw, 0), 1)
-  truncated <- pi_raw > 1 | pi_raw < 0
+  truncated <- !is.na(pi_raw) & (pi_raw > 1 | pi_raw < 0)
+  floored <- is.na(pi_raw)
   df <- rbind(
     data.frame(attr = nm, est = unname(res$before$sign_share), se = NA,
                trunc = FALSE, which = "Two-stage MAP sign fraction"),
     data.frame(attr = nm, est = pi_disp, se = res$after$pi_se,
                trunc = truncated, which = "Mixed logit pi (debiased)")
   )
+  df <- df[!is.na(df$est), , drop = FALSE]
   df$attr <- factor(df$attr, levels = rev(nm))
-  cap <- if (any(truncated)) {
-    sprintf("%d shares whose corrected estimate exceeds 1 are drawn at 1 (diamonds).",
-            sum(truncated))
-  } else NULL
+  cap_parts <- c(
+    if (any(truncated))
+      sprintf("%d shares whose corrected estimate exceeds 1 are drawn at 1 (diamonds).",
+              sum(truncated)),
+    if (any(floored))
+      sprintf("%d floored coordinates (residual SD below the floor) are reported as NA and shown for the two-stage fraction only.",
+              sum(floored)))
+  cap <- if (length(cap_parts)) paste(cap_parts, collapse = "\n") else NULL
   ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
     geom_vline(xintercept = 0.5, linewidth = 0.3, color = "grey70") +
     geom_pointrange(aes(xmin = ifelse(is.na(se), est, pmax(est - 1.96 * se, 0)),
