@@ -16,14 +16,17 @@
 ## the known design law.  Cross-fitting: every ingredient for
 ## respondent i comes from the fold model that did not train on i.
 ##
-## The loading matrix / residual covariance Sigma = AA' is a
-## finite-dimensional nuisance estimated by the same likelihood.  Its
-## estimation error is NOT yet propagated into the standard errors
-## (the influence component for Sigma_hat is a documented follow-up);
-## point estimates are unaffected because Sigma_hat is root-N
-## consistent, and a fold-spread sensitivity is reported instead.
-## theta_k = E[mu_k(Z)] does not involve Sigma at all, so its
-## inference is complete as implemented.
+## The loading matrix is a finite-dimensional nuisance estimated by the
+## same likelihood, and the location score is NOT orthogonal to it (the
+## cross-information I_muA is nonzero, so a loading error transmits
+## into the pseudo-true location).  Every estimand therefore adds a
+## loading-influence term -Gamma_A' IF_A built from the loading scores
+## S_A, the per-bin cross-information blocks, and the ridge-guarded
+## effective loading information; the nonzero mean of IF_A at the
+## fitted loadings doubles as a correction for early-stopped training.
+## This treats A-hat as an asymptotically linear estimator; the
+## root-N/profile-likelihood conditions behind that are stated in the
+## memo as assumptions, not established here.
 
 #' Shared setup for scmix orthogonal estimands
 #' @keywords internal

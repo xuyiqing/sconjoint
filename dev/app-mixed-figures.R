@@ -55,10 +55,11 @@ sign_overlay <- function(res, title) {
   )
   df <- df[!is.na(df$est), , drop = FALSE]
   df$attr <- factor(df$attr, levels = rev(nm))
+  n_tr <- sum(truncated)
   cap_parts <- c(
-    if (any(truncated))
-      sprintf("%d shares whose corrected estimate exceeds 1 are drawn at 1 (diamonds).",
-              sum(truncated)),
+    if (n_tr > 0)
+      sprintf("%d share%s outside [0, 1] drawn at the boundary (diamonds).",
+              n_tr, if (n_tr > 1) "s" else ""),
     if (any(floored))
       sprintf("%d floored coordinates (residual SD below the floor) are reported as NA and shown for the two-stage fraction only.",
               sum(floored)))
