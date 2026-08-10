@@ -35,6 +35,7 @@
 ^tests/testthat/test-map-stage2\.R$
 ^tests/testthat/test-methods\.R$
 ^tests/testthat/test-mixed-logit-stage2\.R$
+^tests/testthat/test-mixed-likelihood\.R$
 ^tests/testthat/test-normalize-deltax\.R$
 ^tests/testthat/test-plot\.R$
 ^tests/testthat/test-quantities-bootstrap\.R$
