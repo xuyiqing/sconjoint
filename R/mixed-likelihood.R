@@ -240,23 +240,42 @@
   ## exactly the attenuation the integrated likelihood removes.
   par_names <- names(net$parameters)
 
-  ## Two-phase training.  Phase 1 trains the mean trunk with A frozen,
-  ## early-stopped on held-out-respondent NLL -- this is what prevents
-  ## the trunk from absorbing residual heterogeneity respondent by
-  ## respondent when Z is rich and T small.  Phase 2 unfreezes A and
-  ## continues jointly with fresh early stopping, so the loading matrix
-  ## gets its own validated growth window instead of being cut short by
-  ## phase 1's stopping point (A starts near zero and trains slowly;
-  ## a single shared stopping rule systematically under-trains it).
-  run_phase <- function(train_A, max_epochs) {
-    net$A$requires_grad_(train_A)
-    trunk <- net$parameters[par_names != "A"]
-    groups <- list(list(params = trunk, weight_decay = weight_decay))
-    if (train_A) {
-      groups[[2L]] <- list(params = net$parameters[par_names == "A"],
-                           weight_decay = 0)
+  ## Three-phase training.
+  ##
+  ## Phase 1 ("mean"): trunk only, A frozen, early-stopped on held-out
+  ## respondent NLL.  This prevents the trunk from absorbing residual
+  ## heterogeneity respondent by respondent when Z is rich and T small
+  ## (observed memorization on the T = 3 candidate application).
+  ##
+  ## Phase 2 ("loading"): A only, trunk frozen, NO early stopping ---
+  ## A has p x q parameters and cannot overfit; it starts near zero and
+  ## improves validation NLL too slowly per check to survive a shared
+  ## patience rule, which is why a joint early-stopped phase quietly
+  ## returned A ~ 0 (and with it, no de-attenuation) on both bundled
+  ## applications.
+  ##
+  ## Phase 3 ("joint"): everything, low learning rate, early-stopped.
+  ## This is where the mean de-attenuates: with the heterogeneity now
+  ## in the model, the marginal likelihood pulls mu(Z) from the
+  ## projection toward the latent conditional mean, and the validation
+  ## guard keeps the trunk from resuming memorization.
+  run_phase <- function(mode, max_epochs, lr_use, use_es) {
+    net$A$requires_grad_(mode != "mean")
+    for (nm in par_names[par_names != "A"]) {
+      net$parameters[[nm]]$requires_grad_(mode != "loading")
     }
-    optimizer <- torch::optim_adam(groups, lr = learning_rate)
+    groups <- list()
+    if (mode != "loading") {
+      groups[[length(groups) + 1L]] <-
+        list(params = net$parameters[par_names != "A"],
+             weight_decay = weight_decay)
+    }
+    if (mode != "mean") {
+      groups[[length(groups) + 1L]] <-
+        list(params = net$parameters[par_names == "A"], weight_decay = 0)
+    }
+    optimizer <- torch::optim_adam(groups, lr = lr_use)
+    use_es <- use_es && early_stop
     loss_trace <- numeric(max_epochs)
     val_trace <- c()
     best_val <- Inf
@@ -270,7 +289,7 @@
       loss$backward()
       optimizer$step()
       loss_trace[epoch] <- as.numeric(loss$item())
-      if (early_stop && (epoch %% check_every == 0L)) {
+      if (use_es && (epoch %% check_every == 0L)) {
         net$eval()
         vloss <- as.numeric(torch::with_no_grad(
           .sc_mixed_nll(net, va$dx, va$zt, va$yt, U_t, logw_t, va$idx1, va$N)
@@ -286,24 +305,31 @@
         }
       }
       if (verbose && (epoch %% 100L == 0L || epoch == 1L)) {
-        message(sprintf("  epoch %4d  nll = %.6f (train_A=%s)",
-                        epoch, loss_trace[epoch], train_A))
+        message(sprintf("  epoch %4d  nll = %.6f (phase=%s)",
+                        epoch, loss_trace[epoch], mode))
       }
     }
-    if (early_stop && !is.null(best_state)) net$load_state_dict(best_state)
+    if (use_es && !is.null(best_state)) net$load_state_dict(best_state)
     list(loss = loss_trace[seq_len(stopped_at)], val = val_trace,
          stopped_at = stopped_at)
   }
 
-  ph1 <- run_phase(train_A = FALSE, max_epochs = n_epochs)
-  ph2 <- run_phase(train_A = TRUE, max_epochs = n_epochs)
+  ph1 <- run_phase("mean", max_epochs = n_epochs, lr_use = learning_rate,
+                   use_es = TRUE)
+  ph2 <- run_phase("loading", max_epochs = n_epochs, lr_use = learning_rate,
+                   use_es = FALSE)
+  ph3 <- run_phase("joint", max_epochs = max(100L, n_epochs %/% 2L),
+                   lr_use = learning_rate / 5, use_es = TRUE)
+
+  ## leave every parameter trainable for downstream users of the net
+  for (nm in par_names) net$parameters[[nm]]$requires_grad_(TRUE)
 
   net$eval()
   A_hat <- as.matrix(torch::as_array(net$A))
-  loss_all <- c(ph1$loss, ph2$loss)
+  loss_all <- c(ph1$loss, ph2$loss, ph3$loss)
   list(net = net, loss_trace = loss_all,
-       val_trace = c(ph1$val, ph2$val),
-       stopped_at = c(ph1$stopped_at, ph2$stopped_at),
+       val_trace = c(ph1$val, ph2$val, ph3$val),
+       stopped_at = c(ph1$stopped_at, ph2$stopped_at, ph3$stopped_at),
        final_loss = loss_all[length(loss_all)], A = A_hat)
 }
 
