@@ -20,7 +20,8 @@ scmix(
   seed = NULL,
   init = NULL,
   device = "cpu",
-  verbose = FALSE
+  verbose = FALSE,
+  early_stop = TRUE
 )
 }
 \arguments{

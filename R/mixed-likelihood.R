@@ -159,7 +159,11 @@
                                 seed = NULL,
                                 device = "cpu",
                                 verbose = FALSE,
-                                warm_state = NULL) {
+                                warm_state = NULL,
+                                early_stop = TRUE,
+                                val_frac = 0.1,
+                                check_every = 20L,
+                                patience = 3L) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_train_mixed_one(): the 'torch' package is required.")
   }
@@ -168,17 +172,46 @@
     set.seed(seed)
     torch::torch_manual_seed(seed)
   }
+  ## Early stopping on a held-out respondent slice.  Without it, at
+  ## small T with rich (nearly respondent-unique) Z the mean network
+  ## can absorb the residual heterogeneity respondent by respondent:
+  ## the training likelihood keeps improving, A collapses to zero, and
+  ## the out-of-fold mu_hat overdisperses badly (observed on the T = 3
+  ## candidate application).  Validation NLL on held-out respondents is
+  ## the model-consistent stopping signal.
+  resp_all <- unique(respondent_id)
+  if (isTRUE(early_stop) && length(resp_all) >= 50L) {
+    n_val <- max(10L, floor(val_frac * length(resp_all)))
+    val_resp <- sample(resp_all, n_val)
+    is_val <- respondent_id %in% val_resp
+  } else {
+    is_val <- rep(FALSE, length(respondent_id))
+    early_stop <- FALSE
+  }
+
+  mk_tensors <- function(rows) {
+    rf <- factor(respondent_id[rows], levels = unique(respondent_id[rows]))
+    list(
+      dx = torch::torch_tensor(deltaX[rows, , drop = FALSE],
+                               dtype = torch::torch_float(), device = dev),
+      zt = torch::torch_tensor(Z[rows, , drop = FALSE],
+                               dtype = torch::torch_float(), device = dev),
+      yt = torch::torch_tensor(as.numeric(y[rows]),
+                               dtype = torch::torch_float(), device = dev),
+      idx1 = torch::torch_tensor(as.integer(rf), dtype = torch::torch_long(),
+                                 device = dev),
+      N = nlevels(rf)
+    )
+  }
+
   dev <- torch::torch_device(device)
-  dx <- torch::torch_tensor(deltaX, dtype = torch::torch_float(), device = dev)
-  zt <- torch::torch_tensor(Z, dtype = torch::torch_float(), device = dev)
-  yt <- torch::torch_tensor(as.numeric(y), dtype = torch::torch_float(), device = dev)
+  tr <- mk_tensors(!is_val)
+  va <- if (early_stop) mk_tensors(is_val) else NULL
+  dx <- tr$dx; zt <- tr$zt; yt <- tr$yt
   U_t <- torch::torch_tensor(gh$U, dtype = torch::torch_float(), device = dev)
   logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float(), device = dev)
-
-  resp_f <- factor(respondent_id, levels = unique(respondent_id))
-  N <- nlevels(resp_f)
-  resp_index1 <- torch::torch_tensor(as.integer(resp_f), dtype = torch::torch_long(),
-                                     device = dev)
+  resp_index1 <- tr$idx1
+  N <- tr$N
 
   q <- ncol(gh$U)
   net <- .sc_build_mixed_network(p = ncol(deltaX), p_Z = ncol(Z), q = q,
@@ -206,30 +239,72 @@
   ## would shrink the residual variance toward zero and re-introduce
   ## exactly the attenuation the integrated likelihood removes.
   par_names <- names(net$parameters)
-  trunk <- net$parameters[par_names != "A"]
-  optimizer <- torch::optim_adam(
-    list(
-      list(params = trunk, weight_decay = weight_decay),
-      list(params = net$parameters[par_names == "A"], weight_decay = 0)
-    ),
-    lr = learning_rate
-  )
-  loss_trace <- numeric(n_epochs)
-  for (epoch in seq_len(n_epochs)) {
-    net$train()
-    optimizer$zero_grad()
-    loss <- .sc_mixed_nll(net, dx, zt, yt, U_t, logw_t, resp_index1, N)
-    loss$backward()
-    optimizer$step()
-    loss_trace[epoch] <- as.numeric(loss$item())
-    if (verbose && (epoch %% 100L == 0L || epoch == 1L)) {
-      message(sprintf("  epoch %4d  nll = %.6f", epoch, loss_trace[epoch]))
+
+  ## Two-phase training.  Phase 1 trains the mean trunk with A frozen,
+  ## early-stopped on held-out-respondent NLL -- this is what prevents
+  ## the trunk from absorbing residual heterogeneity respondent by
+  ## respondent when Z is rich and T small.  Phase 2 unfreezes A and
+  ## continues jointly with fresh early stopping, so the loading matrix
+  ## gets its own validated growth window instead of being cut short by
+  ## phase 1's stopping point (A starts near zero and trains slowly;
+  ## a single shared stopping rule systematically under-trains it).
+  run_phase <- function(train_A, max_epochs) {
+    net$A$requires_grad_(train_A)
+    trunk <- net$parameters[par_names != "A"]
+    groups <- list(list(params = trunk, weight_decay = weight_decay))
+    if (train_A) {
+      groups[[2L]] <- list(params = net$parameters[par_names == "A"],
+                           weight_decay = 0)
     }
+    optimizer <- torch::optim_adam(groups, lr = learning_rate)
+    loss_trace <- numeric(max_epochs)
+    val_trace <- c()
+    best_val <- Inf
+    best_state <- NULL
+    bad_checks <- 0L
+    stopped_at <- max_epochs
+    for (epoch in seq_len(max_epochs)) {
+      net$train()
+      optimizer$zero_grad()
+      loss <- .sc_mixed_nll(net, dx, zt, yt, U_t, logw_t, resp_index1, N)
+      loss$backward()
+      optimizer$step()
+      loss_trace[epoch] <- as.numeric(loss$item())
+      if (early_stop && (epoch %% check_every == 0L)) {
+        net$eval()
+        vloss <- as.numeric(torch::with_no_grad(
+          .sc_mixed_nll(net, va$dx, va$zt, va$yt, U_t, logw_t, va$idx1, va$N)
+        )$item())
+        val_trace <- c(val_trace, vloss)
+        if (vloss < best_val - 1e-5) {
+          best_val <- vloss
+          best_state <- lapply(net$state_dict(), function(t) t$clone())
+          bad_checks <- 0L
+        } else {
+          bad_checks <- bad_checks + 1L
+          if (bad_checks >= patience) { stopped_at <- epoch; break }
+        }
+      }
+      if (verbose && (epoch %% 100L == 0L || epoch == 1L)) {
+        message(sprintf("  epoch %4d  nll = %.6f (train_A=%s)",
+                        epoch, loss_trace[epoch], train_A))
+      }
+    }
+    if (early_stop && !is.null(best_state)) net$load_state_dict(best_state)
+    list(loss = loss_trace[seq_len(stopped_at)], val = val_trace,
+         stopped_at = stopped_at)
   }
+
+  ph1 <- run_phase(train_A = FALSE, max_epochs = n_epochs)
+  ph2 <- run_phase(train_A = TRUE, max_epochs = n_epochs)
+
   net$eval()
   A_hat <- as.matrix(torch::as_array(net$A))
-  list(net = net, loss_trace = loss_trace,
-       final_loss = loss_trace[n_epochs], A = A_hat)
+  loss_all <- c(ph1$loss, ph2$loss)
+  list(net = net, loss_trace = loss_all,
+       val_trace = c(ph1$val, ph2$val),
+       stopped_at = c(ph1$stopped_at, ph2$stopped_at),
+       final_loss = loss_all[length(loss_all)], A = A_hat)
 }
 
 #' Integrated-likelihood mixed-logit conjoint estimator
@@ -275,7 +350,8 @@ scmix <- function(formula, data,
                   seed = NULL,
                   init = NULL,
                   device = "cpu",
-                  verbose = FALSE) {
+                  verbose = FALSE,
+                  early_stop = TRUE) {
   call <- match.call()
   respondent <- .sc_coerce_colname(respondent, "respondent")
   task <- .sc_coerce_colname(task, "task")
@@ -312,6 +388,17 @@ scmix <- function(formula, data,
   wd_use <- .sc_resolve_weight_decay(weight_decay, n, ncol(deltaX))
   gh <- .sc_gh_grid(q = as.integer(q), n_nodes = as.integer(n_nodes))
 
+  ## Internal contrast standardization.  Continuous attributes (e.g. tax
+  ## rates in percentage points) put deltaX entries at O(10-50); the
+  ## loading initialization and the quadrature nodes then start the
+  ## mixture wildly over-dispersed and training fails.  Standardizing
+  ## each contrast column for TRAINING ONLY and rescaling (mu, A) back
+  ## to raw units on output leaves the index deltaX' mu exactly
+  ## invariant, so every downstream score works on the raw scale.
+  sd_dx <- apply(deltaX, 2L, stats::sd)
+  sd_dx[!is.finite(sd_dx) | sd_dx < 1e-12] <- 1
+  deltaX_std <- sweep(deltaX, 2L, sd_dx, `/`)
+
   fold_id <- .sc_make_folds(resp_task, K = K, seed = seed)
   warm_state <- NULL
   if (!is.null(init)) {
@@ -331,7 +418,7 @@ scmix <- function(formula, data,
   for (k in seq_len(K)) {
     in_k <- fold_id != k
     fit_k <- .sc_train_mixed_one(
-      deltaX = deltaX[in_k, , drop = FALSE],
+      deltaX = deltaX_std[in_k, , drop = FALSE],
       y = y[in_k],
       Z = Z_task[in_k, , drop = FALSE],
       respondent_id = resp_task[in_k],
@@ -340,11 +427,16 @@ scmix <- function(formula, data,
       weight_decay = wd_use,
       seed = if (is.null(seed)) NULL else .sc_fold_seed(seed, k),
       device = device, verbose = verbose,
-      warm_state = warm_state
+      warm_state = warm_state,
+      early_stop = early_stop
     )
     out_k <- fold_id == k
-    mu_hat[out_k, ] <- .sc_predict_beta(fit_k$net, Z_task[out_k, , drop = FALSE])
-    A_folds[[k]] <- fit_k$A
+    ## rescale from the standardized training scale back to raw units:
+    ## mu_raw_k = mu_std_k / sd_k, A_raw[k, ] = A_std[k, ] / sd_k
+    mu_hat[out_k, ] <- sweep(
+      .sc_predict_beta(fit_k$net, Z_task[out_k, , drop = FALSE]),
+      2L, sd_dx, `/`)
+    A_folds[[k]] <- fit_k$A / sd_dx
     loss_traces[[k]] <- fit_k$loss_trace
     nets[[k]] <- fit_k$net
     if (verbose) {

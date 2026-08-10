@@ -1,0 +1,111 @@
+# BEFORE/AFTER overlay figures for the two-stage vs mixed-logit
+# application comparison.  Reads the .rds saved by
+# dev/app-mixed-comparison.R; never refits (plots load cache).
+suppressMessages({library(ggplot2)})
+
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+FIG_DIR <- file.path(OUT_DIR, "figs")
+dir.create(FIG_DIR, showWarnings = FALSE)
+
+ACCENT <- "#a8003b"   # cardinal red (house accent)
+GRAY <- "grey35"
+
+theta_overlay <- function(res, title) {
+  nm <- res$attr_names
+  df <- rbind(
+    data.frame(attr = nm, est = unname(res$before$theta),
+               se = unname(res$before$se), which = "Two-stage (projection)"),
+    data.frame(attr = nm, est = res$after$theta,
+               se = res$after$se, which = "Mixed logit (latent mean)")
+  )
+  df$attr <- factor(df$attr, levels = rev(nm))
+  ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
+    geom_vline(xintercept = 0, linewidth = 0.3, color = "grey70") +
+    geom_errorbarh(aes(xmin = est - 1.96 * se, xmax = est + 1.96 * se),
+                   height = 0, linewidth = 0.5,
+                   position = position_dodge2v(height = 0.55, reverse = TRUE)) +
+    geom_point(size = 2.4, fill = "white", stroke = 0.9,
+               position = position_dodge2v(height = 0.55, reverse = TRUE)) +
+    scale_color_manual(values = c("Two-stage (projection)" = GRAY,
+                                  "Mixed logit (latent mean)" = ACCENT)) +
+    scale_shape_manual(values = c("Two-stage (projection)" = 21,
+                                  "Mixed logit (latent mean)" = 19)) +
+    labs(x = expression(theta[k] ~ "(logit scale)"), y = NULL,
+         color = NULL, shape = NULL, title = title,
+         subtitle = "Population-average preferences, 95% CIs") +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(face = "bold"))
+}
+
+sign_overlay <- function(res, title) {
+  nm <- res$attr_names
+  df <- rbind(
+    data.frame(attr = nm, est = unname(res$before$sign_share), se = NA,
+               which = "Two-stage MAP sign fraction"),
+    data.frame(attr = nm, est = res$after$pi, se = res$after$pi_se,
+               which = "Mixed logit pi (debiased)")
+  )
+  df$attr <- factor(df$attr, levels = rev(nm))
+  ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
+    geom_vline(xintercept = 0.5, linewidth = 0.3, color = "grey70") +
+    geom_errorbarh(data = subset(df, !is.na(se)),
+                   aes(xmin = pmax(est - 1.96 * se, 0),
+                       xmax = pmin(est + 1.96 * se, 1)),
+                   height = 0, linewidth = 0.5) +
+    geom_point(size = 2.4, fill = "white", stroke = 0.9) +
+    scale_color_manual(values = c("Two-stage MAP sign fraction" = GRAY,
+                                  "Mixed logit pi (debiased)" = ACCENT)) +
+    scale_shape_manual(values = c("Two-stage MAP sign fraction" = 21,
+                                  "Mixed logit pi (debiased)" = 19)) +
+    coord_cartesian(xlim = c(0, 1)) +
+    labs(x = expression(Pr(beta[ik] > 0)), y = NULL, color = NULL,
+         shape = NULL, title = title,
+         subtitle = "Share of respondents favoring the attribute") +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(face = "bold"))
+}
+
+resid_overlay <- function(res, title) {
+  nm <- res$attr_names
+  sp <- res$before$sigma_prior
+  df <- rbind(
+    data.frame(attr = nm, est = sqrt(unname(sp)),
+               which = "Two-stage prior SD (heuristic)"),
+    data.frame(attr = nm, est = res$after$sd_resid,
+               which = "Mixed logit residual SD (estimated)")
+  )
+  df$attr <- factor(df$attr, levels = rev(nm))
+  ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
+    geom_point(size = 2.4, fill = "white", stroke = 0.9) +
+    scale_color_manual(values = c("Two-stage prior SD (heuristic)" = GRAY,
+                                  "Mixed logit residual SD (estimated)" = ACCENT)) +
+    scale_shape_manual(values = c("Two-stage prior SD (heuristic)" = 21,
+                                  "Mixed logit residual SD (estimated)" = 19)) +
+    labs(x = "Residual (within-Z) SD of the coefficient", y = NULL,
+         color = NULL, shape = NULL, title = title,
+         subtitle = "Calibrated heuristic vs likelihood-estimated heterogeneity") +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(face = "bold"))
+}
+
+for (app in c("br2017", "sw2022")) {
+  f <- file.path(OUT_DIR, paste0("app_", app, ".rds"))
+  if (!file.exists(f)) { cat("missing:", f, "\n"); next }
+  res <- readRDS(f)
+  lab <- c(br2017 = "Tax conjoint (Ballard-Rosa et al. 2017, T = 8)",
+           sw2022 = "Candidate conjoint (Saha-Weeks 2022, T = 3)")[app]
+  ggsave(file.path(FIG_DIR, paste0(app, "_theta.png")),
+         theta_overlay(res, lab), width = 7.5,
+         height = 1.4 + 0.34 * length(res$attr_names), dpi = 200)
+  ggsave(file.path(FIG_DIR, paste0(app, "_signshare.png")),
+         sign_overlay(res, lab), width = 7.5,
+         height = 1.4 + 0.34 * length(res$attr_names), dpi = 200)
+  ggsave(file.path(FIG_DIR, paste0(app, "_residsd.png")),
+         resid_overlay(res, lab), width = 7.5,
+         height = 1.4 + 0.34 * length(res$attr_names), dpi = 200)
+  cat("figures written for", app, "\n")
+}
+cat("DONE figures\n")
