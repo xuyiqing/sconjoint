@@ -1,5 +1,18 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## Unreleased (`feat/mixed-logit`)
+
+**Integrated mixed logit (experimental).** New estimator `scmix()` fits
+preferences as a deep-network mean plus a low-dimensional Gaussian residual
+factor, estimated jointly through the respondent-sequence marginal
+likelihood, so the mean function estimates the latent conditional mean
+directly and no prior-calibration heuristic is needed. Companion inference
+functions `scmix_theta()`, `scmix_polarization()`, and
+`scmix_counterfactual()` provide debiased estimates of population means,
+sign shares, and heterogeneity-integrated vote shares; the latter two have
+no debiased counterpart under the two-stage estimator. See the new chapter
+@sec-mixed-logit.
+
 ## v0.2.2
 
 **CRAN review fixes.** Documentation and hygiene changes requested in the

@@ -1,0 +1,162 @@
+# Integrated mixed logit {#sec-mixed-logit}
+
+::: {.callout-warning}
+## Experimental feature
+
+`scmix()` lives on the `feat/mixed-logit` branch and its interface may
+change. The estimator, its scores, and the simulation evidence behind it
+are documented in the memo of 2026-08-10; this chapter shows how to run
+it and how to read its output.
+:::
+
+The estimator in the rest of this book fits preferences in two stages: a
+deep-network mean stage followed by a respondent-level refinement with a
+calibrated prior. Its first stage targets the conditional-logit
+projection, which understates coefficient magnitudes whenever residual
+preference heterogeneity is present. `scmix()` removes that problem at
+the source. It writes preferences as
+
+$$
+\beta_i = \mu(Z_i) + A u_i, \qquad u_i \sim N(0, I_q),
+$$
+
+with a low-dimensional residual factor $u_i$, and it estimates the mean
+network $\mu(\cdot)$ and the loading matrix $A$ jointly through the
+respondent-sequence marginal likelihood. Because the heterogeneity is
+inside the objective, $\mu(z)$ estimates $\mathbb{E}[\beta_i \mid Z_i = z]$
+directly, and none of the prior-calibration devices of the two-stage
+pipeline is needed.
+
+Three quantities come with debiased inference: the population mean
+`scmix_theta()`, the sign shares `scmix_polarization()`, and the
+heterogeneity-integrated vote share `scmix_counterfactual()`. The
+latter two have no debiased counterpart under the two-stage estimator.
+
+## A synthetic example with known truth
+
+We simulate a small conjoint in which preferences have both a
+covariate-driven part and genuine residual heterogeneity, so the true
+population means are known and the projection bias is visible.
+
+```{r}
+#| label: mix-sim-data
+#| cache: true
+library(sconjoint)
+set.seed(21)
+N <- 1500; T_i <- 8
+z <- matrix(runif(N * 2, -1, 1), N, 2)
+mu_true <- cbind(0.8 + 0.5 * z[, 1],       # attribute a
+                 -0.9 + 0.4 * z[, 2],      # attribute b
+                 0.4)                      # attribute c (homogeneous mean)
+A_true <- c(0.9, 0.5, 0)                   # residual SDs by attribute
+beta <- mu_true + rnorm(N) %*% t(A_true)
+
+a <- sample(c("no", "yes"), 2 * N * T_i, TRUE)
+b <- sample(c("no", "yes"), 2 * N * T_i, TRUE)
+cc <- sample(c("no", "yes"), 2 * N * T_i, TRUE)
+odd <- seq(1L, 2 * N * T_i, by = 2L)
+dx <- cbind((a[odd] == "yes") - (a[odd + 1] == "yes"),
+            (b[odd] == "yes") - (b[odd + 1] == "yes"),
+            (cc[odd] == "yes") - (cc[odd + 1] == "yes"))
+rid <- rep(seq_len(N), each = T_i)
+yA <- rbinom(N * T_i, 1, plogis(rowSums(dx * beta[rid, ])))
+dat <- data.frame(
+  respondent = rep(rid, each = 2), task = rep(rep(seq_len(T_i), N), each = 2),
+  profile = rep(1:2, N * T_i), a = a, b = b, c = cc,
+  z1 = rep(z[rid, 1], each = 2), z2 = rep(z[rid, 2], each = 2),
+  choice = as.vector(rbind(yA, 1L - yA)))
+theta_true <- colMeans(mu_true)
+round(theta_true, 3)
+```
+
+The fit uses the same formula interface as `scfit()`. `q` is the
+dimension of the residual factor; `q = 1` is the right starting point
+for most designs.
+
+```{r}
+#| label: mix-sim-fit
+#| cache: true
+fit_mix <- scmix(choice ~ a + b + c | z1 + z2, dat,
+                 respondent = "respondent", task = "task",
+                 profile = "profile", q = 1, seed = 7)
+fit_mix
+```
+
+The print method reports the estimated residual SDs, the square roots of
+the diagonal of the rotation-invariant $AA^\top$. Compare them with the
+true values $(0.9, 0.5, 0)$. The debiased population means come from
+`scmix_theta()`, and a pooled conditional logit shows the projection
+bias the mixed logit avoids:
+
+```{r}
+#| label: mix-sim-theta
+#| cache: true
+th <- scmix_theta(fit_mix, seed = 3)
+pooled <- coef(glm(fit_mix$y ~ 0 + fit_mix$deltaX, family = binomial()))
+data.frame(truth = round(theta_true, 3),
+           mixed = round(unname(th$estimate), 3),
+           se = round(unname(th$se), 3),
+           pooled = round(unname(pooled), 3),
+           row.names = fit_mix$attr_names)
+```
+
+The pooled logit understates the two large coefficients, while the
+mixed-logit estimates sit near the truth with valid standard errors.
+Sign shares and an integrated vote share follow the same pattern:
+
+```{r}
+#| label: mix-sim-shares
+#| cache: true
+scmix_polarization(fit_mix, seed = 3)
+scmix_counterfactual(fit_mix, contrast = c(ayes = 1, byes = -1), seed = 3)
+```
+
+`scmix_polarization()` estimates $\Pr(\beta_{ik} > 0)$ under the fitted
+mixing law, and `scmix_counterfactual()` integrates the head-to-head
+choice probability over the full heterogeneity distribution. Standard
+errors for these two quantities treat the estimated loading matrix as
+fixed; the memo documents this limitation and the follow-up that
+removes it.
+
+## A real-data fit
+
+On the bundled tax-conjoint data the call is identical. Continuous
+attributes are handled internally by contrast standardization, so no
+rescaling is needed on the user's side.
+
+```{r}
+#| label: mix-br-fit
+#| cache: true
+data(br2017)
+fit_br <- scmix(
+  choice ~ rate_L10 + rate_10_35 + rate_35_85 + rate_85_175 +
+    rate_175_375 + rate_375P + revenue_score |
+    age_std + female + pid7_std + educ_std + race_white + income_std +
+    ineq_averse + work_vs_luck + taxes_harm_econ + hardwork +
+    high_econ_know + employed_ft + conserv_ideo + govt_serv + newsint +
+    numeracy + gen_mobile + future_mobile + gov_assist + risk_averse +
+    hardship + children + trust,
+  br2017, respondent = "respondent", task = "task", profile = "profile",
+  q = 1, seed = 42)
+round(scmix_theta(fit_br, seed = 7)$estimate, 4)
+```
+
+The estimates agree with the two-stage results of @sec-br within
+one standard error. What changes is the interpretation and the residual
+model: the coefficients now estimate latent population means rather than
+projections, and the residual heterogeneity is estimated by the
+likelihood rather than set by a calibrated prior. The fitted loading
+concentrates the heterogeneity on the revenue score rather than the tax
+rates, which the two-stage prior spread uniformly.
+
+## When to use which estimator
+
+The two-stage estimator remains the default for reproducing the paper's
+published results, and it is robust to the shape of the residual
+distribution because its probability-scale quantities do not depend on
+it. `scmix()` is the right tool when the latent-scale magnitudes, the
+sign shares, or the integrated vote shares are the quantities of
+interest, at the price of a Gaussian assumption on the residual factor.
+At $T = 3$ the loading matrix is weakly identified and the fold-to-fold
+spread reported by the fit should be checked before any distributional
+quantity is taken seriously.

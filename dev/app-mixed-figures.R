@@ -39,13 +39,24 @@ theta_overlay <- function(res, title) {
 
 sign_overlay <- function(res, title) {
   nm <- res$attr_names
+  ## Display truncation: pi is a probability; the additive correction can
+  ## push a near-boundary estimate slightly outside [0,1]. The figure
+  ## shows those at the boundary with a distinct marker; the raw values
+  ## stay in the .rds.
+  pi_raw <- res$after$pi
+  pi_disp <- pmin(pmax(pi_raw, 0), 1)
+  truncated <- pi_raw > 1 | pi_raw < 0
   df <- rbind(
     data.frame(attr = nm, est = unname(res$before$sign_share), se = NA,
-               which = "Two-stage MAP sign fraction"),
-    data.frame(attr = nm, est = res$after$pi, se = res$after$pi_se,
-               which = "Mixed logit pi (debiased)")
+               trunc = FALSE, which = "Two-stage MAP sign fraction"),
+    data.frame(attr = nm, est = pi_disp, se = res$after$pi_se,
+               trunc = truncated, which = "Mixed logit pi (debiased)")
   )
   df$attr <- factor(df$attr, levels = rev(nm))
+  cap <- if (any(truncated)) {
+    sprintf("%d shares whose corrected estimate exceeds 1 are drawn at 1 (diamonds).",
+            sum(truncated))
+  } else NULL
   ggplot(df, aes(x = est, y = attr, color = which, shape = which)) +
     geom_vline(xintercept = 0.5, linewidth = 0.3, color = "grey70") +
     geom_pointrange(aes(xmin = ifelse(is.na(se), est, pmax(est - 1.96 * se, 0)),
@@ -53,17 +64,22 @@ sign_overlay <- function(res, title) {
                     orientation = "y", linewidth = 0.5, size = 0.45,
                     fill = "white", stroke = 0.9,
                     position = position_dodge(width = 0.55)) +
+    geom_point(data = subset(df, trunc), shape = 18, size = 3.2,
+               show.legend = FALSE) +
     scale_color_manual(values = c("Two-stage MAP sign fraction" = GRAY,
                                   "Mixed logit pi (debiased)" = ACCENT)) +
     scale_shape_manual(values = c("Two-stage MAP sign fraction" = 21,
                                   "Mixed logit pi (debiased)" = 19)) +
-    coord_cartesian(xlim = c(0, 1)) +
+    coord_cartesian(xlim = c(0, 1), clip = "on") +
+    scale_x_continuous(expand = expansion(mult = c(0.01, 0.02))) +
     labs(x = expression(Pr(beta[ik] > 0)), y = NULL, color = NULL,
          shape = NULL, title = title,
-         subtitle = "Share of respondents favoring the attribute") +
+         subtitle = "Share of respondents favoring the attribute",
+         caption = cap) +
     theme_minimal(base_size = 11) +
     theme(legend.position = "bottom",
-          plot.title = element_text(face = "bold"))
+          plot.title = element_text(face = "bold"),
+          plot.caption = element_text(size = 8, color = "grey30"))
 }
 
 resid_overlay <- function(res, title) {

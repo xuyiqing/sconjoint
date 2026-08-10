@@ -17,6 +17,7 @@ book:
     - 07-estimands.qmd
     - 08-plot-options.qmd
     - 09-advanced-options.qmd
+    - 10-mixed-logit.qmd
     - references.qmd
     - changelog.qmd
 
