@@ -95,8 +95,11 @@
 #' plug-in to a loading error is Gamma_A = mean_i a_i' B(Z_i) with
 #' B(Z) = I_mumu(Z)^{-1} I_muA(Z); the missing influence term is
 #' Gamma_A applied to the loading influence IF_A,i.  `a_rows` is N x p.
-#' Returns the N-vector adjustment to ADD to psi (sign validated by the
-#' loading-perturbation transmission check in the test suite).
+#' Returns the N-vector Gamma_A IF_A term, which every caller
+#' SUBTRACTS from psi (sign validated by the loading-perturbation
+#' transmission check in the test suite and by the 2026-08-11 audit's
+#' numerical flatness check: subtracting cancels the transmission,
+#' adding doubles it).
 #' @keywords internal
 #' @noRd
 .scmix_A_adjust <- function(pr, a_rows, dA_rows = NULL) {
