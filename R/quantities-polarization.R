@@ -51,6 +51,14 @@
 #'   percentile bounds for `polarization_idx`, and the extra columns
 #'   `se_positive`, `se_negative` carry the bootstrap SEs of the two
 #'   fractions.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_polarization <- function(object, subgroup = NULL,
                             which_beta = c("hybrid", "dnn"),
@@ -59,6 +67,7 @@ sc_polarization <- function(object, subgroup = NULL,
                             boot_type = c("wild", "cluster"),
                             boot_seed = NULL) {
   stopifnot(inherits(object, "sc_fit"))
+  .sc_population_claim_note("sc_polarization")
   which_beta <- match.arg(which_beta)
   se_method  <- match.arg(se_method)
   boot_type  <- match.arg(boot_type)

@@ -49,6 +49,15 @@ sc_counterfactual <- function(object, A, B,
   XB <- .sc_profile_to_dummies(object, B)
   dx <- XA - XB
 
+  ## Raw design-based share for the same contrast (Proposition 1(b) of the
+  ## estimand memo): model-free benchmark, attached whenever the contrast
+  ## occurs in the observed design. Skipped for interaction fits, where the
+  ## choice law is not a function of the attribute contrast alone and the
+  ## contrast-matched share estimates a different average.
+  raw <- if (is.null(object$interaction)) {
+    .sc_raw_share(object$deltaX, object$y, object$respondent_id, dx)
+  } else NULL
+
   if (vartype == "orthogonal") {
     cvec <- dx
     if (!is.null(object$interaction)) {
@@ -64,12 +73,24 @@ sc_counterfactual <- function(object, A, B,
               "Compare `vartype = \"plugin\"` and interpret with caution.",
               call. = FALSE)
     }
+    if (!is.null(raw) && !is.na(raw$raw_share)) {
+      gap <- abs(unname(d["estimate"]) - raw$raw_share)
+      gap_se <- sqrt(unname(d["se"])^2 + raw$raw_share_se^2)
+      if (is.finite(gap_se) && gap > 2 * gap_se) {
+        warning("sc_counterfactual(): the model-based share differs from the ",
+                "raw design-based share by more than 2 SEs (",
+                sprintf("%.3f vs %.3f", unname(d["estimate"]), raw$raw_share),
+                "). Treat as a specification warning for this contrast.",
+                call. = FALSE)
+      }
+    }
     return(.sc_quantity(
       name = "counterfactual", estimate = unname(d["estimate"]),
       se = unname(d["se"]), ci_lo = unname(d["ci_lo"]), ci_hi = unname(d["ci_hi"]),
-      details = list(delta_x = dx, profile_A = A, profile_B = B,
-                     vartype = "orthogonal",
-                     se_method = "debiased orthogonal score, respondent-clustered"),
+      details = c(list(delta_x = dx, profile_A = A, profile_B = B,
+                       vartype = "orthogonal",
+                       se_method = "debiased orthogonal score, respondent-clustered"),
+                  raw),
       call = match.call()))
   }
 
@@ -88,14 +109,14 @@ sc_counterfactual <- function(object, A, B,
     se = se,
     ci_lo = ci[1L],
     ci_hi = ci[2L],
-    details = list(
+    details = c(list(
       per_row_prob = p_i,
       delta_x      = dx,
       profile_A    = A,
       profile_B    = B,
       subgroup_size = length(S),
       se_method    = "respondent-clustered"
-    ),
+    ), raw),
     call = match.call()
   )
 }

@@ -19,7 +19,11 @@ A list with \code{floor_index_sd} (length-R vector of spurious
 index-scale SDs), \code{fitted_index_sd} (the fit's own per-fold
 index-scale SDs), and \code{ratio} (fitted mean over floor mean; values
 near 1 mean the fitted heterogeneity is indistinguishable from the
-small-T artifact).
+small-T artifact). Store the result on the fit,
+\code{fit$zero_floor <- scmix_calibrate_zero(fit)}, so that
+\code{\link[=print.scmix]{print.scmix()}} and \code{\link[=summary.scmix]{summary.scmix()}} report it; a ratio below 2
+(provisional threshold) means distributional claims are not
+supported at the design.
 }
 \description{
 At small T the marginal likelihood can attribute part of the mean

@@ -19,6 +19,37 @@
   invisible(TRUE)
 }
 
+#' Emit a message at most once per session, keyed by `id`
+#'
+#' Like `.sc_warn_once()` but for informational notes (e.g. the
+#' population-claim scope note on the plug-in distributional
+#' functions), which should orient the user without polluting every
+#' call with a condition.
+#' @keywords internal
+#' @noRd
+.sc_note_once <- function(id, msg) {
+  if (id %in% .sc_state$warned) {
+    return(invisible(FALSE))
+  }
+  .sc_state$warned <- c(.sc_state$warned, id)
+  message(msg)
+  invisible(TRUE)
+}
+
+#' Standard population-claim scope note for plug-in distributional
+#' functions (correspondence-table rule; estimand memo P5)
+#' @keywords internal
+#' @noRd
+.sc_population_claim_note <- function(fn) {
+  .sc_note_once(paste0("popclaim_", fn), paste0(
+    fn, "(): describes the fitted respondent-level (MAP) estimates. ",
+    "Population sign shares and heterogeneity magnitudes require the ",
+    "integrated-likelihood route (scmix_polarization()) and its design ",
+    "checks; MAP fractions are biased for population shares (9-13 ",
+    "percentage points in the head-to-head simulations, with no SEs). ",
+    "This note prints once per session."))
+}
+
 .onAttach <- function(libname, pkgname) {
   # sconjoint will depend on 'torch' once the DNN backend lands in M2.
   # During M1 (skeleton), torch is in Suggests and is not required.

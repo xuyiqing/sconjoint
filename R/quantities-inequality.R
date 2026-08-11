@@ -22,6 +22,14 @@
 #' @param which_beta Either `"hybrid"` (default) or `"dnn"`. See `?sc_mrs`.
 #' @return An `sc_quantity` with a data.frame estimate containing
 #'   per-attribute inequality measures.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_inequality <- function(object, measure = c("variance", "gini"),
                           subgroup = NULL,

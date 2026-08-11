@@ -25,10 +25,19 @@
 #' @return An `sc_quantity_bivariate` carrying two `sc_quantity`
 #'   sub-objects (`direction` and `intensity`) and a `separation`
 #'   data.frame in `$details`.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_direction_intensity <- function(object, subgroup = NULL,
                                    which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  .sc_population_claim_note("sc_direction_intensity")
   which_beta <- match.arg(which_beta)
   B <- .sc_pick_beta(object, which_beta)
   S <- .sc_resolve_subgroup(object, subgroup)

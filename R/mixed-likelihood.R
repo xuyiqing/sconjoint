@@ -548,5 +548,60 @@ print.scmix <- function(x, ...) {
   sds <- sqrt(pmax(diag(Sig), 0))
   names(sds) <- x$attr_names
   print(round(sds, 3))
+  .scmix_print_floor(x)
   invisible(x)
+}
+
+#' Zero-floor status line shared by print.scmix and summary.scmix
+#' @keywords internal
+#' @noRd
+.scmix_print_floor <- function(x) {
+  cal <- x$zero_floor
+  if (is.null(cal)) {
+    cat("  zero-floor calibration: not run. Before interpreting residual",
+        "SDs or\n  sign shares, run",
+        "`fit$zero_floor <- scmix_calibrate_zero(fit)`.\n")
+    return(invisible(NULL))
+  }
+  cat(sprintf(paste0("  zero-floor calibration: fitted/floor index-SD ratio",
+                     " = %.2f\n"), cal$ratio))
+  if (is.finite(cal$ratio) && cal$ratio < 2) {
+    cat("  ratio < 2: the fitted heterogeneity is not clearly above the",
+        "small-T\n  floor; distributional claims (sign shares, residual-SD",
+        "magnitudes) are\n  not supported at this design. (Provisional",
+        "threshold; under review.)\n")
+  } else {
+    cat("  ratio >= 2: fitted heterogeneity sits above the small-T floor.\n")
+  }
+  invisible(NULL)
+}
+
+#' Summary of an scmix fit, including the zero-floor calibration
+#'
+#' Prints the fit dimensions and residual SDs (as [print.scmix()]) and
+#' the truth-zero calibration status. The calibration itself costs
+#' `R` full refits, so it is not run automatically: run it once and
+#' store it on the fit with `fit$zero_floor <- scmix_calibrate_zero(fit)`,
+#' or pass `calibrate = TRUE` here to run (and print) it now. The
+#' provisional reporting threshold: a fitted-to-floor ratio below 2
+#' means distributional claims are not supported at the design.
+#'
+#' @param object An `scmix` object.
+#' @param calibrate Logical: run [scmix_calibrate_zero()] now if no
+#'   stored result is present (default `FALSE`; costs `R` refits).
+#' @param R,seed Forwarded to [scmix_calibrate_zero()] when
+#'   `calibrate = TRUE`.
+#' @param ... Unused.
+#' @return The (possibly calibrated) fit, invisibly. When run here,
+#'   the calibration is returned on `$zero_floor` of the invisible
+#'   value --- assign it back (`fit <- summary(fit, calibrate = TRUE)`
+#'   drops the summary; use
+#'   `fit$zero_floor <- scmix_calibrate_zero(fit)` to persist).
+#' @export
+summary.scmix <- function(object, calibrate = FALSE, R = 2L, seed = 1L, ...) {
+  if (isTRUE(calibrate) && is.null(object$zero_floor)) {
+    object$zero_floor <- scmix_calibrate_zero(object, R = R, seed = seed)
+  }
+  print.scmix(object)
+  invisible(object)
 }

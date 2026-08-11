@@ -21,6 +21,14 @@
 #' @return An `sc_quantity` whose `estimate` is a data.frame with
 #'   columns `dummy_name`, `var_beta`, `se_var`, `t_stat`, `p_value`,
 #'   `p_adjusted`, `sig`.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_heterogeneity_test <- function(object,
                                   adjust = c("none", "holm", "bh"),

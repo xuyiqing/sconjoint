@@ -327,8 +327,53 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
     psi[i, 1L] <- h + sum(aZ * pr$C[i, ])
   }
   psi[, 1L] <- psi[, 1L] - .scmix_A_adjust(pr, a_all, dA_rows = dA_all)
-  .scmix_wrap(psi, "V(c)", "eta-integrated counterfactual share", fit,
-              extra = list(contrast = stats::setNames(cv, fit$attr_names)))
+  out <- .scmix_wrap(psi, "V(c)", "eta-integrated counterfactual share", fit,
+                     extra = list(contrast = stats::setNames(cv, fit$attr_names)))
+  raw <- .sc_raw_share(fit$deltaX, fit$y, fit$respondent_id, cv)
+  out$extra <- c(out$extra, raw)
+  if (!is.na(raw$raw_share)) {
+    gap <- abs(out$estimate - raw$raw_share)
+    gap_se <- sqrt(out$se^2 + raw$raw_share_se^2)
+    if (is.finite(gap_se) && gap > 2 * gap_se) {
+      warning("scmix_counterfactual(): the model-based share differs from ",
+              "the raw design-based share by more than 2 SEs (",
+              sprintf("%.3f vs %.3f", out$estimate, raw$raw_share),
+              "). Treat as a specification warning for this contrast.",
+              call. = FALSE)
+    }
+  }
+  out
+}
+
+#' Raw design-based share for an in-design contrast
+#'
+#' Proposition 1(b) of the estimand memo: when the design assigns
+#' contrast `cv` (or its negation) with positive probability, the raw
+#' share of choices among matching tasks is a model-free estimator of
+#' `V(cv)`, unbiased conditional on the realized design. Tasks whose
+#' contrast equals `-cv` contribute `1 - y`. Respondents are averaged
+#' FIRST (task-pooling weights respondents by task count, which biases
+#' the share when `T_i` correlates with `beta_i`); the SE is the
+#' between-respondent empirical standard error.  Returns `NA` when no
+#' task matches (off-design contrast).
+#' @keywords internal
+#' @noRd
+.sc_raw_share <- function(deltaX, y, respondent_id, cv, tol = 1e-8) {
+  d_pos <- rowSums(abs(sweep(deltaX, 2L, cv, `-`))) < tol
+  d_neg <- rowSums(abs(sweep(deltaX, 2L, -cv, `-`))) < tol
+  hit <- d_pos | d_neg
+  if (!any(hit)) {
+    return(list(raw_share = NA_real_, raw_share_se = NA_real_,
+                raw_n_tasks = 0L, raw_n_respondents = 0L))
+  }
+  contrib <- ifelse(d_pos[hit], y[hit], 1 - y[hit])
+  resp <- respondent_id[hit]
+  m_i <- tapply(contrib, resp, mean)
+  list(raw_share = mean(m_i),
+       raw_share_se = if (length(m_i) > 1L)
+         stats::sd(m_i) / sqrt(length(m_i)) else NA_real_,
+       raw_n_tasks = sum(hit),
+       raw_n_respondents = length(m_i))
 }
 
 #' Orthogonality self-check for the scmix construction
@@ -385,7 +430,11 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
 #'   index-scale SDs), `fitted_index_sd` (the fit's own per-fold
 #'   index-scale SDs), and `ratio` (fitted mean over floor mean; values
 #'   near 1 mean the fitted heterogeneity is indistinguishable from the
-#'   small-T artifact).
+#'   small-T artifact). Store the result on the fit,
+#'   `fit$zero_floor <- scmix_calibrate_zero(fit)`, so that
+#'   [print.scmix()] and [summary.scmix()] report it; a ratio below 2
+#'   (provisional threshold) means distributional claims are not
+#'   supported at the design.
 #' @export
 scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
   withr::local_preserve_seed()

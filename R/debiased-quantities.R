@@ -257,6 +257,9 @@ sc_voteshare_contrast <- function(object, contrast, level = 0.95) {
   Vaa <- st$vcov[1L, 1L]
   Vbb <- st$vcov[2L, 2L]
   Vab <- st$vcov[1L, 2L]
+  .sc_ratio_denominator_guard(
+    if (transform == "mrs") "sc_mrs" else "sc_wtp",
+    th_b, sqrt(max(Vbb, 0)), sprintf("(column %d)", k))
   z <- stats::qnorm(1 - (1 - level) / 2); z2 <- z^2
 
   if (transform == "mrs") {

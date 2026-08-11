@@ -56,6 +56,14 @@
 #'   chosen `se_method`. When `se_method = "wild_bootstrap"`,
 #'   `details$se_method` is `"wild_bootstrap"` and `details$n_boot`,
 #'   `details$boot_type` record the bootstrap settings.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_fraction_preferring <- function(object, threshold = 0, subgroup = NULL,
                                    which_beta = c("hybrid", "dnn"),

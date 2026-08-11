@@ -38,3 +38,14 @@ index includes the population-level interaction offset
 term enters via the regularized mean-stage estimate (\code{w_hat}); see
 \code{?scfit} for the attenuation caveat.
 }
+\section{Population claims}{
+
+This function describes the fitted respondent-level (MAP) estimates.
+Under the estimand-estimator correspondence it is limited to
+descriptive use of those fitted values: population sign shares and
+heterogeneity magnitudes require the integrated-likelihood route
+(\code{\link[=scmix_polarization]{scmix_polarization()}} and its design checks), and MAP fractions
+are biased for population shares (9--13 percentage points in the
+head-to-head simulations, with no standard errors).
+}
+

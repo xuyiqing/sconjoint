@@ -42,3 +42,14 @@ the per-respondent \code{beta_i} exactly as before, but \code{beta_i} is then
 the MAIN-EFFECT part of the utility (the coefficient on \code{deltaX} at
 the no-interaction baseline), not the all-else-equal effect.
 }
+\section{Population claims}{
+
+This function describes the fitted respondent-level (MAP) estimates.
+Under the estimand-estimator correspondence it is limited to
+descriptive use of those fitted values: population sign shares and
+heterogeneity magnitudes require the integrated-likelihood route
+(\code{\link[=scmix_polarization]{scmix_polarization()}} and its design checks), and MAP fractions
+are biased for population shares (9--13 percentage points in the
+head-to-head simulations, with no standard errors).
+}
+

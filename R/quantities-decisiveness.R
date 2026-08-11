@@ -23,10 +23,19 @@
 #' @return An `sc_quantity` with scalar estimate (mean decisiveness),
 #'   clustered SE, normal-approx CI, and details including the
 #'   fraction strongly decisive.
+#' @section Population claims:
+#' This function describes the fitted respondent-level (MAP) estimates.
+#' Under the estimand-estimator correspondence it is limited to
+#' descriptive use of those fitted values: population sign shares and
+#' heterogeneity magnitudes require the integrated-likelihood route
+#' ([scmix_polarization()] and its design checks), and MAP fractions
+#' are biased for population shares (9--13 percentage points in the
+#' head-to-head simulations, with no standard errors).
 #' @export
 sc_decisiveness <- function(object, A, B, subgroup = NULL,
                             which_beta = c("hybrid", "dnn")) {
   stopifnot(inherits(object, "sc_fit"))
+  .sc_population_claim_note("sc_decisiveness")
   which_beta <- match.arg(which_beta)
   XA <- .sc_profile_to_dummies(object, A)
   XB <- .sc_profile_to_dummies(object, B)
