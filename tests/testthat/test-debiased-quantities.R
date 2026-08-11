@@ -32,7 +32,11 @@ test_that("debiased importance shares sum to one with finite positive SEs", {
 test_that("debiased population MRS/WTP return finite estimate, SE, and Fieller", {
   fit <- .fit_toy()
   for (tr in c("mrs", "wtp")) {
-    r <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, transform = tr)
+    ## the toy fixture's theta_2 has |theta|/SE < 4, so the new
+    ## denominator guard fires by design
+    expect_warning(
+      r <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, transform = tr),
+      "weak denominator")
     expect_true(is.finite(r$estimate) && is.finite(r$se) && r$se >= 0)
     expect_true(r$fieller_type %in% c("bounded", "empty", "all_real", "exclusive"))
   }
@@ -58,16 +62,22 @@ test_that("sc_importance vartype='orthogonal' returns the debiased shares", {
 
 test_that("sc_mrs / sc_wtp population estimand returns the debiased ratio", {
   fit <- .fit_toy()
-  m  <- sc_mrs(fit, "a1", "a2", estimand = "population")
-  r  <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "mrs")
+  ## the toy fixture's theta_2 is weakly separated from zero, so every
+  ## population-ratio call fires the denominator guard by design
+  expect_warning(m <- sc_mrs(fit, "a1", "a2", estimand = "population"),
+                 "weak denominator")
+  expect_warning(r <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "mrs"),
+                 "weak denominator")
   expect_equal(unname(m$estimate), unname(r$estimate), tolerance = 1e-10)
   expect_equal(unname(m$se),       unname(r$se),       tolerance = 1e-10)
   expect_identical(m$details$estimand, "population")
   expect_true(m$details$fieller_type %in%
                 c("bounded", "empty", "all_real", "exclusive"))
 
-  w  <- sc_wtp(fit, "a1", "a2", estimand = "population")
-  rw <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "wtp")
+  expect_warning(w <- sc_wtp(fit, "a1", "a2", estimand = "population"),
+                 "weak denominator")
+  expect_warning(rw <- sconjoint:::.sc_debiased_ratio(fit, 1L, 2L, "wtp"),
+                 "weak denominator")
   expect_equal(unname(w$estimate), unname(rw$estimate), tolerance = 1e-10)
   expect_identical(w$details$estimand, "population")
 

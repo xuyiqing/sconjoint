@@ -27,8 +27,11 @@ test_that("sc_counterfactual warns when the orthogonal estimate leaves [0,1]", {
     },
     .package = "sconjoint"
   )
-  expect_warning(
-    sc_counterfactual(fit, A = list(a1 = 1), B = list(a2 = 1)),
-    "outside \\[0, 1\\]"
-  )
+  ## two warnings by construction: the [0,1] boundary warning, and the
+  ## raw-share specification warning (the mocked 1.2 sits far from the
+  ## design share)
+  w <- testthat::capture_warnings(
+    sc_counterfactual(fit, A = list(a1 = 1), B = list(a2 = 1)))
+  expect_true(any(grepl("outside \\[0, 1\\]", w)))
+  expect_true(any(grepl("raw design-based share", w)))
 })
