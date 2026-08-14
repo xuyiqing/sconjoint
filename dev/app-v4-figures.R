@@ -8,7 +8,11 @@
 #   sw2022_partisan_gender_v4.png      party gender means (survives) +
 #                                      design-check display (replaces the
 #                                      MAP density panel)
-suppressMessages({library(ggplot2)})
+suppressMessages({
+  library(ggplot2)
+  ## the S3 methods on scmix_posterior (as.data.frame) live in the package
+  devtools::load_all("~/GitHub/sconjoint", quiet = TRUE)
+})
 
 OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 FIG_DIR <- file.path(OUT_DIR, "figs")
@@ -46,7 +50,7 @@ coord_labels <- c(diff_respParty = "Co-partisan",
                   diff_dem_code_u_gerry10 = "Gerrymander (10 seats)",
                   diff_dem_code_u_gerry2 = "Gerrymander (2 seats)")
 
-grid_x <- seq(-2.6, 1.6, length.out = 401)
+grid_x <- seq(-3.2, 3.0, length.out = 501)
 dens_rows <- list()
 for (k in show_coords) {
   j <- match(k, di$attr_names)

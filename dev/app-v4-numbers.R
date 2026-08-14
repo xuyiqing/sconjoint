@@ -72,11 +72,16 @@ for (k in names(gs$theta$estimate)) {
 for (a in c("journalists", "court", "gerry10")) {
   m <- gs[[paste0("mrs_", a)]]
   key <- paste0("gs.mrs.population.", a)
+  ## v3 canon reports the ABSOLUTE trade-off ratio (abs_estimate in
+  ## mrs_compdiff_intervals.R); the signed theta_action/theta_party is
+  ## negative. Store signed, display absolute, note the convention.
   row(key, unname(m$estimate), unname(m$se),
       m$extra$fieller_lo, m$extra$fieller_hi, ci_type = "fieller",
+      display = sprintf("%.2f (abs)", abs(unname(m$estimate))),
       source = SRC_GS,
-      note = sprintf("Fieller CI; delta-method [%0.3f, %0.3f]; t_den %.1f",
-                     m$ci_lower, m$ci_upper, m$extra$t_den))
+      note = sprintf(
+        "signed theta_action/theta_party; v3 reports |MRS|; Fieller CI; delta [%0.3f, %0.3f]; t_den %.1f",
+        m$ci_lower, m$ci_upper, m$extra$t_den))
   row(paste0(key, ".ci_lower"), m$extra$fieller_lo, source = SRC_GS)
   row(paste0(key, ".ci_upper"), m$extra$fieller_hi, source = SRC_GS)
 }
@@ -134,6 +139,21 @@ for (k in names(imp$estimate)) {
       ci_type = "wald", source = SRC_GS,
       note = sprintf("between-Z %.4f + residual %.4f of numerator",
                      imp$extra$between_Z[k], imp$extra$residual[k]))
+}
+
+MUZ_NOTE <- "descriptive Z-explained conditional-mean share; the population sign share is gated NA"
+if (!is.null(gs$muZ_shares)) {
+  row("gs.muZ.min_opposed", gs$muZ_shares$min_opposed, source = SRC_GS,
+      note = paste(MUZ_NOTE, "; v3 '>93% opposed' was a MAP fraction"),
+      v3_key = "")
+  row("gs.muZ.max_positive", gs$muZ_shares$max_positive, source = SRC_GS,
+      note = paste(MUZ_NOTE, "; v3 ~6% was a MAP fraction (0.0611)"),
+      v3_key = "gs.frac_undem_positive.max")
+  for (k in names(gs$muZ_shares$opposed_by_action)) {
+    row(paste0("gs.muZ.opposed.", sub("diff_dem_code_u_", "", k)),
+        gs$muZ_shares$opposed_by_action[[k]], source = SRC_GS,
+        note = MUZ_NOTE, v3_key = "")
+  }
 }
 
 row("diag.gs2020.floor_ratio", gs$zero_floor$ratio, source = SRC_GS,
@@ -218,6 +238,22 @@ for (j in seq_along(br$plans_V$estimate)) {
                      rawb$raw_n_tasks[j]))
   sig_row(paste0("br.plan.du_share.", lab), br$plans_du_share, lab, SRC_BR,
           note = "share with du > 0; v3 MAP fractions 0.89 (flat) / 0.83 (regressive)")
+}
+
+if (!is.null(br$muZ_shares)) {
+  mz <- br$muZ_shares
+  row("br.muZ.slope_positive", mz$slope_positive, source = SRC_BR,
+      note = paste(MUZ_NOTE, "; v3 0.929 was a MAP fraction"),
+      v3_key = "br.frac.slope_positive")
+  for (g in names(mz$slope_positive_by_party)) {
+    row(paste0("br.muZ.slope_positive.",
+               c(Democrat = "dem", Independent = "indep",
+                 Republican = "rep")[g]),
+        mz$slope_positive_by_party[[g]], source = SRC_BR,
+        note = MUZ_NOTE, v3_key = "")
+  }
+  row("br.muZ.top_gt_bottom", mz$top_gt_bottom, source = SRC_BR,
+      note = paste(MUZ_NOTE, "; v3 0.91 was a MAP fraction"), v3_key = "")
 }
 
 row("diag.br2017.floor_ratio", br$zero_floor$ratio, source = SRC_BR,
@@ -306,6 +342,17 @@ for (k in names(sw$pi$estimate)) {
       ci_type = if (is.na(v$est)) "none" else "wald",
       na_reason = if (is.na(v$est)) "floored" else "",
       source = SRC_SW)
+}
+
+if (!is.null(sw$muZ_shares)) {
+  for (g in names(sw$muZ_shares$prefer_male_by_party)) {
+    row(paste0("sw.muZ.prefer_male.",
+               c(Democrat = "dem", Independent = "indep",
+                 Republican = "rep")[g]),
+        sw$muZ_shares$prefer_male_by_party[[g]], source = SRC_SW,
+        note = paste(MUZ_NOTE, "; v3 within-party MAP shares 0.657-0.69"),
+        v3_key = "")
+  }
 }
 
 row("diag.sw2022.floor_ratio", sw$zero_floor$ratio, source = SRC_SW,
