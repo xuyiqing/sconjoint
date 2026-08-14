@@ -71,7 +71,7 @@
   fit
 }
 
-.scmix_scores <- function(fit, mu_override = NULL) {
+.scmix_scores <- function(fit, mu_override = NULL, post_sd = FALSE) {
   fit <- .scmix_canon(fit)
   deltaX <- fit$deltaX
   y <- fit$y
@@ -92,6 +92,7 @@
   S_A <- matrix(0, N, p * q)
   loglik <- numeric(N)
   post_mean <- matrix(0, N, p)
+  post_sd_m <- if (post_sd) matrix(0, N, p) else NULL
   T_i <- as.integer(table(ridx))
 
   sigm <- function(x) 1 / (1 + exp(-x))
@@ -147,10 +148,26 @@
     S_A[tgt, ] <- SAk
     loglik[tgt] <- ll
     post_mean[tgt, ] <- pm
+
+    if (post_sd) {
+      ## posterior variance of beta_k = A[k, ] Cov(u | data) A[k, ]',
+      ## accumulated pair by pair on the quadrature grid (opt-in: the
+      ## hot inference path never pays for this)
+      pv <- matrix(0, nlevels(rk_f), p)
+      for (r in seq_len(q)) {
+        for (s in r:q) {
+          Euu_rs <- postw %*% (gh$U[, r] * gh$U[, s])
+          cov_rs <- as.numeric(Euu_rs) - Eu[, r] * Eu[, s]
+          fac <- if (r == s) 1 else 2
+          pv <- pv + fac * (cov_rs %o% (A[, r] * A[, s]))
+        }
+      }
+      post_sd_m[tgt, ] <- sqrt(pmax(pv, 0))
+    }
   }
 
   list(resp = levels(resp_f), S = S, S_A = S_A, loglik = loglik,
-       post_mean = post_mean, T_i = T_i,
+       post_mean = post_mean, post_sd = post_sd_m, T_i = T_i,
        fold_resp = as.integer(fold_resp))
 }
 
