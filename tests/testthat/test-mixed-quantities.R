@@ -110,6 +110,31 @@ test_that("scmix_counterfactual attaches the raw-share benchmark (P7)", {
   expect_lt(gap, 4 * sqrt(vc$se^2 + vc$extra$raw_share_se^2))
 })
 
+test_that("batch counterfactual contrasts equal single calls (P7/E6)", {
+  Dm <- rbind(pro_a1 = c(1, 0), mixed = c(1, -1))
+  batch <- scmix_counterfactual(fit, contrast = Dm, n_bins = 10L, M = 200L,
+                                seed = 2L)
+  expect_named(batch$estimate, c("pro_a1", "mixed"))
+  expect_s3_class(batch$extra$raw, "data.frame")
+  expect_equal(nrow(batch$extra$raw), 2L)
+  for (j in 1:2) {
+    single <- scmix_counterfactual(fit, contrast = Dm[j, ], n_bins = 10L,
+                                   M = 200L, seed = 2L)
+    expect_equal(unname(batch$estimate[j]), unname(single$estimate),
+                 tolerance = 1e-12)
+    expect_equal(unname(batch$se[j]), unname(single$se), tolerance = 1e-12)
+    expect_equal(batch$extra$raw$raw_share[j], single$extra$raw_share,
+                 tolerance = 1e-12)
+    expect_equal(batch$extra$raw$raw_n_tasks[j], single$extra$raw_n_tasks)
+  }
+  ## single-contrast extra keeps the flat backward-compatible fields
+  one <- scmix_counterfactual(fit, contrast = c(1, 0), n_bins = 10L,
+                              M = 200L, seed = 2L)
+  expect_named(one$estimate, "V(c)")
+  expect_true(all(c("contrast", "raw_share", "raw_n_tasks") %in%
+                    names(one$extra)))
+})
+
 test_that("print/summary report the zero-floor status (P3)", {
   expect_output(print(fit), "zero-floor calibration: not run")
   fit2 <- fit

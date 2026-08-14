@@ -9,8 +9,13 @@ scmix_counterfactual(fit, contrast, n_bins = 40L, M = 2000L, seed = 1L)
 \arguments{
 \item{fit}{An \code{scmix} object.}
 
-\item{contrast}{Numeric vector of length p (attribute-dummy scale),
-or a named subset that is expanded against \code{fit$attr_names}.}
+\item{contrast}{One contrast or many: a numeric vector of length p
+(attribute-dummy scale), a named subset expanded against
+\code{fit$attr_names}, a numeric matrix with one contrast per row
+(rownames become labels), or a list of such vectors.  All
+contrasts in a call share one information simulation -- pass a
+sweep as a batch rather than looping.  Each contrast carries its
+own raw-share benchmark (\verb{$extra$raw}, one row per contrast).}
 
 \item{n_bins, M, seed}{Controls for the model-implied information
 simulation (see \code{.scmix_information()}).}

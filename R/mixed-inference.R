@@ -297,67 +297,91 @@ scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
 #' `sum_g w_g G'(c' beta_g) c`.
 #'
 #' @inheritParams scmix_theta
-#' @param contrast Numeric vector of length p (attribute-dummy scale),
-#'   or a named subset that is expanded against `fit$attr_names`.
+#' @param contrast One contrast or many: a numeric vector of length p
+#'   (attribute-dummy scale), a named subset expanded against
+#'   `fit$attr_names`, a numeric matrix with one contrast per row
+#'   (rownames become labels), or a list of such vectors.  All
+#'   contrasts in a call share one information simulation -- pass a
+#'   sweep as a batch rather than looping.  Each contrast carries its
+#'   own raw-share benchmark (`$extra$raw`, one row per contrast).
 #' @export
 scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
                                  seed = 1L) {
   stopifnot(inherits(fit, "scmix"))
-  p <- ncol(fit$deltaX)
-  if (!is.null(names(contrast))) {
-    cv <- stats::setNames(numeric(p), fit$attr_names)
-    bad <- setdiff(names(contrast), fit$attr_names)
-    if (length(bad) > 0L) {
-      stop("scmix_counterfactual(): unknown contrast names: ",
-           paste(bad, collapse = ", "))
-    }
-    cv[names(contrast)] <- as.numeric(contrast)
-  } else {
-    if (length(contrast) != p) {
-      stop("scmix_counterfactual(): `contrast` must have length ", p,
-           " or be a named vector.")
-    }
-    cv <- as.numeric(contrast)
-  }
+  pc <- tryCatch(.scmix_parse_contrasts(fit, contrast),
+                 error = function(e) {
+                   stop("scmix_counterfactual(): ", conditionMessage(e),
+                        call. = FALSE)
+                 })
+  D <- pc$D
+  J <- nrow(D)
+  single <- J == 1L
 
   fit <- .scmix_canon(fit)
   pr <- .scmix_prep(fit, n_bins = n_bins, M = M, seed = seed)
   gh <- fit$gh
   sigm <- function(x) 1 / (1 + exp(-x))
   fold_resp <- pr$sc$fold_resp
-
-  psi <- matrix(0, pr$N, 1L)
-  a_all <- matrix(0, pr$N, pr$p)
   qq <- ncol(fit$A_folds[[1L]])
-  dA_all <- matrix(0, pr$N, pr$p * qq)
-  for (i in seq_len(pr$N)) {
-    A <- fit$A_folds[[fold_resp[i]]]
-    idx <- sum(cv * pr$mu_resp[i, ]) + as.numeric((t(cv) %*% A) %*% t(gh$U))
-    pg <- sigm(idx)
-    h <- sum(gh$w * pg)
-    gprime <- gh$w * pg * (1 - pg)
-    aZ <- sum(gprime) * cv
-    a_all[i, ] <- aZ
-    for (r in seq_len(qq)) {
-      dA_all[i, (r - 1L) * pr$p + seq_len(pr$p)] <-
-        sum(gprime * gh$U[, r]) * cv
+
+  psi <- matrix(0, pr$N, J)
+  raw_rows <- vector("list", J)
+  for (j in seq_len(J)) {
+    cv <- D[j, ]
+    a_all <- matrix(0, pr$N, pr$p)
+    dA_all <- matrix(0, pr$N, pr$p * qq)
+    for (i in seq_len(pr$N)) {
+      A <- fit$A_folds[[fold_resp[i]]]
+      idx <- sum(cv * pr$mu_resp[i, ]) + as.numeric((t(cv) %*% A) %*% t(gh$U))
+      pg <- sigm(idx)
+      h <- sum(gh$w * pg)
+      gprime <- gh$w * pg * (1 - pg)
+      aZ <- sum(gprime) * cv
+      a_all[i, ] <- aZ
+      for (r in seq_len(qq)) {
+        dA_all[i, (r - 1L) * pr$p + seq_len(pr$p)] <-
+          sum(gprime * gh$U[, r]) * cv
+      }
+      psi[i, j] <- h + sum(aZ * pr$C[i, ])
     }
-    psi[i, 1L] <- h + sum(aZ * pr$C[i, ])
+    psi[, j] <- psi[, j] - .scmix_A_adjust(pr, a_all, dA_rows = dA_all)
+    raw_rows[[j]] <- .sc_raw_share(fit$deltaX, fit$y, fit$respondent_id, cv)
   }
-  psi[, 1L] <- psi[, 1L] - .scmix_A_adjust(pr, a_all, dA_rows = dA_all)
-  out <- .scmix_wrap(psi, "V(c)", "eta-integrated counterfactual share", fit,
-                     extra = list(contrast = stats::setNames(cv, fit$attr_names)))
-  raw <- .sc_raw_share(fit$deltaX, fit$y, fit$respondent_id, cv)
-  out$extra <- c(out$extra, raw)
-  if (!is.na(raw$raw_share)) {
-    gap <- abs(out$estimate - raw$raw_share)
-    gap_se <- sqrt(out$se^2 + raw$raw_share_se^2)
-    if (is.finite(gap_se) && gap > 2 * gap_se) {
-      warning("scmix_counterfactual(): the model-based share differs from ",
-              "the raw design-based share by more than 2 SEs (",
-              sprintf("%.3f vs %.3f", out$estimate, raw$raw_share),
-              "). Treat as a specification warning for this contrast.",
-              call. = FALSE)
+
+  labels <- if (single) "V(c)" else pc$labels
+  extra <- if (single) {
+    list(contrast = stats::setNames(D[1L, ], fit$attr_names))
+  } else {
+    list(contrasts = D, contrast_labels = pc$labels)
+  }
+  out <- .scmix_wrap(psi, labels, "eta-integrated counterfactual share", fit,
+                     extra = extra)
+  if (single) {
+    ## backward-compatible flat raw-share fields for one contrast
+    out$extra <- c(out$extra, raw_rows[[1L]])
+  } else {
+    out$extra$raw <- data.frame(
+      label = pc$labels,
+      raw_share = vapply(raw_rows, `[[`, numeric(1L), "raw_share"),
+      raw_share_se = vapply(raw_rows, `[[`, numeric(1L), "raw_share_se"),
+      raw_n_tasks = vapply(raw_rows, `[[`, integer(1L), "raw_n_tasks"),
+      raw_n_respondents = vapply(raw_rows, `[[`, integer(1L),
+                                 "raw_n_respondents"),
+      stringsAsFactors = FALSE)
+  }
+  for (j in seq_len(J)) {
+    raw <- raw_rows[[j]]
+    if (!is.na(raw$raw_share)) {
+      gap <- abs(out$estimate[j] - raw$raw_share)
+      gap_se <- sqrt(out$se[j]^2 + raw$raw_share_se^2)
+      if (is.finite(gap_se) && gap > 2 * gap_se) {
+        warning("scmix_counterfactual(): the model-based share differs from ",
+                "the raw design-based share by more than 2 SEs (",
+                sprintf("%.3f vs %.3f", out$estimate[j], raw$raw_share),
+                if (single) "" else sprintf(" for %s", labels[j]),
+                "). Treat as a specification warning for this contrast.",
+                call. = FALSE)
+      }
     }
   }
   out
