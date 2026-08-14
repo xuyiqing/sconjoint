@@ -113,12 +113,13 @@ resid_overlay <- function(res, title) {
           plot.title = element_text(face = "bold"))
 }
 
-for (app in c("br2017", "sw2022")) {
+for (app in c("br2017", "sw2022", "gs2020")) {
   f <- file.path(OUT_DIR, paste0("app_", app, ".rds"))
   if (!file.exists(f)) { cat("missing:", f, "\n"); next }
   res <- readRDS(f)
   lab <- c(br2017 = "Tax conjoint (Ballard-Rosa et al. 2017, T = 8)",
-           sw2022 = "Candidate conjoint (Saha-Weeks 2022, T = 3)")[app]
+           sw2022 = "Candidate conjoint (Saha-Weeks 2022, T = 3)",
+           gs2020 = "Democracy conjoint (Graham-Svolik 2020, T = 13)")[app]
   ggsave(file.path(FIG_DIR, paste0(app, "_theta.png")),
          theta_overlay(res, lab), width = 7.5,
          height = 1.4 + 0.34 * length(res$attr_names), dpi = 200)
