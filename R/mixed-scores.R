@@ -207,15 +207,10 @@
 .scmix_information <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
                                eig_floor = 1e-3) {
   fit <- .scmix_canon(fit)
-  withr::local_preserve_seed()
-  set.seed(seed)
-
   sc <- .scmix_scores(fit)
   resp_f <- factor(fit$respondent_id, levels = unique(fit$respondent_id))
   first <- !duplicated(as.integer(resp_f))
   mu_resp <- fit$mu_hat[first, , drop = FALSE]
-  N <- nrow(mu_resp)
-  p <- ncol(mu_resp)
 
   ## rotation-invariant residual covariance, refactored to rank q on the
   ## STANDARDIZED scale (raw-units eigen-truncation makes the retained
@@ -236,9 +231,34 @@
   sv <- svd(M_p)
   A_sim <- A_sim %*% (sv$u %*% t(sv$v))
 
+  .sc_mixed_info_core(mu_resp = mu_resp, T_i = sc$T_i, A_sim = A_sim,
+                      pool = fit$deltaX, sd_dx = sd_dxS, gh = fit$gh,
+                      n_bins = n_bins, M = M, seed = seed,
+                      eig_floor = eig_floor)
+}
+
+#' Simulation core for the model-implied information
+#'
+#' The fit-free half of [.scmix_information()]: bins respondents on the
+#' standardized mean scale (crossed with distinct task counts), then
+#' simulates the per-bin information blocks at (mu_c, A_sim) over the
+#' design pool.  Taking (mu_resp, T_i, A_sim, pool) directly makes the
+#' same code path serve both the fit-based check and the
+#' hypothesized-value design precheck.
+#' @keywords internal
+#' @noRd
+.sc_mixed_info_core <- function(mu_resp, T_i, A_sim, pool, sd_dx, gh,
+                                n_bins = 40L, M = 2000L, seed = 1L,
+                                eig_floor = 1e-3) {
+  withr::local_preserve_seed()
+  set.seed(seed)
+  N <- nrow(mu_resp)
+  p <- ncol(mu_resp)
+  qq <- ncol(A_sim)
+
   ## bin on the standardized scale so the partition (and with it every
   ## downstream correction) is invariant to attribute units
-  mu_std <- sweep(mu_resp, 2L, sd_dxS, `*`)
+  mu_std <- sweep(mu_resp, 2L, sd_dx, `*`)
   n_distinct <- nrow(unique(mu_std))
   n_bins <- min(as.integer(n_bins), N, n_distinct)
   if (n_distinct <= n_bins) {
@@ -253,21 +273,18 @@
     bin_of <- km$cluster
   }
   ## split bins further by distinct task count when unbalanced
-  T_i <- sc$T_i
   key <- paste(bin_of, T_i, sep = ":")
   ukey <- unique(key)
   bin_of <- match(key, ukey)
 
-  gh <- fit$gh
   sigm <- function(x) 1 / (1 + exp(-x))
-  pool <- fit$deltaX
   ## The eigenvalue floor must not compare eigenvalues across contrast
   ## columns with very different scales (a small-variance column's true
   ## information can sit far below the floor set by large-variance
   ## columns, silently degrading the correction to the plug-in there).
   ## Floor on the standardized scale instead: I_std = D I D with
   ## D = diag(sd_dx), floor I_std's eigenvalues, map back.
-  D_inv <- diag(1 / sd_dxS, p)
+  D_inv <- diag(1 / sd_dx, p)
   floor_hits <- 0L
   I_inv <- vector("list", length(ukey))
   I_muA <- vector("list", length(ukey))

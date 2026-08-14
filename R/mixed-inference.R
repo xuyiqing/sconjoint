@@ -28,6 +28,28 @@
 ## root-N/profile-likelihood conditions behind that are stated in the
 ## memo as assumptions, not established here.
 
+#' Per-bin sensitivity blocks and averaged effective loading information
+#'
+#' `B(Z) = I_mumu(Z)^{-1} I_muA(Z)` measures how a loading error
+#' transmits into the pseudo-true location; the effective loading
+#' information averages `I_AA(Z) - I_Amu(Z) I_mumu(Z)^{-1} I_muA(Z)`
+#' respondent by respondent.  Shared by [.scmix_prep()] and
+#' [scmix_design_check()] (which previously duplicated the loop).
+#' @keywords internal
+#' @noRd
+.scmix_eff_info_bar <- function(info, N) {
+  B_bin <- lapply(seq_along(info$I_inv), function(b)
+    info$I_inv[[b]] %*% info$I_muA[[b]])
+  pq <- ncol(info$I_AA[[1L]])
+  I_AAeff_bar <- matrix(0, pq, pq)
+  for (i in seq_len(N)) {
+    b <- info$bin_of[i]
+    I_AAeff_bar <- I_AAeff_bar +
+      (info$I_AA[[b]] - crossprod(info$I_muA[[b]], B_bin[[b]])) / N
+  }
+  list(I_AAeff_bar = I_AAeff_bar, B_bin = B_bin)
+}
+
 #' Shared setup for scmix orthogonal estimands
 #' @keywords internal
 #' @noRd
@@ -42,20 +64,15 @@
   p <- ncol(mu_resp)
   pq <- ncol(sc$S_A)
   C <- matrix(0, N, p)
-  ## effective loading score S_Aeff,i = S_A,i - I_Amu I_mumu^{-1} S_mu,i,
-  ## its (respondent-averaged) effective information, and the per-bin
-  ## sensitivity block B(Z) = I_mumu(Z)^{-1} I_muA(Z), which measures how
-  ## a loading error transmits into the pseudo-true location
+  ## effective loading score S_Aeff,i = S_A,i - I_Amu I_mumu^{-1} S_mu,i
   S_Aeff <- matrix(0, N, pq)
-  B_bin <- lapply(seq_along(info$I_inv), function(b)
-    info$I_inv[[b]] %*% info$I_muA[[b]])
-  I_AAeff_bar <- matrix(0, pq, pq)
+  eff <- .scmix_eff_info_bar(info, N)
+  B_bin <- eff$B_bin
+  I_AAeff_bar <- eff$I_AAeff_bar
   for (i in seq_len(N)) {
     b <- info$bin_of[i]
     C[i, ] <- info$I_inv[[b]] %*% sc$S[i, ]
     S_Aeff[i, ] <- sc$S_A[i, ] - crossprod(info$I_muA[[b]], C[i, ])
-    I_AAeff_bar <- I_AAeff_bar +
-      (info$I_AA[[b]] - crossprod(info$I_muA[[b]], B_bin[[b]])) / N
   }
   ## Truncating pseudo-inverse of the effective loading information,
   ## compared on the standardized scale (mixed attribute units must not
@@ -82,7 +99,10 @@
   ## influence of the loading estimate per respondent
   IF_A <- S_Aeff %*% I_AAeff_inv
   list(sc = sc, info = info, mu_resp = mu_resp, C = C, N = N, p = p,
-       pq = pq, B_bin = B_bin, IF_A = IF_A)
+       pq = pq, B_bin = B_bin, IF_A = IF_A,
+       I_AAeff_inv = I_AAeff_inv, sd_dxA = sd_dxA,
+       eigA = list(vectors = eA$vectors, values = eA$values,
+                   keep = keep_A))
 }
 
 #' Loading-influence adjustment for an estimand with gradient rows a_i

@@ -67,14 +67,27 @@
 scmix_average <- function(fit, by, n_bins = 40L, M = 2000L, seed = 1L) {
   stopifnot(inherits(fit, "scmix"))
   ts <- .scmix_theta_psi(fit, n_bins = n_bins, M = M, seed = seed)
-  psi <- ts$psi
-  N <- nrow(psi)
+  g <- .scmix_resolve_by(fit, by, fn = "scmix_average")
+  .scmix_wrap_by(ts$psi, g, col_labels = fit$attr_names,
+                 quantity = "theta by subgroup (population mean, latent scale)",
+                 fit = fit, fn = "scmix_average")
+}
 
+#' Resolve a `by` argument to a respondent-level grouping factor
+#'
+#' Shared by every subgroup-capable scmix estimand.  Accepts a
+#' respondent-length vector, a task-row-length vector (first row per
+#' respondent used), or a length-1 character naming a moderator column
+#' in `fit$Z` (median split).
+#' @keywords internal
+#' @noRd
+.scmix_resolve_by <- function(fit, by, fn) {
   resp_f <- factor(fit$respondent_id, levels = unique(fit$respondent_id))
   first <- !duplicated(as.integer(resp_f))
+  N <- sum(first)
   if (is.character(by) && length(by) == 1L) {
     if (!(by %in% colnames(fit$Z))) {
-      stop("scmix_average(): '", by, "' is not a moderator column in fit$Z.")
+      stop(fn, "(): '", by, "' is not a moderator column in fit$Z.")
     }
     zv <- fit$Z[first, by]
     g <- factor(ifelse(zv > stats::median(zv), "above", "at_or_below"),
@@ -84,34 +97,48 @@ scmix_average <- function(fit, by, n_bins = 40L, M = 2000L, seed = 1L) {
   } else if (length(by) == N) {
     g <- factor(by)
   } else {
-    stop("scmix_average(): `by` must have length N (respondents), length ",
+    stop(fn, "(): `by` must have length N (respondents), length ",
          "nrow(fit$deltaX) (task rows), or name a moderator column.")
   }
-  if (anyNA(g)) stop("scmix_average(): `by` contains NA.")
+  if (anyNA(g)) stop(fn, "(): `by` contains NA.")
+  g
+}
 
+#' Within-group means and SEs of a respondent-level signal matrix
+#'
+#' The group-mean / within-group-SE / label assembly shared by
+#' subgroup-capable scmix estimands: `psi` is N x K with column labels
+#' `col_labels`; output entries are named `"<group>: <label>"` in
+#' group-major order.  NA columns of `psi` stay NA in every group.
+#' @keywords internal
+#' @noRd
+.scmix_wrap_by <- function(psi, g, col_labels, quantity, fit, fn,
+                           extra = NULL, min_group = 2L) {
+  N <- nrow(psi)
   levs <- levels(g)
-  p <- ncol(psi)
-  est <- se <- matrix(NA_real_, length(levs), p)
+  K <- ncol(psi)
+  est <- se <- matrix(NA_real_, length(levs), K)
   for (l in seq_along(levs)) {
     rows <- which(g == levs[l])
-    if (length(rows) < 2L) {
-      stop("scmix_average(): group '", levs[l], "' has fewer than 2 respondents.")
+    if (length(rows) < min_group) {
+      stop(fn, "(): group '", levs[l], "' has fewer than ", min_group,
+           " respondents.")
     }
     est[l, ] <- colMeans(psi[rows, , drop = FALSE])
     se[l, ] <- sqrt(pmax(apply(psi[rows, , drop = FALSE], 2L, stats::var), 0) /
                       length(rows))
   }
-  labels <- as.vector(t(outer(levs, fit$attr_names, paste, sep = ": ")))
+  labels <- as.vector(t(outer(levs, col_labels, paste, sep = ": ")))
   est_v <- as.vector(t(est)); se_v <- as.vector(t(se))
   out <- list(
-    quantity = "theta by subgroup (population mean, latent scale)",
+    quantity = quantity,
     estimate = stats::setNames(est_v, labels),
     se = stats::setNames(se_v, labels),
     ci_lower = est_v - stats::qnorm(0.975) * se_v,
     ci_upper = est_v + stats::qnorm(0.975) * se_v,
     n_respondents = N,
     psi = psi,
-    extra = list(groups = table(g)),
+    extra = c(list(groups = table(g)), extra),
     call_fit = fit$call
   )
   class(out) <- c("scmix_quantity", "list")
@@ -255,31 +282,45 @@ scmix_design_check <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
   sc <- .scmix_scores(fit)
   info <- .scmix_information(fit, n_bins = n_bins, M = M, seed = seed)
   resp_f <- factor(fit$respondent_id, levels = unique(fit$respondent_id))
-  first <- !duplicated(as.integer(resp_f))
-  N <- sum(first); p <- ncol(fit$deltaX); pq <- ncol(sc$S_A)
-  q <- pq / p
+  N <- sum(!duplicated(as.integer(resp_f)))
+  p <- ncol(fit$deltaX)
+  q <- ncol(sc$S_A) / p
 
-  I_AAeff_bar <- matrix(0, pq, pq)
-  for (i in seq_len(N)) {
-    b <- info$bin_of[i]
-    B_b <- info$I_inv[[b]] %*% info$I_muA[[b]]
-    I_AAeff_bar <- I_AAeff_bar +
-      (info$I_AA[[b]] - crossprod(info$I_muA[[b]], B_b)) / N
-  }
-  sdx <- .scmix_sd_dx(fit)
-  D_A <- diag(rep(1 / sdx, q), pq)
+  eff <- .scmix_eff_info_bar(info, N)
+  A_bar <- Reduce(`+`, fit$A_folds) / length(fit$A_folds)
+  .scmix_design_check_core(
+    I_AAeff_bar = eff$I_AAeff_bar, A_bar = A_bar,
+    sd_dx = .scmix_sd_dx(fit), attr_names = fit$attr_names,
+    p = p, q = q, N = N, median_T = stats::median(sc$T_i),
+    eig_tol = eig_tol, t_min = t_min, source = "fit")
+}
+
+#' Assemble a design-check object from the effective loading information
+#'
+#' The eigen/spectrum/t-ratio summary shared by the fit-based
+#' [scmix_design_check()] and the hypothesized-value precheck.  The
+#' standard errors use the plain floored inverse deliberately: an
+#' unidentified direction must surface as a huge SE and a near-zero t
+#' (flagging), not be projected out as the correction path in
+#' [.scmix_prep()] does.
+#' @keywords internal
+#' @noRd
+.scmix_design_check_core <- function(I_AAeff_bar, A_bar, sd_dx, attr_names,
+                                     p, q, N, median_T, eig_tol, t_min,
+                                     source = "fit") {
+  pq <- p * q
+  D_A <- diag(rep(1 / sd_dx, q), pq)
   I_std <- D_A %*% I_AAeff_bar %*% D_A
   eA <- eigen(I_std, symmetric = TRUE)
   rel <- eA$values / max(eA$values, 1e-12)
   I_std_inv <- eA$vectors %*% diag(1 / pmax(eA$values, 1e-12), pq) %*%
     t(eA$vectors)
   se_std <- sqrt(pmax(diag(I_std_inv), 0) / N)
-  A_bar <- Reduce(`+`, fit$A_folds) / length(fit$A_folds)
-  A_std <- as.numeric(A_bar * sdx)
+  A_std <- as.numeric(A_bar * sd_dx)
   tstat <- abs(A_std) / se_std
 
   loadings <- data.frame(
-    coord = rep(fit$attr_names, q),
+    coord = rep(attr_names, q),
     factor = rep(seq_len(q), each = p),
     loading_std = A_std, se_std = se_std, t = tstat,
     row.names = NULL)
@@ -288,10 +329,10 @@ scmix_design_check <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
     eigenvalues = eA$values,
     loadings = loadings,
     weak_directions = sum(rel < eig_tol),
-    identified = fit$attr_names[tstat[seq_len(p)] >= t_min],
-    not_identified = fit$attr_names[tstat[seq_len(p)] < t_min],
+    identified = attr_names[tstat[seq_len(p)] >= t_min],
+    not_identified = attr_names[tstat[seq_len(p)] < t_min],
     eig_tol = eig_tol, t_min = t_min,
-    n_respondents = N, median_T = stats::median(sc$T_i), q = q)
+    n_respondents = N, median_T = median_T, q = q, source = source)
   class(out) <- c("scmix_design_check", "list")
   out
 }
@@ -299,6 +340,10 @@ scmix_design_check <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
 #' @export
 print.scmix_design_check <- function(x, ...) {
   cat("scmix design-rank check (loading identification at this design)\n")
+  if (identical(x$source, "hypothesized")) {
+    cat("  source: hypothesized values (pre-estimation precheck),",
+        "not a fitted model\n")
+  }
   cat(sprintf("  respondents: %d   median tasks per respondent: %d   q = %d\n",
               x$n_respondents, x$median_T, x$q))
   cat("  standardized effective-information eigenvalues (rel. to max):\n   ",
