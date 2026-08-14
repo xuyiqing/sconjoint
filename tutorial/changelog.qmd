@@ -13,6 +13,54 @@ sign shares, and heterogeneity-integrated vote shares; the latter two have
 no debiased counterpart under the two-stage estimator. See the new chapter
 @sec-mixed-logit.
 
+**Derived estimands.** `scmix_average()` reports subgroup means of the
+corrected respondent-level signal; `scmix_mrs()` and `scmix_wtp()` carry
+the joint influence-function delta-method standard error, a Fieller
+interval, and a weak-denominator warning below `|theta|/SE = 4`;
+`summary.scmix()` and the zero-floor status line report
+`scmix_calibrate_zero()`, the truth-zero calibration whose ratio gates
+distributional claims; `scmix_design_check()` reports the eigen-spectrum
+and per-coordinate t-ratios of the effective loading information at the
+realized design; and every in-design counterfactual share prints the raw
+design-based share next to the model-based value, with a specification
+warning when the two separate by more than two standard errors.
+
+**Contrast sign shares.** `scmix_signshare()` estimates
+`Pr(delta' beta > 0)` for arbitrary contrasts -- compensating
+differentials, majority-preference profile sweeps, and slope shares such
+as the tax application's progressivity share -- with the completed
+loading correction and batch support: every contrast in a call reuses one
+information simulation. Reporting is gated per contrast by three
+scale-invariant checks (an index-scale residual-SD floor, a heterogeneity
+t-ratio from the loading influence, and a projected-out gradient-mass
+check); gated contrasts report NA, and `$extra$gates` tabulates the
+inputs. `scmix_counterfactual()` accepts the same batch forms, with one
+raw-share benchmark row per contrast.
+
+**Model-implied importance.** `scmix_importance()` decomposes utility
+variance by attribute from the fitted `(mu, A)` --
+`E_Z[mu_g' S_g mu_g] + tr(S_g (AA')_gg)` per block -- so the residual
+factor contributes the term a point-estimate decomposition cannot see.
+Shares are ratio-of-means with simplex-Jacobian standard errors, four
+level-weightings (`uniform`, `levels`, `design_variance`, `empirical`)
+are expressed as one quadratic form each, subgroups renormalize within
+group, and `$extra` splits the moderator-explained from the
+residual-factor component.
+
+**Posterior summaries.** `scmix_posterior()` extracts respondent-level
+posterior means (and, on request, posterior SDs) of the coefficients for
+descriptive displays and external-validation correlations. These are
+shrinkage summaries by construction and are never aggregated into
+population claims; population quantities come from `(mu, A)` through the
+orthogonal estimands.
+
+**Diagnostics.** `scmix_linearity_check()` reports the size of a second
+profile-Newton increment on the loading matrix; a small second step
+supports the asymptotic-linearity assumption behind the shipped one-step
+loading correction. `scmix_design_precheck()` runs the design-rank check
+before fielding, from hypothesized values and a planned design, so a
+study can pre-register which estimand tiers its design supports.
+
 ## v0.2.2
 
 **CRAN review fixes.** Documentation and hygiene changes requested in the
