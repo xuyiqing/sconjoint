@@ -31,6 +31,22 @@
 #'   first-appearance order), `S`, `loglik`, `post_mean`, `T_i`.
 #' @keywords internal
 #' @noRd
+#' Per-column contrast SDs with the degenerate-column guard
+#' @keywords internal
+#' @noRd
+.sc_sd_dx_cols <- function(m) {
+  s <- apply(m, 2L, stats::sd)
+  s[!is.finite(s) | s < 1e-12] <- 1
+  s
+}
+
+#' Contrast SDs stored on the fit, recomputed when absent
+#' @keywords internal
+#' @noRd
+.scmix_sd_dx <- function(fit) {
+  if (is.null(fit$sd_dx)) .sc_sd_dx_cols(fit$deltaX) else fit$sd_dx
+}
+
 #' Canonical orientation for the fold loadings
 #'
 #' A is identified only up to right-rotation; the fit stores one
@@ -42,11 +58,7 @@
 #' @keywords internal
 #' @noRd
 .scmix_canon <- function(fit) {
-  sdx <- fit$sd_dx
-  if (is.null(sdx)) {
-    sdx <- apply(fit$deltaX, 2L, stats::sd)
-    sdx[!is.finite(sdx) | sdx < 1e-12] <- 1
-  }
+  sdx <- .scmix_sd_dx(fit)
   A1 <- fit$A_folds[[1L]] * sdx
   for (r in seq_len(ncol(A1))) {
     j <- which.max(abs(A1[, r]))
@@ -184,7 +196,7 @@
 #'
 #' @param fit An `scmix` object.
 #' @param n_bins Target number of mu bins (default 40).
-#' @param M Simulated respondents per bin (default 300).
+#' @param M Simulated respondents per bin (default 2000).
 #' @param seed RNG seed for the simulation.
 #' @param eig_floor Relative eigenvalue floor (default 1e-3 of the
 #'   mean diagonal).
@@ -208,11 +220,7 @@
   ## rotation-invariant residual covariance, refactored to rank q on the
   ## STANDARDIZED scale (raw-units eigen-truncation makes the retained
   ## subspace, and with it every downstream correction, unit-dependent)
-  sd_dxS <- fit$sd_dx
-  if (is.null(sd_dxS)) {
-    sd_dxS <- apply(fit$deltaX, 2L, stats::sd)
-    sd_dxS[!is.finite(sd_dxS) | sd_dxS < 1e-12] <- 1
-  }
+  sd_dxS <- .scmix_sd_dx(fit)
   Sig <- Reduce(`+`, lapply(fit$A_folds, tcrossprod)) / length(fit$A_folds)
   D_S <- diag(sd_dxS, ncol(Sig))
   Sig_std <- D_S %*% Sig %*% D_S
@@ -230,12 +238,7 @@
 
   ## bin on the standardized scale so the partition (and with it every
   ## downstream correction) is invariant to attribute units
-  sd_dx0 <- fit$sd_dx
-  if (is.null(sd_dx0)) {
-    sd_dx0 <- apply(fit$deltaX, 2L, stats::sd)
-    sd_dx0[!is.finite(sd_dx0) | sd_dx0 < 1e-12] <- 1
-  }
-  mu_std <- sweep(mu_resp, 2L, sd_dx0, `*`)
+  mu_std <- sweep(mu_resp, 2L, sd_dxS, `*`)
   n_distinct <- nrow(unique(mu_std))
   n_bins <- min(as.integer(n_bins), N, n_distinct)
   if (n_distinct <= n_bins) {
@@ -264,12 +267,7 @@
   ## columns, silently degrading the correction to the plug-in there).
   ## Floor on the standardized scale instead: I_std = D I D with
   ## D = diag(sd_dx), floor I_std's eigenvalues, map back.
-  sd_dx <- fit$sd_dx
-  if (is.null(sd_dx)) {
-    sd_dx <- apply(pool, 2L, stats::sd)
-    sd_dx[!is.finite(sd_dx) | sd_dx < 1e-12] <- 1
-  }
-  D_inv <- diag(1 / sd_dx, p)
+  D_inv <- diag(1 / sd_dxS, p)
   floor_hits <- 0L
   I_inv <- vector("list", length(ukey))
   I_muA <- vector("list", length(ukey))

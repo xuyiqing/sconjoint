@@ -266,11 +266,7 @@ scmix_design_check <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
     I_AAeff_bar <- I_AAeff_bar +
       (info$I_AA[[b]] - crossprod(info$I_muA[[b]], B_b)) / N
   }
-  sdx <- fit$sd_dx
-  if (is.null(sdx)) {
-    sdx <- apply(fit$deltaX, 2L, stats::sd)
-    sdx[!is.finite(sdx) | sdx < 1e-12] <- 1
-  }
+  sdx <- .scmix_sd_dx(fit)
   D_A <- diag(rep(1 / sdx, q), pq)
   I_std <- D_A %*% I_AAeff_bar %*% D_A
   eA <- eigen(I_std, symmetric = TRUE)

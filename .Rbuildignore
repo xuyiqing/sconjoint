@@ -36,6 +36,12 @@
 ^tests/testthat/test-methods\.R$
 ^tests/testthat/test-mixed-logit-stage2\.R$
 ^tests/testthat/test-mixed-likelihood\.R$
+^tests/testthat/test-mixed-quantities\.R$
+^tests/testthat/helper-mixed-fixture\.R$
+^tests/testthat/test-mixed-signshare\.R$
+^tests/testthat/test-mixed-importance\.R$
+^tests/testthat/test-mixed-posterior\.R$
+^tests/testthat/test-mixed-diagnostics\.R$
 ^tests/testthat/test-normalize-deltax\.R$
 ^tests/testthat/test-plot\.R$
 ^tests/testthat/test-quantities-bootstrap\.R$

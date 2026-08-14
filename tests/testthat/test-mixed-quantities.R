@@ -129,3 +129,11 @@ test_that("the population-claim note prints once per session (P5)", {
                  "respondent-level")
   expect_silent(sconjoint:::.sc_population_claim_note("sc_polarization"))
 })
+
+test_that("every scmix entry point rejects a non-scmix fit", {
+  not_a_fit <- list(theta = 1)
+  expect_error(scmix_theta(not_a_fit), "scmix")
+  expect_error(scmix_polarization(not_a_fit), "scmix")
+  expect_error(scmix_counterfactual(not_a_fit, contrast = 1), "scmix")
+  expect_error(scmix_calibrate_zero(not_a_fit), "scmix")
+})

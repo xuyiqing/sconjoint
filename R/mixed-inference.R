@@ -64,11 +64,7 @@
   ## components (for example a collapsed fold loading); their influence
   ## is projected OUT rather than amplified --- a ridge here turns a
   ## rank deficiency into a silent explosion of the correction.
-  sd_dxA <- fit$sd_dx
-  if (is.null(sd_dxA)) {
-    sd_dxA <- apply(fit$deltaX, 2L, stats::sd)
-    sd_dxA[!is.finite(sd_dxA) | sd_dxA < 1e-12] <- 1
-  }
+  sd_dxA <- .scmix_sd_dx(fit)
   q_A <- pq / p
   D_A <- diag(rep(1 / sd_dxA, q_A), pq)
   I_std_A <- D_A %*% I_AAeff_bar %*% D_A
@@ -165,6 +161,7 @@ print.scmix_quantity <- function(x, ...) {
 #' @return An `scmix_quantity` with one row per attribute dummy.
 #' @export
 scmix_theta <- function(fit, n_bins = 40L, M = 2000L, seed = 1L) {
+  stopifnot(inherits(fit, "scmix"))
   pr <- .scmix_prep(fit, n_bins = n_bins, M = M, seed = seed)
   psi <- pr$mu_resp + pr$C
   ## loading-influence term, coordinate by coordinate (a_i = e_k)
@@ -203,6 +200,7 @@ scmix_theta <- function(fit, n_bins = 40L, M = 2000L, seed = 1L) {
 #' @export
 scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
                                sd_floor = 0.05) {
+  stopifnot(inherits(fit, "scmix"))
   fit <- .scmix_canon(fit)
   pr <- .scmix_prep(fit, n_bins = n_bins, M = M, seed = seed)
   sd_folds <- vapply(fit$A_folds,
@@ -216,11 +214,7 @@ scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
   ## its SE), so no number is the honest report.
   ## compare on the index scale (sigma_k times the contrast SD) so the
   ## floor decision is invariant to attribute units
-  sd_dx0 <- fit$sd_dx
-  if (is.null(sd_dx0)) {
-    sd_dx0 <- apply(fit$deltaX, 2L, stats::sd)
-    sd_dx0[!is.finite(sd_dx0) | sd_dx0 < 1e-12] <- 1
-  }
+  sd_dx0 <- .scmix_sd_dx(fit)
   sd_folds_idx <- sd_folds * sd_dx0
   floored <- apply(sd_folds_idx < sd_floor, 1L, any)
   if (any(floored)) {
@@ -288,6 +282,7 @@ scmix_polarization <- function(fit, n_bins = 40L, M = 2000L, seed = 1L,
 #' @export
 scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
                                  seed = 1L) {
+  stopifnot(inherits(fit, "scmix"))
   p <- ncol(fit$deltaX)
   if (!is.null(names(contrast))) {
     cv <- stats::setNames(numeric(p), fit$attr_names)
@@ -440,6 +435,7 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
 #'   supported at the design.
 #' @export
 scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
+  stopifnot(inherits(fit, "scmix"))
   withr::local_preserve_seed()
   set.seed(seed)
   resp_f <- factor(fit$respondent_id, levels = unique(fit$respondent_id))
