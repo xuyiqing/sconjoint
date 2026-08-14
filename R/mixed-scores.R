@@ -71,8 +71,16 @@
   fit
 }
 
-.scmix_scores <- function(fit, mu_override = NULL, post_sd = FALSE) {
+.scmix_scores <- function(fit, mu_override = NULL, post_sd = FALSE,
+                          A_override = NULL) {
   fit <- .scmix_canon(fit)
+  if (!is.null(A_override)) {
+    ## substituted AFTER canon: the override is taken as-is and must
+    ## already live in the canonical orientation (the linearity check
+    ## builds it from canonical-frame quantities)
+    stopifnot(length(A_override) == length(fit$A_folds))
+    fit$A_folds <- A_override
+  }
   deltaX <- fit$deltaX
   y <- fit$y
   mu <- if (is.null(mu_override)) fit$mu_hat else mu_override
