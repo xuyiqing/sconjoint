@@ -1,7 +1,7 @@
 # Summarize the face-validity simulation into the memo's tables.
 # Reads facevalidity_results.rds; prints (and saves) per-arm summaries.
 res_path <- path.expand(
-  "~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype/facevalidity_results.rds")
+  "~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype/facevalidity_results.rds")
 x <- readRDS(res_path)
 res <- x$results
 theta_true <- x$theta_true

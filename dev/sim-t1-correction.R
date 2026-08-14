@@ -9,7 +9,7 @@
 # with no .scmix_A_adjust term.
 suppressMessages(devtools::load_all("~/GitHub/sconjoint", quiet = TRUE))
 
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 R_REPS <- 20L
 N <- 1200L
 

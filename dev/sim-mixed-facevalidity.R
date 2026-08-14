@@ -14,7 +14,7 @@
 # Estimation only -- results saved as .rds; figures are drawn elsewhere.
 suppressMessages(devtools::load_all("~/GitHub/sconjoint", quiet = TRUE))
 
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 
 N <- 1500L; T_i <- 8L; R <- 40L

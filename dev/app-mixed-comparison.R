@@ -9,7 +9,7 @@
 # Estimation only; figures come from dev/app-mixed-figures.R.
 suppressMessages(devtools::load_all("~/GitHub/sconjoint", quiet = TRUE))
 
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 
 bt <- function(x) paste0("`", x, "`")

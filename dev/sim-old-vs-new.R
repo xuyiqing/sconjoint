@@ -25,7 +25,7 @@
 # dev/sim-old-vs-new-analyze.R.
 suppressMessages(devtools::load_all("~/GitHub/sconjoint", quiet = TRUE))
 
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 R_REPS <- 20L
 N <- 1200L
 cv <- c(1, -1, 0, 1)     # contrast for the integrated share

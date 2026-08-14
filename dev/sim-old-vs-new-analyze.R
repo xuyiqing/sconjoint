@@ -1,6 +1,6 @@
 # Summarize dev/sim-old-vs-new.R into the memo's trade-off table + figure.
 suppressMessages(library(ggplot2))
-d <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+d <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 x <- readRDS(file.path(d, "oldvsnew_results.rds"))
 res <- Filter(Negate(is.null), x$results)
 cv <- x$cv

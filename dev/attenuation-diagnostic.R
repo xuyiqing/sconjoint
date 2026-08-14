@@ -17,7 +17,7 @@
 #   the fitted model PREDICTS for this design. Compare with the observed
 #   pooled-vs-mixed gap from Diagnostic A.
 suppressMessages(devtools::load_all("~/GitHub/sconjoint", quiet = TRUE))
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 
 diag_app <- function(name) {
   cat(sprintf("\n===== %s =====\n", name))

@@ -3,7 +3,7 @@
 # dev/app-mixed-comparison.R; never refits (plots load cache).
 suppressMessages({library(ggplot2)})
 
-OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/sconjoint/mixedlogit_prototype")
+OUT_DIR <- path.expand("~/Dropbox/Research_Hub/Projects/ConjointStructural/mixedlogit_prototype")
 FIG_DIR <- file.path(OUT_DIR, "figs")
 dir.create(FIG_DIR, showWarnings = FALSE)
 
