@@ -58,16 +58,12 @@
 #' @keywords internal
 #' @noRd
 .scmix_canon <- function(fit) {
-  sdx <- .scmix_sd_dx(fit)
-  A1 <- fit$A_folds[[1L]] * sdx
-  for (r in seq_len(ncol(A1))) {
-    j <- which.max(abs(A1[, r]))
-    if (A1[j, r] < 0) {
-      for (k in seq_along(fit$A_folds)) {
-        fit$A_folds[[k]][, r] <- -fit$A_folds[[k]][, r]
-      }
-    }
-  }
+  ## Do not rotate the loading used for likelihood or score evaluation.
+  ## The exact integral is rotation invariant, but a finite integration rule
+  ## need not be.  New paperps fits retain the actually optimized loading in
+  ## A_folds and a separate A_folds_aligned object for descriptive comparison.
+  ## Returning the computational fit unchanged keeps score evaluation tied to
+  ## the numerical criterion that was optimized.
   fit
 }
 
@@ -95,8 +91,9 @@
   ## respondent-level fold: constant within respondent by construction
   fold_resp <- tapply(fit$fold_id, ridx, function(v) v[1L])
 
-  q <- ncol(fit$A_folds[[1L]])
+  q <- if (is.null(fit$q)) ncol(fit$A_folds[[1L]]) else as.integer(fit$q)
   S <- matrix(0, N, p)
+  S_kappa <- numeric(N)
   S_A <- matrix(0, N, p * q)
   loglik <- numeric(N)
   post_mean <- matrix(0, N, p)
@@ -109,9 +106,14 @@
     rows <- fit$fold_id == k
     if (!any(rows)) next
     A <- fit$A_folds[[k]]
+    kappa <- if (is.null(fit$kappa_folds)) 0 else fit$kappa_folds[k]
     dxk <- deltaX[rows, , drop = FALSE]
-    idx <- rowSums(dxk * mu[rows, , drop = FALSE]) +
-      (dxk %*% A) %*% t(gh$U)                       # n_k x G
+    base <- kappa + rowSums(dxk * mu[rows, , drop = FALSE])
+    idx <- if (q == 0L) {
+      matrix(base, ncol = 1L)
+    } else {
+      base + (dxk %*% A) %*% t(gh$U)                # n_k x G
+    }
     yk <- y[rows]
     ## log per-task choice prob at each node, numerically stable
     lp <- ifelse(rep(yk, G) == 1,
@@ -135,24 +137,33 @@
     resid_g <- yk - sig                              # n_k x G residual at each node
     rbar <- rowSums(postw[pos, , drop = FALSE] * resid_g)
     Sk <- rowsum(dxk * rbar, rk_f, reorder = FALSE)  # N_k x p
+    Skappa <- rowsum(rbar, rk_f, reorder = FALSE)[, 1L]
 
     ## loading score: d logL_i / d A_{kr} =
     ## E_post[ sum_t deltaX_tk * u_r * (y_t - G(idx)) ]
     SAk <- matrix(0, nlevels(rk_f), p * q)
-    for (r in seq_len(q)) {
-      s_r <- rowSums(postw[pos, , drop = FALSE] *
-                       sweep(resid_g, 2L, gh$U[, r], `*`))
-      SAk[, (r - 1L) * p + seq_len(p)] <-
-        rowsum(dxk * s_r, rk_f, reorder = FALSE)
+    if (q > 0L) {
+      for (r in seq_len(q)) {
+        s_r <- rowSums(postw[pos, , drop = FALSE] *
+                         sweep(resid_g, 2L, gh$U[, r], `*`))
+        SAk[, (r - 1L) * p + seq_len(p)] <-
+          rowsum(dxk * s_r, rk_f, reorder = FALSE)
+      }
     }
 
     ## posterior mean of beta = mu + A E[u | data]
-    Eu <- postw %*% gh$U                             # N_k x q
     mu_resp_k <- mu[rows, , drop = FALSE][!duplicated(rk), , drop = FALSE]
-    pm <- mu_resp_k + Eu %*% t(A)
+    if (q > 0L) {
+      Eu <- postw %*% gh$U                           # N_k x q
+      pm <- mu_resp_k + Eu %*% t(A)
+    } else {
+      Eu <- matrix(numeric(0), nrow(postw), 0L)
+      pm <- mu_resp_k
+    }
 
     tgt <- as.integer(levels(rk_f))
     S[tgt, ] <- Sk
+    S_kappa[tgt] <- Skappa
     S_A[tgt, ] <- SAk
     loglik[tgt] <- ll
     post_mean[tgt, ] <- pm
@@ -162,19 +173,22 @@
       ## accumulated pair by pair on the quadrature grid (opt-in: the
       ## hot inference path never pays for this)
       pv <- matrix(0, nlevels(rk_f), p)
-      for (r in seq_len(q)) {
-        for (s in r:q) {
-          Euu_rs <- postw %*% (gh$U[, r] * gh$U[, s])
-          cov_rs <- as.numeric(Euu_rs) - Eu[, r] * Eu[, s]
-          fac <- if (r == s) 1 else 2
-          pv <- pv + fac * (cov_rs %o% (A[, r] * A[, s]))
+      if (q > 0L) {
+        for (r in seq_len(q)) {
+          for (s in r:q) {
+            Euu_rs <- postw %*% (gh$U[, r] * gh$U[, s])
+            cov_rs <- as.numeric(Euu_rs) - Eu[, r] * Eu[, s]
+            fac <- if (r == s) 1 else 2
+            pv <- pv + fac * (cov_rs %o% (A[, r] * A[, s]))
+          }
         }
       }
       post_sd_m[tgt, ] <- sqrt(pmax(pv, 0))
     }
   }
 
-  list(resp = levels(resp_f), S = S, S_A = S_A, loglik = loglik,
+  list(resp = levels(resp_f), S = S, S_kappa = S_kappa, S_A = S_A,
+       loglik = loglik,
        post_mean = post_mean, post_sd = post_sd_m, T_i = T_i,
        fold_resp = as.integer(fold_resp))
 }

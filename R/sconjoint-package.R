@@ -1,15 +1,18 @@
 #' sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments
 #'
-#' Implements the structural deep-learning estimator for forced-choice
-#' conjoint experiments of Acharya, Hainmueller, and Xu (2026). The
-#' package embeds a deep neural network in a random utility logit so
-#' that preference parameters vary flexibly with respondent
-#' characteristics, and provides double/debiased machine-learning
-#' inference with cross-fitting clustered at the respondent level.
+#' Implements a respondent-sequence low-rank normal mixed-logit model for
+#' forced-choice conjoint experiments. A deep neural-network sieve represents
+#' the covariate-dependent conditional mean of preferences, and a jointly
+#' estimated low-rank covariance represents persistent residual heterogeneity.
 #'
-#' This is an early development release (milestone M1): the package
-#' skeleton is in place but no statistical methods are implemented yet.
-#' See the GitHub repository for the development roadmap.
+#' The paper-aligned workflow separates the full-sample structural fit from
+#' respondent-level cross-fitted one-step inference for supported regular
+#' rowwise primitives and named smooth transformations, and from specification
+#' assessment. With bounded task counts,
+#' respondent posterior summaries are predictions rather than consistently
+#' recovered realized preferences. The package does not automatically verify
+#' normality, rank, neural-network rates, optimization error, or numerical
+#' integration accuracy.
 #'
 #' @keywords internal
 "_PACKAGE"

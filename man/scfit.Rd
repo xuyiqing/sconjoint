@@ -2,7 +2,7 @@
 % Please edit documentation in R/scfit.R
 \name{scfit}
 \alias{scfit}
-\title{Structural deep-learning estimator for forced-choice conjoint}
+\title{Legacy projection/MAP estimator for forced-choice conjoint}
 \usage{
 scfit(
   formula,
@@ -36,6 +36,12 @@ scfit(
   interaction_rank = 2L,
   lambda_V = 0.01
 )
+}
+\section{Legacy warning}{
+This is the superseded task-level projection and optional respondent-MAP
+pipeline. It does not implement the low-rank normal mixed-logit model or the
+regular inference procedure in the rebuilt paper. Use \code{scmix()} and
+\code{scmix_dml()} for that workflow.
 }
 \arguments{
 \item{formula}{A two-sided formula
@@ -78,8 +84,7 @@ integer vector of hidden-layer widths.}
 cross-fitting.  Defaults to 10.}
 
 \item{n_epochs}{Integer, number of full-batch Adam epochs per fold.
-Default \code{1000L} (matches the paper's v13 production runtime; see
-\verb{code/04_training.R}).}
+Default \code{1000L}, retained for replication of the superseded pipeline.}
 
 \item{learning_rate}{Numeric, Adam learning rate.}
 
@@ -87,15 +92,14 @@ Default \code{1000L} (matches the paper's v13 production runtime; see
 (default), or a non-negative numeric scalar passed to the Adam
 optimizer's \code{weight_decay} argument.  When \code{"adaptive"}, the
 per-fit weight decay is resolved from the dataset shape using the
-paper's v13 rule:
+superseded paper-v13 rule:
 \deqn{\mathrm{weight\_decay} = K_{adaptive} / NT,\quad
         K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
                                      25 & NT/p \ge 300 \end{cases}}{
         weight_decay = K_adaptive / NT, K_adaptive = 15 if NT/p<300 else 25}
 where \code{NT} is the number of task-level observations and \code{p} is the
-number of attribute dummies.  This is what generated every current
-paper number; see \verb{code/04_training.R} and memo 42 for the
-rationale.  Pass a fixed numeric (e.g. \code{1e-4}) to override.}
+number of attribute dummies. This historical rule is retained only to
+reproduce the prior pipeline. Pass a fixed numeric to override it.}
 
 \item{ridge_lambda}{Numeric ridge penalty used both in the
 Lambda(Z) regression and in the Lambda inversion.  Distinct from
@@ -170,15 +174,15 @@ Stage 2 is only implemented for \code{learner = "dnn"}.  With
 \code{learner = "enet"} or \code{"grf"} it is forced to \code{"none"} and a
 once-per-session warning is emitted, because the per-respondent
 betas then carry no empirical-Bayes shrinkage (see the \code{learner}
-argument and the \emph{Inference validity by quantity} section below).}
+argument and the \emph{Legacy inferential status} section below).}
 
 \item{stage2_seed}{Integer seed for the 2nd DNN in the Stage-2
 ensemble.  Independent of \code{seed}.  Default \code{12345L}.}
 
 \item{varref_floor}{Numeric lower bound on the per-coefficient prior
 variance when \code{stage2 = "varref"}.  Default \code{1e-3}, which matches
-the production setting used for continuous-attribute designs
-(Ballard-Rosa tax rates; see paper memo 42).  The previous default
+the legacy setting used for continuous-attribute designs
+(Ballard-Rosa tax rates; see the prior memo 42).  The previous default
 of \code{0.01} clipped every coefficient and over-shrank under v13,
 collapsing BR top-bracket validation \code{r} from \code{0.39} to \code{0.13}.
 On factor-dummy designs the natural varref value sits well above
@@ -303,23 +307,24 @@ is), the realized-task features \code{F_int} and cross-fitted offsets
 block of the orthogonal-score correction (\code{correction_int}).
 }
 }
-\section{Inference validity by quantity}{
+\section{Legacy inferential status}{
 
-The \verb{sc_*} quantity functions fall into two groups with different
-inferential status, and it is worth being explicit about which is which.
+None of the following outputs is the estimator or inference procedure used by
+the rebuilt paper. The old pipeline distinguished two internal groups, but the
+new theory does not validate either group merely by running \code{scfit()}.
 
-\strong{DML quantities (valid debiased inference).} The average
+\strong{Earlier DML quantities.} The average
 structural parameters and the functionals built on the orthogonal
-(Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
-standard errors and confidence intervals: \code{coef()} / \code{summary()} /
+score include respondent-clustered standard-error calculations: \code{coef()} /
+\code{summary()} /
 \code{vcov()} (the average \code{theta}), and the debiased quantities
 \code{sc_average()}, \code{sc_ame()}, \code{sc_counterfactual(vartype = "orthogonal")},
-and \code{sc_mrs()} / \code{sc_wtp()}. Their SEs come from the cross-fitted
-influence function and are unchanged across \code{stage2} choices.
+and \code{sc_mrs()} / \code{sc_wtp()}. These do not use the integrated
+mixed-logit likelihood, rank conditions, or rebuilt-paper verification gates.
 
 \strong{Model-based / empirical-Bayes summaries (descriptive, not
 debiased).} The distribution-over-respondents quantities are plug-in
-functionals of the recovered per-respondent \code{beta(Z_i)} and inherit that
+functionals of predicted/shrunken per-respondent \code{beta(Z_i)} and inherit that
 object's finite-\code{T} shrinkage. They are descriptive summaries, not
 debiased estimators: \code{sc_polarization()}, \code{sc_fraction_preferring()},
 \code{sc_direction_intensity()}, \code{sc_heterogeneity_test()}, \code{sc_clusters()},
@@ -328,8 +333,8 @@ threshold/fraction quantities (\code{sc_polarization()},
 \code{sc_fraction_preferring()}) a respondent-cluster wild bootstrap is
 available via \code{se_method = "wild_bootstrap"}, which quantifies the
 \emph{sampling} variability of the fraction; it does not remove the
-shrinkage bias that pulls each \code{beta_i} toward the population mean (and so
-biases these fractions toward consensus under short panels).
+shrinkage bias that pulls each prediction toward the population mean. They
+must not be interpreted as recovered realized individual preferences.
 
 See \code{summary.sc_fit()}, \code{predict.sc_fit()}, and \code{plot.sc_fit()}.
 }

@@ -1,7 +1,13 @@
-## Orthogonal-score inference for scmix fits.
+## Legacy exploratory score corrections for early scmix fits.
 ##
-## Implements the mixed-logit analogue of the paper's (corrected)
-## master proposition.  For a population functional
+## IMPORTANT: this file predates the structural-sieve Riesz construction in
+## paperps.tex.  It is retained for backwards compatibility and diagnostics,
+## but it is not the regular inference procedure justified by that paper.
+## The paper-aligned public entry point is scmix_dml() in
+## R/paperps-inference.R.  In particular, the binned design simulation below
+## must not be used when claiming paperps inference.
+##
+## For a population functional
 ##
 ##   theta_H = E_Z[ H(mu(Z), Sigma; Z) ],
 ##
@@ -151,6 +157,11 @@
     psi = psi,
     extra = extra,
     call_fit = fit$call
+  )
+  out$paperps_regular_inference <- FALSE
+  out$inference_scope <- paste(
+    "Legacy binned-information approximation; not the paperps structural",
+    "Riesz/DML procedure. Use scmix_dml() for paper-aligned inference."
   )
   class(out) <- c("scmix_quantity", "list")
   out
@@ -455,8 +466,9 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
 #' Truth-zero calibration for the estimated residual heterogeneity
 #'
 #' At small T the marginal likelihood can attribute part of the mean
-#' network's misfit to the residual factor, so the estimated loading
-#' carries an upward floor even when no residual heterogeneity exists.
+#' network's misfit to the residual factor. This legacy exploratory diagnostic
+#' asks whether the fitted low-rank covariance carries an upward floor even
+#' when no residual heterogeneity exists.
 #' This diagnostic measures that floor for the design at hand: it
 #' simulates choice data from the fitted conditional means with the
 #' loading matrix set to zero, refits `scmix()` on the simulated data
@@ -473,13 +485,17 @@ scmix_counterfactual <- function(fit, contrast, n_bins = 40L, M = 2000L,
 #'   index-scale SDs), and `ratio` (fitted mean over floor mean; values
 #'   near 1 mean the fitted heterogeneity is indistinguishable from the
 #'   small-T artifact). Store the result on the fit,
-#'   `fit$zero_floor <- scmix_calibrate_zero(fit)`, so that
-#'   [print.scmix()] and [summary.scmix()] report it; a ratio below 2
-#'   (provisional threshold) means distributional claims are not
-#'   supported at the design.
+#'   `fit$zero_floor <- scmix_calibrate_zero(fit)`. The ratio is descriptive;
+#'   it is not a paperps reporting gate and does
+#'   not replace rank, information, shape-sensitivity, or numerical checks.
 #' @export
 scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
   stopifnot(inherits(fit, "scmix"))
+  if (isTRUE(fit$q == 0L)) {
+    return(list(floor_index_sd = 0, fitted_index_sd = 0, ratio = NA_real_,
+                applicable = FALSE,
+                note = "q = 0 was fixed, so residual heterogeneity is absent by specification."))
+  }
   withr::local_preserve_seed()
   set.seed(seed)
   resp_f <- factor(fit$respondent_id, levels = unique(fit$respondent_id))
@@ -490,7 +506,10 @@ scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
 
   floor_sd <- numeric(R)
   for (r in seq_len(R)) {
-    pr <- stats::plogis(rowSums(fit$deltaX * mu_resp[ridx, , drop = FALSE]))
+    kappa_task <- if (is.null(fit$kappa_folds)) 0 else
+      fit$kappa_folds[fit$fold_id]
+    pr <- stats::plogis(kappa_task +
+                          rowSums(fit$deltaX * mu_resp[ridx, , drop = FALSE]))
     ysim <- as.numeric(stats::runif(n) < pr)
     ## reuse the internal training path directly on the existing
     ## contrasts instead of round-tripping through the formula interface
@@ -499,16 +518,37 @@ scmix_calibrate_zero <- function(fit, R = 2L, seed = 1L) {
     A_zero_folds <- vector("list", fit$K)
     for (k in seq_len(fit$K)) {
       in_k <- fold_id != k
+      sd_dx_k <- if (!is.null(fit$sd_dx_folds)) {
+        fit$sd_dx_folds[[k]]
+      } else fit$sd_dx
+      if (is.null(sd_dx_k) || length(sd_dx_k) != ncol(fit$deltaX) ||
+          any(!is.finite(sd_dx_k)) || any(sd_dx_k <= 0)) {
+        stop("scmix_calibrate_zero(): invalid fold-specific DeltaX scale in fold ",
+             k, ".", call. = FALSE)
+      }
+      Z_train <- fit$Z[in_k, , drop = FALSE]
+      if (!is.null(fit$z_transform_folds)) {
+        Z_train <- .sc_apply_z_transform(
+          Z_train, fit$z_transform_folds[[k]])
+      }
       fk <- .sc_train_mixed_one(
-        deltaX = sweep(fit$deltaX[in_k, , drop = FALSE], 2L, fit$sd_dx, `/`),
+        deltaX = sweep(fit$deltaX[in_k, , drop = FALSE], 2L, sd_dx_k, `/`),
         y = ysim[in_k],
-        Z = fit$Z[in_k, , drop = FALSE],
+        Z = Z_train,
         respondent_id = fit$respondent_id[in_k],
         gh = gh, hidden = fit$hidden,
-        n_epochs = fit$n_epochs, weight_decay = fit$weight_decay_used,
+        n_epochs = fit$n_epochs,
+        learning_rate = if (is.null(fit$learning_rate)) 0.01 else
+          fit$learning_rate,
+        weight_decay = fit$weight_decay_used,
+        early_stop = FALSE,
+        mu_bound = if (!is.null(fit$bounds$mu_internal)) {
+          fit$bounds$mu_internal
+        } else if (!is.null(fit$bounds$mu)) fit$bounds$mu else 10,
+        kappa_bound = if (is.null(fit$bounds$kappa)) 10 else fit$bounds$kappa,
         seed = if (is.null(fit$seed)) NULL else
           .sc_fold_seed(fit$seed + 1000L * r, k))
-      A_zero_folds[[k]] <- fk$A / fit$sd_dx
+      A_zero_folds[[k]] <- fk$A / sd_dx_k
     }
     idx_sd_k <- vapply(A_zero_folds, function(A)
       sqrt(mean((fit$deltaX %*% A)^2)), numeric(1L))

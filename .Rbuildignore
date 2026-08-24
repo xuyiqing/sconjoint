@@ -15,6 +15,8 @@
 ^_freeze$
 ^LICENSE\.md$
 ^ARCHITECTURE\.md$
+^PAPERPS_ALIGNMENT_AUDIT\.md$
+^applications$
 ^dev$
 
 # CRAN: ship only a lean core test set (package-load + scfit smoke).

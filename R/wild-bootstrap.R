@@ -2,7 +2,7 @@
 ## quantities.
 ##
 ## `sc_polarization()` and `sc_fraction_preferring()` summarize the
-## *distribution* of the recovered per-respondent slopes beta_i(Z_i):
+## *distribution* of the predicted/shrunken per-respondent slopes beta_i(Z_i):
 ## the fraction of respondents who prefer a level (Pr{beta_ij > tau}),
 ## and the direction-split polarization index. These are plug-in
 ## functionals of the empirical distribution of beta_i over respondents.
@@ -13,16 +13,16 @@
 ##
 ## Two facts shape the implementation:
 ##
-##   1. The recovered beta_i is CONSTANT within a respondent (Z is a
+##   1. The predicted beta_i is CONSTANT within a respondent (Z is a
 ##      respondent-level covariate, and every quantity reads the same
 ##      beta(Z_i) on each of respondent i's task rows). So the
 ##      task-level p x p beta matrix collapses, with no loss, to one
 ##      row per respondent. We bootstrap that respondent-level object.
 ##
 ##   2. The expensive part of `scfit()` -- the cross-fitted DNN that
-##      recovers beta_i -- is NOT re-run inside the bootstrap. We
+##      predicts beta_i -- is NOT re-run inside the bootstrap. We
 ##      bootstrap the respondent-level AGGREGATION step (which fraction
-##      of the recovered betas clears the threshold), because that is
+##      of the predicted betas clears the threshold), because that is
 ##      what carries the sampling uncertainty of these fractions.
 ##      Re-fitting the network per resample would also fold in
 ##      first-stage estimation noise, which these descriptive summaries

@@ -17,3 +17,5 @@ tutorial/*_files/
 tests/testthat/_problems/
 tests/testthat/testthat-problems.rds
 dev/
+applications/config.local.R
+applications/output/

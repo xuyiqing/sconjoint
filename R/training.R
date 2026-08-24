@@ -8,14 +8,14 @@
 #' Train a single conjoint DNN
 #'
 #' Full-batch gradient descent with Adam and BCE-with-logits loss,
-#' matching the paper's v13 production training loop
+#' matching the superseded paper-v13 training loop
 #' (`code/03_structural_dnn.R::train_one_fold`).  L2 regularization
 #' is applied via the optimizer's `weight_decay` argument (the same
-#' channel the production code uses), not as an explicit term added
+#' channel that legacy code uses), not as an explicit term added
 #' to the loss --- for Adam the two are not equivalent because the
 #' loss-side L2 gradient is rescaled by Adam's per-parameter adaptive
 #' rates, whereas `weight_decay` is applied to the parameter update
-#' directly.  The production rate is the v13 NT-adaptive
+#' directly.  The legacy rate is the v13 NT-adaptive
 #' `K_adaptive / NT` rule (see `?scfit` argument `weight_decay`).
 #'
 #' Seeds are handled carefully: the call saves both the R RNG state
@@ -164,7 +164,7 @@
 
 #' Resolve `weight_decay` argument to a numeric L2 coefficient
 #'
-#' Implements the paper's v13 NT-adaptive rule when
+#' Implements the superseded paper-v13 NT-adaptive rule when
 #' `weight_decay = "adaptive"`:
 #' \deqn{K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
 #'                                    25 & NT/p \ge 300 \end{cases},\qquad

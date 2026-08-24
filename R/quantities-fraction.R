@@ -8,8 +8,8 @@
 #' respondents preferring each non-reference level over the reference.
 #'
 #' This is a \emph{descriptive} summary of the distribution of the
-#' recovered per-respondent slopes, not a debiased estimator (see the
-#' *Inference validity by quantity* section of `?scfit`). Two standard
+#' predicted/shrunken per-respondent slopes, not a debiased estimator (see the
+#' *Legacy inferential status* section of `?scfit`). Two standard
 #' error rules are offered via `se_method`:
 #' \itemize{
 #'   \item `"clustered"` (default, the v0.1 behavior): respondent-clustered
@@ -19,7 +19,7 @@
 #'     clustered proportion but ignore that the indicators are taken of
 #'     \emph{shrunken} coefficients.
 #'   \item `"wild_bootstrap"`: a respondent-cluster (wild) bootstrap. The
-#'     recovered \eqn{\hat\beta_i} is resampled at the respondent level
+#'     predicted/shrunken \eqn{\hat\beta_i} is resampled at the respondent level
 #'     (`boot_type = "wild"` applies Rademacher weights to the centered
 #'     per-respondent indicator contributions; `boot_type = "cluster"`
 #'     draws respondents with replacement) and the fraction is recomputed

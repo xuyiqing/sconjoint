@@ -2,15 +2,16 @@
 % Please edit documentation in R/mixed-likelihood.R
 \name{summary.scmix}
 \alias{summary.scmix}
-\title{Summary of an scmix fit, including the zero-floor calibration}
+\title{Summary of an scmix fit}
 \usage{
 \method{summary}{scmix}(object, calibrate = FALSE, R = 2L, seed = 1L, ...)
 }
 \arguments{
 \item{object}{An \code{scmix} object.}
 
-\item{calibrate}{Logical: run \code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} now if no
-stored result is present (default \code{FALSE}; costs \code{R} refits).}
+\item{calibrate}{Logical: run the legacy exploratory
+\code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} diagnostic
+(default \code{FALSE}; costs \code{R} refits).}
 
 \item{R, seed}{Forwarded to \code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} when
 \code{calibrate = TRUE}.}
@@ -18,18 +19,11 @@ stored result is present (default \code{FALSE}; costs \code{R} refits).}
 \item{...}{Unused.}
 }
 \value{
-The (possibly calibrated) fit, invisibly. When run here,
-the calibration is returned on \verb{$zero_floor} of the invisible
-value --- assign it back (\code{fit <- summary(fit, calibrate = TRUE)}
-drops the summary; use
-\code{fit$zero_floor <- scmix_calibrate_zero(fit)} to persist).
+The fit, invisibly, with a legacy \verb{$zero_floor} component when
+\code{calibrate = TRUE}.
 }
 \description{
-Prints the fit dimensions and residual SDs (as \code{\link[=print.scmix]{print.scmix()}}) and
-the truth-zero calibration status. The calibration itself costs
-\code{R} full refits, so it is not run automatically: run it once and
-store it on the fit with \code{fit$zero_floor <- scmix_calibrate_zero(fit)},
-or pass \code{calibrate = TRUE} here to run (and print) it now. The
-provisional reporting threshold: a fitted-to-floor ratio below 2
-means distributional claims are not supported at the design.
+Prints fit dimensions, integration and optimization diagnostics, and residual
+standard deviations. The \code{calibrate} option is retained for backward
+compatibility; it is not one of the paper's reporting gates.
 }

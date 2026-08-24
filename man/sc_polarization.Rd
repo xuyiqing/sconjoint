@@ -59,7 +59,7 @@ lines 478--497. The polarization index is a bounded nonlinear
 transform of two proportions and has no clean clustered-sd
 expression, so by default (\code{se_method = "none"}) no standard error is
 returned. A respondent-cluster (wild) bootstrap is available via
-\code{se_method = "wild_bootstrap"}: the recovered per-respondent
+\code{se_method = "wild_bootstrap"}: the predicted/shrunken per-respondent
 \eqn{\hat\beta_i} are resampled at the respondent level and
 \eqn{\mathrm{frac}^+_j}, \eqn{\mathrm{frac}^-_j}, and the
 polarization index are recomputed on each resample, giving bootstrap
@@ -69,7 +69,7 @@ inside the bootstrap: only the respondent-level aggregation is
 resampled. As with \code{sc_fraction_preferring()}, fixed-\eqn{T}
 shrinkage biases the plug-in fractions toward consensus, so the
 interval reflects \strong{sampling variability}, not the shrinkage
-bias. See the \emph{Inference validity by quantity} section of \code{?scfit}.
+bias. See the \emph{Legacy inferential status} section of \code{?scfit}.
 
 When the fit carries an attribute-interaction term
 (\code{scfit(..., interactions != "none")}), this quantity is computed from
@@ -87,4 +87,3 @@ heterogeneity magnitudes require the integrated-likelihood route
 are biased for population shares (9--13 percentage points in the
 head-to-head simulations, with no standard errors).
 }
-

@@ -18,21 +18,16 @@ one full \code{scmix()} fit).}
 A list with \code{floor_index_sd} (length-R vector of spurious
 index-scale SDs), \code{fitted_index_sd} (the fit's own per-fold
 index-scale SDs), and \code{ratio} (fitted mean over floor mean; values
-near 1 mean the fitted heterogeneity is indistinguishable from the
-small-T artifact). Store the result on the fit,
-\code{fit$zero_floor <- scmix_calibrate_zero(fit)}, so that
-\code{\link[=print.scmix]{print.scmix()}} and \code{\link[=summary.scmix]{summary.scmix()}} report it; a ratio below 2
-(provisional threshold) means distributional claims are not
-supported at the design.
+near 1 indicate a larger truth-zero floor relative to the fitted index-scale
+dispersion). This is a descriptive legacy result, not a reporting gate.
 }
 \description{
-At small T the marginal likelihood can attribute part of the mean
-network's misfit to the residual factor, so the estimated loading
-carries an upward floor even when no residual heterogeneity exists.
-This diagnostic measures that floor for the design at hand: it
+At small T the marginal likelihood can attribute part of mean-network misfit
+to the residual factor. This legacy exploratory diagnostic measures that
+truth-zero floor for the design at hand: it
 simulates choice data from the fitted conditional means with the
 loading matrix set to zero, refits \code{scmix()} on the simulated data
 with the original settings, and reports the index-scale residual SD
-the pipeline manufactures from nothing. Estimated heterogeneity that
-does not clearly exceed this floor should not be interpreted.
+the pipeline manufactures from nothing. It does not replace the paper's rank,
+information, numerical, and structural-sensitivity assessments.
 }
