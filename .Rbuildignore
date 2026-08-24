@@ -17,6 +17,8 @@
 ^ARCHITECTURE\.md$
 ^PAPERPS_ALIGNMENT_AUDIT\.md$
 ^applications$
+^\.runtime$
+^\.R-library$
 ^dev$
 
 # CRAN: ship only a lean core test set (package-load + scfit smoke).

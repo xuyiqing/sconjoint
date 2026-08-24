@@ -930,7 +930,7 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
   }, logical(1L))
   selection_eligible <- vapply(
     nested$tuning,
-    function(x) isTRUE(x$primary_inference_eligible), logical(1L)) &&
+    function(x) isTRUE(x$primary_inference_eligible), logical(1L)) &
     candidate_selection_gate
   if (!all(selection_eligible) && !isTRUE(diagnostic_only)) {
     stop(

@@ -1156,8 +1156,10 @@ scmix <- function(formula, data,
   ## convention (rows are (respondent, task, profile)-sorted; the first
   ## profile row of each task carries y = 1 iff profile 1 was chosen).
   y_long <- data[[parsed$response]]
-  ord <- order(paste(data[[respondent]], data[[task]], sep = "\r"),
-               data[[profile]])
+  ## `.sc_to_long()` has already imposed this typed canonical order.  Repeat
+  ## it directly rather than sorting a pasted character key, which would put
+  ## numeric respondent 10 before respondent 2.
+  ord <- order(data[[respondent]], data[[task]], data[[profile]])
   y_sorted <- y_long[ord]
   idx1 <- seq(1L, length(y_sorted), by = 2L)
   y_first <- y_sorted[idx1]
