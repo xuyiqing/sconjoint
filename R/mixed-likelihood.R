@@ -1514,6 +1514,7 @@ print.scmix <- function(x, ...) {
       " (attained-solution diagnostic only)\n"),
       if (isTRUE(overall_gate)) "pass" else "fail"))
   }
+  .scmix_print_floor(x)
   invisible(x)
 }
 
@@ -1523,11 +1524,31 @@ print.scmix <- function(x, ...) {
 .scmix_print_floor <- function(x) {
   cal <- x$zero_floor
   if (is.null(cal)) {
-    cat("  legacy zero-floor diagnostic: not run\n")
+    cat("  zero-floor calibration: not run. Before interpreting residual",
+        "SDs or\n  sign shares, run",
+        "`fit$zero_floor <- scmix_calibrate_zero(fit)`.\n")
+    cat("  descriptive legacy diagnostic only; not a paperps reporting gate\n")
     return(invisible(NULL))
   }
   cat(sprintf(paste0("  zero-floor calibration: fitted/floor index-SD ratio",
                      " = %.2f\n"), cal$ratio))
+  ## Provisional threshold carried forward unchanged from the
+  ## pre-paperps-rebuild print method (see scmix_calibrate_zero()'s
+  ## documented `ratio`: values near 1 are indistinguishable from the
+  ## small-T floor the diagnostic manufactures from a zero-heterogeneity
+  ## truth). Not a paperps reporting gate.
+  small_t_floor_ratio <- 2
+  if (is.finite(cal$ratio) && cal$ratio < small_t_floor_ratio) {
+    cat(sprintf(paste0(
+      "  ratio < %d: the fitted heterogeneity is not clearly above the",
+      " small-T\n  floor; distributional claims (sign shares, residual-SD",
+      " magnitudes) are\n  not supported at this design.\n"),
+      small_t_floor_ratio))
+  } else {
+    cat(sprintf(
+      "  ratio >= %d: fitted heterogeneity sits above the small-T floor.\n",
+      small_t_floor_ratio))
+  }
   cat("  descriptive legacy diagnostic only; not a paperps reporting gate\n")
   invisible(NULL)
 }
@@ -1555,7 +1576,9 @@ summary.scmix <- function(object, calibrate = FALSE, R = 2L, seed = 1L, ...) {
             call. = FALSE)
     object$zero_floor <- scmix_calibrate_zero(object, R = R, seed = seed)
   }
+  ## print.scmix() already calls .scmix_print_floor() unconditionally, so
+  ## no separate call is needed here (it would double-print the status
+  ## line whenever calibrate = TRUE).
   print.scmix(object)
-  if (isTRUE(calibrate)) .scmix_print_floor(object)
   invisible(object)
 }
