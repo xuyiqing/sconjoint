@@ -1,23 +1,24 @@
 Package: sconjoint
 Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.2.2
-Date: 2026-07-04
+Version: 0.3.0.9000
+Date: 2026-08-23
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
     person("Yiqing", "Xu", , "yiqingxu@stanford.edu", role = c("aut", "cre")))
-Description: Implements the structural deep-learning estimator for
-    forced-choice conjoint experiments of Acharya, Hainmueller, and Xu
-    (2026) <doi:10.48550/arXiv.2604.10845>, which embeds a deep neural
-    network in a random utility logit
-    so that preference parameters vary flexibly with respondent
-    characteristics. Provides double/debiased machine-learning inference
-    with cross-fitting clustered at the respondent level, and a full set
-    of structural quantities including marginal rates of substitution,
-    counterfactual choice probabilities, compensating differentials,
-    consumer surplus, attribute importance, preference polarization, and
-    preference clustering. Builds on 'torch' for the deep-learning
-    backend.
+Description: Implements a respondent-sequence low-rank normal mixed-logit
+    model for forced-choice conjoint experiments. A deep neural-network
+    sieve represents the covariate-dependent conditional mean of latent
+    preferences, while a jointly estimated low-rank covariance represents
+    persistent residual heterogeneity. The package separates full-sample
+    structural plug-in estimation, respondent-level cross-fitted one-step
+    inference for prespecified regular rowwise-expectation primitives and
+    named smooth transformations under explicit high-level conditions, and
+    design/specification assessment. It does not claim
+    recovery of realized respondent preferences with bounded task counts or
+    automatic verification of normality, rank, neural-network rates, or
+    numerical-integration error rates. Builds on 'torch' for the
+    deep-learning backend.
 License: MIT + file LICENSE
 URL: https://yiqingxu.org/packages/sconjoint/
 BugReports: https://github.com/xuyiqing/sconjoint/issues
@@ -42,7 +43,9 @@ Suggests:
     gridExtra,
     lme4,
     patchwork,
+    qrng,
     quarto,
+    randtoolbox,
     scales,
     viridisLite
 Encoding: UTF-8

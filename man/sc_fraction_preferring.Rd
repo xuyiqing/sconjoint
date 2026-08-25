@@ -54,8 +54,8 @@ respondents preferring each non-reference level over the reference.
 }
 \details{
 This is a \emph{descriptive} summary of the distribution of the
-recovered per-respondent slopes, not a debiased estimator (see the
-\emph{Inference validity by quantity} section of \code{?scfit}). Two standard
+predicted/shrunken per-respondent slopes, not a debiased estimator (see the
+\emph{Legacy inferential status} section of \code{?scfit}). Two standard
 error rules are offered via \code{se_method}:
 \itemize{
 \item \code{"clustered"} (default, the v0.1 behavior): respondent-clustered
@@ -65,7 +65,7 @@ observed 0/1 outcome. These are correct for the variance of a
 clustered proportion but ignore that the indicators are taken of
 \emph{shrunken} coefficients.
 \item \code{"wild_bootstrap"}: a respondent-cluster (wild) bootstrap. The
-recovered \eqn{\hat\beta_i} is resampled at the respondent level
+predicted/shrunken \eqn{\hat\beta_i} is resampled at the respondent level
 (\code{boot_type = "wild"} applies Rademacher weights to the centered
 per-respondent indicator contributions; \code{boot_type = "cluster"}
 draws respondents with replacement) and the fraction is recomputed
@@ -94,4 +94,3 @@ heterogeneity magnitudes require the integrated-likelihood route
 are biased for population shares (9--13 percentage points in the
 head-to-head simulations, with no standard errors).
 }
-

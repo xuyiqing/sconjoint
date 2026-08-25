@@ -6,14 +6,25 @@
 ## export of the package.  Full `sc_fit` methods (summary, predict,
 ## Full S3 method set: print, coef, vcov, summary, predict, plot.
 
-#' Structural deep-learning estimator for forced-choice conjoint
+#' Legacy projection/MAP estimator for forced-choice conjoint
 #'
-#' Fits the Acharya-Hainmueller-Xu structural conjoint estimator via a
+#' This function retains the earlier task-level projection and optional
+#' respondent MAP pipeline for replication of superseded analyses. It is not
+#' the low-rank normal mixed-logit estimator or inference procedure developed
+#' in `paperps.pdf`; use [scmix()] and [scmix_dml()] for the rebuilt paper.
+#'
+#' The legacy routine fits the earlier estimator via a
 #' cross-fitted deep neural network with double/debiased machine
 #' learning (DML) inference.  The DNN flexibly maps respondent
 #' moderators `Z` into per-respondent preference weights `beta(Z)`,
 #' and the DML correction debiases `E[beta(Z)]` for the non-parametric
 #' first stage.  Standard errors are clustered at the respondent level.
+#'
+#' @section Legacy warning:
+#' This is the superseded task-level projection and optional respondent-MAP
+#' pipeline. It does not implement the low-rank normal mixed-logit model or
+#' regular inference procedure in the rebuilt paper. Use [scmix()] and
+#' [scmix_dml()] for that workflow.
 #'
 #' @param formula A two-sided formula
 #'   `choice ~ attr1 + attr2 + ... | z1 + z2 + ...` (fixest-style).
@@ -47,22 +58,20 @@
 #' @param K Integer, number of respondent-clustered folds for
 #'   cross-fitting.  Defaults to 10.
 #' @param n_epochs Integer, number of full-batch Adam epochs per fold.
-#'   Default `1000L` (matches the paper's v13 production runtime; see
-#'   `code/04_training.R`).
+#'   Default `1000L`, retained for replication of the superseded pipeline.
 #' @param learning_rate Numeric, Adam learning rate.
 #' @param weight_decay Either the character string `"adaptive"`
 #'   (default), or a non-negative numeric scalar passed to the Adam
 #'   optimizer's `weight_decay` argument.  When `"adaptive"`, the
 #'   per-fit weight decay is resolved from the dataset shape using the
-#'   paper's v13 rule:
+#'   superseded paper-v13 rule:
 #'   \deqn{\mathrm{weight\_decay} = K_{adaptive} / NT,\quad
 #'         K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
 #'                                      25 & NT/p \ge 300 \end{cases}}{
 #'         weight_decay = K_adaptive / NT, K_adaptive = 15 if NT/p<300 else 25}
 #'   where `NT` is the number of task-level observations and `p` is the
-#'   number of attribute dummies.  This is what generated every current
-#'   paper number; see `code/04_training.R` and memo 42 for the
-#'   rationale.  Pass a fixed numeric (e.g. `1e-4`) to override.
+#'   number of attribute dummies. This historical rule is retained only to
+#'   reproduce the prior pipeline. Pass a fixed numeric to override it.
 #' @param ridge_lambda Numeric ridge penalty used both in the
 #'   Lambda(Z) regression and in the Lambda inversion.  Distinct from
 #'   `weight_decay`, which regularises the DNN; this regularises the
@@ -125,13 +134,13 @@
 #'   `learner = "enet"` or `"grf"` it is forced to `"none"` and a
 #'   once-per-session warning is emitted, because the per-respondent
 #'   betas then carry no empirical-Bayes shrinkage (see the `learner`
-#'   argument and the *Inference validity by quantity* section below).
+#'   argument and the *Legacy inferential status* section below).
 #' @param stage2_seed Integer seed for the 2nd DNN in the Stage-2
 #'   ensemble.  Independent of `seed`.  Default `12345L`.
 #' @param varref_floor Numeric lower bound on the per-coefficient prior
 #'   variance when `stage2 = "varref"`.  Default `1e-3`, which matches
-#'   the production setting used for continuous-attribute designs
-#'   (Ballard-Rosa tax rates; see paper memo 42).  The previous default
+#'   the legacy setting used for continuous-attribute designs
+#'   (Ballard-Rosa tax rates; see the prior memo 42).  The previous default
 #'   of `0.01` clipped every coefficient and over-shrank under v13,
 #'   collapsing BR top-bracket validation `r` from `0.39` to `0.13`.
 #'   On factor-dummy designs the natural varref value sits well above
@@ -238,22 +247,24 @@
 #'   (`g_offset`, `g_offset_ens`, `g_offset_task`), and the interaction
 #'   block of the orthogonal-score correction (`correction_int`).
 #'
-#' @section Inference validity by quantity:
-#' The `sc_*` quantity functions fall into two groups with different
-#' inferential status, and it is worth being explicit about which is which.
+#' @section Legacy inferential status:
+#' None of the following outputs is the estimator or inference procedure used
+#' by the rebuilt paper. The old pipeline distinguished two internal groups,
+#' but the new theory does not validate either group merely by running
+#' `scfit()`.
 #'
-#' \strong{DML quantities (valid debiased inference).} The average
+#' \strong{Earlier DML quantities.} The average
 #' structural parameters and the functionals built on the orthogonal
-#' (Neyman-orthogonal) score carry asymptotically valid, respondent-clustered
-#' standard errors and confidence intervals: `coef()` / `summary()` /
+#' score include respondent-clustered standard-error calculations: `coef()` /
+#' `summary()` /
 #' `vcov()` (the average `theta`), and the debiased quantities
 #' `sc_average()`, `sc_ame()`, `sc_counterfactual(vartype = "orthogonal")`,
-#' and `sc_mrs()` / `sc_wtp()`. Their SEs come from the cross-fitted
-#' influence function and are unchanged across `stage2` choices.
+#' and `sc_mrs()` / `sc_wtp()`. These do not use the integrated mixed-logit
+#' likelihood, rank conditions, or rebuilt-paper verification gates.
 #'
 #' \strong{Model-based / empirical-Bayes summaries (descriptive, not
 #' debiased).} The distribution-over-respondents quantities are plug-in
-#' functionals of the recovered per-respondent `beta(Z_i)` and inherit that
+#' functionals of predicted/shrunken per-respondent `beta(Z_i)` and inherit that
 #' object's finite-`T` shrinkage. They are descriptive summaries, not
 #' debiased estimators: `sc_polarization()`, `sc_fraction_preferring()`,
 #' `sc_direction_intensity()`, `sc_heterogeneity_test()`, `sc_clusters()`,
@@ -262,8 +273,8 @@
 #' `sc_fraction_preferring()`) a respondent-cluster wild bootstrap is
 #' available via `se_method = "wild_bootstrap"`, which quantifies the
 #' \emph{sampling} variability of the fraction; it does not remove the
-#' shrinkage bias that pulls each `beta_i` toward the population mean (and so
-#' biases these fractions toward consensus under short panels).
+#' shrinkage bias that pulls each prediction toward the population mean. They
+#' must not be interpreted as recovered realized individual preferences.
 #'
 #' See `summary.sc_fit()`, `predict.sc_fit()`, and `plot.sc_fit()`.
 #'
@@ -361,6 +372,15 @@ scfit <- function(formula, data,
                   interactions = c("none", "lowrank", "explicit"),
                   interaction_rank = 2L,
                   lambda_V = 1e-2) {
+  .sc_warn_once(
+    "scfit_legacy_paperps",
+    paste(
+      "scfit() is the superseded projection/MAP pipeline and does not",
+      "implement the low-rank normal mixed-logit model in paperps.pdf.",
+      "Use scmix() for structural estimation and scmix_dml() for regular",
+      "finite-functional inference."
+    )
+  )
   call <- match.call()
   learner <- match.arg(learner)
   stage2_supplied <- !missing(stage2)
@@ -577,8 +597,12 @@ scfit <- function(formula, data,
     if (any(dev_w > 1e-8)) {
       stop("scfit(): `respondent_weights` must be constant within respondent.")
     }
-    key_task <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
-    ord_task <- order(key_task, data_sorted[[profile]])
+    ## Order by the typed identifiers directly (matches .sc_build_deltax()
+    ## and scmix()'s y-ordering below): sorting a pasted character key turns
+    ## numeric respondent/task ids into lexicographic strings (1, 10, 11,
+    ## ..., 2), which silently desynchronizes this weight vector from
+    ## deltaX's task rows for any respondent/task id spanning two digits.
+    ord_task <- order(data_sorted[[respondent]], data_sorted[[task]], data_sorted[[profile]])
     respondent_weight_task <- w_profile[ord_task][seq(1L, length(w_profile), by = 2L)]
     if (length(respondent_weight_task) != nrow(deltaX)) {
       stop("scfit(): internal error aligning respondent_weights with task rows.")
@@ -635,8 +659,13 @@ scfit <- function(formula, data,
     stop(sprintf("scfit(): response column '%s' must be coded 0/1.",
                  response))
   }
-  key <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
-  ord <- order(key, data_sorted[[profile]])
+  ## Order by the typed identifiers directly, exactly as .sc_build_deltax()
+  ## does for deltaX/Z_task/respondent_task above and as scmix() does for
+  ## its own y-ordering: sorting a pasted character key turns numeric
+  ## respondent/task ids into lexicographic strings (1, 10, 11, ..., 2),
+  ## which silently desynchronizes y from deltaX's task rows whenever a
+  ## respondent or task id spans two digits.
+  ord <- order(data_sorted[[respondent]], data_sorted[[task]], data_sorted[[profile]])
   y_sorted <- y_profile[ord]
   idx1 <- seq(1L, length(y_sorted), by = 2L)
   y <- y_sorted[idx1]

@@ -14,10 +14,15 @@ fit <- fixed$fit
   rows <- which(cf$respondent_id == resp_id)
   k <- cf$fold_id[rows[1L]]
   A <- cf$A_folds[[k]]
+  ## paperps model completeness: the trained index is
+  ## kappa + deltaX'(mu(Z) + Au) (update_memo.tex Sec. "Model
+  ## completeness"), so the hand quadrature must include kappa exactly
+  ## as .scmix_scores() does (R/mixed-scores.R).
+  kappa <- if (is.null(cf$kappa_folds)) 0 else cf$kappa_folds[k]
   gh <- cf$gh
   dxk <- cf$deltaX[rows, , drop = FALSE]
   mu_i <- cf$mu_hat[rows[1L], ]
-  idx <- rowSums(dxk * matrix(mu_i, length(rows), length(mu_i),
+  idx <- kappa + rowSums(dxk * matrix(mu_i, length(rows), length(mu_i),
                               byrow = TRUE)) + (dxk %*% A) %*% t(gh$U)
   yk <- cf$y[rows]
   lp <- ifelse(rep(yk, length(gh$w)) == 1,
