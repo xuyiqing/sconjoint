@@ -260,9 +260,8 @@
 #'
 #' @param fit A mixed-logit fit containing respondent ids and fitted means.
 #' @param subgroup Optional logical, character, or factor subgroup variable.
-#' @param mu Optional fitted conditional-mean matrix or function, overriding
-#'   the fit accessor.
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_theta <- function(fit, subgroup = NULL, mu = NULL) {
   mm <- .pps_extract_mu(fit, mu)
@@ -308,6 +307,7 @@ scmix_paper_theta <- function(fit, subgroup = NULL, mu = NULL) {
 #' @param n_nodes One-dimensional normal quadrature resolution.
 #' @param on_support `TRUE`, `FALSE`, or `NA` after the design audit.
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_choice <- function(fit, contrast, position_neutral = FALSE,
                                kappa = NULL, mu = NULL, Sigma = NULL,
@@ -357,8 +357,8 @@ scmix_paper_choice <- function(fit, contrast, position_neutral = FALSE,
 #' @param numerator,denominator Contrasts `c_a` and `c_b`.
 #' @param denominator_margin Prespecified lower bound on the absolute
 #'   denominator. `NULL` leaves the reporting gate unconfigured.
-#' @param mu Optional fitted conditional means.
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_mrs <- function(fit, numerator, denominator,
                             denominator_margin = NULL, mu = NULL) {
@@ -391,8 +391,8 @@ scmix_paper_mrs <- function(fit, numerator, denominator,
 #' @param variance_margin Prespecified lower bound on directional residual
 #'   variance for regular inference. `NULL` leaves the gate unconfigured.
 #' @param ci Optional two-element confidence interval for the majority gate.
-#' @param mu,Sigma Optional explicit structural estimates.
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_signshare <- function(fit, contrast, ties = c("exclude", "include"),
                                   variance_margin = NULL, ci = NULL,
@@ -438,8 +438,8 @@ scmix_paper_signshare <- function(fit, contrast, ties = c("exclude", "include"),
 #' @param fit A mixed-logit fit.
 #' @param penalty,benefit Contrasts `c_p` and `c_b`.
 #' @param amount Benefit amount `a`.
-#' @inheritParams scmix_paper_signshare
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_compensating <- function(fit, penalty, benefit, amount,
                                      variance_margin = NULL, ci = NULL,
@@ -473,8 +473,8 @@ scmix_paper_compensating <- function(fit, penalty, benefit, amount,
 #' @param direction Optional contrast `c`.
 #' @param total_margin Prespecified lower bound on total directional
 #'   heterogeneity before reporting its explained share.
-#' @param mu,Sigma Optional explicit structural estimates.
 #' @return An internal `scmix_paper_quantity` object.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_heterogeneity <- function(fit, direction = NULL,
                                       total_margin = NULL,
@@ -519,6 +519,7 @@ scmix_paper_heterogeneity <- function(fit, direction = NULL,
 #' @param choice,mrs,sign,compensating,heterogeneity Optional named lists of
 #'   arguments for the corresponding quantity routine.
 #' @return A named list of `scmix_paper_quantity` objects.
+#' @rdname scmix_paper_quantities
 #' @export
 scmix_paper_quantities <- function(fit, subgroup = NULL, choice = NULL,
                                    mrs = NULL, sign = NULL,

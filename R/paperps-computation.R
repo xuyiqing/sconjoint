@@ -480,11 +480,16 @@
 #' @param keep_cv_fits Retain all inner-fold network objects (memory intensive).
 #' @param a_bound Positive raw-coefficient Frobenius bound for the loading.
 #' @param weight_bound Positive coordinatewise network-parameter bound.
-#' @param ... Core optimization controls listed explicitly below.
+#' @param n_epochs,learning_rate,n_starts,mu_bound,kappa_bound,opt_tol,grad_tol,seed,device,verbose Optimization controls, passed to [scmix_tune_outer_matrix()] via its `...`.
+#' @param ... Core optimization controls (`n_epochs`, `learning_rate`,
+#'   `n_starts`, `mu_bound`, `kappa_bound`, `opt_tol`, `grad_tol`, `seed`,
+#'   `device`, `verbose`) forwarded to [scmix_tune_matrix()] inside every
+#'   outer training set.
 #' @return An internal tuning object with respondent-sequence scores,
 #'   training-only preprocessing, inner-fold computational and candidate
 #'   eligibility diagnostics, selected specification, optional refit, and a
 #'   data/specification/fold analysis signature.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
                               K = 3L, allow_q_tuning = FALSE,
@@ -725,6 +730,11 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
 }
 
 #' Run tuning separately inside every DML outer training set
+#'
+#' @param outer_K,inner_K,outer_fold_id Respondent-level outer/inner fold
+#'   controls, mirroring [scmix_tune_matrix()]'s `K` one level up: each outer
+#'   fold runs its own complete inner tuning.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_tune_outer_matrix <- function(deltaX, y, Z, respondent_id, grid,
                                     q = NULL, outer_K = 5L, inner_K = 3L,
@@ -850,6 +860,7 @@ scmix_tune_outer_matrix <- function(deltaX, y, Z, respondent_id, grid,
 #' @return A fold-nuisance object directly consumable by [scmix_dml()]. It is
 #'   not a full-sample structural plug-in fit and retains the nested analysis
 #'   signature.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
                                   require_optimization_gate = TRUE,
@@ -1054,6 +1065,7 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
 #'   signature, and scope summaries. Bound activity is available for the
 #'   selected start because the core fit does not retain all nonselected
 #'   networks.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_optimization_audit <- function(fit) {
   opt <- fit$optimization
@@ -1192,6 +1204,7 @@ scmix_optimization_audit <- function(fit) {
 #' @param keep_fits Retain every refit.
 #' @return Settings, recomputed checks, numerical gate, fit-linked analysis
 #'   signature status, and optional fits.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_integration_refinement <- function(resolutions, scrambles = NULL,
                                          refitter, extractors, tolerances,
@@ -1263,6 +1276,7 @@ scmix_integration_refinement <- function(resolutions, scrambles = NULL,
 #' @param keep_fits Retain the refits.
 #' @return Sensitivity table. The primary q is never replaced by the best-looking
 #'   alternative and no selection-adjusted coverage is claimed.
+#' @rdname scmix_tune_matrix
 #' @export
 scmix_q_sensitivity <- function(primary_q, alternatives, refitter, extractors,
                                 keep_fits = FALSE) {
