@@ -597,8 +597,12 @@ scfit <- function(formula, data,
     if (any(dev_w > 1e-8)) {
       stop("scfit(): `respondent_weights` must be constant within respondent.")
     }
-    key_task <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
-    ord_task <- order(key_task, data_sorted[[profile]])
+    ## Order by the typed identifiers directly (matches .sc_build_deltax()
+    ## and scmix()'s y-ordering below): sorting a pasted character key turns
+    ## numeric respondent/task ids into lexicographic strings (1, 10, 11,
+    ## ..., 2), which silently desynchronizes this weight vector from
+    ## deltaX's task rows for any respondent/task id spanning two digits.
+    ord_task <- order(data_sorted[[respondent]], data_sorted[[task]], data_sorted[[profile]])
     respondent_weight_task <- w_profile[ord_task][seq(1L, length(w_profile), by = 2L)]
     if (length(respondent_weight_task) != nrow(deltaX)) {
       stop("scfit(): internal error aligning respondent_weights with task rows.")
@@ -655,8 +659,13 @@ scfit <- function(formula, data,
     stop(sprintf("scfit(): response column '%s' must be coded 0/1.",
                  response))
   }
-  key <- paste(data_sorted[[respondent]], data_sorted[[task]], sep = "\r")
-  ord <- order(key, data_sorted[[profile]])
+  ## Order by the typed identifiers directly, exactly as .sc_build_deltax()
+  ## does for deltaX/Z_task/respondent_task above and as scmix() does for
+  ## its own y-ordering: sorting a pasted character key turns numeric
+  ## respondent/task ids into lexicographic strings (1, 10, 11, ..., 2),
+  ## which silently desynchronizes y from deltaX's task rows whenever a
+  ## respondent or task id spans two digits.
+  ord <- order(data_sorted[[respondent]], data_sorted[[task]], data_sorted[[profile]])
   y_sorted <- y_profile[ord]
   idx1 <- seq(1L, length(y_sorted), by = 2L)
   y <- y_sorted[idx1]

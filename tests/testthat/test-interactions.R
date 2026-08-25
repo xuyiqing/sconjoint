@@ -137,9 +137,18 @@ test_that("interactions = 'none' reproduces the pre-extension fit byte-for-byte"
                respondent = "rid", task = "tid", profile = "pos",
                K = 2L, n_epochs = 120L, seed = 7L,
                interactions = "none")
-  ## Golden fixture captured from the unmodified code path (commit
-  ## 64a4024) on the same seed: the default must be a byte-identical
-  ## no-op, not merely statistically equivalent.
+  ## Golden fixture on the same seed: the default must be a byte-identical
+  ## no-op, not merely statistically equivalent. Regenerated at the
+  ## row-ordering fix (post-11fba95): with M = 80 respondents, ids span
+  ## two digits, and the original fixture (commit 64a4024) was captured
+  ## under a pasted-string-key sort that lexicographically reorders
+  ## respondent/task rows (e.g. respondent 10 before respondent 2). That
+  ## was the bug 11fba95 fixed in .sc_build_deltax()/scmix(); the same
+  ## desynchronization also lived in scfit()'s own y-ordering and
+  ## respondent-weight-ordering (fixed alongside this regeneration). The
+  ## corrected code produces a genuinely different row order, so the old
+  ## fixture is stale by design, not a target to match. See
+  ## builder.md, group A, in runs/2026-08-24-absorb-paperps-alignment/.
   golden <- readRDS(test_path("fixtures", "golden-none-fit.rds"))
   expect_equal(fit$theta,        golden$theta,        tolerance = 1e-12)
   expect_equal(fit$vcov,         golden$vcov,         tolerance = 1e-12)
