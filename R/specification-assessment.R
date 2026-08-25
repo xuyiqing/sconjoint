@@ -725,7 +725,7 @@ scmix_heldout_calibration <- function(y, predicted, respondent_id,
   }
   if (!is.numeric(probability_breaks) || any(!is.finite(probability_breaks)) ||
       length(probability_breaks) < 2L || any(diff(probability_breaks) <= 0) ||
-      probability_breaks[1L] != 0 || tail(probability_breaks, 1L) != 1) {
+      probability_breaks[1L] != 0 || utils::tail(probability_breaks, 1L) != 1) {
     stop("`probability_breaks` must be strictly increasing from zero to one.",
          call. = FALSE)
   }

@@ -159,7 +159,7 @@ scmix_heldout_predictions <- function(fit, task_order = NULL,
     stop("The fold loading collection is incompatible with q.", call. = FALSE)
   }
   if (is.null(task_order)) {
-    task_order <- ave(seq_len(n), rid, FUN = seq_along)
+    task_order <- stats::ave(seq_len(n), rid, FUN = seq_along)
   }
   if (!is.numeric(task_order) || length(task_order) != n ||
       any(!is.finite(task_order))) {
