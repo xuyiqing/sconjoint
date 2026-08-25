@@ -235,7 +235,7 @@ test_that("q=0 fit estimates kappa and retains full and fold fits", {
   expect_equal(dim(Z_oof), dim(fit$Z))
   expect_equal(dim(Z_full), dim(fit$Z))
   first <- !duplicated(fit$respondent_id)
-  expect_equal(colMeans(Z_full[first, , drop = FALSE]), 0, tolerance = 1e-12)
+  expect_equal(unname(colMeans(Z_full[first, , drop = FALSE])), 0, tolerance = 1e-12)
 
   expect_error(
     scmix(choice ~ a | z, dat, q = 0.5, K = 2L, n_epochs = 1L),
