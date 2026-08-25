@@ -3,7 +3,7 @@
 
 application_source_root <- Sys.getenv(
   "SCONJOINT_APPLICATION_ROOT",
-  unset = "/Users/avidit/Dropbox/Research - Active/Conjoint/ConjointStructural"
+  unset = "/path/to/ConjointStructural"
 )
 
 application_output_root <- file.path(
