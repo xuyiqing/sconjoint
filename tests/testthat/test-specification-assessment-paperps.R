@@ -246,12 +246,16 @@ test_that("fit-aware held-out predictions integrate complete respondent sequence
 })
 
 test_that("completion diagnostics are descriptive, not verification", {
-  out <- sconjoint:::scmix_completion_diagnostics(
+  ## The 5-row synthetic fixture makes completed_tasks a perfect linear
+  ## function of z, so stats::summary.lm() warns "essentially perfect
+  ## fit". That is an artifact of the deliberately tiny fixture, not of
+  ## the diagnostic; the descriptive outputs below are what is under test.
+  out <- suppressWarnings(sconjoint:::scmix_completion_diagnostics(
     completed_tasks = c(2, 3, 4, 5, 6),
     predictors = data.frame(z = 1:5, group = c("a", "a", "b", "b", "b")),
     early_response = c(0, 0, 1, 1, 1),
     completion_pattern = c("early", "early", "full", "full", "full")
-  )
+  ))
   expect_equal(nrow(out$associations), 2L)
   expect_true(all(c("slope", "se", "p_value") %in% names(out$early_response)))
   expect_match(out$disclaimer, "cannot verify")
