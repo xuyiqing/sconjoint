@@ -37,12 +37,6 @@ scfit(
   lambda_V = 0.01
 )
 }
-\section{Legacy warning}{
-This is the superseded task-level projection and optional respondent-MAP
-pipeline. It does not implement the low-rank normal mixed-logit model or the
-regular inference procedure in the rebuilt paper. Use \code{scmix()} and
-\code{scmix_dml()} for that workflow.
-}
 \arguments{
 \item{formula}{A two-sided formula
 \code{choice ~ attr1 + attr2 + ... | z1 + z2 + ...} (fixest-style).
@@ -273,14 +267,19 @@ clustered variance-covariance \code{vcov}, the out-of-sample
 \code{beta_hat} matrix, the Lambda(Z) object, and the fold assignment.
 }
 \description{
-Fits the Acharya-Hainmueller-Xu structural conjoint estimator via a
+This function retains the earlier task-level projection and optional
+respondent MAP pipeline for replication of superseded analyses. It is not
+the low-rank normal mixed-logit estimator or inference procedure developed
+in \code{paperps.pdf}; use \code{\link[=scmix]{scmix()}} and \code{\link[=scmix_dml]{scmix_dml()}} for the rebuilt paper.
+}
+\details{
+The legacy routine fits the earlier estimator via a
 cross-fitted deep neural network with double/debiased machine
 learning (DML) inference.  The DNN flexibly maps respondent
 moderators \code{Z} into per-respondent preference weights \code{beta(Z)},
 and the DML correction debiases \code{E[beta(Z)]} for the non-parametric
 first stage.  Standard errors are clustered at the respondent level.
-}
-\details{
+
 The returned \code{sc_fit} list contains at least the following fields:
 \itemize{
 \item \code{theta} -- named p-vector of DML point estimates;
@@ -307,11 +306,20 @@ is), the realized-task features \code{F_int} and cross-fitted offsets
 block of the orthogonal-score correction (\code{correction_int}).
 }
 }
+\section{Legacy warning}{
+
+This is the superseded task-level projection and optional respondent-MAP
+pipeline. It does not implement the low-rank normal mixed-logit model or
+regular inference procedure in the rebuilt paper. Use \code{\link[=scmix]{scmix()}} and
+\code{\link[=scmix_dml]{scmix_dml()}} for that workflow.
+}
+
 \section{Legacy inferential status}{
 
-None of the following outputs is the estimator or inference procedure used by
-the rebuilt paper. The old pipeline distinguished two internal groups, but the
-new theory does not validate either group merely by running \code{scfit()}.
+None of the following outputs is the estimator or inference procedure used
+by the rebuilt paper. The old pipeline distinguished two internal groups,
+but the new theory does not validate either group merely by running
+\code{scfit()}.
 
 \strong{Earlier DML quantities.} The average
 structural parameters and the functionals built on the orthogonal
@@ -319,8 +327,8 @@ score include respondent-clustered standard-error calculations: \code{coef()} /
 \code{summary()} /
 \code{vcov()} (the average \code{theta}), and the debiased quantities
 \code{sc_average()}, \code{sc_ame()}, \code{sc_counterfactual(vartype = "orthogonal")},
-and \code{sc_mrs()} / \code{sc_wtp()}. These do not use the integrated
-mixed-logit likelihood, rank conditions, or rebuilt-paper verification gates.
+and \code{sc_mrs()} / \code{sc_wtp()}. These do not use the integrated mixed-logit
+likelihood, rank conditions, or rebuilt-paper verification gates.
 
 \strong{Model-based / empirical-Bayes summaries (descriptive, not
 debiased).} The distribution-over-respondents quantities are plug-in

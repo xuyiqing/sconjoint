@@ -94,3 +94,4 @@ heterogeneity magnitudes require the integrated-likelihood route
 are biased for population shares (9--13 percentage points in the
 head-to-head simulations, with no standard errors).
 }
+

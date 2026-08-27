@@ -10,8 +10,7 @@
 \item{object}{An \code{scmix} object.}
 
 \item{calibrate}{Logical: run the legacy exploratory
-\code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} diagnostic
-(default \code{FALSE}; costs \code{R} refits).}
+\code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} diagnostic (default \code{FALSE}; costs \code{R} refits).}
 
 \item{R, seed}{Forwarded to \code{\link[=scmix_calibrate_zero]{scmix_calibrate_zero()}} when
 \code{calibrate = TRUE}.}
@@ -23,7 +22,8 @@ The fit, invisibly, with a legacy \verb{$zero_floor} component when
 \code{calibrate = TRUE}.
 }
 \description{
-Prints fit dimensions, integration and optimization diagnostics, and residual
-standard deviations. The \code{calibrate} option is retained for backward
-compatibility; it is not one of the paper's reporting gates.
+Prints the fit dimensions, integration rule, optimization diagnostics, and
+residual standard deviations. The \code{calibrate} argument is retained only for
+backward compatibility with an exploratory truth-zero refit diagnostic; it
+is not one of the paper's reporting gates.
 }
