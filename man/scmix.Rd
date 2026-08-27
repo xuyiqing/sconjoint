@@ -12,16 +12,29 @@ scmix(
   profile = "profile_id",
   q = 1L,
   n_nodes = 31L,
+  integration = c("auto", "gh", "qmc"),
+  n_draws = 4096L,
+  qmc_antithetic = TRUE,
+  qmc_scramble = TRUE,
   K = 5L,
   hidden = "auto",
+  mean_family = "legacy",
   n_epochs = 400L,
   learning_rate = 0.01,
   weight_decay = "adaptive",
+  n_starts = 2L,
+  mu_bound = 10,
+  kappa_bound = 10,
+  alpha_bound = 5,
+  a_bound = 10,
+  weight_bound = 10,
+  opt_tol = 1e-07,
+  grad_tol = 1e-04,
   seed = NULL,
   init = NULL,
   device = "cpu",
   verbose = FALSE,
-  early_stop = TRUE
+  early_stop = FALSE
 )
 }
 \arguments{
@@ -43,10 +56,20 @@ respondent id in \code{data}.}
 
 \item{profile}{Column name of the within-task profile id in \code{data}.}
 
-\item{q}{Integer, dimension of the residual factor (1, 2, or 3).}
+\item{q}{Integer, dimension of the residual factor. \code{q = 0} is the
+homogeneous model; product Gauss--Hermite is available through \code{q = 3}.}
 
 \item{n_nodes}{Integer, univariate Gauss-Hermite nodes per factor
 dimension (default 31; the q-dim grid is the tensor product).}
+
+\item{integration}{One of \code{"auto"}, \code{"gh"}, or \code{"qmc"}.
+Auto uses exact evaluation at \code{q = 0}, product Gauss--Hermite through
+\code{q = 3}, and optional Sobol QMC above \code{q = 3}.}
+
+\item{n_draws}{Number of QMC draws; ignored by exact and Gauss--Hermite
+integration. Must be even when \code{qmc_antithetic = TRUE}.}
+
+\item{qmc_antithetic, qmc_scramble}{Logical controls for QMC integration.}
 
 \item{K}{Integer, respondent-clustered folds (default 5).}
 
@@ -54,57 +77,79 @@ dimension (default 31; the q-dim grid is the tensor product).}
 a three-tier default from \code{N*T}, see \code{.sc_auto_hidden()}), or an
 integer vector of hidden-layer widths.}
 
-\item{n_epochs}{Adam epochs per fold (default 400; the marginal
-likelihood typically converges faster per epoch than the
-task-level BCE because each respondent contributes one pooled
-term).}
+\item{mean_family}{Conditional-mean parameterization. \code{"constant"},
+\code{"linear"}, and \code{"relu"} use an unpenalized compact baseline plus
+a penalized deviation centered at the training-coded moderator origin.
+\code{"legacy"} reproduces the original all-parameter ReLU penalty.}
+
+\item{n_epochs}{Maximum full-batch Adam epochs per optimization start.}
 
 \item{learning_rate}{Numeric, Adam learning rate.}
 
-\item{weight_decay}{Either the character string \code{"adaptive"}
-(default), or a non-negative numeric scalar passed to the Adam
-optimizer's \code{weight_decay} argument.  When \code{"adaptive"}, the
-per-fit weight decay is resolved from the dataset shape using the
-paper's v13 rule:
-\deqn{\mathrm{weight\_decay} = K_{adaptive} / NT,\quad
-        K_{adaptive} = \begin{cases} 15 & NT/p < 300 \\
-                                     25 & NT/p \ge 300 \end{cases}}{
-        weight_decay = K_adaptive / NT, K_adaptive = 15 if NT/p<300 else 25}
-where \code{NT} is the number of task-level observations and \code{p} is the
-number of attribute dummies.  This is what generated every current
-paper number; see \verb{code/04_training.R} and memo 42 for the
-rationale.  Pass a fixed numeric (e.g. \code{1e-4}) to override.}
+\item{weight_decay}{A nonnegative squared-weight penalty coefficient or the
+backward-compatible \code{"adaptive"} rule. Paper analyses should tune a
+finite prespecified penalty grid within each outer training sample.}
 
-\item{seed}{Integer master seed.  When supplied, the cross-fit
-output is bit-identical on 1 core and on N cores.  The function
-saves and restores the R and torch RNG states on exit.}
+\item{seed}{Reproducibility seed for folds, integration nodes, and starts.}
 
-\item{init}{Optional \link{scfit} object used to warm start each fold's
-mean trunk (architecture must match \code{hidden}).}
+\item{n_starts}{Number of prespecified optimization starts per fit.}
 
-\item{device}{Character \code{"cpu"} (default) or \code{"cuda"}.  The
-bit-exact determinism guarantee applies only on CPU.}
+\item{mu_bound, kappa_bound}{Positive finite bounds for the fitted conditional
+mean coordinates and position effect. For corrected mean families,
+\code{mu_bound} is a common coordinatewise bound in raw coefficient units.
+The legacy family retains its original scalar training-scale bound.}
+
+\item{alpha_bound}{Positive raw-coefficient coordinate bound for the
+unpenalized corrected-family baseline. It must be strictly less than
+\code{mu_bound}.}
+
+\item{a_bound}{Positive finite Frobenius-norm bound on the loading matrix in
+raw coefficient units. The training-scale loading is projected after every
+optimizer update using the stored contrast scales.}
+
+\item{weight_bound}{Positive finite coordinatewise bound on every
+mean-network weight and bias. Network parameters are projected after every
+optimizer update.}
+
+\item{opt_tol, grad_tol}{Numerical diagnostic tolerances. Passing them does
+not certify a global optimum.}
+
+\item{init}{Optional \link{scfit} object used to warm start the full-sample
+mean trunk (architecture must match \code{hidden}). It is never used for an
+outer-fold nuisance fit.}
+
+\item{device}{Character \code{"cpu"} (default) or \code{"cuda"}.}
 
 \item{verbose}{Logical, print per-epoch training progress.}
+
+\item{early_stop}{Logical legacy validation-stopping option. With the default
+\code{FALSE}, a start stops at the joint diagnostic tolerance or the maximum
+epoch count. Every returned state is audited separately.}
 }
 \value{
-An object of class \code{scmix}; see \code{\link[=scmix_theta]{scmix_theta()}},
-\code{\link[=scmix_polarization]{scmix_polarization()}}, \code{\link[=scmix_counterfactual]{scmix_counterfactual()}} for inference.
+An object of class \code{scmix}, including a stable
+\code{analysis_signature} based on the data, model/learner specification, and
+respondent folds but not fitted parameters or integration resolution. Use
+\code{\link[=scmix_dml]{scmix_dml()}} for paper-aligned regular inference and
+the \code{scmix_paper_*} functions for structural plug-in quantities.
 }
 \description{
 Fits the rebuilt structural model in which respondent preferences
 are \verb{beta_i = mu(Z_i) + A u_i} with \code{u_i ~ N(0, I_q)} and the
 respondent's whole choice sequence enters one marginal likelihood.
-Unlike \code{\link[=scfit]{scfit()}}, whose first stage targets the conditional-logit
-projection (attenuated toward zero whenever residual heterogeneity
-is present), \code{scmix()} targets \code{E[beta_i | Z_i]} directly: the
-mixture is inside the objective, so no mean-logit bridge assumption
-is needed.
+The conditional mean and residual covariance are estimated jointly within the
+maintained normal mixed-logit family. The mixture is inside the
+respondent-sequence objective, so the estimator does not relabel a task-level
+conditional-logit projection as a latent preference mean.
 }
 \details{
-The interface deliberately mirrors \code{\link[=scfit]{scfit()}} (same formula, same
-long-format data contract).  Cross-fitting is respondent-clustered;
-each respondent's stored \code{mu_hat} and loading matrix come from the
-fold model that did not train on them, which is what the
-orthogonal-score inference in \code{\link[=scmix_theta]{scmix_theta()}} and friends requires.
+The interface deliberately mirrors \code{\link[=scfit]{scfit()}} (same formula
+and long-format data contract). A full-sample fit estimates the structural
+plug-in object. Separate respondent-level outer-fold fits provide nuisance
+estimates for \code{\link[=scmix_dml]{scmix_dml()}} and held-out specification
+assessment. With bounded task counts, the estimator does not consistently
+recover respondents' realized preference vectors. The returned
+\code{analysis_signature} links computation and numerical-refinement artifacts
+to the same data, model/learner specification, and respondent folds without
+hashing fitted parameters.
 }

@@ -12,7 +12,7 @@
 #' transform of two proportions and has no clean clustered-sd
 #' expression, so by default (`se_method = "none"`) no standard error is
 #' returned. A respondent-cluster (wild) bootstrap is available via
-#' `se_method = "wild_bootstrap"`: the recovered per-respondent
+#' `se_method = "wild_bootstrap"`: the predicted/shrunken per-respondent
 #' \eqn{\hat\beta_i} are resampled at the respondent level and
 #' \eqn{\mathrm{frac}^+_j}, \eqn{\mathrm{frac}^-_j}, and the
 #' polarization index are recomputed on each resample, giving bootstrap
@@ -22,7 +22,7 @@
 #' resampled. As with `sc_fraction_preferring()`, fixed-\eqn{T}
 #' shrinkage biases the plug-in fractions toward consensus, so the
 #' interval reflects \strong{sampling variability}, not the shrinkage
-#' bias. See the *Inference validity by quantity* section of `?scfit`.
+#' bias. See the *Legacy inferential status* section of `?scfit`.
 #'
 #'
 #' When the fit carries an attribute-interaction term

@@ -232,13 +232,15 @@
     stop(".sc_build_deltax(): `task_id`, `profile_id`, `respondent_id` must all match nrow(X).")
   }
 
-  key <- paste(respondent_id, task_id, sep = "\r")
-  ord <- order(key, profile_id)
+  ## Order the original typed identifiers directly.  Sorting a pasted key
+  ## turns numeric ids into lexicographic strings (1, 10, 11, ..., 2), which
+  ## can silently desynchronize task rows from outcomes and raw moderators.
+  ord <- order(respondent_id, task_id, profile_id)
   X   <- X[ord, , drop = FALSE]
   Z   <- Z[ord, , drop = FALSE]
-  key <- key[ord]
   respondent_id <- respondent_id[ord]
   task_id       <- task_id[ord]
+  key <- paste(respondent_id, task_id, sep = "\r")
 
   if (length(key) %% 2L != 0L) {
     stop(".sc_build_deltax(): expected an even number of profile rows (2 per task).")

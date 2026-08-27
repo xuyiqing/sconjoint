@@ -1,117 +1,111 @@
-# sconjoint
+# sconjoint: paper-aligned mixed logit
 
-**Structural Deep-Learning Estimation for Conjoint Experiments**
+This local development branch implements the respondent-sequence estimator,
+regular inference for supported finite collections of paper quantities,
+the computation protocol, and specification
+assessment in Sections 3--4 of `paperps.pdf`. It is based on
+`xuyiqing/sconjoint@feat/mixed-logit` at commit
+`c38d4a721ed803469548a54b06896bf4c5ac44f7`.
 
-`sconjoint` implements the structural deep-learning estimator of
-[Acharya, Hainmueller, and Xu (2026)](https://arxiv.org/abs/2604.10845) for
-forced-choice conjoint experiments. The estimator embeds a deep neural
-network inside a random utility logit so that each respondent's
-preference vector varies flexibly with observed covariates.
-Double/debiased machine-learning (DML) inference delivers
-respondent-clustered standard errors on all quantities.
+The maintained structural model is
 
-## Installation
-
-```r
-install.packages("torch")
-torch::install_torch()
-
-# install.packages("remotes")
-remotes::install_github("xuyiqing/sconjoint")
+```text
+beta_i = mu(Z_i) + A u_i,       u_i ~ N(0, I_q),
+Pr(Y_it = 1 | beta_i) = logit^{-1}(kappa + DeltaX_it' beta_i).
 ```
 
-## Quick example
+`scmix()` maximizes the integrated likelihood of each respondent's complete
+choice sequence. The product over tasks is taken before integrating over the
+persistent factor, and the sample objective gives respondents equal weight. A
+full-sample fit estimates the structural plug-in object; respondent-level
+outer-fold fits are retained for inference and held-out assessment.
+
+## Statistical scope
+
+- The DNN is a sieve for the unknown conditional mean `mu(Z)`. It is not a
+  separate behavioral assumption.
+- Population and subgroup quantities integrate the fitted conditional normal
+  distribution and the respondent empirical distribution of `Z`.
+- With bounded task counts, posterior summaries are predictions. They are not
+  consistently recovered realized respondent preferences.
+- `scmix_dml()` implements respondent-level, cross-fitted, Riesz-corrected
+  inference for prespecified rowwise-expectation primitives.
+  `scmix_inference_target()` constructs the supported paper primitives and
+  `scmix_delta_transform()` maps them into subgroup ratios, MRS, directional
+  heterogeneity shares, and covariance decompositions. The procedure uses
+  complete-sequence Fisher scores and includes the direct empirical-`P_Z`
+  influence term; it does not claim an arbitrary-functional API.
+- Ordinary inference is withheld at a covariance-rank boundary. The software
+  also does not prove the paper's DNN rate, curvature, optimization, or
+  numerical-integration assumptions.
+- Specification assessments can expose lack of support, poor fit, weak
+  information, numerical instability, and sensitivity. They cannot verify
+  normality, common covariance, noninformative completion, or independent
+  logit shocks.
+
+## Main workflow
 
 ```r
 library(sconjoint)
-data(sw2022)
 
-# Candidate attributes (left of |) and respondent moderators Z (right of |).
-# sw2022 ships pre-coded dummy columns; dotted names are backquoted.
-attrs <- c("cand_genderMale", "cand_runYes",
-           "cand_talentCollaborative", "cand_talentDetermined.to.Succeed",
-           "cand_talentEmpathetic", "cand_talentGood.Communicator",
-           "cand_talentHard.Working", "cand_talentTough.Negotiator",
-           "cand_agendaModerate.Changes", "cand_agendaComplete.Overhaul",
-           "cand_child1.child", "cand_child2.children", "cand_child3.children")
-Zvars <- c("gender_num", "age", "income", "educ_Middle", "educ_High",
-           "party_Republican", "party_Independent", "region_NORTHEAST",
-           "region_SOUTH", "region_WEST", "employ_parttime", "employ_homemaker",
-           "employ_not_working", "employ_retired", "employ_student",
-           "ideo_conservative", "vote_trump", "vote_clinton", "gender_att")
-
-bt   <- function(x) paste0("`", x, "`")
-form <- as.formula(paste("choice ~", paste(bt(attrs), collapse = " + "),
-                         "|",        paste(bt(Zvars), collapse = " + ")))
-
-fit <- scfit(
-  form,
-  data = sw2022, respondent = "respondent",
-  task = "task", profile = "profile",
-  K = 5L, n_epochs = 200L, seed = 2024
+fit <- scmix(
+  choice ~ attribute_1 + attribute_2 | moderator_1 + moderator_2,
+  data = conjoint_long,
+  respondent = "respondent_id",
+  task = "task_id",
+  profile = "profile_id",
+  q = 1L,
+  K = 5L,
+  n_starts = 4L,
+  seed = 2026
 )
 
-summary(fit)
-plot_amce(fit)
-plot_fraction(fit)
-plot(fit, "beta_ridgelines")
+# Natural structural plug-ins; these never use empirical posterior modes.
+theta <- scmix_paper_theta(fit)
+choice_probability <- scmix_paper_choice(fit, contrast = c(1, 0))
+
+# Finite-functional one-step calculation. Without a classed numerical,
+# optimization, and tangent audit from scmix_inference_verification(), this
+# deliberately returns status = "conditional_unverified" and withholds intervals.
+inference <- scmix_dml(fit, targets = "theta")
+
+# Assemble prespecified assessment results. Component diagnostics are
+# constructed with scmix_design_audit(), scmix_heldout_sequence_score(),
+# scmix_heldout_calibration(), scmix_local_information(), and related helpers.
+assessment <- scmix_assess(fit = fit, inference = inference,
+                           eigenvalue_margin = 1e-4)
+# The assessment remains incomplete until every required Section 4 component
+# is supplied with provenance.
 ```
 
-## Features
+Architecture and penalty selection must occur inside each outer training
+sample when used for DML. `scmix_tune_outer_matrix()` provides that nested,
+respondent-level workflow. Integration refinement and rank sensitivity use
+fresh refits through `scmix_integration_refinement()` and
+`scmix_q_sensitivity()`.
 
-**Estimator**: `scfit()` --- DNN-based structural conjoint with DML
-inference, respondent-clustered cross-fitting, bit-exact determinism
-across core counts.
+The older `scfit()` projection/MAP pipeline and the old `scmix_theta()`,
+`scmix_polarization()`, and related binned-information functions remain only
+for backward compatibility. `scfit()` emits a legacy warning, and the old
+mixed-logit quantity objects are marked `paperps_regular_inference = FALSE`;
+none is the estimator or inference method justified by the rebuilt paper.
 
-**Structural quantities** (21 functions):
+## Application data
 
-| Tier | Functions |
-|------|-----------|
-| Core | `sc_mrs`, `sc_counterfactual`, `sc_wtp`, `sc_importance`, `sc_polarization`, `sc_fraction_preferring`, `sc_optimal_profile`, `sc_direction_intensity`, `sc_heterogeneity_test` |
-| Advanced | `sc_subgroup`, `sc_compensating`, `sc_clusters` |
-| Welfare | `sc_surplus`, `sc_welfare_change`, `sc_average`, `sc_demand_curve` |
-| Diagnostics | `sc_indifference`, `sc_decisiveness`, `sc_inequality` |
+The three replication sources are read without modification from the existing
+`ConjointStructural` project. All new prepared data, checkpoints, diagnostics,
+tables, and figures are written below this clone. See
+[`applications/README.md`](applications/README.md) and
+[`PAPERPS_ALIGNMENT_AUDIT.md`](PAPERPS_ALIGNMENT_AUDIT.md).
 
-**Baselines**: `sc_baseline_logit`, `sc_baseline_lpm` for
-side-by-side comparison with the structural model.
+## Local verification status
 
-**Plots** (7 functions):
-
-| Function | Purpose |
-|----------|---------|
-| `plot_amce()` | AMCE coefficient plot with CI |
-| `plot_fraction()` | Fraction favor/oppose diverging bar |
-| `plot_hetero()` | Preference heterogeneity bar chart |
-| `plot_subgroup()` | Subgroup AMCE comparison |
-| `plot_importance()` | Attribute importance ridgelines |
-| `plot(fit, "beta_ridgelines")` | Per-respondent preference distributions |
-| `plot(fit, "loss_trace")` | Training convergence |
-
-All plot functions accept `dummies`, `labels`, `groups` for
-customization. See the Plot Options chapter in the tutorial.
-
-**Bundled datasets**: `sw2022` (Saha & Weeks 2022), `gs2020`
-(Graham & Svolik 2020), `br2017` (Ballard-Rosa, Martin & Scheve 2017),
-`bs2013` (Bechtel & Scheve 2013), `simdata` (known-DGP sanity check).
-
-## Documentation
-
-The primary documentation is a [Quarto book](https://yiqingxu.org/packages/sconjoint/) with
-worked examples:
-
-1. **Get Started** --- installation
-2. **Simulated Example** --- full workflow with ground-truth verification
-3. **Example: Candidate Choice** --- Saha & Weeks (2022)
-4. **Example: Democratic Norms** --- Graham & Svolik (2020)
-5. **Example: Tax Preferences** --- Ballard-Rosa, Martin & Scheve (2017)
-6. **Example: Climate Treaties** --- Bechtel & Scheve (2013)
-7. **Plot Options** --- parameter-first reference for customization
-
-## Reference
-
-Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
-"[A Structural Deep-Learning Estimator for Conjoint Experiments](https://arxiv.org/abs/2604.10845)."
-Working paper.
+The R sources parse and source together, and pure-R unit/smoke checks cover the
+paper-facing quantities, design benchmark, specification gates, finite-sieve
+inference algebra, and computation orchestration. The current host has R 4.0.5
+without `torch` or `testthat`, so the full Torch optimization and formal
+`testthat` suite must be run in the reproducible analysis environment before
+the application estimates are produced.
 
 ## License
 

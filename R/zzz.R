@@ -43,10 +43,9 @@
 .sc_population_claim_note <- function(fn) {
   .sc_note_once(paste0("popclaim_", fn), paste0(
     fn, "(): describes the fitted respondent-level (MAP) estimates. ",
-    "Population sign shares and heterogeneity magnitudes require the ",
-    "integrated-likelihood route (scmix_polarization()) and its design ",
-    "checks; MAP fractions are biased for population shares (9-13 ",
-    "percentage points in the head-to-head simulations, with no SEs). ",
+    "It is a legacy descriptive output and is not a paperps estimand or ",
+    "inference procedure. Use scmix(), the scmix_paper_* quantity helpers, ",
+    "scmix_dml(), and the Section 4 assessment gates for the rebuilt paper. ",
     "This note prints once per session."))
 }
 
