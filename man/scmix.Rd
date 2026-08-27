@@ -18,12 +18,14 @@ scmix(
   qmc_scramble = TRUE,
   K = 5L,
   hidden = "auto",
+  mean_family = "legacy",
   n_epochs = 400L,
   learning_rate = 0.01,
   weight_decay = "adaptive",
   n_starts = 2L,
   mu_bound = 10,
   kappa_bound = 10,
+  alpha_bound = 5,
   a_bound = 10,
   weight_bound = 10,
   opt_tol = 1e-07,
@@ -75,6 +77,11 @@ integration. Must be even when \code{qmc_antithetic = TRUE}.}
 a three-tier default from \code{N*T}, see \code{.sc_auto_hidden()}), or an
 integer vector of hidden-layer widths.}
 
+\item{mean_family}{Conditional-mean parameterization. \code{"constant"},
+\code{"linear"}, and \code{"relu"} use an unpenalized compact baseline plus
+a penalized deviation centered at the training-coded moderator origin.
+\code{"legacy"} reproduces the original all-parameter ReLU penalty.}
+
 \item{n_epochs}{Maximum full-batch Adam epochs per optimization start.}
 
 \item{learning_rate}{Numeric, Adam learning rate.}
@@ -87,8 +94,14 @@ finite prespecified penalty grid within each outer training sample.}
 
 \item{n_starts}{Number of prespecified optimization starts per fit.}
 
-\item{mu_bound, kappa_bound}{Positive finite bounds implemented through
-smooth tanh parameterizations.}
+\item{mu_bound, kappa_bound}{Positive finite bounds for the fitted conditional
+mean coordinates and position effect. For corrected mean families,
+\code{mu_bound} is a common coordinatewise bound in raw coefficient units.
+The legacy family retains its original scalar training-scale bound.}
+
+\item{alpha_bound}{Positive raw-coefficient coordinate bound for the
+unpenalized corrected-family baseline. It must be strictly less than
+\code{mu_bound}.}
 
 \item{a_bound}{Positive finite Frobenius-norm bound on the loading matrix in
 raw coefficient units. The training-scale loading is projected after every

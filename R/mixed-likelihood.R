@@ -334,7 +334,8 @@
 #' @keywords internal
 #' @noRd
 .sc_mixed_validate_compact_bounds <- function(p, coefficient_scale,
-                                              a_bound, weight_bound) {
+                                              a_bound, weight_bound,
+                                              alpha_bound = 5) {
   if (!is.numeric(a_bound) || length(a_bound) != 1L ||
       !is.finite(a_bound) || a_bound <= 0) {
     stop("`a_bound` must be one finite strictly positive raw-unit Frobenius bound.")
@@ -343,6 +344,10 @@
       !is.finite(weight_bound) || weight_bound <= 0) {
     stop("`weight_bound` must be one finite strictly positive coordinate bound.")
   }
+  if (!is.numeric(alpha_bound) || length(alpha_bound) != 1L ||
+      !is.finite(alpha_bound) || alpha_bound <= 0) {
+    stop("`alpha_bound` must be one finite strictly positive raw-coordinate bound.")
+  }
   if (is.null(coefficient_scale)) coefficient_scale <- rep(1, p)
   coefficient_scale <- as.numeric(coefficient_scale)
   if (length(coefficient_scale) != p || any(!is.finite(coefficient_scale)) ||
@@ -350,31 +355,66 @@
     stop("`coefficient_scale` must contain one finite positive scale per coefficient.")
   }
   list(a_bound = as.numeric(a_bound),
+       alpha_bound = as.numeric(alpha_bound),
        weight_bound = as.numeric(weight_bound),
        coefficient_scale = coefficient_scale)
+}
+
+.sc_mixed_mean_family <- function(mean_family = "legacy", hidden = integer()) {
+  if (!is.character(mean_family) || length(mean_family) != 1L ||
+      is.na(mean_family)) {
+    stop("`mean_family` must be one of 'legacy', 'constant', 'linear', or 'relu'.")
+  }
+  mean_family <- match.arg(mean_family,
+                           c("legacy", "constant", "linear", "relu"))
+  hidden <- as.integer(hidden)
+  if (anyNA(hidden) || any(hidden < 1L)) {
+    stop("Every supplied hidden width must be a positive integer.")
+  }
+  if (mean_family %in% c("legacy", "relu") && !length(hidden)) {
+    stop("The legacy and ReLU mean families require a positive-integer hidden architecture.")
+  }
+  if (mean_family %in% c("constant", "linear") && length(hidden)) {
+    stop("The constant and linear mean families require `hidden = integer()`.")
+  }
+  list(mean_family = mean_family, hidden = hidden)
 }
 
 #' Project computational parameters onto the artificial compact sets
 #'
 #' `A` is optimized on standardized-contrast coordinates.  Dividing its rows
 #' by `coefficient_scale` recovers raw coefficient units, so the loading
-#' projection is with respect to that raw-unit Frobenius norm.  Every parameter
-#' in the mean-network sieve (weights and biases) is clipped coordinatewise.
-#' The structural position parameter is excluded because its reported value is
-#' already smoothly bounded by `kappa_bound`.
+#' projection is with respect to that raw-unit Frobenius norm. In the corrected
+#' families, `alpha_raw / coefficient_scale` is the unpenalized conditional
+#' mean at the training-coded origin and is projected coordinatewise in raw
+#' coefficient units. Deviation-network weights and biases are separately
+#' clipped at `weight_bound`. The legacy family retains its original all-mean-
+#' parameter projection solely for version-1 reproducibility.
 #'
 #' @keywords internal
 #' @noRd
 .sc_mixed_project_parameters <- function(net, coefficient_scale,
-                                         a_bound, weight_bound) {
+                                         a_bound, weight_bound,
+                                         alpha_bound = 5) {
   compact <- .sc_mixed_validate_compact_bounds(
     p = net$p_beta, coefficient_scale = coefficient_scale,
-    a_bound = a_bound, weight_bound = weight_bound)
-  sieve_names <- setdiff(names(net$parameters), c("A", "kappa_raw"))
+    a_bound = a_bound, weight_bound = weight_bound,
+    alpha_bound = alpha_bound)
+  excluded <- c("A", "kappa_raw", "alpha_raw")
+  sieve_names <- setdiff(names(net$parameters), excluded)
   torch::with_no_grad({
     for (nm in sieve_names) {
       net$parameters[[nm]]$clamp_(min = -compact$weight_bound,
                                   max = compact$weight_bound)
+    }
+    if ("alpha_raw" %in% names(net$parameters)) {
+      scale_t <- torch::torch_tensor(
+        compact$coefficient_scale,
+        dtype = net$alpha_raw$dtype, device = net$alpha_raw$device)
+      lower <- -compact$alpha_bound * scale_t
+      upper <- compact$alpha_bound * scale_t
+      net$alpha_raw$copy_(torch::torch_maximum(
+        torch::torch_minimum(net$alpha_raw, upper), lower))
     }
     if (net$q > 0L) {
       scale_t <- torch::torch_tensor(
@@ -397,35 +437,61 @@
 .sc_mixed_bound_diagnostics <- function(net, mu, kappa, coefficient_scale,
                                         mu_bound, kappa_bound,
                                         a_bound, weight_bound,
+                                        alpha_bound = 5,
                                         activity_fraction = 0.99) {
   compact <- .sc_mixed_validate_compact_bounds(
     p = net$p_beta, coefficient_scale = coefficient_scale,
-    a_bound = a_bound, weight_bound = weight_bound)
-  sieve_names <- setdiff(names(net$parameters), c("A", "kappa_raw"))
+    a_bound = a_bound, weight_bound = weight_bound,
+    alpha_bound = alpha_bound)
+  sieve_names <- setdiff(names(net$parameters),
+                         c("A", "kappa_raw", "alpha_raw"))
   weight_max <- if (length(sieve_names)) {
     max(vapply(sieve_names, function(nm) {
       as.numeric(net$parameters[[nm]]$detach()$abs()$max()$item())
     }, numeric(1L)))
   } else 0
+  alpha_raw <- if ("alpha_raw" %in% names(net$parameters)) {
+    as.numeric(torch::as_array(net$alpha_raw$detach()$cpu())) /
+      compact$coefficient_scale
+  } else numeric()
+  alpha_max <- if (length(alpha_raw)) max(abs(alpha_raw)) else 0
   a_raw_norm <- if (net$q > 0L) {
     A_internal <- as.matrix(torch::as_array(net$A$detach()$cpu()))
     sqrt(sum(sweep(A_internal, 1L, compact$coefficient_scale, `/`)^2))
   } else 0
-  mu_max <- if (length(mu)) max(abs(mu)) else 0
+  mu_max_internal <- if (length(mu)) max(abs(mu)) else 0
+  mu_raw <- if (length(mu)) {
+    sweep(as.matrix(mu), 2L, compact$coefficient_scale, `/`)
+  } else matrix(numeric(), 0L, net$p_beta)
+  mu_max_raw <- if (length(mu_raw)) max(abs(mu_raw)) else 0
+  ## Live modules created before `mean_family` was introduced have no such
+  ## field and must retain the legacy standardized-coordinate interpretation.
+  corrected_mean <- !is.null(net$mean_family) &&
+    !identical(net$mean_family, "legacy")
+  mu_max_for_gate <- if (corrected_mean) mu_max_raw else mu_max_internal
   list(
     mu = mu_bound,
     kappa = kappa_bound,
     a = compact$a_bound,
+    alpha = compact$alpha_bound,
     weight = compact$weight_bound,
     a_units = "raw-coefficient Frobenius norm",
+    alpha_units = "raw coefficient at training-coded moderator origin",
     weight_units = "coordinatewise network parameter",
-    mu_max = mu_max,
+    mu_max = mu_max_for_gate,
+    mu_max_internal = mu_max_internal,
+    mu_max_abs_raw = mu_max_raw,
+    mu_units = if (corrected_mean) "raw coefficient" else
+      "legacy standardized-contrast coefficient",
     kappa_abs = abs(kappa),
     a_raw_frobenius = a_raw_norm,
+    alpha_max_abs_raw = alpha_max,
     weight_max_abs = weight_max,
-    mu_active = mu_max >= activity_fraction * mu_bound,
+    mu_active = mu_max_for_gate >= activity_fraction * mu_bound,
     kappa_active = abs(kappa) >= activity_fraction * kappa_bound,
     a_active = a_raw_norm >= activity_fraction * compact$a_bound,
+    alpha_active = alpha_max >= activity_fraction * compact$alpha_bound,
+    alpha_diagnostics_applicable = length(alpha_raw) > 0L,
     weight_active = weight_max >= activity_fraction * compact$weight_bound,
     activity_fraction = activity_fraction
   )
@@ -443,22 +509,31 @@
 #' @keywords internal
 #' @noRd
 .sc_build_mixed_network <- function(p, p_Z, q, hidden, a_init_sd = 0.15,
+                                    mean_family = "legacy",
                                     mu_bound = 10, kappa_bound = 10,
+                                    alpha_bound = 5,
                                     a_bound = 10, weight_bound = 10,
                                     coefficient_scale = rep(1, p)) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_build_mixed_network(): the 'torch' package is required.")
   }
-  hidden <- as.integer(hidden)
+  family <- .sc_mixed_mean_family(mean_family, hidden)
+  hidden <- family$hidden
+  mean_family <- family$mean_family
   p <- as.integer(p); p_Z <- as.integer(p_Z); q <- as.integer(q)
   compact <- .sc_mixed_validate_compact_bounds(
     p = p, coefficient_scale = coefficient_scale,
-    a_bound = a_bound, weight_bound = weight_bound)
+    a_bound = a_bound, weight_bound = weight_bound,
+    alpha_bound = alpha_bound)
   if (!is.finite(mu_bound) || mu_bound <= 0) {
     stop(".sc_build_mixed_network(): `mu_bound` must be positive and finite.")
   }
   if (!is.finite(kappa_bound) || kappa_bound <= 0) {
     stop(".sc_build_mixed_network(): `kappa_bound` must be positive and finite.")
+  }
+  if (mean_family != "legacy" && compact$alpha_bound >= mu_bound) {
+    stop(".sc_build_mixed_network(): corrected families require ",
+         "`alpha_bound < mu_bound` in raw coefficient units.")
   }
 
   generator <- torch::nn_module(
@@ -466,16 +541,40 @@
     initialize = function() {
       self$p_beta <- p
       self$q <- q
+      self$mean_family <- mean_family
       self$mu_bound <- mu_bound
       self$kappa_bound <- kappa_bound
+      if (mean_family != "legacy") {
+        ## DeltaX is divided by coefficient_scale for optimization, hence the
+        ## internal coefficient is beta-dagger = D beta. Coordinatewise
+        ## internal clipping at mu_bound * D preserves one common raw-unit box
+        ## |beta_j| <= mu_bound in every fold.
+        self$register_buffer(
+          "mu_bound_internal",
+          torch::torch_tensor(mu_bound * compact$coefficient_scale,
+                              dtype = torch::torch_float()))
+      }
       layers <- list()
       in_dim <- p_Z
-      for (i in seq_along(hidden)) {
-        layers[[paste0("hidden_", i)]] <- torch::nn_linear(in_dim, hidden[i])
-        in_dim <- hidden[i]
+      if (mean_family %in% c("legacy", "relu")) {
+        for (i in seq_along(hidden)) {
+          layers[[paste0("hidden_", i)]] <- torch::nn_linear(in_dim, hidden[i])
+          in_dim <- hidden[i]
+        }
       }
       self$hidden <- torch::nn_module_list(layers)
-      self$param_layer <- torch::nn_linear(in_dim, p)
+      if (mean_family == "legacy") {
+        self$param_layer <- torch::nn_linear(in_dim, p)
+      } else {
+        self$alpha_raw <- torch::nn_parameter(torch::torch_zeros(p))
+        if (mean_family == "linear") {
+          self$param_layer <- torch::nn_linear(p_Z, p, bias = FALSE)
+        } else if (mean_family == "relu") {
+          ## No output bias: centering g(z)-g(0) would cancel it and leave a
+          ## null computational coordinate.
+          self$param_layer <- torch::nn_linear(in_dim, p, bias = FALSE)
+        }
+      }
       self$kappa_raw <- torch::nn_parameter(torch::torch_zeros(1L))
       if (q > 0L) {
         scale_t <- torch::torch_tensor(compact$coefficient_scale,
@@ -486,12 +585,36 @@
       }
     },
     get_beta = function(z) {
+      if (self$mean_family == "constant") {
+        alpha <- self$alpha_raw$unsqueeze(1L)$expand(c(z$shape[[1L]],
+                                                       self$p_beta))
+        upper <- self$mu_bound_internal$unsqueeze(1L)
+        return(torch::torch_maximum(
+          torch::torch_minimum(alpha, upper), -upper))
+      }
       h <- z
       for (i in seq_along(self$hidden)) {
         h <- torch::nnf_relu(self$hidden[[i]](h))
       }
-      raw <- self$param_layer(h)
-      self$mu_bound * torch::torch_tanh(raw / self$mu_bound)
+      if (self$mean_family == "legacy") {
+        raw <- self$param_layer(h)
+        return(self$mu_bound * torch::torch_tanh(raw / self$mu_bound))
+      }
+      deviation <- if (self$mean_family == "linear") {
+        self$param_layer(z)
+      } else {
+        z0 <- torch::torch_zeros_like(z)
+        h0 <- z0
+        for (i in seq_along(self$hidden)) {
+          h0 <- torch::nnf_relu(self$hidden[[i]](h0))
+        }
+        self$param_layer(h) - self$param_layer(h0)
+      }
+      alpha <- self$alpha_raw$unsqueeze(1L)$expand(c(z$shape[[1L]],
+                                                     self$p_beta))
+      upper <- self$mu_bound_internal$unsqueeze(1L)
+      torch::torch_maximum(torch::torch_minimum(alpha + deviation, upper),
+                           -upper)
     },
     get_kappa = function() {
       self$kappa_bound * torch::torch_tanh(self$kappa_raw / self$kappa_bound)
@@ -500,6 +623,7 @@
   net <- generator()
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
   net
@@ -542,8 +666,12 @@
 #' @keywords internal
 #' @noRd
 .sc_mixed_penalty <- function(net, weight_decay) {
-  structural <- c("A", "kappa_raw")
-  nms <- setdiff(names(net$parameters), structural)
+  ## Corrected families separate the compact common reference alpha from the
+  ## moderator deviation. Alpha is optimized and audited but never penalized.
+  ## Legacy modules have no alpha_raw and therefore reproduce the version-1
+  ## all-mean-parameter penalty exactly.
+  unpenalized <- c("A", "kappa_raw", "alpha_raw")
+  nms <- setdiff(names(net$parameters), unpenalized)
   if (length(nms) == 0L || weight_decay == 0) {
     return(torch::torch_zeros(1L, dtype = net$kappa_raw$dtype,
                               device = net$kappa_raw$device))
@@ -563,7 +691,8 @@
     as.numeric(p$grad$detach()$abs()$max()$item())
   }, numeric(1L))
   structural_names <- intersect(names(vals), c("A", "kappa_raw"))
-  sieve_names <- setdiff(names(vals), structural_names)
+  alpha_names <- intersect(names(vals), "alpha_raw")
+  sieve_names <- setdiff(names(vals), c(structural_names, alpha_names))
   group_max <- function(nms) {
     if (!length(nms)) 0 else max(vals[nms], 0)
   }
@@ -571,8 +700,11 @@
     by_parameter = vals,
     total = max(vals, 0),
     structural = group_max(structural_names),
+    alpha = group_max(alpha_names),
     sieve = group_max(sieve_names),
+    deviation = group_max(sieve_names),
     structural_parameters = structural_names,
+    alpha_parameters = alpha_names,
     sieve_parameters = sieve_names
   )
 }
@@ -639,9 +771,14 @@
   stationarity_met <- gradients_finite && gradient$total <= grad_tol
   structural_stationarity_met <- gradients_finite &&
     gradient$structural <= grad_tol
+  alpha_stationarity_met <- gradients_finite &&
+    (is.null(gradient$alpha) || gradient$alpha <= grad_tol)
   sieve_stationarity_met <- gradients_finite && gradient$sieve <= grad_tol
   required_bound_flags <- c("mu_active", "kappa_active", "a_active",
                             "weight_active")
+  if (isTRUE(bounds$alpha_diagnostics_applicable)) {
+    required_bound_flags <- c(required_bound_flags, "alpha_active")
+  }
   bound_diagnostics_complete <- is.list(bounds) &&
     all(required_bound_flags %in% names(bounds)) &&
     all(vapply(bounds[required_bound_flags], function(x) {
@@ -680,6 +817,7 @@
     gradients_finite = gradients_finite,
     stationarity_met = stationarity_met,
     structural_stationarity_met = structural_stationarity_met,
+    alpha_stationarity_met = alpha_stationarity_met,
     sieve_stationarity_met = sieve_stationarity_met,
     last_relative_change = as.numeric(last_relative_change),
     criterion_tolerance_met = criterion_tolerance_met,
@@ -704,6 +842,7 @@
 #' @noRd
 .sc_train_mixed_one <- function(deltaX, y, Z, respondent_id, gh,
                                 hidden,
+                                mean_family = "legacy",
                                 n_epochs = 400L,
                                 learning_rate = 0.01,
                                 weight_decay = 1e-4,
@@ -711,6 +850,8 @@
                                 device = "cpu",
                                 verbose = FALSE,
                                 warm_state = NULL,
+                                warm_start_mode = c("mean_only", "pooled_nested",
+                                                    "pooled_structural"),
                                 early_stop = FALSE,
                                 val_frac = 0.1,
                                 check_every = 20L,
@@ -719,12 +860,14 @@
                                 grad_tol = 1e-4,
                                 mu_bound = 10,
                                 kappa_bound = 10,
+                                alpha_bound = 5,
                                 a_bound = 10,
                                 weight_bound = 10,
                                 coefficient_scale = rep(1, ncol(deltaX))) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_train_mixed_one(): the 'torch' package is required.")
   }
+  warm_start_mode <- match.arg(warm_start_mode)
   n_epochs <- as.integer(n_epochs)
   if (is.na(n_epochs) || n_epochs < 1L) {
     stop(".sc_train_mixed_one(): `n_epochs` must be positive.")
@@ -743,7 +886,8 @@
   }
   compact <- .sc_mixed_validate_compact_bounds(
     p = ncol(deltaX), coefficient_scale = coefficient_scale,
-    a_bound = a_bound, weight_bound = weight_bound)
+    a_bound = a_bound, weight_bound = weight_bound,
+    alpha_bound = alpha_bound)
   if (!is.null(seed)) {
     withr::local_preserve_seed()
     set.seed(seed)
@@ -791,7 +935,9 @@
 
   net <- .sc_build_mixed_network(
     p = ncol(deltaX), p_Z = ncol(Z), q = q, hidden = hidden,
+    mean_family = mean_family,
     mu_bound = mu_bound, kappa_bound = kappa_bound,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound,
     coefficient_scale = compact$coefficient_scale
   )
@@ -802,9 +948,31 @@
     ok <- tryCatch({
       own <- net$state_dict()
       for (nm in intersect(names(warm_state), names(own))) {
-        if (!nm %in% c("A", "kappa_raw")) own[[nm]] <- warm_state[[nm]]
+        use <- if (warm_start_mode == "pooled_structural") {
+          nm %in% c("A", "kappa_raw", "alpha_raw")
+        } else {
+          warm_start_mode == "pooled_nested" ||
+            !nm %in% c("A", "kappa_raw")
+        }
+        if (use) own[[nm]] <- warm_state[[nm]]
       }
       net$load_state_dict(own)
+      if (warm_start_mode == "pooled_nested") {
+        torch::with_no_grad({
+          deviation <- setdiff(names(net$parameters),
+                               c("A", "kappa_raw", "alpha_raw"))
+          for (nm in deviation) net$parameters[[nm]]$zero_()
+        })
+      } else if (warm_start_mode == "pooled_structural") {
+        ## Retain randomized hidden layers but start at the pooled function by
+        ## zeroing only the deviation output map. Its first gradient is then
+        ## generally nonzero, unlike an all-zero multilayer ReLU network.
+        torch::with_no_grad({
+          if ("param_layer.weight" %in% names(net$parameters)) {
+            net$parameters[["param_layer.weight"]]$zero_()
+          }
+        })
+      }
       TRUE
     }, error = function(e) FALSE)
     if (!ok && isTRUE(verbose)) {
@@ -816,6 +984,7 @@
   ## projection used after every optimizer update.
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
   optimizer <- torch::optim_adam(net$parameters, lr = learning_rate,
@@ -843,6 +1012,7 @@
     optimizer$step()
     .sc_mixed_project_parameters(
       net, coefficient_scale = compact$coefficient_scale,
+      alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound
     )
     loss_trace[epoch] <- as.numeric(loss$item())
@@ -893,6 +1063,7 @@
   if (state_restored) net$load_state_dict(best_state)
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
 
@@ -913,10 +1084,18 @@
     as.matrix(torch::as_array(net$A))
   kappa_hat <- as.numeric(net$get_kappa()$detach()$cpu()$item())
   mu_train <- .sc_predict_beta(net, Z)
+  origin_mu <- .sc_predict_beta(net, matrix(0, nrow = 1L, ncol = ncol(Z)))
+  deviation_from_origin_max <- if (nrow(mu_train)) {
+    max(abs(sweep(mu_train, 2L, origin_mu[1L, ], `-`)))
+  } else 0
+  mean_variation_max <- if (nrow(mu_train) > 1L) {
+    max(apply(mu_train, 2L, function(x) diff(range(x))))
+  } else 0
   bounds <- .sc_mixed_bound_diagnostics(
     net = net, mu = mu_train, kappa = kappa_hat,
     coefficient_scale = compact$coefficient_scale,
     mu_bound = mu_bound, kappa_bound = kappa_bound,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
   ## loss_trace[stopped_at] is evaluated immediately before the final Adam
@@ -948,11 +1127,13 @@
     final_gradient_norm = final_grad,
     final_gradient_by_parameter = final_gradient$by_parameter,
     structural_gradient_norm = final_gradient$structural,
+    alpha_gradient_norm = final_gradient$alpha,
     sieve_gradient_norm = final_gradient$sieve,
     converged = status$objective_finite && status$stationarity_met &&
       status$criterion_tolerance_met,
     stationarity_met = status$stationarity_met,
     structural_stationarity_met = status$structural_stationarity_met,
+    alpha_stationarity_met = status$alpha_stationarity_met,
     sieve_stationarity_met = status$sieve_stationarity_met,
     last_relative_change = status$last_relative_change,
     criterion_tolerance_met = status$criterion_tolerance_met,
@@ -966,6 +1147,11 @@
     optimization_failure_reasons = status$failure_reasons,
     stop_reason = stop_reason,
     early_stop = early_stop,
+    warm_start_mode = warm_start_mode,
+    mean_family = mean_family,
+    alpha_bound = compact$alpha_bound,
+    deviation_from_origin_max = deviation_from_origin_max,
+    mean_variation_max = mean_variation_max,
     A = A_hat,
     kappa = kappa_hat,
     bounds = bounds
@@ -976,22 +1162,34 @@
 #' @keywords internal
 #' @noRd
 .sc_train_mixed_multistart <- function(..., n_starts = 2L, seed = NULL,
-                                       warm_state = NULL) {
+                                       warm_state = NULL,
+                                       warm_start_mode = c(
+                                         "mean_only", "pooled_nested",
+                                         "pooled_structural")) {
   if (!is.numeric(n_starts) || length(n_starts) != 1L || is.na(n_starts) ||
       n_starts < 1L || n_starts != as.integer(n_starts)) {
     stop(".sc_train_mixed_multistart(): `n_starts` must be positive.")
   }
   n_starts <- as.integer(n_starts)
+  warm_start_mode <- match.arg(warm_start_mode)
   fits <- vector("list", n_starts)
   for (s in seq_len(n_starts)) {
     seed_s <- if (is.null(seed)) NULL else {
       out <- (as.double(seed) + 104729 * (s - 1L)) %% (.Machine$integer.max - 1)
       as.integer(out + 1)
     }
+    warm_s <- if (is.null(warm_state) ||
+        (s > 1L && warm_start_mode == "mean_only")) NULL else warm_state
+    mode_s <- if (s > 1L && warm_start_mode == "pooled_nested") {
+      ## Start one is the exact zero-deviation pooled fallback. Additional
+      ## starts inherit only its structural coordinates while retaining their
+      ## random, trainable deviation networks. This avoids the all-zero ReLU
+      ## saddle without sacrificing exact nesting of the attained candidate.
+      "pooled_structural"
+    } else warm_start_mode
     fits[[s]] <- .sc_train_mixed_one(
-      ..., seed = seed_s,
-      warm_state = if (s == 1L) warm_state else NULL
-    )
+      ..., seed = seed_s, warm_state = warm_s,
+      warm_start_mode = mode_s)
   }
   objective <- vapply(fits, `[[`, numeric(1L), "objective")
   finite_objective <- is.finite(objective)
@@ -1011,6 +1209,9 @@
     gradient_norm = vapply(fits, `[[`, numeric(1L), "final_gradient_norm"),
     structural_gradient_norm = vapply(fits, `[[`, numeric(1L),
                                         "structural_gradient_norm"),
+    alpha_gradient_norm = vapply(fits, function(x) {
+      as.numeric(x$alpha_gradient_norm %||% 0)
+    }, numeric(1L)),
     sieve_gradient_norm = vapply(fits, `[[`, numeric(1L),
                                    "sieve_gradient_norm"),
     objective_finite = vapply(fits, `[[`, logical(1L), "objective_finite"),
@@ -1033,6 +1234,11 @@
     converged = vapply(fits, `[[`, logical(1L), "converged"),
     epochs = vapply(fits, `[[`, integer(1L), "stopped_at"),
     stop_reason = vapply(fits, `[[`, character(1L), "stop_reason"),
+    warm_start_mode = vapply(fits, `[[`, character(1L), "warm_start_mode"),
+    deviation_from_origin_max = vapply(
+      fits, `[[`, numeric(1L), "deviation_from_origin_max"),
+    mean_variation_max = vapply(fits, `[[`, numeric(1L),
+                                  "mean_variation_max"),
     stringsAsFactors = FALSE
   )
   sorted <- sort(objective[finite_objective], decreasing = TRUE)
@@ -1072,6 +1278,10 @@
 #' @param qmc_antithetic,qmc_scramble Logical QMC controls.
 #' @param K Integer, respondent-clustered folds (default 5).
 #' @param hidden Mean-network hidden-layer widths, or `"auto"`.
+#' @param mean_family Conditional-mean parameterization. `"constant"`,
+#'   `"linear"`, and `"relu"` use an unpenalized compact baseline plus a
+#'   penalized deviation centered at the training-coded moderator origin.
+#'   `"legacy"` reproduces the original all-parameter ReLU penalty.
 #' @param n_epochs Maximum full-batch Adam epochs per optimization start.
 #' @param learning_rate Adam learning rate.
 #' @param weight_decay Nonnegative squared-weight penalty coefficient, or the
@@ -1081,8 +1291,17 @@
 #'   mean trunk (architecture must match `hidden`). To prevent cross-fit
 #'   leakage, this state is never used for an outer-fold fit.
 #' @param n_starts Number of prespecified optimization starts per fit.
-#' @param mu_bound,kappa_bound Positive finite tanh bounds for the fitted
-#'   conditional mean coordinates and position effect.
+#' @param mu_bound,kappa_bound Positive finite bounds for the fitted
+#'   conditional mean coordinates and position effect. In the corrected
+#'   `"constant"`, `"linear"`, and `"relu"` families, `mu_bound` is a
+#'   common coordinatewise bound in raw coefficient units; its training-scale
+#'   representation is adjusted by each contrast scale. The `"legacy"`
+#'   family retains its original scalar training-scale bound for exact
+#'   backward compatibility.
+#' @param alpha_bound Positive raw-coefficient coordinate bound for the
+#'   unpenalized baseline in corrected mean families. It must be strictly less
+#'   than `mu_bound`, so the reference mean lies in the interior of the mean
+#'   output box.
 #' @param a_bound Positive finite Frobenius-norm bound on the loading matrix in
 #'   raw coefficient units. Training-scale loadings are projected after every
 #'   optimizer update using the corresponding contrast scales.
@@ -1120,12 +1339,14 @@ scmix <- function(formula, data,
                   qmc_scramble = TRUE,
                   K = 5L,
                   hidden = "auto",
+                  mean_family = "legacy",
                   n_epochs = 400L,
                   learning_rate = 0.01,
                   weight_decay = "adaptive",
                   n_starts = 2L,
                   mu_bound = 10,
                   kappa_bound = 10,
+                  alpha_bound = 5,
                   a_bound = 10,
                   weight_bound = 10,
                   opt_tol = 1e-7,
@@ -1182,11 +1403,14 @@ scmix <- function(formula, data,
   q <- as.integer(q)
   compact <- .sc_mixed_validate_compact_bounds(
     p = p, coefficient_scale = rep(1, p),
-    a_bound = a_bound, weight_bound = weight_bound
+    a_bound = a_bound, weight_bound = weight_bound,
+    alpha_bound = alpha_bound
   )
   hidden_use <- if (identical(hidden, "auto")) {
+    if (mean_family %in% c("constant", "linear")) integer() else
     .sc_auto_hidden(n, p)
   } else as.integer(hidden)
+  family_use <- .sc_mixed_mean_family(mean_family, hidden_use)$mean_family
   wd_use <- .sc_resolve_weight_decay(weight_decay, n, p)
   integration <- match.arg(integration)
   gh <- .sc_mixed_grid(
@@ -1211,6 +1435,9 @@ scmix <- function(formula, data,
   fold_id <- .sc_make_folds(resp_task, K = K, seed = seed)
   warm_state <- NULL
   if (!is.null(init)) {
+    if (family_use != "legacy") {
+      stop("scmix(): `init` from scfit is supported only for the legacy mean family.")
+    }
     if (!inherits(init, "sc_fit") || is.null(init$nets) || length(init$nets) == 0L) {
       warning("scmix(): `init` has no stored nets; warm start skipped.")
     } else {
@@ -1260,7 +1487,7 @@ scmix <- function(formula, data,
       y = y[in_k],
       Z = Z_train_k,
       respondent_id = resp_task[in_k],
-      gh = gh, hidden = hidden_use,
+      gh = gh, hidden = hidden_use, mean_family = family_use,
       n_epochs = n_epochs, learning_rate = learning_rate,
       weight_decay = wd_use,
       seed = if (is.null(seed)) NULL else .sc_fold_seed(seed, k),
@@ -1270,6 +1497,7 @@ scmix <- function(formula, data,
       n_starts = n_starts,
       opt_tol = opt_tol, grad_tol = grad_tol,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
+      alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound,
       coefficient_scale = sd_dx_folds[[k]]
     )
@@ -1293,10 +1521,12 @@ scmix <- function(formula, data,
       gradient_norm = fit_k$final_gradient_norm,
       gradient_by_parameter = fit_k$final_gradient_by_parameter,
       structural_gradient_norm = fit_k$structural_gradient_norm,
+      alpha_gradient_norm = fit_k$alpha_gradient_norm,
       sieve_gradient_norm = fit_k$sieve_gradient_norm,
       converged = fit_k$converged,
       stationarity_met = fit_k$stationarity_met,
       structural_stationarity_met = fit_k$structural_stationarity_met,
+      alpha_stationarity_met = fit_k$alpha_stationarity_met,
       sieve_stationarity_met = fit_k$sieve_stationarity_met,
       last_relative_change = fit_k$last_relative_change,
       criterion_tolerance_met = fit_k$criterion_tolerance_met,
@@ -1328,12 +1558,14 @@ scmix <- function(formula, data,
   full_fit <- .sc_train_mixed_multistart(
     deltaX = deltaX_std_full, y = y, Z = Z_full, respondent_id = resp_task,
     gh = gh, hidden = hidden_use,
+    mean_family = family_use,
     n_epochs = n_epochs, learning_rate = learning_rate,
     weight_decay = wd_use, seed = full_seed,
     device = device, verbose = verbose,
     warm_state = warm_state, early_stop = early_stop,
     n_starts = n_starts, opt_tol = opt_tol, grad_tol = grad_tol,
     mu_bound = mu_bound, kappa_bound = kappa_bound,
+    alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound,
     coefficient_scale = sd_dx
   )
@@ -1367,6 +1599,7 @@ scmix <- function(formula, data,
     specification = list(
       estimator = "respondent-sequence-normal-mixed-logit",
       q = q,
+      mean_family = family_use,
       hidden = hidden_use,
       integration_method = gh$metadata$method,
       qmc_antithetic = isTRUE(qmc_antithetic),
@@ -1376,6 +1609,7 @@ scmix <- function(formula, data,
       n_starts = as.integer(n_starts),
       mu_bound = as.numeric(mu_bound),
       kappa_bound = as.numeric(kappa_bound),
+      alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound,
       weight_bound = compact$weight_bound,
       opt_tol = as.numeric(opt_tol),
@@ -1384,6 +1618,38 @@ scmix <- function(formula, data,
       init_used_for_full_fit = !is.null(warm_state)
     )
   )
+
+  ## Torch nn_modules contain session-local external pointers and are not
+  ## durable when embedded directly in an RDS file.  Retain the live modules
+  ## for backward compatibility within this process, and also capture a
+  ## pointer-free CPU state/architecture/transform bundle for later reload.
+  network_state_full <- .scmix_capture_network_state(
+    full_fit$net, p = p, p_Z = ncol(Z_task), q = q, hidden = hidden_use,
+    mean_family = family_use,
+    mu_bound = mu_bound, kappa_bound = kappa_bound,
+    alpha_bound = compact$alpha_bound,
+    a_bound = compact$a_bound, weight_bound = compact$weight_bound,
+    coefficient_scale = sd_dx, z_transform = z_transform_full,
+    dx_transform = dx_transform_full, coefficient_names = enc$x_names,
+    moderator_names = enc$z_names, integration_grid = gh,
+    analysis_signature = analysis_signature,
+    scope = "full-sample structural plug-in fit"
+  )
+  network_state_folds <- lapply(seq_len(K), function(k) {
+    .scmix_capture_network_state(
+      nets[[k]], p = p, p_Z = ncol(Z_task), q = q, hidden = hidden_use,
+      mean_family = family_use,
+      mu_bound = mu_bound, kappa_bound = kappa_bound,
+      alpha_bound = compact$alpha_bound,
+      a_bound = compact$a_bound, weight_bound = compact$weight_bound,
+      coefficient_scale = sd_dx_folds[[k]],
+      z_transform = z_transform_folds[[k]],
+      dx_transform = dx_transform_folds[[k]],
+      coefficient_names = enc$x_names, moderator_names = enc$z_names,
+      integration_grid = gh, analysis_signature = analysis_signature,
+      scope = paste0("outer-fold nuisance fit ", k)
+    )
+  })
 
   fit <- list(
     mu_hat = mu_hat,               # task rows; constant within respondent
@@ -1421,13 +1687,23 @@ scmix <- function(formula, data,
     factor_levels = enc$factor_levels,
     attr_map = enc$attr_map,
     z_names = enc$z_names,
+    mean_family = family_use,
     hidden = hidden_use,
     n_epochs = as.integer(n_epochs),
     learning_rate = learning_rate,
     weight_decay_used = wd_use,
     n_starts = as.integer(n_starts),
-    bounds = list(mu = mu_bound, mu_internal = mu_bound,
-                  mu_raw_by_coordinate = mu_bound / sd_dx,
+    bounds = list(mu = mu_bound,
+                  mu_units = if (family_use == "legacy") {
+                    "legacy standardized-contrast coefficient"
+                  } else "raw coefficient",
+                  mu_internal = if (family_use == "legacy") mu_bound else
+                    mu_bound * sd_dx,
+                  mu_raw_by_coordinate = if (family_use == "legacy") {
+                    mu_bound / sd_dx
+                  } else rep(mu_bound, length(sd_dx)),
+                  alpha = compact$alpha_bound,
+                  alpha_units = "raw coefficient at training-coded origin",
                   kappa = kappa_bound,
                   a = compact$a_bound,
                   a_units = "raw-coefficient Frobenius norm",
@@ -1441,10 +1717,12 @@ scmix <- function(formula, data,
                   gradient_norm = full_fit$final_gradient_norm,
                   gradient_by_parameter = full_fit$final_gradient_by_parameter,
                   structural_gradient_norm = full_fit$structural_gradient_norm,
+                  alpha_gradient_norm = full_fit$alpha_gradient_norm,
                   sieve_gradient_norm = full_fit$sieve_gradient_norm,
                   converged = full_fit$converged,
                   stationarity_met = full_fit$stationarity_met,
                   structural_stationarity_met = full_fit$structural_stationarity_met,
+                  alpha_stationarity_met = full_fit$alpha_stationarity_met,
                   sieve_stationarity_met = full_fit$sieve_stationarity_met,
                   last_relative_change = full_fit$last_relative_change,
                   criterion_tolerance_met = full_fit$criterion_tolerance_met,
@@ -1470,6 +1748,8 @@ scmix <- function(formula, data,
     loss_traces = loss_traces,
     nets = nets,
     full_net = full_fit$net,
+    network_state_folds = network_state_folds,
+    network_state_full = network_state_full,
     call = call
   )
   class(fit) <- c("scmix", "list")
@@ -1576,9 +1856,7 @@ summary.scmix <- function(object, calibrate = FALSE, R = 2L, seed = 1L, ...) {
             call. = FALSE)
     object$zero_floor <- scmix_calibrate_zero(object, R = R, seed = seed)
   }
-  ## print.scmix() already calls .scmix_print_floor() unconditionally, so
-  ## no separate call is needed here (it would double-print the status
-  ## line whenever calibrate = TRUE).
   print.scmix(object)
+  if (isTRUE(calibrate)) .scmix_print_floor(object)
   invisible(object)
 }

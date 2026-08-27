@@ -352,6 +352,29 @@
     return(lapply(seq_len(K), function(k) normalize_one(src[[k]], k)))
   }
 
+  ## Portable states are the durable source of network predictions. An
+  ## nn_module embedded directly in an RDS object contains stale external
+  ## pointers after reload, so never prefer it when a state bundle is present.
+  network_states <- if (!is.null(fit$network_states)) {
+    fit$network_states
+  } else fit$network_state_folds
+  if (!is.null(network_states)) {
+    if (!is.list(network_states) || length(network_states) != K ||
+        !all(vapply(network_states, inherits, logical(1L),
+                    what = "scmix_network_state"))) {
+      .scmix_dml_stop("scmix_dml(): fold portable network states are malformed.")
+    }
+    if (!ncol(layout$Z_resp)) {
+      .scmix_dml_stop("scmix_dml(): stored network states require respondent ",
+                      "moderators to construct all-fold mean predictions.")
+    }
+    return(lapply(seq_len(K), function(k) {
+      normalize_one(
+        scmix_predict_network(network_states[[k]], layout$Z_resp,
+                              input = "raw", output = "raw"), k)
+    }))
+  }
+
   ## Graceful compatibility with a fitted network: unlike fit$mu_hat (which
   ## is only out-of-fold), a stored fold network can predict every respondent
   ## under the same training-fold nuisance used for that fold's Riesz fit.
@@ -376,7 +399,9 @@
                         "network prediction in fold ", k, ".")
       }
       Z_k <- .scmix_dml_fold_network_Z(fit, layout$Z_resp, k, K)
-      pred <- .sc_predict_beta(fit$nets[[k]], Z_k)
+      net_k <- .scmix_resolve_network(
+        net = fit$nets[[k]], what = paste0("Fold network ", k))
+      pred <- .sc_predict_beta(net_k, Z_k)
       normalize_one(sweep(pred, 2L, sd_dx, `/`), k)
     }))
   }

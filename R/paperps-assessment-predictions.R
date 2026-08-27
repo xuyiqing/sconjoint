@@ -97,7 +97,6 @@
 #' @return A fit-aware prediction object consumable by
 #'   [scmix_heldout_sequence_score()] and [scmix_heldout_calibration()], carrying
 #'   the fitted analysis's nonempty `analysis_signature`.
-#' @rdname scmix_assess
 #' @export
 scmix_heldout_predictions <- function(fit, task_order = NULL,
                                       include_counts = TRUE,
@@ -277,9 +276,9 @@ scmix_heldout_predictions <- function(fit, task_order = NULL,
 #' Convert fit-aware predictions to Section 4 assessment objects
 #'
 #' @param predictions Result from [scmix_heldout_predictions()].
+#' @param design_cell,respondent_group Optional task-row strata.
 #' @return Held-out sequence-score and calibration objects carrying the same
 #'   nonempty `analysis_signature` as the fit-aware prediction object.
-#' @rdname scmix_assess
 #' @export
 scmix_prediction_assessment <- function(predictions, design_cell = NULL,
                                         respondent_group = NULL) {

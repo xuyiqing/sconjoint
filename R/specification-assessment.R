@@ -65,9 +65,7 @@
 #'
 #' @param deltaX Task-row contrast matrix.
 #' @param y Task-row binary choices for alternative 1.
-#' @param respondent_id Respondent identifiers, one per relevant row (task row
-#'   or score row, depending on the function); required or optional matching
-#'   each function's own default.
+#' @param respondent_id Task-row respondent identifiers.
 #' @param contrast Ordered contrast `d`; `-d` is not silently pooled with it.
 #' @param protocol_probability Known `bar(pi)_i(d)`, as one value, one per
 #'   respondent, one constant-within-respondent value per task, or a function
@@ -75,7 +73,6 @@
 #' @param tol Matching tolerance.
 #' @return An internal object containing the estimate, respondent influence
 #'   contributions, standard error, match counts, and protocol probabilities.
-#' @rdname scmix_assess
 #' @export
 scmix_design_benchmark <- function(deltaX, y, respondent_id, contrast,
                                    protocol_probability, tol = 1e-8) {
@@ -134,7 +131,6 @@ scmix_design_benchmark <- function(deltaX, y, respondent_id, contrast,
 #'
 #' @param positive,negative Benchmark objects for `d` and `-d`.
 #' @return An internal `scmix_design_benchmark` object.
-#' @rdname scmix_assess
 #' @export
 scmix_design_benchmark_neutral <- function(positive, negative) {
   if (!inherits(positive, "scmix_design_benchmark") ||
@@ -202,7 +198,6 @@ scmix_design_benchmark_neutral <- function(positive, negative) {
 #'   error; otherwise the discrepancy is descriptive.
 #' @return An internal discrepancy object; without structural influence the
 #'   comparison is explicitly descriptive.
-#' @rdname scmix_assess
 #' @export
 scmix_structural_design_discrepancy <- function(structural_estimate, design,
                                                 structural_influence = NULL,
@@ -447,11 +442,14 @@ scmix_structural_design_discrepancy <- function(structural_estimate, design,
 #' theorem silent; it is never reported as proof of nonidentification.
 #'
 #' @param contrasts Matrix with one required ordered contrast per row.
+#' @param q Maintained maximum covariance rank.
 #' @param protocol_support Data frame with `contrast_id`, `stratum`, `event`,
 #'   and known `probability`, or a contrast-by-stratum numeric matrix. The event
 #'   must be `"repeated_ordered_contrast"`.
 #' @param protocol_strata Complete prespecified list of design/completion strata
 #'   that the protocol-support input must cover.
+#' @param deltaX,respondent_id,task_order Optional realized task data used only
+#'   for finite-sample repeat counts.
 #' @param covariance_injective Optional classed verifier artifact for
 #'   rank-constrained injectivity. It must inherit from
 #'   `scmix_covariance_injectivity_certificate`, contain `established = TRUE`
@@ -464,7 +462,6 @@ scmix_structural_design_discrepancy <- function(structural_estimate, design,
 #' @param tol Positive relative singular-value tolerance for rank calculations
 #'   and absolute tolerance for realized contrast matching.
 #' @return An internal design-audit object.
-#' @rdname scmix_assess
 #' @export
 scmix_design_audit <- function(contrasts, q, protocol_support = NULL,
                                protocol_strata = NULL,
@@ -602,6 +599,7 @@ scmix_design_audit <- function(contrasts, q, protocol_support = NULL,
 #' log scores cannot be silently substituted.
 #'
 #' @param loglik Numeric vector or respondent-by-model matrix.
+#' @param respondent_id One unique id per row.
 #' @param out_of_fold Whether every score was computed from a fit that excluded
 #'   that respondent.
 #' @param training_only_tuning Whether preprocessing and tuning for every fold
@@ -611,7 +609,6 @@ scmix_design_audit <- function(contrasts, q, protocol_support = NULL,
 #' @param analysis_signature Optional nonempty signature linking a fit-aware
 #'   score to the fitted analysis. The official prediction pipeline supplies it.
 #' @return Means, respondent standard errors, and paired model differences.
-#' @rdname scmix_assess
 #' @export
 scmix_heldout_sequence_score <- function(loglik, respondent_id = NULL,
                                          out_of_fold = FALSE,
@@ -695,18 +692,18 @@ scmix_heldout_sequence_score <- function(loglik, respondent_id = NULL,
 #' repeated-contrast probabilities to be assessed without pretending they can
 #' be reconstructed from marginal predictions alone.
 #'
-#' @param predicted Held-out marginal choice-probability predictions, matched
-#'   row for row with `y`.
+#' @param y,predicted Held-out task outcomes and marginal probabilities.
+#' @param respondent_id Task-row respondent ids.
 #' @param probability_breaks Prespecified bin boundaries from zero to one.
-#' @param design_cell,respondent_group Optional task-row strata.
+#' @param design_cell,respondent_group,task_order Optional task-row strata.
 #' @param joint Optional data frame with `respondent_id`, `type`, `stratum`,
 #'   `observed`, and `predicted` columns for genuine joint checks.
+#' @param out_of_fold,training_only_tuning Logical provenance gates.
 #' @param provenance Nonempty description of how predictions were constructed.
 #' @param analysis_signature Optional nonempty signature linking fit-aware
 #'   calibration to the fitted analysis. The official prediction pipeline
 #'   supplies it.
 #' @return An internal calibration object.
-#' @rdname scmix_assess
 #' @export
 scmix_heldout_calibration <- function(y, predicted, respondent_id,
                                       probability_breaks = seq(0, 1, by = 0.1),
@@ -817,8 +814,8 @@ scmix_heldout_calibration <- function(y, predicted, respondent_id,
 #' @param predictors Optional respondent-level data frame.
 #' @param early_response Optional respondent-level early-task response summary.
 #' @param completion_pattern Optional respondent-level pattern label.
+#' @param respondent_id Optional unique respondent ids.
 #' @return An internal completion-assessment object.
-#' @rdname scmix_assess
 #' @export
 scmix_completion_diagnostics <- function(completed_tasks, predictors = NULL,
                                           early_response = NULL,
@@ -917,7 +914,6 @@ scmix_completion_diagnostics <- function(completed_tasks, predictors = NULL,
 #'   values. Required for `q > 0`.
 #' @param absolute_floor Machine-level absolute eigenvalue floor after scaling.
 #' @return An internal gate object.
-#' @rdname scmix_assess
 #' @export
 scmix_rank_gate <- function(Sigma, q, eigenvalue_margin = NULL,
                             rank_tol = 1e-8, structural_scale = NULL,
@@ -993,7 +989,6 @@ scmix_rank_gate <- function(Sigma, q, eigenvalue_margin = NULL,
 #' @param tolerances Named nonnegative tolerances for assessed numeric columns.
 #' @param reference Row used as the reference, by default the last row.
 #' @return An internal numerical gate object.
-#' @rdname scmix_assess
 #' @export
 scmix_numerical_gate <- function(checks, tolerances,
                                  reference = nrow(checks)) {
@@ -1050,6 +1045,7 @@ scmix_numerical_gate <- function(checks, tolerances,
 #'   scores.
 #' @param structural_norm Positive-definite Gram matrix for the fixed
 #'   structural norm used to normalize directions.
+#' @param respondent_id Optional unique id for every score row.
 #' @param direction_labels Optional labels for score columns.
 #' @param identified_directions Must be explicitly `TRUE`.
 #' @param provenance Nonempty description of the identified tangent
@@ -1058,7 +1054,6 @@ scmix_numerical_gate <- function(checks, tolerances,
 #' @return Generalized eigenvalues/eigenvectors and the empirical structural
 #'   information matrix. This is a local information diagnostic, not a global
 #'   identification test.
-#' @rdname scmix_assess
 #' @export
 scmix_local_information <- function(score, structural_norm,
                                     respondent_id = NULL,
@@ -1138,6 +1133,7 @@ scmix_local_information <- function(score, structural_norm,
 #' @param grid Numeric profile values.
 #' @param loglik Respondent-by-grid matrix of integrated complete-sequence log
 #'   likelihoods.
+#' @param respondent_id Optional unique respondent ids.
 #' @param direction Description of the structural or quantity direction.
 #' @param nuisance_reoptimized Must be explicitly true if the table is to be
 #'   labeled a profile rather than a slice.
@@ -1146,7 +1142,6 @@ scmix_local_information <- function(score, structural_norm,
 #'   penalty were fixed over the profile grid.
 #' @param provenance Nonempty description of the fit and profiling routine.
 #' @return A descriptive profile table.
-#' @rdname scmix_assess
 #' @export
 scmix_profile_sequence_likelihood <- function(grid, loglik,
                                               respondent_id = NULL,
@@ -1206,7 +1201,6 @@ scmix_profile_sequence_likelihood <- function(grid, loglik,
 #' @param multipliers Optional precomputed `R`-by-`N` mean-zero multiplier
 #'   matrix; useful for deterministic tests.
 #' @return Multiplier draws, simultaneous critical value, and intervals.
-#' @rdname scmix_assess
 #' @export
 scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
                                          level = 0.95, seed = NULL,
@@ -1314,7 +1308,6 @@ scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
 #'   least two distinct prespecified rank values; substantive passage also
 #'   requires auditable component-level materiality evidence. Neither verifies
 #'   a maintained assumption.
-#' @rdname scmix_assess
 #' @export
 scmix_structural_sensitivity <- function(results = list(), q_values = NULL,
                                          materiality_tolerances = NULL,
@@ -1475,9 +1468,10 @@ scmix_structural_sensitivity <- function(results = list(), q_values = NULL,
 #'   record for every supplied runner.
 #' @param context Read-only application inputs and fitted objects passed to each
 #'   callback.
+#' @param q_values,materiality_tolerances,prespecified Passed to
+#'   [scmix_structural_sensitivity()].
 #' @return A `scmix_structural_sensitivity` object containing every result or
 #'   captured error. Missing runners remain visibly `not_run`.
-#' @rdname scmix_assess
 #' @export
 scmix_run_structural_sensitivity <- function(
     runners, provenance, context = list(), q_values = NULL,
@@ -1543,10 +1537,10 @@ scmix_run_structural_sensitivity <- function(
 #'   margin for its smallest structural-norm generalized information eigenvalue.
 #' @param target Target type determining the evidence that must be supplied.
 #' @param inference Paper-aligned `scmix_dml` result.
+#' @param target_label Name of the target column in `inference`.
 #' @param optimization_gate Output of `scmix_optimization_audit()`.
 #' @param design_audit Optional design audit used to label theorem applicability.
 #' @return A gate table and allowed majority label.
-#' @rdname scmix_assess
 #' @export
 scmix_reporting_gates <- function(mrs_denominator = NULL, mrs_margin = NULL,
                                   total_heterogeneity = NULL,
@@ -1733,17 +1727,14 @@ scmix_reporting_gates <- function(mrs_denominator = NULL, mrs_margin = NULL,
 #' The collector deliberately does not convert diagnostic success into a claim
 #' that maintained structural assumptions have been verified.
 #'
-#' @param design_benchmarks,heldout_scores,calibration,completion,profiles,numerical,sensitivity,reporting Precomputed assessment objects. When `fit` is
-#'   supplied, only `fit` itself is used directly (to obtain covariance and
-#'   `q` for a rank gate); every other component here is a precomputed
-#'   object produced by its own constructor (for example `design_audit` by
-#'   [scmix_design_audit()], `discrepancies` by
-#'   [scmix_structural_design_discrepancy()], `local_information` by
-#'   [scmix_local_information()]) and is only assembled and status-checked
-#'   here, not recomputed.
+#' @param fit Optional mixed-logit fit used only to obtain covariance and q for
+#'   a rank gate.
+#' @param design_audit,design_benchmarks,discrepancies,heldout_scores,
+#'   calibration,completion,local_information,profiles,numerical,sensitivity,
+#'   reporting Precomputed assessment objects.
+#' @param inference Paper-aligned inference result.
 #' @param optimization Optimization audit.
-#' @param x An object to print or convert with `as.data.frame()`.
-#' @param ... Unused.
+#' @param q,eigenvalue_margin Optional rank-gate settings.
 #' @param information_eigenvalue_margin Prespecified strictly positive minimum
 #'   acceptable structural-norm generalized information eigenvalue.
 #' @param calibration_margins Named positive materiality thresholds `marginal`
@@ -1765,7 +1756,6 @@ scmix_reporting_gates <- function(mrs_denominator = NULL, mrs_margin = NULL,
 #'   execution only; `structural_reporting_ready` additionally applies all
 #'   prespecified materiality and reporting gates. Neither verifies maintained
 #'   assumptions.
-#' @rdname scmix_assess
 #' @export
 scmix_assess <- function(fit = NULL, design_audit = NULL,
                          design_benchmarks = NULL, discrepancies = NULL,
@@ -2190,7 +2180,6 @@ scmix_assess <- function(fit = NULL, design_audit = NULL,
   out
 }
 
-#' @rdname scmix_assess
 #' @export
 print.scmix_design_audit <- function(x, ...) {
   cat("paperps finite-design identification audit\n")
@@ -2201,7 +2190,6 @@ print.scmix_design_audit <- function(x, ...) {
   invisible(x)
 }
 
-#' @rdname scmix_assess
 #' @export
 as.data.frame.scmix_design_audit <- function(x, ...) {
   data.frame(condition = names(x$conditions),
@@ -2209,7 +2197,6 @@ as.data.frame.scmix_design_audit <- function(x, ...) {
              stringsAsFactors = FALSE)
 }
 
-#' @rdname scmix_assess
 #' @export
 print.scmix_reporting_gates <- function(x, ...) {
   cat("paperps quantity-specific reporting gates\n")
@@ -2221,11 +2208,9 @@ print.scmix_reporting_gates <- function(x, ...) {
   invisible(x)
 }
 
-#' @rdname scmix_assess
 #' @export
 as.data.frame.scmix_reporting_gates <- function(x, ...) x$gates
 
-#' @rdname scmix_assess
 #' @export
 print.scmix_assessment <- function(x, ...) {
   cat("paperps specification assessment\n")
@@ -2239,6 +2224,5 @@ print.scmix_assessment <- function(x, ...) {
   invisible(x)
 }
 
-#' @rdname scmix_assess
 #' @export
 as.data.frame.scmix_assessment <- function(x, ...) x$component_status

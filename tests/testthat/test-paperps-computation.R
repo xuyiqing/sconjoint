@@ -103,6 +103,24 @@ test_that("candidate selection excludes failed inner optimizations", {
   expect_false(incomplete$pass)
   expect_true("compact_bound_diagnostics_incomplete" %in%
                 incomplete$failure_reasons)
+
+  dominance_failure <- sconjoint:::.sc_comp_inner_fit_gate(list(
+    optimization_gate_pass = TRUE,
+    optimization_failure_reasons = character(),
+    bounds = list(mu_active = FALSE, alpha_active = FALSE,
+                  kappa_active = FALSE, a_active = FALSE,
+                  weight_active = FALSE),
+    nested_objective_gate = list(pass = FALSE)))
+  expect_false(dominance_failure$pass)
+  expect_true("nested_pooled_objective_not_attained" %in%
+                dominance_failure$failure_reasons)
+  dominance_matrix <- matrix(
+    c(dominance_failure$pass, TRUE, TRUE, TRUE), nrow = 2L, byrow = TRUE)
+  dominance_selection <- sconjoint:::.sc_comp_select_candidate(
+    matrix(c(10, 10, 1, 1), nrow = 2L, byrow = TRUE),
+    matrix(5L, nrow = 2L, ncol = 2L), dominance_matrix)
+  expect_identical(dominance_selection$selected, 2L)
+  expect_false(dominance_selection$selection_eligible[1L])
 })
 
 test_that("optimization audit reports attained diagnostics, not a global gap", {
@@ -252,8 +270,33 @@ test_that("matrix tuning uses respondent folds and training-only preprocessing",
   }
   expect_match(out$dml_scope, "rerun inside each outer")
   expect_s3_class(out$refit, "scmix_tuned_matrix_fit")
+  expect_s3_class(out$refit$network_state, "scmix_network_state")
+  expect_equal(out$refit$network_state$integration_grid$U,
+               out$refit$integration_grid$U)
+  state_path <- tempfile(fileext = ".rds")
+  saveRDS(out$refit$network_state, state_path, version = 3)
+  state_reloaded <- readRDS(state_path)
+  expect_equal(
+    unname(scmix_predict_network(state_reloaded, Z)),
+    unname(out$refit$mu), tolerance = 1e-6)
   expect_identical(out$analysis_signature, out$refit$analysis_signature)
   expect_true(nzchar(out$analysis_signature))
+
+  fixed <- scmix_refit_selected_matrix(
+    dx, y, Z, rid, specification = out$selected,
+    integration_grid = out$refit$integration_grid,
+    preprocessing = out$refit$preprocessing,
+    n_epochs = 2L, learning_rate = 0.05, n_starts = 1L,
+    opt_tol = 1e6, grad_tol = 1e6, seed = 20260823L,
+    source_analysis_signature = out$analysis_signature)
+  expect_s3_class(fixed, "scmix_tuned_matrix_fit")
+  expect_false(fixed$retuning_performed)
+  expect_identical(fixed$analysis_signature, out$analysis_signature)
+  expect_false(identical(fixed$refit_analysis_signature,
+                         out$analysis_signature))
+  expect_equal(
+    unname(scmix_predict_network(fixed$network_state, Z)),
+    unname(fixed$mu), tolerance = 1e-6)
 })
 
 test_that("nested tuning assembles the fold nuisance contract for DML", {
@@ -279,6 +322,9 @@ test_that("nested tuning assembles the fold nuisance contract for DML", {
   expect_s3_class(assembled, "scmix_nested_assembled")
   expect_length(assembled$mu_all_folds, 2L)
   expect_length(assembled$A_computational_folds, 2L)
+  expect_length(assembled$network_states, 2L)
+  expect_true(all(vapply(assembled$network_states, inherits, logical(1L),
+                         what = "scmix_network_state")))
   expect_equal(dim(assembled$mu_hat), dim(dx))
   expect_true(all(vapply(
     assembled$integration_grids_folds[-1L],
@@ -292,4 +338,28 @@ test_that("nested tuning assembles the fold nuisance contract for DML", {
   expect_identical(assembled$analysis_signature, nested$analysis_signature)
   expect_true(all(nested$candidate_selection_gate_by_outer_fold))
   expect_true(all(assembled$optimization$candidate_selection_gate_by_fold))
+
+  ## Disk-reloaded nested artifacts use portable states, never dead module
+  ## pointers, when they are assembled again.
+  nested_path <- tempfile(fileext = ".rds")
+  saveRDS(nested, nested_path, version = 3)
+  reloaded <- readRDS(nested_path)
+  reassembled <- sconjoint:::scmix_assemble_nested(
+    reloaded, require_optimization_gate = FALSE, diagnostic_only = TRUE)
+  expect_equal(reassembled$mu_all_folds, assembled$mu_all_folds,
+               tolerance = 1e-7)
+
+  ## A continued-constant dominance failure is consumed by the same
+  ## fail-closed stage gate during assembly; it cannot remain inference
+  ## eligible even when diagnostic assembly is explicitly requested.
+  bad_nested <- nested
+  bad_continued <- bad_nested$tuning[[1L]]$refit$optimization
+  bad_continued$nested_objective_gate <- list(pass = FALSE)
+  bad_nested$tuning[[1L]]$refit$continued_constant_optimization <-
+    bad_continued
+  bad_assembled <- sconjoint:::scmix_assemble_nested(
+    bad_nested, require_optimization_gate = FALSE, diagnostic_only = TRUE)
+  expect_false(bad_assembled$optimization$continued_constant_gate_by_fold[1L])
+  expect_false(bad_assembled$optimization$gate_by_fold[1L])
+  expect_false(bad_assembled$eligible_for_ordinary_inference)
 })
