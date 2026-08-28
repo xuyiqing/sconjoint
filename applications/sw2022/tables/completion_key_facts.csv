@@ -1,0 +1,8 @@
+"fact","value","note"
+"raw respondents",1249,"anonymous ResponseId is the respondent key"
+"two-task unfinished respondents",7,"all have Progress=50 in these data"
+"three-task unfinished respondents",8,"seven have Progress=78 and one has Progress=83"
+"three-task finished respondents",1234,"35 of these are in the all-demographics-missing block"
+"all-primary-demographics-missing block",50,"contains seven two-task unfinished, eight three-task unfinished, and 35 three-task finished respondents"
+"final analysis respondents",1191,"three tasks and valid primary pre-conjoint demographics"
+"final task observations",3573,"three candidate-pair choices per included respondent"

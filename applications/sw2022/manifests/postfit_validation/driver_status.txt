@@ -1,0 +1,5 @@
+started_utc=2026-08-24T14:41:58Z
+finished_utc=2026-08-24T14:42:13Z
+exit_status=1
+process_check_code=3
+fit_confirmed_stopped=true

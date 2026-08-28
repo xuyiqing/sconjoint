@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(CDPATH= cd -- "${script_dir}/../.." && pwd)
+runtime_root="${project_root}/.runtime/R-4.5.3-root"
+runtime_link=/tmp/R45
+library_root="${project_root}/.R-library/4.5"
+
+if [ ! -x "${runtime_root}/Library/Frameworks/R.framework/Resources/bin/R" ]; then
+  echo "Local R 4.5.3 runtime is missing at ${runtime_root}." >&2
+  echo "See applications/sw2022/manifests/environment.md for bootstrap details." >&2
+  exit 1
+fi
+
+ln -sfn "${runtime_root}" "${runtime_link}"
+mkdir -p "${library_root}"
+
+export R_LIBS_USER="${library_root}"
+export R_ENVIRON_USER=/dev/null
+export R_PROFILE_USER=/dev/null
+export TORCH_VERIFY_LOAD=FALSE
+
+runtime_r="${runtime_link}/Library/Frameworks/R.framework/Resources/bin/R"
+
+if [ "$#" -ge 2 ] && [ "$1" = "-e" ]; then
+  expression=$2
+  shift 2
+  exec "${runtime_r}" --vanilla --slave -e "${expression}" --args "$@"
+fi
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: Rscript45 [-e expression] script.R [arguments]" >&2
+  exit 2
+fi
+
+script=$1
+shift
+exec "${runtime_r}" --vanilla --slave --file="${script}" --args "$@"

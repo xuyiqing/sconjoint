@@ -1,0 +1,10 @@
+"condition","established","q"
+"protocol_support",FALSE,1
+"affine_rank",TRUE,1
+"covariance_injectivity",TRUE,1
+"protocol_support",FALSE,0
+"affine_rank",TRUE,0
+"covariance_injectivity",TRUE,0
+"protocol_support",FALSE,2
+"affine_rank",TRUE,2
+"covariance_injectivity",TRUE,2

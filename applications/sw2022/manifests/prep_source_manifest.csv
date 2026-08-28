@@ -1,0 +1,4 @@
+"role","path","exists","bytes","md5","access"
+"raw replication data","/Users/avidit/Dropbox/Research - Active/Conjoint/ConjointStructural/data/replication_materials_saha_weeks_2022/ssi.csv",TRUE,5269925,"4e656973f2848e798fb378e9cf75f154","read-only; no source-tree writes"
+"frozen reconstruction equivalence gate","/Users/avidit/Dropbox/Research - Active/Conjoint/ConjointStructural/code/analysis/sw2022/out/prep_matrices.rds",TRUE,84252,"98033e743ee27963123fa787a30618aa","read-only; no source-tree writes"
+"legacy preparation code (provenance only)","/Users/avidit/Dropbox/Research - Active/Conjoint/ConjointStructural/code/analysis/sw2022/04_data_prep.R",TRUE,9152,"e43c29b613d08501a2023e901333899a","read-only; no source-tree writes"

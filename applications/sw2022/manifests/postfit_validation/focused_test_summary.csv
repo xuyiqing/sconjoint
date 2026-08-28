@@ -1,0 +1,7 @@
+"source_file","tests","expectations","passed","failed","errors","warnings","skipped","elapsed_seconds"
+"test-data-prep.R",3,16,16,0,0,0,0,0.0750000000000002
+"test-paperps-computation.R",9,96,96,0,0,0,0,1.687
+"test-paperps-inference.R",19,131,131,0,0,0,0,0.872000000000002
+"test-paperps-ordering-regression.R",1,3,3,0,0,0,0,0.35
+"test-paperps-quantities.R",7,31,31,0,0,0,0,0.108
+"test-specification-assessment-paperps.R",20,128,127,0,0,1,0,0.697999999999997

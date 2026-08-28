@@ -1,0 +1,42 @@
+# Protocol metadata: Ballard-Rosa, Martin & Scheve (2017), tax-plan conjoint.
+# Assembled 2026-08-26 for the identification audit (work-list step 5).
+# Sources: published paper (JOP 79(1)), replication .do file and plan-level
+# .dta, realized data. Empirical level sets in rate_level_sets.csv.
+
+application: br2017
+design:
+  unit: respondent chooses between two randomly generated income tax plans
+  tasks_per_respondent: 8 (all 2,000 respondents complete)
+  brackets:   # cutoffs match the US tax code
+    - {name: "<10k",      coordinate: rate_L10,     levels_pct: [0, 5, 15, 25]}
+    - {name: "10-35k",    coordinate: rate_10_35,   levels_pct: [5, 15, 25, 35]}
+    - {name: "35-85k",    coordinate: rate_35_85,   levels_pct: [5, 15, 25, 35]}
+    - {name: "85-175k",   coordinate: rate_85_175,  levels_pct: [5, 15, 25, 35]}
+    - {name: "175-375k",  coordinate: rate_175_375, levels_pct: [5, 15, 25, 35, 45]}
+    - {name: ">375k",     coordinate: rate_375P,    levels_pct: [5, 15, 25, 35, 45, 55]}
+randomization:
+  statement: >
+    "For each tax plan pair a respondent sees, the tax rates for each income
+    level are randomly assigned." (Paper, design section; level sets from
+    Table 1 / pretesting.)
+  level_probabilities: realized frequencies uniform within bracket
+    (~0.25 x4, ~0.20 x5, ~0.167 x6; rate_level_sets.csv), consistent with
+    independent uniform assignment per bracket
+  revenue: the revenue attribute (revenue_score) is CALCULATED from the six
+    randomized rates using IRS income data --- it is a DERIVED attribute,
+    never independently assigned; its exposure distribution is induced by the
+    rate randomization and its coefficient is identified only through
+    functional variation in the rates
+  display_side: plan 1 is the first-displayed plan; no reshaping in the
+    replication data
+data_repair:
+  code5_recode: the legacy preparation corrupted the code-5 rows of the
+    derived tax-rate contrast; the frozen DeltaX_fixed (from
+    04_data_prep_fixed.R) corrects it, changing 5,044 of 16,000 task
+    contrasts; rates must always be rebuilt from coded labels, not derived
+    columns
+unverified_without_instrument:
+  - independence of rate draws ACROSS brackets within a plan (realized
+    correlations near zero; confirm no rejection sampling on total revenue)
+  - whether implausible plans were filtered at fielding (the paper mentions
+    a "difficult to understand" robustness split, implying none were)

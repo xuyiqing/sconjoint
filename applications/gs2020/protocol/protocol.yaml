@@ -1,0 +1,48 @@
+# Protocol metadata: Graham & Svolik (2020), candidate-choice experiment.
+# Assembled 2026-08-26 for the identification audit (work-list step 5).
+# Sources: published paper (APSR 114(2)), replication codebook/readme,
+# realized data. Empirical checks in scenario_structure.csv,
+# u_codes_per_task.csv, tasks_per_respondent.csv.
+
+application: gs2020
+design:
+  unit: respondent chooses between two candidates per scenario
+  tasks_per_respondent: 16 choices fielded; 11 from the core design plus 5
+    extensions; the analysis sample retains 13 (11 core + 2 valence
+    scenarios), 1,538 of 1,605 respondents with all 13 (observed 1-13)
+  scenario_blocking:   # THE key protocol restriction
+    control_D1_vs_D1: 4 of 13 retained tasks --- both candidates hold a
+      democratically neutral generic position (realized share 0.3083 = 4/13)
+    treatment_D2_vs_D1: 7 of 13 --- one candidate holds one undemocratic
+      position, the other a neutral one (realized share 0.5379 = 7/13)
+    valence: 2 of 13 --- valence scenarios (affair / tax evasion) from the
+      extension set (realized share 0.1538 = 2/13)
+  undemocratic_positions: 8 items (electoral fairness 1a/1b/2, checks 3/4,
+    civil liberties 5/6a/6b); exactly one assigned in a treatment scenario
+  policy_platforms: each candidate holds one economic (state income tax OR
+    education funding) and one social (immigration OR marijuana) position;
+    the POLICY AREAS are randomly assigned but IDENTICAL across the two
+    candidates; 4 platforms per area (extreme liberal .. extreme conservative)
+  party: candidate party (Democrat/Republican) randomly assigned
+  other_attributes: sex, race, profession randomized
+randomization:
+  display_side: whether the undemocratic candidate appears left or right is
+    random; the PUBLISHED data are reshaped so candidate 2 always holds D1,
+    which destroys display-position information --- the c_onLeft variable in
+    the raw file recovers it (our 01 flips 10,275 of 20,657 tasks, 49.7%)
+  proximity_measure: respondents rated all 16 platforms 0-100 one to three
+    weeks earlier; squared-distance terms (diff_p1_num/diff_p2_num) are
+    DERIVED from randomized platforms x pre-measured ideal points, so their
+    exposure distribution is induced, not assigned
+completion:
+  missing_task_choices: 262 among 76 respondents (dropped rows, respondents
+    retained)
+restrictions_stated:
+  - candidate age and experience were manipulated but are excluded from the
+    structural utility; zero utility coefficients imposed (decision 2026-08-24)
+unverified_without_instrument:
+  - the sampling probabilities of scenario types within respondent (4/7/2 is
+    the realized per-respondent composition; confirm blocking mechanics)
+  - platform-to-position mapping details for the two policy areas
+  - which 2 of the 5 extension scenarios entered the retained 13 (valence
+    identified empirically; confirm against appendix)
