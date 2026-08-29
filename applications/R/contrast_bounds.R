@@ -218,7 +218,10 @@ sb_project_assembled <- function(assembled, C) {
 ##  "supplied"  A numeric floor per contrast, computed on the machine that
 ##              holds the fit by re-running the zero-heterogeneity
 ##              calibration and recording ||A~' c|| instead of |A~_j|.
-##              This is the exact object. USE THIS FOR PUBLICATION.
+##              This is the exact object for THAT calibration. It removes
+##              the projection approximation only; it does not turn the
+##              null detection threshold into an upper confidence limit,
+##              so the result stays a conditional sensitivity bound.
 ##
 ##  "draws"     From fl$draws (the R x p matrix of per-coordinate norms):
 ##              floor_c = q_{1-gamma}( sum_j |c_j| * draws[, j] ), the
@@ -310,7 +313,15 @@ sb_contrast_floor <- function(C, floors_or_calibration,
         stop("floor_mode='draws' needs gamma (the calibration's tail level).",
              call. = FALSE)
       }
-      env <- draws %*% abs(C)                       # R x m, row-wise envelope
+      ## MATCHED statistic (audit finding P2). The observed contrast
+      ## dispersion is a FOLD AVERAGE of ||A_raw' c||, so each replication
+      ## is averaged over its folds FIRST and the quantile is taken across
+      ## replications. Averaging preserves the triangle envelope row by
+      ## row --- avg_k ||A~' c|| <= sum_j |c_j| avg_k ||A~_j.|| --- so the
+      ## quantile of the averaged envelope still dominates the exact
+      ## matched contrast ceiling.
+      reps <- if (is_cal) sb_calibration_reps(fl) else draws
+      env <- reps %*% abs(C)                  # reps x m, row-wise envelope
       out <- apply(env, 2L, stats::quantile, probs = 1 - gamma,
                    names = FALSE, type = 1L)
     } else {
@@ -346,7 +357,11 @@ sb_contrast_bounds <- function(assembled, contrasts, floors_or_calibration,
                                orient = NULL, grid_n = 60L,
                                floor_mode = c("auto", "supplied", "draws",
                                               "coordinate_sum"),
-                               gamma = NULL, return_projection = FALSE) {
+                               gamma = NULL, return_projection = FALSE,
+                               env_cells = 8L, sign_margin = NA_real_,
+                               orientation = NULL,
+                               ceiling_source = NULL,
+                               ceiling_status = "conditional_unverified") {
   floor_mode <- match.arg(floor_mode)
   attr_names <- as.character(assembled$attr_names)
   if (!length(attr_names)) {
@@ -395,7 +410,19 @@ sb_contrast_bounds <- function(assembled, contrasts, floors_or_calibration,
   }
 
   proj <- sb_project_assembled(assembled, Cw)
-  tb <- sb_bounds_table(proj, floors_w, grid_n = grid_n, orient = orient_c)
+  if (is.null(ceiling_source)) {
+    ceiling_source <- paste0(
+      "zero_heterogeneity_null_calibration, projected to the contrast by ",
+      "floor_mode='", floor_mode, "'")
+  }
+  ## The orientation spec is looked up by CONTRAST name, which is exactly
+  ## what the projected pseudo-fit's attr_names are. The pad column is
+  ## never in a spec, so it stays unspecified and is dropped below.
+  tb <- sb_bounds_table(proj, floors_w, grid_n = grid_n, orient = orient_c,
+                        env_cells = env_cells, sign_margin = sign_margin,
+                        orientation = orientation,
+                        ceiling_source = ceiling_source,
+                        ceiling_status = ceiling_status)
   tb <- tb[seq_len(m), , drop = FALSE]
   rownames(tb) <- NULL
 
@@ -497,27 +524,33 @@ sb_contrast_confidence_bounds <- function(assembled, bounds_table, inf_cfg,
   est <- out$estimate
   se <- out$diagnostic_se
   n <- nrow(bounds_table)
-  gauss_onestep <- gauss_lcb <- numeric(n)
+  gauss_onestep <- gauss_l <- rep(NA_real_, n)
   for (j in seq_len(n)) {
     nm <- bounds_table$coordinate[j]
     if (isTRUE(bounds_table$all_one_sign[j])) {
       lab <- paste0("gauss_", nm)
       gauss_onestep[j] <- est[[lab]]
-      gauss_lcb[j] <- est[[lab]] - z * se[[lab]]
+      gauss_l[j] <- est[[lab]] - z * se[[lab]]
     } else {
+      ## Mixed-sign: no one-step interval. The envelope's boundary cell is
+      ## discontinuous at m = 0, so the smooth one-step theorem does not
+      ## cover it; the cell minimum of the plug-in values is a diagnostic.
       labs <- grep(paste0("^gaussenv_", nm, "_c"), names(est), value = TRUE)
-      lcbs <- as.numeric(est[labs]) - z * as.numeric(se[labs])
-      gauss_onestep[j] <- min(as.numeric(est[labs]))
-      gauss_lcb[j] <- min(lcbs)
+      gauss_onestep[j] <- if (length(labs)) min(as.numeric(est[labs])) else
+        NA_real_
+      gauss_l[j] <- NA_real_
     }
   }
   lab_c <- paste0("cant_", bounds_table$coordinate)
   bounds_table$gauss_onestep <- gauss_onestep
-  bounds_table$gauss_lcb95 <- pmax(0, gauss_lcb)
+  bounds_table$gauss_cond_l95 <- pmax(0, gauss_l)
   bounds_table$cant_onestep <- as.numeric(est[lab_c])
-  bounds_table$cant_lcb95 <- pmax(0,
+  bounds_table$cant_cond_l95 <- pmax(0,
     as.numeric(est[lab_c]) - z * as.numeric(se[lab_c]))
   bounds_table$dml_status <- out$status
+  cm <- attr(bounds_table, "contrast_matrix")
+  bounds_table <- sb_attach_release(bounds_table)
+  attr(bounds_table, "contrast_matrix") <- cm
   attr(bounds_table, "dml") <- out
   bounds_table
 }

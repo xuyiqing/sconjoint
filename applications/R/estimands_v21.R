@@ -158,6 +158,13 @@ est_C0 <- function(fit, c_penalty, c_benefit, a = 1, groups = NULL,
 }
 
 ## --- Subgroup structural means theta_0(B) -------------------------------
+##
+## PLUG-IN ONLY (audit work package D2). These are full-fit plug-in point
+## estimates of the manuscript's subgroup mean. No debiasing correction and
+## no standard error is attached: the paper's subgroup one-step callback is
+## not routed through here. Any exhibit built on this output must either
+## say "plug-in" or be recomputed through the one-step machinery first --
+## `inference` carries the label so a downstream table cannot lose it.
 est_theta_B <- function(fit, groups) {
   stopifnot(length(groups) == fit$n)
   overall <- colMeans(fit$mu)
@@ -167,23 +174,57 @@ est_theta_B <- function(fit, groups) {
   recon <- Reduce(`+`, Map(function(v, w) v * w, by_g,
                            as.numeric(shares[names(by_g)])))
   list(value = by_g, overall = overall,
+       inference = "descriptive_plugin",
+       inference_detail = paste0(
+         "plug-in point estimate (full-fit sample mean of mu_hat); no ",
+         "debiased one-step correction and no standard error. Differences ",
+         "between groups are described, not tested: a group-difference ",
+         "claim needs the joint covariance of the subgroup one-step ",
+         "estimates, which this path does not produce."),
        checks = data.frame(check = "subgroups_aggregate_to_overall",
                            pass = max(abs(recon - overall)) < 1e-10))
 }
 
-## --- Importance shares: faithful port of the submitted constructs -------
-## Both submitted variants are per-respondent shares (a mean of ratios over
-## recovered betas), averaged over respondents. The port replaces the
-## recovered beta with the fitted N(mu(Z), Sigma) and takes the inner
-## expectation of the ratio by quadrature.
+## --- Archived mean-of-ratios importance display -------------------------
+##
+## NAMING (audit work package D1). This is NOT the package's
+## `scmix_importance()`, and it is NOT an estimand of Avi's draft. Three
+## distinct objects have circulated under the word "importance":
+##
+##   1. THIS function, `est_archived_importance_ratio()`: a faithful port of
+##      the submitted draft's display --- a per-respondent RATIO of one
+##      attribute's contribution to the total, averaged over respondents
+##      (a mean of ratios). The draft has no such estimand; it is a
+##      descriptive display carried over from the archived code.
+##   2. `scmix_importance()` in the package: a RATIO OF POPULATION MEANS
+##      with a residual trace term. Different functional, different value.
+##   3. The manuscript's native replacement, if the authors want one: the
+##      directional heterogeneity decomposition (paperps.tex:584-598),
+##      already implemented as the law-of-total-variance split.
+##
+## No output of this function may carry an unqualified "importance" label.
+## Its artifacts are written as `archived_importance_mean_of_ratios_*`.
+##
+## The port replaces the recovered beta with the fitted N(mu(Z), Sigma) and
+## takes the inner expectation of the ratio by quadrature.
 ##   mode "numeric" (Ballard-Rosa): contrib_k = beta_k^2 * Var(level set),
 ##     spec = named numeric vector of level-set variances per coordinate.
 ##   mode "categorical" (Graham--Svolik, "production-35"): per attribute
 ##     group g with columns K_g and L_g = |K_g| + 1 levels (reference = 0),
 ##     contrib_g = sum(beta_K^2)/L_g - (sum(beta_K)/L_g)^2,
 ##     spec = named list of coordinate-name vectors per group.
-est_importance <- function(fit, spec, mode = c("numeric", "categorical"),
-                           groups = NULL, n_nodes = 45L) {
+##
+## DOMAIN GUARD (audit D1). The ratio contrib / sum(contrib) is defined only
+## where the total contribution is strictly positive. Both modes admit
+## sum(contrib) = 0 --- an all-zero beta draw in numeric mode, a draw whose
+## every group is level in categorical mode --- and the quadrature would
+## silently return 0/0. `total_min` records the smallest total encountered
+## and `positive_total_contribution` fails the check when it is not above
+## `tol`, so the runner withholds the number instead of printing NaN.
+est_archived_importance_ratio <- function(fit, spec,
+                                          mode = c("numeric", "categorical"),
+                                          groups = NULL, n_nodes = 45L,
+                                          tol = 1e-12) {
   mode <- match.arg(mode)
   gh <- est_gh(q = ncol(fit$A), n_nodes = n_nodes)
   A <- fit$A
@@ -199,12 +240,17 @@ est_importance <- function(fit, spec, mode = c("numeric", "categorical"),
     }, 0)
   }
   n_out <- if (mode == "numeric") ncol(fit$mu) else length(spec)
+  total_min <- Inf
   share_i <- t(vapply(seq_len(fit$n), function(i) {
     acc <- numeric(n_out)
     for (j in seq_len(nrow(gh$U))) {
       beta <- fit$mu[i, ] + as.numeric(A %*% gh$U[j, ])
       contrib <- contrib_fun(beta)
-      acc <- acc + gh$w[j] * contrib / sum(contrib)
+      tot <- sum(contrib)
+      total_min <<- min(total_min, tot)
+      ## Domain guard: leave the node's contribution at zero rather than
+      ## dividing by a non-positive total. The check below then withholds.
+      if (tot > tol) acc <- acc + gh$w[j] * contrib / tot
     }
     acc
   }, numeric(n_out)))
@@ -215,8 +261,111 @@ est_importance <- function(fit, spec, mode = c("numeric", "categorical"),
       colMeans(share_i[ii, , drop = FALSE])))
   sums <- vapply(out, sum, 0)
   list(value = out, respondent_shares = share_i,
-       checks = data.frame(check = paste0("shares_sum_to_one:", names(out)),
-                           pass = abs(sums - 1) < 1e-10))
+       quantity = "archived_importance_mean_of_ratios",
+       total_min = total_min,
+       checks = rbind(
+         data.frame(check = paste0("shares_sum_to_one:", names(out)),
+                    pass = abs(sums - 1) < 1e-10),
+         data.frame(check = "positive_total_contribution",
+                    pass = total_min > tol)))
+}
+
+## --- Directional heterogeneity decomposition (paperps Omega split) ------
+##
+## THE MANUSCRIPT-FACING HETEROGENEITY QUANTITY (audit work package 6).
+## For a direction c, the draft splits the total directional variance of
+## preferences into the part covariates explain and the residual part:
+##
+##   H_T(c) = c' Omega_T c = c' Omega_Z c + c' Omega_R c = H_Z(c) + H_R(c),
+##
+## with Omega_Z the covariance of mu(Z) across respondents and Omega_R the
+## common residual covariance A A'. `share_Z = H_Z / H_T` is the fraction
+## of directional preference variation the covariates account for.
+##
+## This is NOT the archived mean-of-ratios display
+## (`est_archived_importance_ratio()`), which is a per-respondent ratio of
+## dispersion indices with no counterpart in the draft. The two answer
+## different questions and must never share an unqualified name. This one
+## is `quantity = "directional_heterogeneity"`.
+##
+## Respondent weighting is the application's: equal weights over the
+## analysis sample, the same weighting every other reported estimand uses.
+## The calculation is delegated to the package's own
+## `scmix_paper_heterogeneity()` so the application layer cannot drift
+## from the paper's formula.
+##
+## @param directions Named list of directions. Each is a named numeric
+##   vector over coordinates (sparse is fine), or a single coordinate name
+##   for the unit direction.
+## @param total_margin Optional reporting margin on H_T. A direction whose
+##   total directional variance is below it has an undefined share and is
+##   gated rather than printed.
+est_directional_heterogeneity <- function(fit, directions,
+                                          total_margin = NULL,
+                                          groups = NULL) {
+  if (!exists("scmix_paper_heterogeneity", mode = "function")) {
+    stop("est_directional_heterogeneity() needs the package loaded ",
+         "(pkgload::load_all).", call. = FALSE)
+  }
+  coord <- fit$coord
+  as_dir <- function(d, nm) {
+    if (is.character(d) && length(d) == 1L) {
+      if (!d %in% coord) stop("Unknown coordinate '", d, "' for direction '",
+                              nm, "'.", call. = FALSE)
+      return(as.numeric(coord == d))
+    }
+    if (!is.numeric(d) || is.null(names(d))) {
+      stop("Direction '", nm, "' must be a coordinate name or a NAMED ",
+           "numeric vector.", call. = FALSE)
+    }
+    miss <- setdiff(names(d), coord)
+    if (length(miss)) stop("Direction '", nm, "' names unknown coordinate(s): ",
+                           paste(miss, collapse = ", "), call. = FALSE)
+    v <- stats::setNames(numeric(length(coord)), coord)
+    v[names(d)] <- as.numeric(d)
+    as.numeric(v)
+  }
+  Sigma <- tcrossprod(fit$A)
+  ## The package routine reduces `mu` to respondent rows using the fit's
+  ## own identifiers, so it needs a shim carrying them even when mu and
+  ## Sigma are supplied directly. The application's `fit$mu` is already
+  ## respondent-level, so the reduction is the identity.
+  shim <- function(mu_sub) list(respondent_id = seq_len(nrow(mu_sub)),
+                                attr_names = coord)
+  one_block <- function(mu_sub, label) {
+    fit_shim <- shim(mu_sub)
+    do.call(rbind, lapply(names(directions), function(nm) {
+      d <- as_dir(directions[[nm]], nm)
+      h <- scmix_paper_heterogeneity(fit_shim, direction = d,
+                                     total_margin = total_margin,
+                                     mu = mu_sub, Sigma = Sigma)
+      e <- h$estimate
+      data.frame(group = label, direction = nm,
+                 H_Z = unname(e[["H_Z"]]), H_R = unname(e[["H_R"]]),
+                 H_T = unname(e[["H_T"]]),
+                 share_Z = unname(e[["share_Z"]]),
+                 total_margin = if (is.null(total_margin)) NA_real_ else
+                   as.numeric(total_margin),
+                 gate_pass = if (is.null(h$gate)) NA else h$gate$pass,
+                 quantity = "directional_heterogeneity",
+                 stringsAsFactors = FALSE)
+    }))
+  }
+  out <- one_block(fit$mu, "Overall")
+  if (!is.null(groups)) {
+    idx <- split(seq_len(fit$n), groups)
+    for (g in names(idx)) {
+      if (!length(idx[[g]])) next
+      out <- rbind(out, one_block(fit$mu[idx[[g]], , drop = FALSE], g))
+    }
+  }
+  ## The split is an identity, not an approximation: check it.
+  dev <- max(abs(out$H_Z + out$H_R - out$H_T))
+  list(value = out,
+       checks = data.frame(
+         check = c("variance_split_is_exact", "all_components_nonnegative"),
+         pass = c(dev < 1e-10,
+                  all(out$H_Z >= -1e-12) && all(out$H_R >= -1e-12))))
 }
 
 ## --- Structural AME (paperps AME_0), independent-uniform designs --------
@@ -302,18 +451,20 @@ est_AME <- function(fit, attrs, n_nodes = 31L, M_D = 20000L, seed = 1L) {
          pass = c(all(p_ref >= 0 & p_ref <= 1), ident_chk < 1e-12)))
 }
 
-## --- Importance self-test: archived-formula recovery --------------------
-## With Sigma = 0 the mixture collapses to mu, and est_importance must
-## reproduce the archived per-respondent computation exactly (memo
-## Sec. 8, check iii). Returns TRUE or stops.
-est_importance_selftest <- function() {
+## --- Archived-importance self-test: archived-formula recovery -----------
+## With Sigma = 0 the mixture collapses to mu, and
+## est_archived_importance_ratio() must reproduce the archived
+## per-respondent computation exactly (memo Sec. 8, check iii). Returns
+## TRUE or stops.
+est_archived_importance_selftest <- function() {
   mu <- rbind(c(1, -2, 0.5), c(0.3, 0.1, -1))
   fit0 <- list(mu = mu, A = matrix(0, 3, 1), Sigma = matrix(0, 3, 3),
                kappa = 0, coord = c("a", "b", "c"), n = 2)
   ## numeric mode vs hand computation
   v <- c(a = 2, b = 0.5, c = 1)
   hand <- t(apply(mu, 1, function(b) { k <- b^2 * v; k / sum(k) }))
-  got <- est_importance(fit0, spec = v, mode = "numeric", n_nodes = 5L)
+  got <- est_archived_importance_ratio(fit0, spec = v, mode = "numeric",
+                                       n_nodes = 5L)
   stopifnot(max(abs(got$value$Overall - colMeans(hand))) < 1e-12)
   ## categorical mode vs the archived production-35 formula
   spec <- list(g1 = c("a", "b"), g2 = "c")
@@ -322,17 +473,26 @@ est_importance_selftest <- function() {
            g2 = b[3]^2 / 2 - (b[3] / 2)^2)
     k / sum(k)
   }))
-  got2 <- est_importance(fit0, spec = spec, mode = "categorical",
-                         n_nodes = 5L)
+  got2 <- est_archived_importance_ratio(fit0, spec = spec,
+                                        mode = "categorical", n_nodes = 5L)
   stopifnot(max(abs(got2$value$Overall - colMeans(hand2))) < 1e-12)
   TRUE
 }
 
 ## --- MRS (paperps MRS^mean_0), point ratios -----------------------------
-## The point ratio itself is withheld unless the denominator exceeds
-## `t_min` diagnostic standard errors (manuscript domain condition,
-## strengthened per the math audit; delta/Fieller intervals need the
-## joint covariance block, which this runner does not have).
+## r = -theta_num / theta_den. Its gradient in (theta_num, theta_den) is
+##   (-1/theta_den,  theta_num/theta_den^2)
+## --- worth stating because the algorithm memo printed both signs
+## backwards (audit work package D3). The printed vector was the global
+## negative, so g' V g was unchanged and the code was never wrong; the
+## derivation was.
+##
+## The point ratio is withheld unless the denominator exceeds `t_min`
+## diagnostic standard errors. That gate is an APPLICATION REPORTING RULE,
+## not a theorem of the paper: the manuscript's domain condition is that
+## the denominator is nonzero, and four standard errors is this runner's
+## own conservative operationalisation of it. Delta/Fieller intervals need
+## the joint covariance block, which this runner does not have.
 est_mrs <- function(theta, num_coord, den_coord, den_se = NA_real_,
                     t_min = 4) {
   stopifnot(num_coord %in% names(theta), den_coord %in% names(theta))

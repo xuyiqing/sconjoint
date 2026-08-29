@@ -1,20 +1,34 @@
-## One-step (DML) inference for the structural AME, via scmix_dml()'s
-## documented plugin-callback contract.
+## One-step (DML) inference for the FIXED-DRAW structural AME, via
+## scmix_dml()'s documented plugin-callback contract.
 ##
-## Theory (paperps.tex, Avi's rebuild). With a fixed prespecified draw set
-## W_1..W_M from the KNOWN fielded design law D, the target
-##   Psi_M = (1/M) sum_m [ V_0(d(a, W_m)) - V_0(d(a', W_m)) ]
-## is a fixed finite linear combination of the manuscript's
-## choice-probability functionals (eq:choice_estimand /
-## eq:neutral_choice_estimand). Proposition prop:regular_inference then
-## covers Psi_M by stacking the 2M choice targets (a fixed prespecified
-## finite collection, condition (I1)); the influence function and the Riesz
-## representer are the same linear combination of the choice targets' ones.
-## No new domain gates arise: choice probabilities are smooth means. The
-## Monte Carlo gap Psi_M - Psi (exact design integral) is randomized
-## integration error in the sense of condition (I5): fixed seed, reported
-## as mc_se, and required to be negligible against the sampling se.
-## Because D is known by design, no estimated-design-law term enters.
+## TWO TARGETS, NEVER INTERCHANGEABLE (audit work package A1).
+##
+##   Psi_M = (1/M) sum_m [ V_0(d(a, W_m)) - V_0(d(a', W_m)) ]      "ame_fixed_draw"
+##   Psi   = E_W [ V_0(d(a, W)) - V_0(d(a', W)) ]                  "ame_design_integrated"
+##
+## Everything in this file targets Psi_M, CONDITIONAL ON A PRESPECIFIED
+## FROZEN DRAW SET W_1..W_M from the known fielded design law D. That is a
+## fixed finite linear combination of the manuscript's choice-probability
+## functionals (eq:choice_estimand / eq:neutral_choice_estimand), so
+## Proposition prop:regular_inference covers it by stacking the 2M choice
+## targets (a fixed prespecified finite collection, condition (I1)); the
+## influence function and the Riesz representer are the same linear
+## combination of the choice targets'. No new domain gates arise: choice
+## probabilities are smooth means. Because D is known by design, no
+## estimated-design-law term enters.
+##
+## The intervals this file produces cover Psi_M. They do NOT cover Psi
+## without an additional numerical-integration argument. Fixing M does not
+## supply one: ordinary Monte Carlo error is O_p(M^{-1/2}), and the paper's
+## condition needs sqrt(N)|Psi_M - Psi| = o_p(1), for which a sufficient
+## asymptotic regime is M/N -> infinity or a deterministic certified
+## integration rule. `ame_design_mc_se()` below is a DIAGNOSTIC for the gap,
+## and its `mc_se < 0.25 * sampling_se` companion rule is a finite-sample
+## heuristic, not the paper's asymptotic condition.
+##
+## Target labels are prefixed `ame_fixed_draw` so no downstream table can
+## print a fixed-draw interval under an exact-AME heading. `ame_draw_spec()`
+## persists the draw set, seed, design law, hash, M, and target label.
 ##
 ## The derivative kernel copies the package's typed "choice" target
 ## conventions exactly (R/paperps-inference.R):
@@ -55,7 +69,11 @@ ame_gh_nodes <- function(n_nodes = 31L) {
 ##   coord: character vector of coordinate names (fit$coord order).
 ##   attrs: named list, attribute -> its non-reference coordinate names.
 ## Returns X1, X2 (M x p profile matrices) and coord_index.
-ame_design_draws <- function(coord, attrs, M_D = 20000L, seed = 1L) {
+ame_design_draws <- function(coord, attrs, M_D = 20000L, seed = 1L,
+                             design_law = paste0(
+                               "attributes independent; levels uniform over ",
+                               "each attribute's levels including the ",
+                               "reference; both profiles drawn")) {
   p <- length(coord)
   coord_index <- lapply(attrs, function(cols) match(cols, coord))
   stopifnot(!anyNA(unlist(coord_index)))
@@ -72,8 +90,37 @@ ame_design_draws <- function(coord, attrs, M_D = 20000L, seed = 1L) {
   }
   X1 <- draw_profile(M_D)
   X2 <- draw_profile(M_D)
-  list(X1 = X1, X2 = X2, coord_index = coord_index, coord = coord,
-       attrs = attrs, M_D = M_D, seed = seed)
+  out <- list(X1 = X1, X2 = X2, coord_index = coord_index, coord = coord,
+              attrs = attrs, M_D = M_D, seed = seed,
+              design_law = design_law,
+              target = "ame_fixed_draw",
+              target_definition = paste0(
+                "Psi_M = M^{-1} sum_m [V_0{d(a,W_m)} - V_0{d(a',W_m)}], ",
+                "conditional on this frozen draw set"))
+  ## Draw-set hash: two runs that agree here return bitwise-identical
+  ## Psi_M, because the callbacks are deterministic in (mu, kappa, Sigma).
+  out$draw_hash <- tryCatch(
+    digest::digest(list(X1, X2, coord, attrs), algo = "sha256"),
+    error = function(e) NA_character_)
+  out
+}
+
+## The provenance record that must travel with every AME artifact.
+ame_draw_spec <- function(draws, mc_se = NULL) {
+  list(target = draws$target,
+       target_definition = draws$target_definition,
+       design_law = draws$design_law,
+       M = draws$M_D,
+       seed = draws$seed,
+       draw_hash = draws$draw_hash,
+       coordinates = paste(draws$coord, collapse = ","),
+       mc_se_max = if (is.null(mc_se)) NA_real_ else max(mc_se),
+       integration_contract = paste0(
+         "intervals cover the FIXED-DRAW target Psi_M conditional on this ",
+         "draw set; they do not cover the exact design integral Psi without ",
+         "a certified integration rate (M/N -> infinity or a deterministic ",
+         "rule). The mc_se < 0.25 * sampling_se check is a finite-sample ",
+         "heuristic, not the paper's asymptotic condition."))
 }
 
 ## Focal/reference contrast pair for one attribute level:
@@ -214,7 +261,7 @@ ame_dml_target <- function(d_focal, d_ref, n_nodes = 31L,
 ame_dml_targets <- function(coord, attrs, M_D = 20000L, seed = 1L,
                             n_nodes = 31L, position_neutral = FALSE,
                             chunk = 1024L, prefix = if (position_neutral)
-                              "ame_neutral" else "ame") {
+                              "ame_fixed_draw_neutral" else "ame_fixed_draw") {
   draws <- ame_design_draws(coord, attrs, M_D = M_D, seed = seed)
   targets <- list()
   for (a in names(attrs)) {
@@ -228,15 +275,17 @@ ame_dml_targets <- function(coord, attrs, M_D = 20000L, seed = 1L,
                                        chunk = chunk, label = lab)
     }
   }
-  list(targets = targets, draws = draws)
+  list(targets = targets, draws = draws, spec = ame_draw_spec(draws))
 }
 
-## Design-Monte-Carlo error of the M-draw average at given fit
+## DIAGNOSTIC. Design-Monte-Carlo error of the M-draw average at given fit
 ## parameters. Returns both the value (the respondent-by-draw product-form
 ## plug-in at these parameters) and its design mc_se: sd over draws of the
 ## respondent-averaged per-draw difference, divided by sqrt(M). The mc_se
-## quantifies Psi_M - Psi (design error only; respondents fixed at the
-## fit's sample). Chunked like the kernel.
+## quantifies the ORDINARY Monte Carlo size of Psi_M - Psi (design error
+## only; respondents fixed at the fit's sample). It is not a certificate:
+## an O_p(M^{-1/2}) gap does not establish sqrt(N)|Psi_M - Psi| = o_p(1).
+## Chunked like the kernel.
 ame_design_mc_se <- function(mu, kappa, Sigma, d_focal, d_ref,
                              n_nodes = 31L, position_neutral = FALSE,
                              chunk = 1024L) {

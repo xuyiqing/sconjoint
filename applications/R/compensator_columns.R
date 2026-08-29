@@ -187,6 +187,7 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
 .cc_acceptance_new <- function(n) {
   list(L = rep(-Inf, n), R = rep(Inf, n),
        gL = rep(NA_real_, n), gR = rep(NA_real_, n),
+       kL = rep(NA_integer_, n), kR = rep(NA_integer_, n),
        whole = rep(FALSE, n), tied = rep(FALSE, n),
        zero_line = rep(FALSE, n))
 }
@@ -197,7 +198,7 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
 ## fastest-decreasing branch is the smallest gamma_k, so the retained slope is
 ## the correct right-derivative branch -- and it is the conservative one for the
 ## floor flag. Ties are also recorded in `tied`.
-.cc_update_L <- function(acc, cand, cand_g) {
+.cc_update_L <- function(acc, cand, cand_g, cand_k = NA_integer_) {
   better <- !is.na(cand) & cand > acc$L
   tie <- !is.na(cand) & is.finite(cand) & (cand == acc$L)
   gcur <- ifelse(is.na(acc$gL), Inf, abs(acc$gL))
@@ -206,11 +207,16 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
   take[is.na(take)] <- FALSE
   acc$L[take] <- cand[take]
   acc$gL[take] <- cand_g[take]
+  ## Which support line generates the endpoint. Recorded so a withheld
+  ## cell can say WHICH line binds, not only that something does
+  ## (audit work package C2).
+  ck <- if (length(cand_k) == 1L) rep(cand_k, length(cand)) else cand_k
+  acc$kL[take] <- as.integer(ck[take])
   acc$tied <- acc$tied | tie
   acc
 }
 
-.cc_update_R <- function(acc, cand, cand_g) {
+.cc_update_R <- function(acc, cand, cand_g, cand_k = NA_integer_) {
   better <- !is.na(cand) & cand < acc$R
   tie <- !is.na(cand) & is.finite(cand) & (cand == acc$R)
   gcur <- ifelse(is.na(acc$gR), Inf, abs(acc$gR))
@@ -219,6 +225,8 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
   take[is.na(take)] <- FALSE
   acc$R[take] <- cand[take]
   acc$gR[take] <- cand_g[take]
+  ck <- if (length(cand_k) == 1L) rep(cand_k, length(cand)) else cand_k
+  acc$kR[take] <- as.integer(ck[take])
   acc$tied <- acc$tied | tie
   acc
 }
@@ -245,12 +253,12 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
     neg <- ga < 0
     if (any(neg)) {
       acc <- .cc_update_L(acc, ifelse(neg, root, NA_real_),
-                          ifelse(neg, ga, NA_real_))
+                          ifelse(neg, ga, NA_real_), k)
     }
     pos <- ga > 0
     if (any(pos)) {
       acc <- .cc_update_R(acc, ifelse(pos, root, NA_real_),
-                          ifelse(pos, ga, NA_real_))
+                          ifelse(pos, ga, NA_real_), k)
     }
     zer <- !nz
     ## `>=` at the boundary: a flat line sitting exactly at zero accepts.
@@ -276,8 +284,8 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
   if (length(accs) > 1L) {
     for (k in seq_along(accs)[-1L]) {
       a <- accs[[k]]
-      out <- .cc_update_L(out, a$L, a$gL)
-      out <- .cc_update_R(out, a$R, a$gR)
+      out <- .cc_update_L(out, a$L, a$gL, a$kL)
+      out <- .cc_update_R(out, a$R, a$gR, a$kR)
       out$whole <- out$whole | a$whole
       out$tied <- out$tied | a$tied
       out$zero_line <- out$zero_line | a$zero_line
@@ -318,6 +326,12 @@ cc_selectors <- function(attr_names, action, coparty, econ, social, governance) 
        binding_min_slope = bmin, binding_below_floor = below,
        n_endpoints = as.integer(finL) + as.integer(finR),
        L = acc$L, R = acc$R, gL = acc$gL, gR = acc$gR,
+       kL = acc$kL, kR = acc$kR,
+       ## The line that generates the SMALLER endpoint slope: the one the
+       ## floor gate has to clear for this respondent (audit C2).
+       binding_line = ifelse(is.na(slopeL) | (!is.na(slopeR) &
+                                                slopeR < slopeL),
+                             acc$kR, acc$kL),
        whole = full, tied = acc$tied, zero_line = acc$zero_line)
 }
 
@@ -399,7 +413,16 @@ cc_cell_exact <- function(mu, A, sel, spec, policy_steps = 3,
     ## [AUDIT Finding 2] union of the three acceptance sets, never a rerun of
     ## the per-column breakpoint recipe on h_any.
     parts <- lapply(c("party", "pol", "gov"), build)
-    acc <- .cc_union_acceptance(lapply(parts, `[[`, "acc"))
+    ## Each part indexes its own support lines from 1; offset them so the
+    ## unioned binding-line index points into the stacked Gamma below.
+    off <- cumsum(c(0L, vapply(parts, function(pp) ncol(pp$Gamma), 1L)))
+    accs <- lapply(seq_along(parts), function(i) {
+      a <- parts[[i]]$acc
+      a$kL <- a$kL + off[i]
+      a$kR <- a$kR + off[i]
+      a
+    })
+    acc <- .cc_union_acceptance(accs)
     Gamma <- do.call(cbind, lapply(parts, `[[`, "Gamma"))
     if (isTRUE(verify_any)) {
       direct <- build("any")
@@ -540,6 +563,15 @@ cc_cell_breakpoints <- function(mu_i, a_i, sel, spec, policy_steps = 3,
 
 #' Seeded Monte Carlo cell value for q >= 1
 #'
+#' APPROXIMATION, not an exact value (audit work package C1). The q = 1 engine
+#' computes the acceptance set exactly as a union of half-lines; this path
+#' replaces that with a seeded draw average, so its output is an approximation
+#' whose error is bounded only in the Monte Carlo sense below. Label q > 1
+#' results as approximations wherever they are reported, unless a separate
+#' certificate for the integration error is supplied. The returned object
+#' carries `value_kind = "monte_carlo_approximation"` so a downstream table
+#' cannot silently print it as an exact cell.
+#'
 #' Memo step 7. `M` defaults to the smallest draw count whose worst-case
 #' standard error, sqrt(0.25 / M), sits below `se_target_frac` of the printed
 #' cell resolution (0.1 * 0.01 = 0.001, so M = 250,000). A doubled-M replicate
@@ -601,7 +633,8 @@ cc_cell_mc <- function(mu, A, sel, spec, policy_steps = 3, coparty_amount = 1,
   list(share = r1$mean, share_double = r2$mean, mc_se = r1$se, M = M,
        se_gate_pass = r1$se <= se_target_frac * resolution,
        replicate_gap = abs(r1$mean - r2$mean), rounding_distance = rd,
-       printed_digit_stable = rd > 2 * r1$se)
+       printed_digit_stable = rd > 2 * r1$se,
+       value_kind = "monte_carlo_approximation")
 }
 
 ## h evaluated on a matrix of beta draws (definitional form; used by the MC path).
@@ -664,19 +697,115 @@ cc_assert_policy_units <- function(deltaX, econ_idx, social_idx,
 
 #' Reduce a per-coordinate dispersion floor to one scalar for a column
 #'
-#' The bound memo's floor (`sb_zero_floor()$floor`) is per coordinate, i.e. it
-#' calibrates |A_j| for a UNIT coordinate contrast. The compensator slopes are
-#' composite contrasts c'A, for which no per-coordinate floor exists. This
-#' helper takes the conservative (largest) floor over the coordinates that enter
-#' any support line of the column, making the gate harder to clear. Judgment
-#' call, recorded rather than hidden: use it explicitly, or pass your own scalar.
+#' NOT SAFE FOR A RELEASE GATE (audit work package C2). The bound memo's floor
+#' (`sb_zero_floor()$floor`) is per coordinate: it calibrates |A_j| for a UNIT
+#' coordinate contrast. The compensator slopes are COMPOSITE contrasts c'A --
+#' `c_p + 3 c_e + 3 c_s` for the policy column, for instance -- and the largest
+#' MARGINAL floor does not bound the composite one. The triangle envelope
+#' `sum_j |c_j| * |A~_j|` is what the calibration actually supports, and on the
+#' saved Graham--Svolik draws it is 34-39 percent larger than this marginal
+#' maximum for some composite columns. Using the smaller number as the gate
+#' makes release EASIER than the calibration warrants, which is exactly the
+#' wrong direction.
+#'
+#' Kept as a diagnostic and for single-coordinate columns (where it is exact).
+#' It warns whenever the column has a genuinely composite support line. Use
+#' `cc_composite_floor()` for the gate.
 cc_reduce_floor <- function(floor_vec, sel, spec, policy_steps = 3,
-                            coparty_amount = 1) {
+                            coparty_amount = 1, quiet = FALSE) {
   if (length(floor_vec) == 1L) return(as.numeric(floor_vec))
   C <- .cc_support_contrasts(sel, spec, policy_steps, coparty_amount)
   used <- apply(C != 0, 1L, any)
   if (!any(used)) return(NA_real_)
+  composite <- any(colSums(C != 0) > 1L)
+  if (composite && !quiet) {
+    warning("cc_reduce_floor() is NOT a conservative floor for the composite ",
+            "support lines of column '", spec, "'. It is a diagnostic; use ",
+            "cc_composite_floor() with the calibration draws for the gate.",
+            call. = FALSE)
+  }
   max(as.numeric(floor_vec)[used])
+}
+
+#' Composite dispersion floor for one column's support lines
+#'
+#' Two routes, in preference order (audit work package 5).
+#'
+#' `matched_composite` --- the EXACT statistic. Needs a calibration run with
+#' `sb_zero_floor(..., keep_loadings = TRUE)`, which retains the signed
+#' raw-scale `A~` from every (replication, fold) refit. The composite slope
+#' the gate has to clear is `||A~' c||_2`, and that depends on the SIGNS of
+#' `A~`'s rows, which the stored per-coordinate norms cannot recover.
+#'
+#' `triangle_fallback` --- the conservative envelope
+#' `||A~' c|| <= sum_j |c_j| ||A~_j.||`, row by row. All the stored norms
+#' support, and it can only make the gate harder. Used when signed draws
+#' are unavailable, and named as such in every cell.
+#'
+#' AGGREGATION, identical for both so the inequality survives it: average
+#' over the replication's folds (matching the observed fold-averaged
+#' dispersion), take the MAXIMUM over the column's support contrasts WITHIN
+#' the replication, then the `(1-gamma)` quantile ACROSS replications. The
+#' maximum comes first because the gate must cover whichever line binds,
+#' and because the quantile of a maximum dominates the maximum of
+#' quantiles --- the conservative order.
+#'
+#' @param calibration A calibration object from `sb_zero_floor()`, or a
+#'   plain replications-by-coordinate matrix of `|A~_j|` (triangle only).
+#' @return A list with `per_line`, `column`, `floor_rule`
+#'   (`"matched_composite"` or `"triangle_fallback"`), `rule` (prose),
+#'   and `n_reps`.
+cc_composite_floor <- function(calibration, sel, spec, gamma,
+                               policy_steps = 3, coparty_amount = 1,
+                               method = c("auto", "matched_composite",
+                                          "triangle_fallback")) {
+  method <- match.arg(method)
+  C <- .cc_support_contrasts(sel, spec, policy_steps, coparty_amount)
+  colnames(C) <- paste0(spec, "_line", seq_len(ncol(C)))
+  is_cal <- is.list(calibration) && !is.null(calibration$draws)
+  have_signed <- is_cal && exists("sb_calibration_has_loadings",
+                                  mode = "function") &&
+    sb_calibration_has_loadings(calibration)
+  if (method == "auto") {
+    method <- if (have_signed) "matched_composite" else "triangle_fallback"
+  }
+  if (method == "matched_composite" && !have_signed) {
+    stop("matched_composite needs a calibration carrying signed loadings ",
+         "(sb_zero_floor(..., keep_loadings = TRUE)).", call. = FALSE)
+  }
+  if (method == "matched_composite") {
+    m <- sb_column_floor_matched(calibration, C, gamma = gamma,
+                                 method = "matched_composite")
+    return(list(per_line = m$per_line, column = m$column,
+                n_reps = m$n_reps, floor_rule = "matched_composite",
+                rule = paste0("matched composite calibration: exact ",
+                              "||A~' c|| from retained signed loadings, ",
+                              "fold-averaged within replication, maximised ",
+                              "over the column's ", ncol(C), " support ",
+                              "lines, then the ", 1 - gamma,
+                              " quantile across replications")))
+  }
+  ## Triangle fallback, aggregated the same way.
+  reps <- if (is_cal) {
+    if (exists("sb_calibration_reps", mode = "function"))
+      sb_calibration_reps(calibration) else as.matrix(calibration$draws)
+  } else as.matrix(calibration)
+  if (ncol(reps) != nrow(C)) {
+    stop("Calibration replications have ", ncol(reps), " coordinates; the ",
+         "support contrasts have ", nrow(C), ".", call. = FALSE)
+  }
+  env <- reps %*% abs(C)
+  per_line <- apply(env, 2L, stats::quantile, probs = 1 - gamma,
+                    names = FALSE, type = 1L)
+  column <- unname(stats::quantile(apply(env, 1L, max), probs = 1 - gamma,
+                                   names = FALSE, type = 1L))
+  list(per_line = stats::setNames(per_line, colnames(C)), column = column,
+       n_reps = nrow(reps), floor_rule = "triangle_fallback",
+       rule = paste0("triangle-envelope fallback at gamma = ", gamma,
+                     ", maximised over the column's ", ncol(C),
+                     " support lines within each replication, then the ",
+                     1 - gamma, " quantile across replications; an UPPER ",
+                     "bound on the exact composite ceiling"))
 }
 
 
@@ -714,6 +843,29 @@ cc_respondent_shares <- function(mu, A, sel, specs = cc_specs(),
 
 #' Aggregate per-respondent shares into one exhibit cell with gate metadata
 #'
+#' RELEASE RULE (audit work package C2). The pre-audit gate released a cell
+#' whenever the LARGEST support-line slope anywhere in the cell cleared the
+#' floor: `floored <- max(max_abs_slope) < floor`. One favourable respondent,
+#' or one support line that never binds, could therefore release a whole cell
+#' while most respondents' acceptance boundaries rested on slopes below the
+#' floor. In the saved Graham--Svolik output, released cells had roughly
+#' 40-81 percent of BINDING slopes below the floor, and the I3 canary moved a
+#' released share from 1.000000 to 0.000030 under a small mean perturbation.
+#'
+#' The gate is now fail-closed and evaluated on the slope that actually binds
+#' at each respondent's acceptance boundary:
+#'
+#'   release  <=>  every respondent in the cell clears the floor,
+#'   where a respondent clears when its binding slope is at least the floor,
+#'   or it has no finite endpoint AND no identically-zero support line (an
+#'   exact indicator, insensitive to a level shift of h).
+#'
+#' A respondent with an identically-zero line is never counted as clearing:
+#' its share is discontinuous downward regardless of the endpoint slopes.
+#'
+#' The diagnostic maximum is retained (`max_abs_slope`) but no longer
+#' authorises anything.
+#'
 #' @param res A `cc_cell_exact()` result.
 #' @param idx Logical or integer index of the respondents in this cell.
 #' @param floor Scalar floor used for the column gate, or NA.
@@ -723,17 +875,41 @@ cc_respondent_shares <- function(mu, A, sel, specs = cc_specs(),
   sens <- res$sensitivity[idx]
   mas <- res$max_abs_slope[idx]
   bmin <- res$binding_min_slope[idx]
+  zl <- as.logical(res$zero_line[idx])
+  bline <- res$binding_line[idx]
+  has_endpoint <- !is.na(bmin)
   below <- if (is.na(floor)) rep(NA, length(sh)) else
-    !is.na(bmin) & bmin < floor
+    has_endpoint & bmin < floor
+  ## Per respondent: does the floor gate clear?
+  clears <- if (is.na(floor)) rep(NA, length(sh)) else
+    ifelse(has_endpoint, bmin >= floor, TRUE) & !zl
+  qs <- function(p) if (any(has_endpoint))
+    unname(stats::quantile(bmin[has_endpoint], probs = p, names = FALSE,
+                           type = 7L)) else NA_real_
   data.frame(
     n_respondents = length(sh),
     share = mean(sh),
-    ## Column gate (memo, Uncertainty (b)): largest support-line slope magnitude.
+    ## Diagnostic only: the largest support-line slope magnitude. Kept
+    ## because it is informative, but it authorises nothing.
     max_abs_slope = if (length(mas)) max(mas) else NA_real_,
-    ## Same quantity per respondent, minimised: exposes the gate's one-sidedness.
     min_respondent_max_slope = if (length(mas)) min(mas) else NA_real_,
+    ## The gate's own quantities: the slope that binds at each respondent's
+    ## boundary, summarised.
+    binding_slope_min = if (any(has_endpoint)) min(bmin[has_endpoint]) else
+      NA_real_,
+    binding_slope_q05 = qs(0.05),
+    binding_slope_q25 = qs(0.25),
+    binding_slope_median = qs(0.50),
+    n_no_endpoint = as.integer(sum(!has_endpoint)),
     floor = floor,
-    floored = if (is.na(floor) || !length(mas)) NA else max(mas) < floor,
+    ## `floored` keeps its old NAME but now means "the gate did not clear",
+    ## on the binding-slope rule.
+    floored = if (is.na(floor) || !length(sh)) NA else !all(clears),
+    gate_rule = if (is.na(floor)) NA_character_ else
+      "all binding slopes >= floor (respondents with no finite endpoint and no zero line pass)",
+    n_gate_failures = if (is.na(floor)) NA_integer_ else
+      as.integer(sum(!clears)),
+    frac_gate_failures = if (is.na(floor)) NA_real_ else mean(!clears),
     ## Exact cell sensitivity to a common level shift of h: the mean of the
     ## per-respondent sum_j phi(e_j)/|gamma_(j)|.
     sensitivity = if (length(sens)) mean(sens) else NA_real_,
@@ -742,10 +918,12 @@ cc_respondent_shares <- function(mu, A, sel, specs = cc_specs(),
       as.integer(sum(below, na.rm = TRUE)),
     frac_binding_below_floor = if (all(is.na(below))) NA_real_ else
       mean(below, na.rm = TRUE),
+    ## Which support lines bind, as a compact record of the gate's input.
+    binding_lines = paste(sort(unique(bline[!is.na(bline)])), collapse = "|"),
     ## Root-at-kink collisions (only one-sided derivatives exist there) and
     ## identically-zero pieces (the tie convention carries real mass).
     n_endpoint_tied = as.integer(sum(res$tied[idx])),
-    n_zero_line = as.integer(sum(res$zero_line[idx])),
+    n_zero_line = as.integer(sum(zl)),
     stringsAsFactors = FALSE)
 }
 
@@ -763,11 +941,23 @@ cc_respondent_shares <- function(mu, A, sel, specs = cc_specs(),
 #' @param group Factor of ideology groups, length n, or NULL for overall only.
 #'   `cc_ideology_group()` produces the archived partition.
 #' @param floors Scalar floor, a named per-spec vector, or NA.
-#' @param none_bounds Certified lower bounds for the None cell, from the bound
-#'   memo. Either a scalar applied to every cell, or a data frame with columns
-#'   `action`, `group`, `bound`. Floored `pol`, `gov`, and `any` cells inherit
-#'   it by pointwise domination; floored `party` cells do NOT (its benefit takes
-#'   both signs) and are withheld.
+#' @param none_bounds Certified lower bounds for the None cell. Either a
+#'   scalar, or a data frame with columns `action`, `group`, `bound`, and
+#'   `event_side`. SAME-SIDE INHERITANCE (audit work package C3): pointwise
+#'   domination only transfers a lower bound for the SAME event. The
+#'   compensator cells need an ACCEPTANCE-side lower bound; the Graham--Svolik
+#'   bound rows certify the OPPOSITION side, whose acceptance-side implication
+#'   is the trivial zero. A bound whose `event_side` is not
+#'   `required_event_side` is REFUSED, and a bound with no `event_side` at all
+#'   is refused as unknown-side. Floored `party` cells never inherit (its
+#'   benefit takes both signs).
+#' @param required_event_side The event side the cells need. Default
+#'   "acceptance".
+#' @param floor_rule The floor's METHOD token, stamped into every row:
+#'   `"matched_composite"` or `"triangle_fallback"` from
+#'   `cc_composite_floor()$floor_rule`.
+#' @param floor_rule_detail Free prose describing the same floor. Use
+#'   `cc_composite_floor()$rule`.
 #' @return A data frame, one row per (action, group, column), with `share` (the
 #'   engine value, pre-release, used by the domination check), `released_value`,
 #'   `release_kind`, and the gate metadata. The per-respondent detail is
@@ -776,7 +966,9 @@ cc_columns <- function(mu, A, actions, sel_template, group = NULL,
                        specs = cc_specs(), policy_steps = 3,
                        coparty_amount = 1, floors = NA_real_,
                        none_bounds = NULL, loading_form = "auto",
-                       verify_any = TRUE) {
+                       verify_any = TRUE, required_event_side = "acceptance",
+                       floor_rule = NA_character_,
+                       floor_rule_detail = NA_character_) {
   mu <- as.matrix(mu); n <- nrow(mu)
   if (is.null(group)) {
     grp <- factor(rep("Overall", n), levels = "Overall")
@@ -788,14 +980,35 @@ cc_columns <- function(mu, A, actions, sel_template, group = NULL,
     groups <- c("Overall", levels(grp))
   }
   labels <- cc_column_labels()
+  ## Same-side inheritance (audit C3). Returns the bound only when its
+  ## `event_side` matches what the cells need; otherwise NA plus the reason.
   bound_for <- function(act, gp) {
-    if (is.null(none_bounds)) return(NA_real_)
+    none <- list(bound = NA_real_, side = NA_character_,
+                 reason = "no None bound supplied")
+    if (is.null(none_bounds)) return(none)
     if (is.data.frame(none_bounds)) {
       hit <- none_bounds$action == act & as.character(none_bounds$group) == gp
-      if (!any(hit)) return(NA_real_)
-      return(as.numeric(none_bounds$bound[which(hit)[1L]]))
+      if (!any(hit)) return(none)
+      i <- which(hit)[1L]
+      side <- if ("event_side" %in% names(none_bounds))
+        as.character(none_bounds$event_side[i]) else NA_character_
+      b <- as.numeric(none_bounds$bound[i])
+    } else {
+      side <- attr(none_bounds, "event_side")
+      side <- if (is.null(side)) NA_character_ else as.character(side)[1L]
+      b <- as.numeric(none_bounds)[1L]
     }
-    as.numeric(none_bounds)[1L]
+    if (is.na(side)) {
+      return(list(bound = NA_real_, side = NA_character_,
+                  reason = "None bound has no event_side; unknown-side bounds are refused"))
+    }
+    if (!identical(side, required_event_side)) {
+      return(list(bound = NA_real_, side = side,
+                  reason = paste0("None bound is on the '", side,
+                                  "' side; cells need '", required_event_side,
+                                  "'")))
+    }
+    list(bound = b, side = side, reason = NA_character_)
   }
   rows <- list(); detail <- list()
   for (act_name in names(actions)) {
@@ -814,26 +1027,35 @@ cc_columns <- function(mu, A, actions, sel_template, group = NULL,
         idx <- if (gp == "Overall") seq_len(n) else which(as.character(grp) == gp)
         if (!length(idx)) next
         cell <- .cc_aggregate_cell(res[[sp]], idx, floor_sp)
-        b <- bound_for(act_name, gp)
-        floored <- isTRUE(cell$floored)
+        bnd <- bound_for(act_name, gp)
+        b <- bnd$bound
+        gate_failed <- !isTRUE(!cell$floored)   # NA floor also fails closed
         inherits_ok <- sp %in% c("none", "pol", "gov", "any")
-        if (!floored) {
+        if (!gate_failed) {
           rel <- cell$share; kind <- "point"
         } else if (inherits_ok && is.finite(b)) {
           rel <- b; kind <- "lower_bound"
         } else {
           rel <- NA_real_
-          kind <- if (!inherits_ok) "withheld (no domination inheritance)" else
-            "withheld (no None bound supplied)"
-          warning("Floored cell withheld: action '", act_name, "', group '", gp,
-                  "', column '", labels[[sp]], "'.", call. = FALSE)
+          kind <- if (is.na(floor_sp)) {
+            "withheld (no floor supplied; gate cannot be evaluated)"
+          } else if (!inherits_ok) {
+            "withheld (no domination inheritance)"
+          } else {
+            paste0("withheld (", bnd$reason, ")")
+          }
         }
         rows[[length(rows) + 1L]] <- cbind(
           data.frame(action = act_name, group = gp,
                      column = unname(labels[[sp]]), spec = sp,
                      stringsAsFactors = FALSE),
           cell,
-          data.frame(inherited_bound = b, released_value = rel,
+          data.frame(floor_rule = floor_rule,
+                     floor_rule_detail = floor_rule_detail,
+                     inherited_bound = b,
+                     inherited_event_side = bnd$side,
+                     required_event_side = required_event_side,
+                     released_value = rel,
                      release_kind = kind, stringsAsFactors = FALSE))
       }
     }
@@ -961,7 +1183,10 @@ cc_fit_inputs <- function(assembled) {
 #'   named vector, or NA. See `cc_reduce_floor()` for turning the bound memo's
 #'   per-coordinate floor into one scalar.
 #' @param none_bounds Certified lower bounds for the None cells (scalar or a
-#'   data frame with `action`, `group`, `bound`).
+#'   data frame with `action`, `group`, `bound`, `event_side`). Same-side
+#'   inheritance is enforced; see `cc_columns()`.
+#' @param required_event_side The event side the cells need ("acceptance").
+#' @param floor_rule Floor method token; `floor_rule_detail` its prose.
 #' @param assert_units If TRUE (default) run the memo's raw-ordinal-units
 #'   assertion on the fit's `deltaX` policy columns.
 #' @return The `cc_columns()` data frame, with `attr(x, "inputs")` carrying the
@@ -971,6 +1196,9 @@ cc_compensator_columns <- function(assembled, actions, coparty, econ, social,
                                    policy_steps = 3, coparty_amount = 1,
                                    floors = NA_real_, none_bounds = NULL,
                                    specs = cc_specs(), assert_units = TRUE,
+                                   required_event_side = "acceptance",
+                                   floor_rule = NA_character_,
+                                   floor_rule_detail = NA_character_,
                                    mc_M = NULL, mc_seed = 20260827L) {
   inp <- cc_fit_inputs(assembled)
   if (isTRUE(assert_units) && !is.null(assembled$deltaX)) {
@@ -1016,7 +1244,10 @@ cc_compensator_columns <- function(assembled, actions, coparty, econ, social,
   out <- cc_columns(inp$mu, inp$A, acts, sel, group = grp, specs = specs,
                     policy_steps = policy_steps,
                     coparty_amount = coparty_amount, floors = floors,
-                    none_bounds = none_bounds, loading_form = "rows")
+                    none_bounds = none_bounds, loading_form = "rows",
+                    required_event_side = required_event_side,
+                    floor_rule = floor_rule,
+                    floor_rule_detail = floor_rule_detail)
   attr(out, "inputs") <- inp[c("respondents", "fold", "attr_names", "q", "K")]
   out
 }

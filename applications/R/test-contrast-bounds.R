@@ -50,17 +50,23 @@ here <- tryCatch({
   if (length(f)) dirname(normalizePath(f[[1L]])) else getwd()
 }, error = function(e) getwd())
 
+## PRODUCTION FIRST. contrast_bounds.R's own sb_share_bounds_path() prefers
+## the in-repo copy and treats the Dropbox tree as the fallback; this file
+## used to prefer the Dropbox copy, which meant the tests could silently
+## exercise a stale mirror while the driver used the repo file. Same order
+## as the code under test now.
+repo_sb <- file.path(here, "share_bounds.R")
 dropbox_sb <- path.expand(file.path(
   "~/Dropbox/Research_Hub/Projects/ConjointStructural/2608_issues",
   "Yiqing/bound_for_share/code/share_bounds.R"))
-repo_sb <- file.path(here, "share_bounds.R")
-share_bounds_path <- if (file.exists(dropbox_sb)) dropbox_sb else repo_sb
+share_bounds_path <- if (file.exists(repo_sb)) repo_sb else dropbox_sb
 if (!file.exists(share_bounds_path)) {
   stop("Cannot locate the audited share_bounds.R (looked at ", dropbox_sb,
        " and ", repo_sb, ").")
 }
 cat("audited source : ", share_bounds_path, "\n", sep = "")
 source(share_bounds_path)
+source(file.path(here, "orientation_spec.R"))
 source(file.path(here, "contrast_bounds.R"))
 source(file.path(here, "br_progressivity_contrasts.R"))
 cat("under test     : ", file.path(here, "contrast_bounds.R"), "\n\n", sep = "")
@@ -98,16 +104,26 @@ make_fit <- function(p = 7L, q = 2L, K = 3L, n_resp = 51L, tasks = 4L,
 ## A calibration object shaped like sb_zero_floor()'s return value:
 ## per-coordinate apparent dispersions, plus the quantile it derives.
 make_calibration <- function(fit, R_rows = 20L, gamma = 0.05, scale = 0.02,
-                             seed = NULL) {
+                             n_folds = 2L, seed = NULL) {
   if (!is.null(seed)) set.seed(seed)
   p <- length(fit$attr_names)
+  ## Row count must equal R * length(folds_use): the replication index is
+  ## reconstructed from those two on artifacts saved before the matching
+  ## fix, and a mismatch is a hard error rather than a silent regroup.
+  R_rows <- as.integer(ceiling(R_rows / n_folds) * n_folds)
+  R <- as.integer(R_rows / n_folds)
   draws <- matrix(abs(stats::rnorm(R_rows * p, sd = scale)), R_rows, p)
-  floors <- apply(draws, 2L, stats::quantile, probs = 1 - gamma,
-                  names = FALSE, type = 1L)
-  names(floors) <- fit$attr_names
-  list(floor = floors, draws = draws, R = 10L, folds_use = c(1L, 2L),
-       gamma = gamma, n_epochs = 4000L,
-       analysis_signature = fit$analysis_signature)
+  colnames(draws) <- fit$attr_names
+  cal <- list(draws = draws, R = R, folds_use = seq_len(n_folds),
+              gamma = gamma, n_epochs = 4000L, attr_names = fit$attr_names,
+              analysis_signature = fit$analysis_signature)
+  ## Matched statistic: average within replication, then quantile across.
+  cal$floor <- sb_matched_floor(cal, gamma = gamma,
+                                attr_names = fit$attr_names)
+  cal$floor_pooled <- stats::setNames(
+    apply(draws, 2L, stats::quantile, probs = 1 - gamma, names = FALSE,
+          type = 1L), fit$attr_names)
+  cal
 }
 
 identity_contrasts <- function(fit) {
@@ -125,7 +141,7 @@ compare_tables <- function(ct, bt) {
   devs <- vapply(NUMCOL, function(cl) maxdev(ct[[cl]], bt[[cl]]), numeric(1L))
   chr_ok <- identical(as.character(ct$coordinate), as.character(bt$coordinate)) &&
     identical(as.character(ct$contrast), as.character(bt$coordinate)) &&
-    identical(as.character(ct$modal_side), as.character(bt$modal_side)) &&
+    identical(as.character(ct$orientation_side), as.character(bt$orientation_side)) &&
     identical(as.logical(ct$all_one_sign), as.logical(bt$all_one_sign))
   list(max_dev = max(devs), devs = devs, chr_ok = chr_ok)
 }
@@ -185,17 +201,36 @@ tryCatch({
 ## ====================================================================
 cat("\n--- projection against an independent reference ---\n")
 tryCatch({
-  ref_bound <- function(m, s_c, floor_c, orient_val = NULL, grid_n = 60L) {
-    modal_negative <- if (!is.null(orient_val)) orient_val < 0 else
+  ## Independent re-implementation of the CERTIFIED lower bound: the
+  ## one-sign case is the exact value at s_bar (eta is decreasing there);
+  ## the mixed-sign case is the per-respondent monotone envelope over the
+  ## same geometric cells. A grid minimum would be an UPPER bound for the
+  ## infimum, which is the defect the certified version replaces.
+  ref_bound <- function(m, s_c, floor_c, orient_val = NULL, grid_n = 60L,
+                        env_cells = 8L) {
+    oriented_negative <- if (!is.null(orient_val)) orient_val < 0 else
       mean(m < 0) >= 0.5
-    mo <- if (modal_negative) m else -m
+    mo <- if (oriented_negative) m else -m
     sbar <- max(s_c, floor_c)
-    grid <- sbar * exp(seq(log(1e-4), 0, length.out = grid_n))
     eta0 <- mean(mo < 0) + 0.5 * mean(mo == 0)
-    LG <- min(min(vapply(grid, function(s) mean(stats::pnorm(-mo / s)),
-                         numeric(1L))), eta0)
+    LG <- if (all(mo < 0)) {
+      mean(stats::pnorm(-mo / sbar))
+    } else {
+      pts <- sbar * exp(seq(log(1 / 50), 0, length.out = env_cells + 1L))
+      cell <- function(s_neg, s_pos) {
+        v <- numeric(length(mo))
+        neg <- mo < 0
+        v[neg] <- stats::pnorm(-mo[neg] / s_neg)
+        if (is.finite(s_pos)) v[!neg] <- stats::pnorm(-mo[!neg] / s_pos)
+        mean(v)
+      }
+      min(c(cell(pts[1L], Inf),
+            vapply(seq_len(env_cells),
+                   function(g) cell(pts[g + 1L], pts[g]), numeric(1L)),
+            eta0))
+    }
     LC <- mean(ifelse(mo < 0, mo^2 / (sbar^2 + mo^2), 0))
-    list(modal_side = if (modal_negative) "negative" else "positive",
+    list(orientation_side = if (oriented_negative) "negative" else "positive",
          all_one_sign = all(mo < 0),
          mean_abs = mean(abs(m)), mean_oriented = mean(mo),
          fitted_s = s_c, floor = floor_c, s_bar = sbar,
@@ -231,7 +266,7 @@ tryCatch({
       proj_worst <- max(proj_worst,
         maxdev(unlist(r[NUMCOL]), unlist(ct[jj, NUMCOL])))
       proj_chr_ok <- proj_chr_ok &&
-        identical(r$modal_side, ct$modal_side[[jj]]) &&
+        identical(r$orientation_side, ct$orientation_side[[jj]]) &&
         identical(r$all_one_sign, ct$all_one_sign[[jj]])
     }
   }
@@ -265,13 +300,13 @@ tryCatch({
   ok("scale: mean / dispersion / floor / ceiling scale by t", lin_dev <= 1e-12,
      sprintf("max deviation = %.3e", lin_dev))
   ok("scale: modal side unchanged",
-     length(unique(tb_s$modal_side)) == 1L &&
+     length(unique(tb_s$orientation_side)) == 1L &&
        length(unique(tb_s$all_one_sign)) == 1L,
-     paste(tb_s$modal_side, collapse = "/"))
+     paste(tb_s$orientation_side, collapse = "/"))
 }, error = guard("CHECK 3 scale"))
 
 ## ====================================================================
-## CHECK 4. Sign flip. c -> -c flips modal_side and leaves every bound
+## CHECK 4. Sign flip. c -> -c flips orientation_side and leaves every bound
 ## and every magnitude column unchanged (the oriented series is the same
 ## series). Tested under both the modal rule and an `orient` vector.
 ## ====================================================================
@@ -291,13 +326,35 @@ tryCatch({
         floor_mode = "coordinate_sum"))
       flip_dev <- max(flip_dev, maxdev(tt[1L, NUMCOL], tt[2L, NUMCOL]))
       flip_side_ok <- flip_side_ok &&
-        tt$modal_side[[1L]] != tt$modal_side[[2L]] &&
+        tt$orientation_side[[1L]] != tt$orientation_side[[2L]] &&
         identical(tt$all_one_sign[[1L]], tt$all_one_sign[[2L]])
     }
   }
   ok("sign flip: all numeric columns unchanged", flip_dev <= 1e-12,
      sprintf("max deviation = %.3e", flip_dev))
-  ok("sign flip: modal_side flips, all_one_sign unchanged", flip_side_ok)
+  ok("sign flip: orientation_side flips, all_one_sign unchanged", flip_side_ok)
+
+  ## A PRESPECIFIED side survives the flip: reversing the contrast reverses
+  ## the quantity, so an explicitly reversed contrast must be declared
+  ## explicitly too. This is the invariance that still has to hold once
+  ## orientation stops being read off the fit (work package 3).
+  spec_pn <- orient_spec(
+    orient_row("pos", "negative", "test: declared for the contrast"),
+    orient_row("neg", "positive", "test: declared for the reversed contrast"))
+  f3 <- make_fit(p = 6L, q = 2L, K = 3L, seed = 6600L)
+  c3 <- make_calibration(f3, seed = 6700L)
+  cv3 <- stats::setNames(stats::rnorm(6L), f3$attr_names)
+  tp <- suppressWarnings(sb_contrast_bounds(
+    f3, list(pos = cv3, neg = -cv3), c3, floor_mode = "coordinate_sum",
+    orientation = spec_pn))
+  ok("prespecified sides survive an explicit contrast reversal",
+     tp$orientation_side[[1L]] == "negative" &&
+       tp$orientation_side[[2L]] == "positive" &&
+       all(tp$orientation_source == "prespecified"),
+     paste(tp$orientation_side, collapse = "/"))
+  ok("the reversed pair still shares every numeric bound column",
+     maxdev(tp[1L, NUMCOL], tp[2L, NUMCOL]) <= 1e-12,
+     sprintf("max deviation = %.3e", maxdev(tp[1L, NUMCOL], tp[2L, NUMCOL])))
 }, error = guard("CHECK 4 sign flip"))
 
 ## ====================================================================
@@ -406,9 +463,13 @@ tryCatch({
   cf <- make_calibration(ff, R_rows = 40L, seed = 9002L)
   Cf <- identity_contrasts(ff)
   fl_ej <- sb_contrast_floor(Cf, cf, floor_mode = "draws", gamma = cf$gamma)
-  ok("draws mode reproduces the per-coordinate floor on e_j",
+  ok("draws mode reproduces the MATCHED per-coordinate floor on e_j",
      maxdev(fl_ej, cf$floor) <= 1e-15,
      sprintf("max deviation = %.3e", maxdev(fl_ej, cf$floor)))
+  ok("the matched floor differs from the pre-audit pooled quantile",
+     maxdev(cf$floor, cf$floor_pooled) > 0,
+     sprintf("matched vs pooled max gap = %.3e",
+             maxdev(cf$floor, cf$floor_pooled)))
   ## dominance: simulate signed loading rows whose norms are the recorded
   ## draws, and check the envelope quantile is >= the exact one.
   set.seed(9003L)
@@ -416,10 +477,15 @@ tryCatch({
   Cf2 <- sb_as_contrast_matrix(list(cx = cvecF), ff$attr_names)
   env_floor <- sb_contrast_floor(Cf2, cf, floor_mode = "draws",
                                  gamma = cf$gamma)
-  exact_draw <- apply(cf$draws, 1L, function(nrm) {
+  ## Matched exact statistic: the signed contrast norm per (rep, fold),
+  ## averaged within replication, then quantiled across replications ---
+  ## the same functional the envelope dominates.
+  exact_row <- apply(cf$draws, 1L, function(nrm) {
     sgn <- sample(c(-1, 1), length(nrm), replace = TRUE)
     abs(sum(cvecF * sgn * nrm))
   })
+  rep_idx <- rep(seq_len(cf$R), each = length(cf$folds_use))
+  exact_draw <- vapply(split(exact_row, rep_idx), mean, numeric(1L))
   exact_floor <- stats::quantile(exact_draw, probs = 1 - cf$gamma,
                                  names = FALSE, type = 1L)
   ok("draws envelope dominates an exact signed contrast floor",
@@ -513,7 +579,8 @@ tryCatch({
                   rank_tolerance = 1e-8)
   cb_ref <- sb_confidence_bounds(ft, bt_t, inf_cfg, seed = 20260826L)
   cb_new <- sb_contrast_confidence_bounds(ft, ctb_t, inf_cfg, seed = 20260826L)
-  CBCOL <- c("gauss_onestep", "gauss_lcb95", "cant_onestep", "cant_lcb95")
+  CBCOL <- c("gauss_onestep", "gauss_cond_l95", "cant_onestep",
+             "cant_cond_l95")
   cb_dev <- max(vapply(CBCOL, function(cl) maxdev(cb_ref[[cl]], cb_new[[cl]]),
                        numeric(1L)))
   ok("confidence columns match sb_confidence_bounds on e_j", cb_dev <= 1e-12,
@@ -596,9 +663,9 @@ tryCatch({
              maxdev(tbr[tbr$contrast == "slope", INVAR],
                     tbr[tbr$contrast == "slope_unit", INVAR])))
   ok("br: progressivity contrasts orient positive under the v2.1 thetas",
-     all(tbr$modal_side[tbr$contrast %in%
+     all(tbr$orientation_side[tbr$contrast %in%
                           c("top_minus_bottom", "slope")] == "positive"),
-     paste(tbr$contrast, tbr$modal_side, sep = "=", collapse = " "))
+     paste(tbr$contrast, tbr$orientation_side, sep = "=", collapse = " "))
 }, error = guard("CHECK 10 br2017"))
 
 ## --------------------------------------------------------------------

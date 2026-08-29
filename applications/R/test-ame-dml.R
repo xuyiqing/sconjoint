@@ -207,11 +207,32 @@ d_gen <- matrix(stats::rnorm(4), 1L)
 cb0 <- ame_dml_target(rbind(d_perp, d_gen), rbind(d_gen, d_perp),
                       n_nodes = 31L, chunk = 1L)
 res0 <- cb0(mu, 0.15, Sig0, NULL, NULL, NULL, colnames(mu))
+## AUDIT A2. This perturbation is deliberately SUB-THRESHOLD: the induced
+## directional variance is d' Sig_eps d = 1e-12 * 3.25 = 3.25e-12, well
+## below .ame_v_eps = 1e-10, so BOTH calls take the zero-variance branch
+## and nothing crosses. The test therefore pins branch STABILITY under a
+## sub-threshold nudge, not continuity across the switch; the Stein-limit
+## check immediately below is the one that genuinely crosses.
+v_induced <- as.numeric(d_perp %*% (1e-12 * tcrossprod(
+  c(0, 1, -1, 0.5) / sqrt(2.25 + 1))) %*% t(d_perp))
+ok("branch-switch fixture is sub-threshold (documents the label)",
+   v_induced < .ame_v_eps,
+   sprintf("induced variance %.2e < .ame_v_eps %.0e", v_induced, .ame_v_eps))
 Sig_eps <- Sig0 + 1e-12 * tcrossprod(c(0, 1, -1, 0.5) / sqrt(2.25 + 1))
 res_eps <- cb0(mu, 0.15, Sig_eps, NULL, NULL, NULL, colnames(mu))
-ok("value continuous across the branch switch",
+ok("value stable under a sub-threshold variance nudge",
    max(abs(res0$value - res_eps$value)) < 1e-6,
    sprintf("max dev %.2e", max(abs(res0$value - res_eps$value))))
+## And a nudge that DOES cross: the value must still move only by O(s).
+Sig_cross <- Sig0 + 1e-6 * tcrossprod(c(0, 1, -1, 0.5) / sqrt(2.25 + 1))
+v_cross <- as.numeric(d_perp %*% (1e-6 * tcrossprod(
+  c(0, 1, -1, 0.5) / sqrt(2.25 + 1))) %*% t(d_perp))
+res_cross <- cb0(mu, 0.15, Sig_cross, NULL, NULL, NULL, colnames(mu))
+ok("value continuous ACROSS the branch switch (super-threshold nudge)",
+   v_cross > .ame_v_eps &&
+     max(abs(res0$value - res_cross$value)) < 1e-6,
+   sprintf("induced variance %.2e crosses; max dev %.2e",
+           v_cross, max(abs(res0$value - res_cross$value))))
 ## Stein limit against a tiny positive variance evaluated by fine GH.
 s_small <- 1e-4
 gh_fine <- ame_gh_nodes(201L)
@@ -308,7 +329,7 @@ vals5 <- vapply(names(tg5$targets), function(nm) {
   mean(tg5$targets[[nm]](fit5$mu, fit5$kappa, Sigma5, NULL, NULL, NULL,
                          coord5)$value)
 }, numeric(1L))
-names(vals5) <- sub("^ame:", "", names(vals5))
+names(vals5) <- sub("^ame_fixed_draw:", "", names(vals5))
 cmp <- ame_pi$value
 dev5 <- abs(vals5[cmp$coordinate] - cmp$ame)
 tol5 <- 4 * cmp$mc_se
@@ -370,6 +391,128 @@ cb_flip <- ame_dml_target(d_r, d_f, chunk = 4L)   # sides swapped
 vflip <- cb_flip(mu, 0.15, Sigma, NULL, NULL, NULL, colnames(mu))$value
 ok("canary: swapped focal/reference sides is caught by the oracle",
    max(abs(vflip - v201)) > 1e-3)
+
+## --------------------------------------------------------------------
+## 6. Target identity and provenance (audit work package A1/A2)
+## --------------------------------------------------------------------
+section("Fixed-draw target: identity, provenance, labelling")
+
+attrs_t <- list(gender = "c1", agenda = c("c2", "c3"))
+coord_t <- paste0("c", 1:4)
+
+## A1 ACCEPTANCE. Two runs against the same frozen draw file must return
+## BITWISE-identical Psi_M. The draws are the only randomness; the
+## callback is deterministic in (mu, kappa, Sigma).
+dr1 <- ame_design_draws(coord_t, attrs_t, M_D = 500L, seed = 4242L)
+dr2 <- ame_design_draws(coord_t, attrs_t, M_D = 500L, seed = 4242L)
+ok("frozen draw set: identical seed gives an identical draw hash",
+   identical(dr1$draw_hash, dr2$draw_hash) && !is.na(dr1$draw_hash),
+   substr(dr1$draw_hash, 1L, 16L))
+pair1 <- ame_contrast_pair(dr1, "agenda", dr1$coord_index$agenda[[1L]])
+pair2 <- ame_contrast_pair(dr2, "agenda", dr2$coord_index$agenda[[1L]])
+cb_a <- ame_dml_target(pair1$d_focal, pair1$d_ref, n_nodes = 31L,
+                       chunk = 128L, label = "psi_M")
+cb_b <- ame_dml_target(pair2$d_focal, pair2$d_ref, n_nodes = 31L,
+                       chunk = 128L, label = "psi_M")
+mu_t <- matrix(stats::rnorm(30L * 4L, sd = 0.5), 30L, 4L,
+               dimnames = list(NULL, coord_t))
+Sig_t <- crossprod(matrix(stats::rnorm(16L, sd = 0.3), 4L, 4L)) +
+  diag(0.05, 4L)
+psi_a <- cb_a(mu_t, 0.1, Sig_t, NULL, NULL, NULL, coord_t)$value
+psi_b <- cb_b(mu_t, 0.1, Sig_t, NULL, NULL, NULL, coord_t)$value
+ok("frozen draw set: two runs return BITWISE-identical Psi_M",
+   identical(psi_a, psi_b),
+   sprintf("mean Psi_M = %.12f, identical() = TRUE", mean(psi_a)))
+## A different seed is a different draw set, hence a different Psi_M.
+dr3 <- ame_design_draws(coord_t, attrs_t, M_D = 500L, seed = 4243L)
+pair3 <- ame_contrast_pair(dr3, "agenda", dr3$coord_index$agenda[[1L]])
+psi_c <- ame_dml_target(pair3$d_focal, pair3$d_ref, n_nodes = 31L,
+                        chunk = 128L)(mu_t, 0.1, Sig_t, NULL, NULL, NULL,
+                                      coord_t)$value
+ok("a different draw seed gives a different Psi_M (targets are distinct)",
+   !identical(dr1$draw_hash, dr3$draw_hash) && !identical(psi_a, psi_c),
+   sprintf("|Psi_M(seed 4242) - Psi_M(seed 4243)| = %.3e",
+           mean(abs(psi_a - psi_c))))
+
+## Provenance travels with the draw set and names the target explicitly.
+spec <- ame_draw_spec(dr1)
+ok("draw spec names the fixed-draw target, not the exact integral",
+   identical(spec$target, "ame_fixed_draw") &&
+     grepl("Psi_M", spec$target_definition, fixed = TRUE) &&
+     grepl("do not cover the exact design integral",
+           spec$integration_contract, fixed = TRUE),
+   spec$target)
+ok("draw spec carries M, seed, hash and the design law",
+   identical(spec$M, 500L) && identical(spec$seed, 4242L) &&
+     nzchar(spec$draw_hash) && nzchar(spec$design_law),
+   sprintf("M = %d, seed = %d", spec$M, spec$seed))
+
+built_t <- ame_dml_targets(coord_t, attrs_t, M_D = 200L, seed = 5L,
+                           position_neutral = TRUE, chunk = 64L)
+ok("target labels are prefixed ame_fixed_draw, never a bare 'ame'",
+   all(grepl("^ame_fixed_draw_neutral:", names(built_t$targets))),
+   names(built_t$targets)[[1L]])
+
+## A2. Position-neutral is an ORIENTATION-AVERAGED structural AME. It is
+## comparable only with a design AMCE averaged over the same orientations:
+## against a single-orientation target it differs whenever kappa != 0, and
+## coincides exactly when kappa = 0.
+cb_or <- ame_dml_target(pair1$d_focal, pair1$d_ref, n_nodes = 31L,
+                        position_neutral = FALSE, chunk = 128L)
+cb_pn <- ame_dml_target(pair1$d_focal, pair1$d_ref, n_nodes = 31L,
+                        position_neutral = TRUE, chunk = 128L)
+v_or_k <- cb_or(mu_t, 0.4, Sig_t, NULL, NULL, NULL, coord_t)$value
+v_pn_k <- cb_pn(mu_t, 0.4, Sig_t, NULL, NULL, NULL, coord_t)$value
+v_or_0 <- cb_or(mu_t, 0, Sig_t, NULL, NULL, NULL, coord_t)$value
+v_pn_0 <- cb_pn(mu_t, 0, Sig_t, NULL, NULL, NULL, coord_t)$value
+ok("position-neutral differs from one orientation when kappa != 0",
+   max(abs(v_or_k - v_pn_k)) > 1e-6,
+   sprintf("max dev at kappa = 0.4 is %.3e", max(abs(v_or_k - v_pn_k))))
+ok("position-neutral equals one orientation exactly when kappa = 0",
+   max(abs(v_or_0 - v_pn_0)) < 1e-12,
+   sprintf("max dev at kappa = 0 is %.3e", max(abs(v_or_0 - v_pn_0))))
+## And it is the exact average of the two display orientations.
+cb_flip_or <- ame_dml_target(pair1$d_focal, pair1$d_ref, n_nodes = 31L,
+                             position_neutral = FALSE, chunk = 128L)
+v_minus <- cb_flip_or(mu_t, -0.4, Sig_t, NULL, NULL, NULL, coord_t)$value
+ok("position-neutral is the mean of the +kappa and -kappa orientations",
+   max(abs(0.5 * (v_or_k + v_minus) - v_pn_k)) < 1e-12,
+   sprintf("max dev %.3e", max(abs(0.5 * (v_or_k + v_minus) - v_pn_k))))
+
+## A2. Joint respondent/design sampling and the Cartesian product share a
+## conditional expectation but not a Monte Carlo standard error: the joint
+## estimator carries respondent-resampling noise the product form does not.
+## Compare on the SAME draw set at the same parameters.
+prod_val <- ame_design_mc_se(mu_t, 0.1, Sig_t, pair1$d_focal, pair1$d_ref,
+                             n_nodes = 31L, chunk = 128L)
+joint_one <- function(seed) {
+  set.seed(seed)
+  ii <- sample.int(nrow(mu_t), nrow(pair1$d_focal), replace = TRUE)
+  gh <- ame_gh_nodes(31L)
+  side <- function(D) {
+    m <- rowSums(D * mu_t[ii, , drop = FALSE])
+    v <- pmax(rowSums((D %*% Sig_t) * D), 0)
+    acc <- 0
+    for (j in seq_along(gh$x))
+      acc <- acc + gh$w[j] * stats::plogis(0.1 + m + sqrt(v) * gh$x[j])
+    acc
+  }
+  d <- side(pair1$d_focal) - side(pair1$d_ref)
+  c(est = mean(d), se = stats::sd(d) / sqrt(length(d)))
+}
+joint <- vapply(1:40, joint_one, numeric(2L))
+joint_mean <- mean(joint["est", ])
+joint_se_mean <- mean(joint["se", ])
+ok("joint sampling and the Cartesian product share a conditional mean",
+   abs(joint_mean - prod_val$value) <
+     4 * stats::sd(joint["est", ]) / sqrt(ncol(joint)),
+   sprintf("joint %.6f vs product %.6f (4 se of the joint mean = %.6f)",
+           joint_mean, prod_val$value,
+           4 * stats::sd(joint["est", ]) / sqrt(ncol(joint))))
+ok("their Monte Carlo standard errors differ (joint adds respondent noise)",
+   joint_se_mean > 3 * prod_val$mc_se,
+   sprintf("joint mc_se %.3e vs product design mc_se %.3e (ratio %.1f)",
+           joint_se_mean, prod_val$mc_se, joint_se_mean / prod_val$mc_se))
 
 ## --------------------------------------------------------------------
 cat(sprintf("\n%d passed, %d failed\n", .n_pass, .n_fail))

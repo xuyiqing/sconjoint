@@ -39,8 +39,20 @@
 #   H3   capstone at amounts a != 1
 #   I1   gate sensitivity equals d(cell)/d(level shift) numerically
 #   I2   gate sensitivity reproduces the audit's dC/dmu_p = 0.22112935
-#   I3   the column floor gate is one-sided; the per-respondent flag catches it
-#   J1   floored cells inherit the None bound; Co-party does not
+#   I3   the max-slope gate is one-sided; the per-respondent flag catches it
+#   I3b  the I3 canary cannot receive a reportable status (fail-closed gate)
+#   I3c  one clearing respondent cannot release a failing cell
+#   C2a  composite envelope floor exceeds the marginal maximum
+#   C2b  aligned loading: released under marginal max, withheld under composite
+#   C5a  matched composite floor never exceeds the triangle fallback
+#   C5b  matched aggregation is max-then-quantile, not quantile-then-max
+#   C5c  the aligned-loading canary stays withheld under the matched floor
+#   C5d  floor_rule stamps the method token in every cell
+#   J1   floored cells inherit a SAME-SIDE None bound; Co-party does not
+#   J1b  an opposition-side None bound is refused
+#   J1c  an undeclared-side None bound is refused
+#   J1d  data-frame none_bounds honours event_side
+#   J1e  no floor supplied -> the engine point is never released
 #   J2   unfloored cells release the point value
 #   J3   cc_check_domination() on an assembled table
 #   K1   zero-slope / identically-zero lines do not crash or produce NaN
@@ -63,6 +75,13 @@
 ENGINE <- file.path(.this_dir(), "compensator_columns.R")
 if (!file.exists(ENGINE)) stop("Cannot find compensator_columns.R next to this script.")
 source(ENGINE)
+## The matched composite floor delegates to share_bounds.R, which owns the
+## calibration reshaping and the signed-loading contrast statistic. The
+## runner sources both; so does this suite, so the matched path is
+## exercised here rather than only in production.
+SBSRC <- file.path(.this_dir(), "share_bounds.R")
+if (!file.exists(SBSRC)) stop("Cannot find share_bounds.R next to this script.")
+source(SBSRC)
 
 N_FAIL <- 0L
 N_PASS <- 0L
@@ -609,17 +628,187 @@ report("I2", "audit probe: dC/dmu_p = 0.22112935 on C12/pol",
        sprintf("engine sensitivity = %.8f (pol cell %.6f, audit 0.383147)",
                sens_c12, ENG$pol[[i_c12]]))
 
-## The floor gate is one-sided: the audit's Z-floor-gate-gap config must pass
-## the column gate on max slope while a binding slope sits below the floor.
+## The MAX-SLOPE gate is one-sided: the audit's Z-floor-gate-gap config
+## passes it while a binding slope sits below the floor.
 i_fg <- which(names(CFG) == "Z-floor-gate-gap")
 fg <- cc_cell_exact(PK$mu, PK$A, SEL, "gov", floor = 0.01)
 mu_fg <- PK$mu; mu_fg[i_fg, 1L] <- mu_fg[i_fg, 1L] - 0.06
 fg_shift <- cc_cell_exact(mu_fg, PK$A, SEL, "gov", floor = 0.01)
-report("I3", "column gate is one-sided; per-respondent flag catches it",
+report("I3", "max-slope gate is one-sided; per-respondent flag catches it",
        fg$max_abs_slope[i_fg] > 0.01 &&
          abs(fg$share[i_fg] - fg_shift$share[i_fg]) > 0.5,
        sprintf("max slope %.3f clears floor 0.01, yet share %.6f -> %.6f under a -0.06 mean shift",
                fg$max_abs_slope[i_fg], fg$share[i_fg], fg_shift$share[i_fg]))
+
+## AUDIT C2 REGRESSION. The I3 canary must not be able to receive a
+## reportable status. Put it in a cell of its own and check the fail-closed
+## binding-slope gate withholds it, and that the old max-slope rule would
+## have released it.
+mu_i3 <- PK$mu[i_fg, , drop = FALSE]
+A_i3 <- PK$A[i_fg, , drop = FALSE]
+tab_i3 <- cc_columns(mu_i3, A_i3, list(u_action = "u_action"), SEL,
+                     specs = "gov", floors = 0.01)
+old_rule_would_release <- tab_i3$max_abs_slope >= tab_i3$floor
+report("I3b", "I3 canary cannot receive a reportable status",
+       isTRUE(tab_i3$floored) && is.na(tab_i3$released_value) &&
+         grepl("^withheld", tab_i3$release_kind) &&
+         isTRUE(old_rule_would_release),
+       sprintf("binding slope %.4f < floor %.2f -> '%s'; old max-slope rule (%.3f) would have released",
+               tab_i3$binding_slope_min, tab_i3$floor, tab_i3$release_kind,
+               tab_i3$max_abs_slope))
+
+## AUDIT C2 REGRESSION. One favourable respondent must not release a cell
+## whose other respondents fail the gate.
+i_ok <- which(names(CFG) == "G1-generic")
+mu_mix <- PK$mu[c(i_ok, i_fg), , drop = FALSE]
+A_mix <- PK$A[c(i_ok, i_fg), , drop = FALSE]
+tab_mix <- cc_columns(mu_mix, A_mix, list(u_action = "u_action"), SEL,
+                      specs = "gov", floors = 0.01)
+report("I3c", "one clearing respondent cannot release a failing cell",
+       isTRUE(tab_mix$floored) && is.na(tab_mix$released_value) &&
+         tab_mix$n_gate_failures >= 1L,
+       sprintf("%d of %d respondents fail the binding-slope gate; release '%s'",
+               tab_mix$n_gate_failures, tab_mix$n_respondents,
+               tab_mix$release_kind))
+
+## AUDIT C2. cc_composite_floor(): an ALIGNED-LOADING example where the
+## composite support line c_p + 3c_e + 3c_s has a far larger slope than any
+## single coordinate. The marginal maximum understates the floor the
+## calibration supports; the envelope does not.
+reps_al <- matrix(0, nrow = 40L, ncol = P)
+set.seed(4242L)
+reps_al[, 1L] <- abs(stats::rnorm(40L, 0.10, 0.01))    # action
+reps_al[, 3L] <- abs(stats::rnorm(40L, 0.10, 0.01))    # econ
+reps_al[, 4L] <- abs(stats::rnorm(40L, 0.10, 0.01))    # social
+marg_al <- cc_reduce_floor(apply(reps_al, 2L, stats::quantile, probs = 0.95,
+                                 names = FALSE, type = 1L),
+                           SEL, "pol", quiet = TRUE)
+comp_al <- cc_composite_floor(reps_al, SEL, "pol", gamma = 0.05)
+report("C2a", "composite envelope floor exceeds the marginal maximum",
+       comp_al$column > 5 * marg_al,
+       sprintf("marginal max %.4f vs composite envelope %.4f (ratio %.1f) for c_p + 3c_e + 3c_s",
+               marg_al, comp_al$column, comp_al$column / marg_al))
+
+## ---------------------------------------------------------------------------
+## C5. Matched composite calibration (audit work package 5)
+##
+## The triangle envelope bounds ||A~' c|| from above with
+## sum_j |c_j| ||A~_j.||. With the SIGNED A~ retained the exact statistic is
+## computable, and it must never come out larger. Both are aggregated the
+## same way --- fold-average within replication, maximum over the column's
+## support lines within the replication, then the quantile across
+## replications --- so the pointwise inequality survives aggregation.
+## ---------------------------------------------------------------------------
+
+## A synthetic calibration in sb_zero_floor(keep_loadings = TRUE) shape.
+mk_signed_cal <- function(R = 24L, n_folds = 2L, gamma = 0.05, seed = 808L,
+                          p = P, q = 1L) {
+  set.seed(seed)
+  n <- R * n_folds
+  A_list <- lapply(seq_len(n), function(i)
+    matrix(stats::rnorm(p * q, sd = 0.08), p, q,
+           dimnames = list(ATTR, NULL)))
+  draws <- t(vapply(A_list, function(A) sqrt(rowSums(A^2)), numeric(p)))
+  colnames(draws) <- ATTR
+  list(draws = draws, rep_id = rep(seq_len(R), each = n_folds),
+       fold_of_draw = rep(seq_len(n_folds), times = R),
+       R = R, folds_use = seq_len(n_folds), gamma = gamma,
+       attr_names = ATTR, A_raw_draws = A_list, keep_loadings = TRUE)
+}
+cal5 <- mk_signed_cal()
+
+matched_le_tri <- TRUE
+ratios5 <- numeric(0)
+for (sp in SPECS) {
+  mm <- cc_composite_floor(cal5, SEL, sp, gamma = cal5$gamma,
+                           method = "matched_composite")
+  tt <- cc_composite_floor(cal5, SEL, sp, gamma = cal5$gamma,
+                           method = "triangle_fallback")
+  matched_le_tri <- matched_le_tri && (mm$column <= tt$column + 1e-12)
+  ratios5 <- c(ratios5, mm$column / tt$column)
+}
+report("C5a", "matched composite floor never exceeds the triangle fallback",
+       matched_le_tri,
+       sprintf("matched/triangle ratio by column: %s",
+               paste(sprintf("%.2f", ratios5), collapse = " ")))
+
+## The aggregation order is load-bearing: maximising within a replication
+## and then quantiling dominates quantiling each line and then maximising.
+C5 <- .cc_support_contrasts(SEL, "any")
+reps5 <- sb_matched_contrast_reps(cal5, C5)
+q_then_max <- max(apply(reps5, 2L, stats::quantile, probs = 0.95,
+                        names = FALSE, type = 1L))
+max_then_q <- cc_composite_floor(cal5, SEL, "any", gamma = 0.05,
+                                 method = "matched_composite")$column
+report("C5b", "matched aggregation is max-then-quantile (the conservative order)",
+       max_then_q >= q_then_max - 1e-12,
+       sprintf("max-then-quantile %.4f >= quantile-then-max %.4f",
+               max_then_q, q_then_max))
+
+report("C5d", "cc_composite_floor stamps the method token",
+       identical(cc_composite_floor(cal5, SEL, "pol", gamma = 0.05,
+                                    method = "matched_composite")$floor_rule,
+                 "matched_composite") &&
+         identical(cc_composite_floor(cal5$draws, SEL, "pol",
+                                      gamma = 0.05)$floor_rule,
+                   "triangle_fallback"),
+       "matched_composite / triangle_fallback")
+
+report("C5e", "matched_composite is refused when no signed draws exist",
+       grepl("needs a calibration carrying signed loadings",
+             tryCatch({ cc_composite_floor(cal5$draws, SEL, "pol",
+                                           gamma = 0.05,
+                                           method = "matched_composite")
+                        "" }, error = conditionMessage), fixed = TRUE),
+       "errors rather than silently falling back")
+
+## A respondent whose binding slope sits between the two floors: released
+## under the marginal maximum, withheld under the composite envelope.
+mu_al <- matrix(0, 1L, P); A_al <- matrix(0, 1L, P)
+mu_al[1L, 1L] <- -0.30                       # action penalty
+## Support slopes c_p +- 3c_e +- 3c_s = {0.51, 0.33, 0.27, 0.09}, all
+## positive and none cancelling: the binding slope is 0.51, above the
+## marginal-max floor and below the composite envelope floor.
+A_al[1L, 1L] <- 0.30; A_al[1L, 3L] <- 0.04; A_al[1L, 4L] <- 0.03
+tab_marg <- cc_columns(mu_al, A_al, list(u_action = "u_action"), SEL,
+                       specs = "pol", floors = marg_al)
+tab_comp <- cc_columns(mu_al, A_al, list(u_action = "u_action"), SEL,
+                       specs = "pol", floors = comp_al$column)
+## The same canary against a MATCHED floor built from signed draws whose
+## aligned rows make the composite slope genuinely large: still withheld.
+cal_al <- local({
+  R <- 24L; nf <- 2L
+  set.seed(5150L)
+  A_list <- lapply(seq_len(R * nf), function(i) {
+    A <- matrix(0, P, 1L, dimnames = list(ATTR, NULL))
+    A[1L, 1L] <- abs(stats::rnorm(1L, 0.10, 0.01))
+    A[3L, 1L] <- abs(stats::rnorm(1L, 0.10, 0.01))
+    A[4L, 1L] <- abs(stats::rnorm(1L, 0.10, 0.01))
+    A
+  })
+  draws <- t(vapply(A_list, function(A) sqrt(rowSums(A^2)), numeric(P)))
+  colnames(draws) <- ATTR
+  list(draws = draws, rep_id = rep(seq_len(R), each = nf),
+       R = R, folds_use = seq_len(nf), gamma = 0.05, attr_names = ATTR,
+       A_raw_draws = A_list, keep_loadings = TRUE)
+})
+mf_al <- cc_composite_floor(cal_al, SEL, "pol", gamma = 0.05,
+                            method = "matched_composite")
+tab_matched <- cc_columns(mu_al, A_al, list(u_action = "u_action"), SEL,
+                          specs = "pol", floors = mf_al$column,
+                          floor_rule = mf_al$floor_rule)
+report("C5c", "the aligned-loading canary stays withheld under the matched floor",
+       isTRUE(tab_matched$floored) && is.na(tab_matched$released_value) &&
+         identical(tab_matched$floor_rule[[1L]], "matched_composite"),
+       sprintf("binding slope %.3f < matched floor %.3f; floor_rule = %s",
+               tab_matched$binding_slope_min, mf_al$column,
+               tab_matched$floor_rule[[1L]]))
+
+report("C2b", "aligned-loading cell: released under marginal max, withheld under composite",
+       !isTRUE(tab_marg$floored) && isTRUE(tab_comp$floored) &&
+         is.na(tab_comp$released_value),
+       sprintf("binding slope %.3f; marginal floor %.4f releases, composite floor %.4f withholds",
+               tab_comp$binding_slope_min, marg_al, comp_al$column))
 
 ## ---------------------------------------------------------------------------
 ## J. Floored cells inherit the None bound (Co-party does not)
@@ -628,9 +817,12 @@ report("I3", "column gate is one-sided; per-respondent flag catches it",
 mu_j <- PR$mu[1:50, , drop = FALSE]
 A_j <- matrix(1e-6, nrow = 50L, ncol = P)
 acts <- list(u_action = "u_action")
+## SAME-SIDE INHERITANCE (audit C3). The bound must declare the event side
+## it certifies; only an acceptance-side bound may be inherited here.
+bound_acc <- structure(0.42, event_side = "acceptance")
 tab_j <- suppressWarnings(
   cc_columns(mu_j, A_j, acts, SEL, group = NULL, floors = 1e-3,
-             none_bounds = 0.42))
+             none_bounds = bound_acc))
 inh <- tab_j[tab_j$spec %in% c("none", "pol", "gov", "any"), ]
 cop <- tab_j[tab_j$spec == "party", ]
 j_ok <- all(inh$floored) && all(inh$released_value == 0.42) &&
@@ -638,12 +830,65 @@ j_ok <- all(inh$floored) && all(inh$released_value == 0.42) &&
   all(is.finite(inh$share)) &&
   isTRUE(cop$floored) && is.na(cop$released_value) &&
   grepl("no domination inheritance", cop$release_kind)
-report("J1", "floored None/Full/Gov/Any inherit the certified bound", j_ok,
+report("J1", "floored None/Full/Gov/Any inherit a SAME-SIDE certified bound",
+       j_ok,
        sprintf("released %s; Co-party '%s'",
                paste(unique(inh$released_value), collapse = "/"),
                cop$release_kind))
+
+## An OPPOSITION-side bound is the real Graham--Svolik case: refused.
+tab_wrong <- suppressWarnings(
+  cc_columns(mu_j, A_j, acts, SEL, group = NULL, floors = 1e-3,
+             none_bounds = structure(0.42, event_side = "opposition")))
+wrong <- tab_wrong[tab_wrong$spec %in% c("none", "pol", "gov", "any"), ]
+report("J1b", "an opposition-side None bound is refused, not inherited",
+       all(is.na(wrong$released_value)) &&
+         all(grepl("opposition", wrong$release_kind)),
+       sprintf("release_kind: '%s'", unique(wrong$release_kind)[1L]))
+
+## A bound with no declared side is refused as unknown-side.
+tab_unk <- suppressWarnings(
+  cc_columns(mu_j, A_j, acts, SEL, group = NULL, floors = 1e-3,
+             none_bounds = 0.42))
+unk <- tab_unk[tab_unk$spec %in% c("none", "pol", "gov", "any"), ]
+report("J1c", "an undeclared-side None bound is refused",
+       all(is.na(unk$released_value)) &&
+         all(grepl("no event_side", unk$release_kind)),
+       sprintf("release_kind: '%s'", unique(unk$release_kind)[1L]))
+
+## Data-frame form, mixed sides: only the acceptance-side row inherits.
+nb_df <- data.frame(action = "u_action", group = "Overall", bound = 0.42,
+                    event_side = "acceptance", stringsAsFactors = FALSE)
+tab_df <- suppressWarnings(
+  cc_columns(mu_j, A_j, acts, SEL, group = NULL, floors = 1e-3,
+             none_bounds = nb_df))
+nb_df$event_side <- "opposition"
+tab_df2 <- suppressWarnings(
+  cc_columns(mu_j, A_j, acts, SEL, group = NULL, floors = 1e-3,
+             none_bounds = nb_df))
+report("J1d", "data-frame none_bounds honours event_side",
+       all(tab_df$released_value[tab_df$spec == "none"] == 0.42) &&
+         all(is.na(tab_df2$released_value[tab_df2$spec == "none"])),
+       "acceptance row inherits; the same row on the opposition side does not")
+
+## A cell with no floor at all can never release the ENGINE POINT: the gate
+## cannot be evaluated, so the point fails closed. A same-side certified
+## bound may still be inherited, because that bound does not depend on the
+## gate; with no bound the cell is withheld outright.
+tab_nofloor <- cc_columns(mu_j, A_j, acts, SEL, group = NULL,
+                          floors = NA_real_, none_bounds = bound_acc)
+tab_nofloor_nb <- cc_columns(mu_j, A_j, acts, SEL, group = NULL,
+                             floors = NA_real_, none_bounds = NULL)
+report("J1e", "no floor supplied -> the engine point is never released",
+       !any(tab_nofloor$release_kind == "point") &&
+         !any(tab_nofloor_nb$release_kind == "point") &&
+         all(is.na(tab_nofloor_nb$released_value)) &&
+         any(grepl("no floor supplied", tab_nofloor_nb$release_kind)),
+       sprintf("with a same-side bound: '%s'; without: '%s'",
+               unique(tab_nofloor$release_kind)[1L],
+               unique(tab_nofloor_nb$release_kind)[1L]))
 tab_ok <- cc_columns(PR$mu[1:50, , drop = FALSE], PR$A[1:50, , drop = FALSE],
-                     acts, SEL, floors = 1e-6, none_bounds = 0.42)
+                     acts, SEL, floors = 1e-6, none_bounds = bound_acc)
 report("J2", "unfloored cells release the point value",
        all(!tab_ok$floored) && all(tab_ok$release_kind == "point") &&
          max(abs(tab_ok$released_value - tab_ok$share)) == 0,

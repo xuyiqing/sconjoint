@@ -9,6 +9,12 @@
 ## run (ame_sw.csv), so the DML plug-in column is comparable to the banked
 ## ame_neutral within design Monte Carlo error.
 ##
+## TARGET (audit work package A1). This runner estimates the FIXED-DRAW
+## AME Psi_M, conditional on the frozen draw set recorded in
+## ame_dml_draw_spec.csv. Its intervals cover Psi_M, not the exact
+## design-integrated Psi. The `mc_ok` column is a finite-sample heuristic,
+## not the paper's numerical-integration condition, and is named to say so.
+##
 ## Probe mode (AME_PROBE=1): M = 1000, two targets, to measure cost.
 ## Full mode: M = 20000, all 13 coordinates, position-neutral.
 ## Output (worktree estimands/): ame_dml_sw.csv, ame_dml_inference.rds.
@@ -24,6 +30,7 @@ wt <- path.expand("~/GitHub/sconjoint-v21-repro")
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/ame_dml.R"))
 source(file.path(root, "applications/R/estimands_v21.R"))
+source(file.path(root, "applications/R/provenance.R"))
 
 probe <- identical(Sys.getenv("AME_PROBE"), "1")
 M_D <- if (probe) 1000L else 20000L
@@ -115,7 +122,7 @@ log("scmix_dml done: status", inf$status,
 ## joint-sampled ame_neutral within that run's own mc_se.
 Sigma_full <- tcrossprod(full$A)
 mcv <- lapply(names(built$targets), function(nm) {
-  cn <- sub("^ame_neutral:", "", nm)
+  cn <- sub("^ame_fixed_draw_neutral:", "", nm)
   a <- names(attrs)[vapply(attrs, function(v) cn %in% v, logical(1L))]
   pair <- ame_contrast_pair(built$draws, a,
                             built$draws$coord_index[[a]][match(cn, attrs[[a]])])
@@ -130,7 +137,8 @@ log("design mc_se range:", sprintf("%.2e", min(mc)), "-",
 
 se_diag <- sqrt(diag(as.matrix(inf$diagnostic_covariance)))
 res <- data.frame(
-  coordinate = sub("^ame_neutral:", "", names(inf$estimate)),
+  coordinate = sub("^ame_fixed_draw_neutral:", "", names(inf$estimate)),
+  target = "ame_fixed_draw",
   plugin = as.numeric(inf$plugin_estimate),
   one_step = as.numeric(inf$estimate),
   diagnostic_se = as.numeric(se_diag),
@@ -148,8 +156,11 @@ if (file.exists(banked)) {
   names(res)[names(res) == "ame_neutral"] <- "banked_plugin_neutral"
   names(res)[names(res) == "mc_se"] <- "banked_mc_se"
 }
-## MC error must be negligible against the sampling se (paper cond. (I5)).
-res$mc_ok <- res$design_mc_se < 0.25 * res$diagnostic_se
+## DIAGNOSTIC HEURISTIC, not the paper's condition. An O_p(M^{-1/2}) design
+## Monte Carlo error does not establish sqrt(N)|Psi_M - Psi| = o_p(1); the
+## intervals above cover Psi_M regardless. Named `mc_heuristic_ok` so no
+## reader can take it for a certificate.
+res$mc_heuristic_ok <- res$design_mc_se < 0.25 * res$diagnostic_se
 ## Bridge to the banked plug-in run (identical draws; their estimator adds
 ## respondent-pairing noise quantified by banked_mc_se).
 if ("banked_plugin_neutral" %in% names(res)) {
@@ -159,8 +170,25 @@ if ("banked_plugin_neutral" %in% names(res)) {
 print(res, digits = 4)
 
 suffix <- if (probe) "_probe" else ""
+res <- sb_stamp_provenance(res, app = "sw2022",
+                           profile = "mixed_logit_v2_1_postpilot_final",
+                           fit = assembled, calibration = NULL,
+                           seed = 20260827L,
+                           producer = "applications/sw2022/ame_dml_run.R",
+                           target_label = "ame_fixed_draw",
+                           sources = "applications/R/ame_dml.R")
+spec <- ame_draw_spec(built$draws, mc_se = mc)
+res$prov_draw_hash <- spec$draw_hash
+res$prov_draw_M <- spec$M
+res$prov_draw_seed <- spec$seed
+res$prov_design_law <- spec$design_law
+res$prov_integration_contract <- spec$integration_contract
 write.csv(res, file.path(out_dir, paste0("ame_dml_sw", suffix, ".csv")),
           row.names = FALSE)
+prov_write_manifest(out_dir, c(
+  list(artifact = paste0("ame_dml_sw", suffix, ".csv")), spec,
+  list(commit = prov_git_commit(root))),
+  name = paste0("provenance_ame", suffix, ".csv"))
 saveRDS(inf, file.path(out_dir, paste0("ame_dml_inference", suffix, ".rds")))
 log("written:", file.path(out_dir, paste0("ame_dml_sw", suffix, ".csv")))
 log("total", sprintf("%.1f min", as.numeric(difftime(Sys.time(), t0,

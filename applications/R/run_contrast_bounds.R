@@ -18,7 +18,9 @@
 ##                   a NAMED numeric vector with one exact floor per
 ##                   contrast, produced by re-running the zero-heterogeneity
 ##                   calibration with ||A~' c|| recorded in place of
-##                   |A~_j|. This is the publication path.
+##                   |A~_j|. It removes the projection approximation only;
+##                   the ceiling stays a null detection threshold, so the
+##                   output stays a conditional sensitivity bound.
 
 options(stringsAsFactors = FALSE, warn = 1)
 a <- commandArgs(trailingOnly = TRUE)
@@ -36,6 +38,8 @@ suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 ## path directly; this is the same file, located rather than assumed.
 source(file.path(root, "applications/R/contrast_bounds.R"))
 source(file.path(root, "applications/R/br_progressivity_contrasts.R"))
+source(file.path(root, "applications/R/provenance.R"))
+source(file.path(root, "applications/R/orientation_spec.R"))
 message("audited bound math: ", sb_share_bounds_path(root))
 
 dir <- file.path(root, "applications", app, "results/mixed_logit", profile)
@@ -66,6 +70,17 @@ contrasts <- if (identical(app, "br2017")) {
 }
 
 floors_arg <- fl
+## Matched ceiling (audit finding P2). For the 'draws' and
+## 'coordinate_sum' modes sb_contrast_floor() now averages each
+## replication over its folds before quantiling; for 'coordinate_sum' the
+## per-coordinate input must be the matched floor as well, so replace the
+## calibration's pre-audit pooled `floor` before it is read.
+if (!identical(floor_mode, "supplied") && !is.null(fl$draws)) {
+  fl$floor <- sb_matched_floor(fl, attr_names = asm$attr_names)
+  floors_arg <- fl
+  message("ceiling statistic: matched (within-replication fold average, ",
+          "quantile across replications)")
+}
 if (identical(floor_mode, "supplied")) {
   sup_path <- file.path(dir, "contrast_bound_floor.rds")
   if (!file.exists(sup_path)) {
@@ -80,8 +95,14 @@ if (identical(floor_mode, "supplied")) {
   floors_arg <- if (is.list(sup) && !is.null(sup$floor)) sup$floor else sup
 }
 
+## Prespecified orientation, by contrast name. br_progressivity_contrasts()
+## already defines its contrasts so that positive means progressive, so the
+## side is fixed by the definition rather than by the fit.
+ospec <- orient_spec_for(app, "contrast")
+message("prespecified orientations on file for ", app, ": ", nrow(ospec))
 tb <- sb_contrast_bounds(asm, contrasts, floors_arg, orient = orient,
-                         floor_mode = floor_mode, gamma = fl$gamma)
+                         floor_mode = floor_mode, gamma = fl$gamma,
+                         orientation = ospec)
 inf_cfg <- list(riesz_validation_fraction = 0.2,
                 riesz_equation_tolerance = 0.05,
                 ridge_sensitivity_tolerance = 0.10,
@@ -89,16 +110,42 @@ inf_cfg <- list(riesz_validation_fraction = 0.2,
                 information_eigenvalue_min = 1e-8,
                 rank_tolerance = 1e-8)
 tb <- sb_contrast_confidence_bounds(asm, tb, inf_cfg, seed = 20260826L)
+## The progressivity contrasts ARE read jointly in the report ("both
+## submitted claims survive"), so they form one claim family and carry a
+## Bonferroni-adjusted endpoint alongside the pointwise one.
+claim_fam <- ifelse(sb_is_released(tb$bound_release) &
+                      tb$contrast %in% c("top_minus_bottom", "slope",
+                                         "slope_unit"),
+                    "br_progressivity", NA_character_)
+tb <- sb_attach_multiplicity(tb, claim_family = claim_fam,
+                             alpha_family = 0.05)
 tb$floor_R <- fl$R
 tb$floor_gamma <- fl$gamma
 tb$floor_mode <- floor_mode
-## Contrasts whose fitted spread clears the framework's ratio-two
-## detection rule are back in the point-identified regime; the bound is
-## reported for reference but the ordinary sign-share machinery governs.
-tb$regime <- ifelse(tb$fitted_s >= 2 * tb$floor, "point_identified", "floored")
+## `regime` and the release gate are set inside sb_bounds_table(): the
+## intermediate window (floor <= fitted_s < 2 floor) has no valid ceiling
+## and is withheld; the point-identified regime is not reported as a bound.
+tb <- sb_stamp_provenance(tb, app = app, profile = profile, fit = asm,
+                          calibration = fl, seed = 20260826L,
+                          producer = "applications/R/run_contrast_bounds.R",
+                          target_label = "contrast_directional_share_bound")
+orient_require_prespecified(tb, what = "contrast_bounds.csv")
+## A familywise caption is only writable if the family carries its
+## adjustment metadata; check it here so the artifact cannot ship claiming
+## a family it has not adjusted for.
+if (any(!is.na(tb$claim_family))) {
+  for (f in unique(stats::na.omit(tb$claim_family))) {
+    sb_require_family_adjustment(tb, f, what = paste0("'", f, "' caption"))
+  }
+  message("claim families adjusted: ",
+          paste(unique(stats::na.omit(tb$claim_family)), collapse = ", "))
+}
 out_csv <- file.path(dir, "contrast_bounds.csv")
 utils::write.csv(tb, out_csv, row.names = FALSE)
 message("contrast bounds written: ", out_csv)
-print(tb[, c("contrast", "modal_side", "s_bar", "lower_bound_gauss",
-             "gauss_lcb95", "lower_bound_cantelli", "cant_lcb95")],
+print(tb[, c("contrast", "orientation_side", "orientation_source",
+             "regime", "released_lower_bound_gauss",
+             "released_gauss_cond_ladj", "bound_release")],
       row.names = FALSE, digits = 3)
+message("released rows: ", sum(sb_is_released(tb$bound_release)), " of ",
+        nrow(tb))
