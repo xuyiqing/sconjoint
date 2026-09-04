@@ -1,0 +1,45 @@
+# Protocol metadata: Saha & Weeks (2022), SSI candidate-choice conjoint.
+# Assembled 2026-08-26 for the identification audit (work-list step 5).
+# Sources: published paper (Political Behavior 44:779-805), replication
+# archive readme + analysis scripts, realized SSI data. Empirical checks in
+# exposure_profile_marginals.csv and exposure_independence_check.csv.
+
+application: sw2022
+design:
+  unit: respondent evaluates pairs of hypothetical candidates (forced choice)
+  tasks_per_respondent: 3 analyzed elections (raw file also carries partial completers)
+  attributes:
+    - name: gender
+      levels: [Male, Female]
+    - name: previously_ran_for_office
+      levels: [Yes, "No"]
+    - name: talent   # paper labels this personality/talent
+      levels: [Assertive, Collaborative, Determined to Succeed, Empathetic,
+               Good Communicator, Hard Working, Tough Negotiator]
+    - name: agenda
+      levels: [Very Few Changes, Moderate Changes, Complete Overhaul]
+    - name: children
+      levels: [No children, 1 child, 2 children, 3 children]
+randomization:
+  statement: >
+    "For each candidate profile in the tables, all attributes are randomly
+    assigned (with no restrictions on the combination of attributes). The
+    order in which the attributes appeared was also randomly assigned, but
+    fixed for each respondent."  (Paper, design section.)
+  attribute_independence: stated by the paper; realized max |corr| between
+    attribute blocks 0.029 (exposure_independence_check.csv)
+  level_probabilities: not stated numerically in the paper text; realized
+    marginals consistent with uniform assignment
+  display_side: profile pair shown as two columns; no statement that
+    left/right column assignment is randomized per candidate --- candidate A
+    is the first-listed profile in the replication data
+  attribute_order: randomized once per respondent, then fixed
+completion:
+  raw_respondents: 1249
+  analyzed_respondents: 1191
+  exclusions: 7 partial completers (two tasks), 43 missing vendor demographic
+    panel, 8 demographic-whitelist failures (reconstructed in 01/02)
+unverified_without_instrument:
+  - exact level probabilities (uniformity is inferred, not documented)
+  - per-respondent attribute-order realizations
+  - whether the A/B column assignment involved any display-side randomization

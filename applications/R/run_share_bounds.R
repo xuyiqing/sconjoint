@@ -15,7 +15,19 @@ source(file.path(root, "applications/R/orientation_spec.R"))
 
 dir <- file.path(root, "applications", app, "results/mixed_logit", profile)
 asm <- readRDS(file.path(dir, "fit_primary_assembled.rds"))
-fl <- readRDS(file.path(dir, "share_bound_floor.rds"))
+## Calibration override (2026-08-31). SB_CALIBRATION names a calibration to
+## use in place of the one of record; SB_SUFFIX names the output so the
+## record's share_bounds.csv is never overwritten. The signature check is
+## kept: an override must still belong to this assembled fit.
+sb_cal_override <- Sys.getenv("SB_CALIBRATION", "")
+sb_suffix <- Sys.getenv("SB_SUFFIX", "")
+fl <- if (nzchar(sb_cal_override)) readRDS(sb_cal_override) else
+  readRDS(file.path(dir, "share_bound_floor.rds"))
+if (nzchar(sb_cal_override)) {
+  message("calibration OVERRIDE: ", basename(sb_cal_override),
+          " | source: ", fl$ceiling_source, " | R: ", fl$R,
+          " | folds: ", paste(fl$folds_use, collapse = ","))
+}
 if (!identical(fl$analysis_signature, asm$analysis_signature)) {
   stop("Floor calibration does not match the assembled fit.")
 }
@@ -67,7 +79,7 @@ tb <- sb_stamp_provenance(tb, app = app, profile = profile, fit = asm,
                           producer = "applications/R/run_share_bounds.R")
 ## Hard gate before anything manuscript-facing is written.
 orient_require_prespecified(tb, what = "share_bounds.csv")
-out_csv <- file.path(dir, "share_bounds.csv")
+out_csv <- file.path(dir, paste0("share_bounds", sb_suffix, ".csv"))
 utils::write.csv(tb, out_csv, row.names = FALSE)
 message("share bounds written: ", out_csv)
 print(tb[, c("coordinate", "orientation_side", "orientation_source",

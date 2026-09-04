@@ -21,3 +21,7 @@ applications/config.local.R
 applications/output/
 .runtime/
 .R-library/
+inputs/
+runs/
+*.Rds
+*.rds

@@ -61,6 +61,25 @@ if (file.exists(signed_path)) {
   }
 }
 
+## Optional arm override (calibration comparison, 2026-08-31). When set,
+## the run uses the named calibration instead of the one of record. It must
+## still carry signed loadings; the reproduces-the-record certificate is NOT
+## required, because a procedure-matched calibration deliberately does not
+## reproduce it. Outputs are written under a suffixed name so the record's
+## artifacts are never overwritten.
+CC_ARM <- Sys.getenv("CC_ARM", "")
+cal_override <- Sys.getenv("CC_CALIBRATION", "")
+if (nzchar(cal_override)) {
+  cs2 <- readRDS(cal_override)
+  if (!sb_calibration_has_loadings(cs2)) {
+    stop("The override calibration has no signed loadings.", call. = FALSE)
+  }
+  cal <- cs2
+  log("calibration OVERRIDE:", basename(cal_override),
+      "| source:", cal$ceiling_source, "| R:", cal$R)
+}
+suffix <- if (nzchar(CC_ARM)) paste0("_", CC_ARM) else ""
+
 inp <- cc_fit_inputs(assembled)
 log("fit: n_resp", nrow(inp$mu), "p", ncol(inp$mu), "q", inp$q, "K", inp$K)
 
@@ -201,9 +220,9 @@ tab_out <- sb_stamp_provenance(
   target_label = "nonlinear_compensator_column",
   sources = c("applications/R/compensator_columns.R",
               "applications/R/share_bounds.R"))
-write.csv(tab_out, file.path(out, "compensator_columns.csv"),
+write.csv(tab_out, file.path(out, paste0("compensator_columns", suffix, ".csv")),
           row.names = FALSE)
-saveRDS(tab, file.path(out, "compensator_columns.rds"))
+saveRDS(tab, file.path(out, paste0("compensator_columns", suffix, ".rds")))
 prov_write_manifest(out, list(
   artifact = "compensator_columns.csv",
   engine = "cc_compensator_columns (exact q=1 union-of-half-lines)",
@@ -221,5 +240,5 @@ ov <- tab[tab$group == "Overall", c("action", "spec", "share",
                                     "floored", "frac_gate_failures",
                                     "binding_slope_min", "floor")]
 print(ov, digits = 3)
-log("written:", file.path(out, "compensator_columns.csv"))
+log("written:", file.path(out, paste0("compensator_columns", suffix, ".csv")))
 log("DONE")
