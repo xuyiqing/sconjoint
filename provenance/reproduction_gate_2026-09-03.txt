@@ -1,0 +1,22 @@
+Graham--Svolik one-cell reproduction gate
+Date: 2026-09-03
+Platform: Apple arm64 CPU
+R: 4.5.3
+torch: 0.16.3
+Fold index: 1 (stored outer-fold label 2)
+Seed: 20264036
+Reference selected learner: relu4_wd1e-01
+
+Preserved baseline application code
+Selected learner: relu4_wd1e-01
+Selection match: TRUE
+Maximum absolute loading deviation: 7.116770e-06
+Note: the baseline gate compared two loadings after the same erroneous second
+division by the contrast scale. It verifies refit reproduction but not units.
+
+Corrected application code
+Selected learner: relu4_wd1e-01
+Selection match: TRUE
+Maximum absolute raw-loading deviation: 1.974150248010287e-06
+Declared absolute tolerance: 1e-05
+Gate result: PASS
