@@ -302,6 +302,12 @@ tq1_transform_summary <- function(x, family, target, level = 0.95) {
   est <- x$estimate
   z <- stats::qnorm(1 - (1 - level) / 2)
   dse <- as.numeric(x$diagnostic_se[names(est)])
+  quantity_gate_pass <- rep(TRUE, length(est))
+  if (identical(x$type, "directional_heterogeneity")) {
+    quantity_gate_pass[names(est) == "share_Z"] <- isTRUE(x$gate$pass)
+  } else if (!identical(x$type, "covariance_decomposition")) {
+    quantity_gate_pass[] <- isTRUE(x$gate$pass)
+  }
   data.frame(
     family = family, target = target, component = names(est),
     one_step = as.numeric(est), diagnostic_se = dse,
@@ -313,7 +319,7 @@ tq1_transform_summary <- function(x, family, target, level = 0.95) {
     status = x$status,
     formal_inference_available = as.logical(
       x$target_inference_available[names(est)]),
-    quantity_gate_pass = isTRUE(x$gate$pass),
+    quantity_gate_pass = quantity_gate_pass,
     withholding_reason = if (is.null(x$reason)) "" else x$reason,
     stringsAsFactors = FALSE
   )

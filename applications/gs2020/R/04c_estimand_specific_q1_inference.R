@@ -40,6 +40,7 @@ options(sconjoint.project_root = root, sconjoint.gs_application_root = app_root)
 source(file.path(app_root, "config/analysis_config.R"), local = FALSE)
 cfg <- gs_analysis_config
 cli <- parse_cli(commandArgs(trailingOnly = TRUE))
+config_path <- file.path(app_root, "config/analysis_config.R")
 
 families <- if (identical(cli$family, "all")) {
   c("basis", "direction", "compensating", "heterogeneity")
@@ -80,9 +81,28 @@ seed <- as.integer(cfg$optimizer$seed + 41000L)
 runner_path <- script_path()
 base_settings <- list(application = "gs2020", profile = cli$profile,
   q = 1L, granularity = "estimand-specific", seed = seed,
-  multiplier_draws = inf_cfg$multiplier_draws,
+  inference = inf_cfg,
   runner_md5 = unname(tools::md5sum(runner_path)))
-fingerprint <- tq1_fingerprint(root, c(fit_path, prepared_path), base_settings)
+package_sources <- sort(list.files(file.path(root, "R"), pattern = "[.]R$",
+                                   full.names = TRUE))
+fingerprint <- tq1_fingerprint(
+  root, c(fit_path, prepared_path, config_path, package_sources),
+  base_settings)
+checkpoint_fingerprint <- function(target) {
+  out <- fingerprint
+  out$settings$checkpoint_target <- target
+  out
+}
+
+manifest_path <- file.path(out_dir, "run_manifest.rds")
+previous_manifest <- NULL
+if (file.exists(manifest_path) && !cli$force) {
+  previous_manifest <- readRDS(manifest_path)
+  if (!identical(previous_manifest$fingerprint, fingerprint)) {
+    stop("Existing output manifest has a different code, input, or settings ",
+         "fingerprint. Use a fresh output directory or --force=true.")
+  }
+}
 
 basis_path <- file.path(out_dir, "basis_reconstruction.rds")
 basis_obj <- tq1_checkpoint(basis_path, fingerprint, cli$force,
@@ -222,7 +242,8 @@ if ("direction" %in% families) {
       type = "sign", contrast = direction_contrasts[[nm]],
       variance_floor = inf_cfg$variance_floor, label = nm)), target_name)
     dml <- tq1_checkpoint(file.path(checkpoint_dir,
-      paste0(target_name, ".rds")), fingerprint, cli$force,
+      paste0(target_name, ".rds")), checkpoint_fingerprint(target_name),
+      cli$force,
       tq1_run_family(fit, basis_obj$mu_basis, targets, inf_cfg, seed))
     z <- tq1_family_summary(dml, "preference_direction", inf_cfg$level)
     z$direction <- nm
@@ -259,7 +280,7 @@ if ("compensating" %in% families) {
         tq1_subgroup_target(base, groups[[group]])
       targets <- stats::setNames(list(target), stem)
       dml <- tq1_checkpoint(file.path(checkpoint_dir, paste0(stem, ".rds")),
-        fingerprint, cli$force,
+        checkpoint_fingerprint(stem), cli$force,
         tq1_run_family(fit, basis_obj$mu_basis, targets, inf_cfg,
                        seed + 1L))
       ps <- tq1_family_summary(dml, "compensating_primitives", inf_cfg$level)
@@ -304,7 +325,7 @@ if ("heterogeneity" %in% families) {
       type = "heterogeneity_primitives", contrast = direction_contrasts[[nm]],
       label = nm)), stem)
     dml <- tq1_checkpoint(file.path(checkpoint_dir, paste0(stem, ".rds")),
-      fingerprint, cli$force,
+      checkpoint_fingerprint(stem), cli$force,
       tq1_run_family(fit, basis_obj$mu_basis, targets, inf_cfg,
                      seed + 2L))
     ps <- tq1_family_summary(dml, "heterogeneity_primitives", inf_cfg$level)
@@ -337,15 +358,34 @@ if ("heterogeneity" %in% families) {
                        file.path(out_dir, "heterogeneity_primitives.csv"))
   tq1_atomic_write_csv(heterogeneity_summary,
                        file.path(out_dir, "heterogeneity_summary.csv"))
-  pol <- heterogeneity_summary[
-    heterogeneity_summary$component == "share_Z",
+}
+
+load_prior_summary <- function(current, family, filename) {
+  if (!is.null(current)) return(current)
+  path <- file.path(out_dir, filename)
+  if (!is.null(previous_manifest) &&
+      family %in% previous_manifest$completed_families && file.exists(path)) {
+    return(utils::read.csv(path, check.names = FALSE))
+  }
+  NULL
+}
+direction_all <- load_prior_summary(
+  direction_summary, "direction", "direction_summary.csv")
+comp_all <- load_prior_summary(
+  comp_summary, "compensating", "compensating_summary.csv")
+heterogeneity_all <- load_prior_summary(
+  heterogeneity_summary, "heterogeneity", "heterogeneity_summary.csv")
+
+if (!is.null(heterogeneity_all)) {
+  pol <- heterogeneity_all[
+    heterogeneity_all$component == "share_Z",
     c("target", "plugin", "one_step", "diagnostic_se", "status",
       "formal_inference_available", "riesz_max", "ridge_max",
       "information_min", "one_step_in_parameter_space",
       "plugin_in_parameter_space"), drop = FALSE]
   names(pol)[names(pol) == "target"] <- "direction"
-  if (!is.null(direction_summary)) {
-    pol <- merge(direction_summary[, c("direction", "plugin", "one_step",
+  if (!is.null(direction_all)) {
+    pol <- merge(direction_all[, c("direction", "plugin", "one_step",
       "diagnostic_se", "status", "formal_inference_available")],
       pol, by = "direction", all = TRUE,
       suffixes = c("_direction", "_heterogeneity"))
@@ -354,8 +394,7 @@ if ("heterogeneity" %in% families) {
 }
 
 summaries <- Filter(Negate(is.null),
-                    list(direction_summary, comp_summary,
-                         heterogeneity_summary))
+                    list(direction_all, comp_all, heterogeneity_all))
 if (length(summaries)) {
   gate_summary <- tq1_bind_rows(summaries)
   gate_summary$interval_status <- ifelse(
@@ -364,15 +403,10 @@ if (length(summaries)) {
   tq1_atomic_write_csv(gate_summary, file.path(out_dir, "gate_summary.csv"))
 }
 
-manifest_path <- file.path(out_dir, "run_manifest.rds")
-completed_families <- families
-if (file.exists(manifest_path) && !cli$force) {
-  previous_manifest <- readRDS(manifest_path)
-  if (identical(previous_manifest$fingerprint, fingerprint)) {
-    completed_families <- unique(c(previous_manifest$completed_families,
-                                   completed_families))
-  }
-}
+completed_families <- unique(c(
+  if (is.null(previous_manifest)) character() else
+    previous_manifest$completed_families,
+  families))
 manifest <- list(
   application = "gs2020", profile = cli$profile, q = 1L,
   granularity = paste(

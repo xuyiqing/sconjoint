@@ -66,6 +66,14 @@ check("directional decomposition obeys H_T = H_Z + H_R",
             tr$estimate[["H_R"]]) < 1e-14)
 check("unverified primitives cannot produce formal intervals",
       !isTRUE(tr$inference_available) && all(is.na(tr$ci_lower)))
+tr_margin_fail <- scmix_delta_transform(
+  fake, type = "directional_heterogeneity",
+  primitives = c("h", "h2", "hr"), total_margin = 1)
+tr_summary <- tq1_transform_summary(
+  tr_margin_fail, "heterogeneity", "synthetic")
+check("heterogeneity total margin gates only the reported share",
+      all(tr_summary$quantity_gate_pass[tr_summary$component != "share_Z"]) &&
+        !tr_summary$quantity_gate_pass[tr_summary$component == "share_Z"])
 plug_h <- tq1_plugin_transform(fake, "directional_heterogeneity",
                                c("h", "h2", "hr"))
 check("plug-in heterogeneity transform uses plug-in primitives",
