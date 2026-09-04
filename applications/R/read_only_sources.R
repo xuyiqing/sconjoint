@@ -5,7 +5,22 @@
 # later adapters and written only below `output_root`.
 
 .scapp_normalize <- function(path, mustWork) {
-  normalizePath(path, winslash = "/", mustWork = mustWork)
+  if (isTRUE(mustWork) || file.exists(path)) {
+    return(normalizePath(path, winslash = "/", mustWork = mustWork))
+  }
+  ## normalizePath() does not resolve a symlink such as /tmp -> /private/tmp
+  ## for a destination that does not exist yet. Resolve its deepest existing
+  ## ancestor first so the containment guard cannot be bypassed that way.
+  path <- path.expand(path)
+  if (!grepl("^/", path)) path <- file.path(getwd(), path)
+  suffix <- character()
+  probe <- path
+  while (!file.exists(probe) && !identical(dirname(probe), probe)) {
+    suffix <- c(basename(probe), suffix)
+    probe <- dirname(probe)
+  }
+  base <- normalizePath(probe, winslash = "/", mustWork = TRUE)
+  if (!length(suffix)) base else do.call(file.path, c(list(base), as.list(suffix)))
 }
 
 .scapp_is_within <- function(path, parent) {
@@ -24,11 +39,20 @@ scapp_paths <- function(
   source_root <- .scapp_normalize(source_root, TRUE)
   output_root <- .scapp_normalize(output_root, FALSE)
   if (.scapp_is_within(output_root, source_root)) {
-    stop("The application output root may not be inside the read-only source ",
-         "project.", call. = FALSE)
+    ## The authors explicitly reserve source_root/mlcodex for isolated work in
+    ## the shared project. No other descendant of the source project is writable.
+    writable <- Sys.getenv("SCONJOINT_WRITABLE_SUBTREE", unset = file.path(
+      source_root, "mlcodex"))
+    if (!dir.exists(writable) || !.scapp_is_within(output_root, writable)) {
+      stop("The application output root may not be inside the read-only source ",
+           "project except below its designated mlcodex subtree.",
+           call. = FALSE)
+    }
   }
   list(source_root = source_root, output_root = output_root,
-       source_policy = "read-only", output_policy = "local clone only")
+       source_policy = "read-only",
+       output_policy = if (.scapp_is_within(output_root, source_root))
+         "designated shared mlcodex subtree" else "local clone only")
 }
 
 .scapp_frozen_path <- function(application, source_root) {

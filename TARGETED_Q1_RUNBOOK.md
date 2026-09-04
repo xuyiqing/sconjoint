@@ -72,4 +72,6 @@ application summaries must not be presented as results from this corrected
 runner.
 
 Every application writes to a fresh directory under `runs/`. The source data
-and Yiqing's original folders remain unchanged.
+and Yiqing's original folders remain unchanged. The read-only source guard
+permits writes inside the explicitly designated shared `mlcodex` subtree and
+nowhere else under `ConjointStructural`.
