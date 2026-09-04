@@ -58,16 +58,21 @@ if (is_gate) {
                           y_override = as.numeric(nested$raw_data$y),
                           gate_seed = gseed)
   ref <- nested$tuning[[k_index]]
-  ref_A <- as.matrix(ref$refit$A) /
-    as.numeric(ref$refit$preprocessing$deltaX$scale)
+  ref_A <- as.matrix(ref$refit$A)
+  gate_tolerance <- as.numeric(Sys.getenv("SB_GATE_TOL", "1e-5"))
   cell$gate <- list(
     selected_match = identical(cell$selected_name, ref$selected$name),
     reference_selected = ref$selected$name,
     max_abs_dev_A = max(abs(cell$A_raw - ref_A)),
-    max_abs_dev_draw = max(abs(cell$draw - sqrt(rowSums(ref_A^2)))))
+    max_abs_dev_draw = max(abs(cell$draw - sqrt(rowSums(ref_A^2)))),
+    tolerance = gate_tolerance)
+  cell$gate$pass <- isTRUE(cell$gate$selected_match) &&
+    is.finite(cell$gate$max_abs_dev_A) &&
+    cell$gate$max_abs_dev_A <= gate_tolerance
   msg("GATE selected:", cell$selected_name, "| reference:", ref$selected$name,
       "| match:", cell$gate$selected_match,
-      "| max|dev A|:", format(cell$gate$max_abs_dev_A, digits = 3))
+      "| max|dev A|:", format(cell$gate$max_abs_dev_A, digits = 3),
+      "| pass:", cell$gate$pass)
 } else {
   R_TOTAL <- as.integer(Sys.getenv("SB_R", "10"))
   draws <- sb_matched_null_draws(assembled, R = R_TOTAL,
@@ -85,4 +90,8 @@ tmp <- paste0(outfile, ".tmp")
 saveRDS(cell, tmp, version = 3)
 if (!file.rename(tmp, outfile)) stop("Could not write ", outfile)
 msg("WROTE", basename(outfile))
+if (is_gate && !isTRUE(cell$gate$pass)) {
+  stop("The reproduction gate failed. Do not use downstream results.",
+       call. = FALSE)
+}
 cat("CELL_DONE", tag, "\n")

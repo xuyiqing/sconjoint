@@ -54,10 +54,9 @@
 # domination (b >= 0), so it is released as "at least x", never as NA. Co-party
 # gets no such inheritance: its benefit takes both signs.
 #
-# Interface. Fit-facing entry points follow the conventions of
-# 2608_issues/Yiqing/bound_for_share/code/share_bounds.R: raw-scale loadings
-# A_folds[[k]] / sd_dx_folds[[k]] (as in sb_raw_A_folds), respondent-level means
-# by !duplicated(respondent_id) (as in sb_respondent_means).
+# Interface. Fit-facing entry points follow the assembled-fit contract.
+# `A_folds[[k]]` is already on the raw contrast scale. Respondent-level means
+# are selected with !duplicated(respondent_id), as in sb_respondent_means().
 #
 # Dependencies: base R + stats only. Standalone; source() it, no package load
 # required to run the engine on synthetic (mu, A).
@@ -1115,7 +1114,7 @@ cc_check_domination <- function(tab, tol = 1e-12) {
 #' Extract respondent-level means and raw-scale loadings from an assembled fit
 #'
 #' Conventions copied from `share_bounds.R`:
-#'   - raw-scale loading  A_folds[[k]] / sd_dx_folds[[k]]   (sb_raw_A_folds)
+#'   - raw-scale loading  A_folds[[k]]   (sb_raw_A_folds)
 #'   - respondent means   mu_hat[!duplicated(respondent_id), ] (sb_respondent_means)
 #'
 #' Judgment call, recorded: each respondent is paired with the loading of the
@@ -1147,10 +1146,8 @@ cc_fit_inputs <- function(assembled) {
   mu <- as.matrix(assembled$mu_hat)[keep, , drop = FALSE]
   fold <- as.integer(assembled$fold_id)[keep]
   p <- ncol(mu)
-  A_raw <- lapply(seq_len(assembled$K), function(k) {
-    Ak <- as.matrix(assembled$A_folds[[k]])
-    Ak / as.numeric(assembled$sd_dx_folds[[k]])
-  })
+  A_raw <- lapply(seq_len(assembled$K), function(k)
+    as.matrix(assembled$A_folds[[k]]))
   q <- ncol(A_raw[[1L]])
   attr_names <- assembled$attr_names
   if (is.null(attr_names)) attr_names <- colnames(mu)

@@ -28,5 +28,7 @@ hashes.
 
 Before an expensive rerun, the untouched baseline must pass Yiqing's one-cell
 reproduction gate. It must select `relu4_wd1e-01` and reproduce the saved loading
-matrix with maximum absolute deviation zero. A failure indicates an environment
-or source mismatch and blocks substantive reporting.
+matrix within the declared `1e-5` absolute tolerance. On the preserved R 4.5.3
+and torch 0.16.3 CPU environment, the observed maximum deviation was
+`7.12e-6`. A larger difference or a changed selected learner blocks substantive
+reporting.

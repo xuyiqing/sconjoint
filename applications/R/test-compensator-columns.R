@@ -942,7 +942,7 @@ report("L3", "default M meets the memo's SE gate (SE <= 0.001)",
 ## ---------------------------------------------------------------------------
 ## M. End-to-end on a fit-shaped object
 ##
-## Mirrors the assembled-fit fields the engine consumes: A_folds (standardized),
+## Mirrors the assembled-fit fields the engine consumes: A_folds (raw scale),
 ## sd_dx_folds, mu_hat (task-level, out-of-fold), respondent_id, fold_id, K,
 ## attr_names, deltaX. This is the exact shape a real
 ## `fit_primary_assembled.rds` presents, so the other machine can swap it in.
@@ -956,18 +956,18 @@ mu_resp <- matrix(stats::rnorm(n_resp * P, 0, 0.6), n_resp, P,
                   dimnames = list(NULL, ATTR))
 mu_task <- mu_resp[rep(seq_len(n_resp), each = tasks), , drop = FALSE]
 sd_dx <- lapply(seq_len(K), function(k) stats::runif(P, 0.8, 1.6))
-A_std <- lapply(seq_len(K), function(k)
-  matrix(stats::rnorm(P, 0, 0.5) * sd_dx[[k]], ncol = 1L))
+A_raw <- lapply(seq_len(K), function(k)
+  matrix(stats::rnorm(P, 0, 0.5), ncol = 1L))
 dX <- matrix(sample(-3:3, n_resp * tasks * P, TRUE), ncol = P,
              dimnames = list(NULL, ATTR))
 fit <- structure(list(
-  mu_hat = mu_task, A_folds = A_std, sd_dx_folds = sd_dx,
+  mu_hat = mu_task, A_folds = A_raw, sd_dx_folds = sd_dx,
   respondent_id = rid, fold_id = fold, K = K, q = 1L,
   attr_names = ATTR, deltaX = dX),
   class = c("scmix_nested_assembled", "list"))
 
 inp <- cc_fit_inputs(fit)
-A_expect <- t(vapply(inp$fold, function(k) as.numeric(A_std[[k]][, 1L] / sd_dx[[k]]),
+A_expect <- t(vapply(inp$fold, function(k) as.numeric(A_raw[[k]][, 1L]),
                      numeric(P)))
 m_ok <- identical(dim(inp$mu), c(n_resp, P)) &&
   max(abs(inp$mu - mu_resp)) == 0 &&
@@ -1008,7 +1008,7 @@ report("M3", "raw-ordinal-units assertion fires on a rescaled deltaX", m3,
        "stop() on non-integer policy differences")
 
 m4 <- tryCatch({
-  q2 <- fit; q2$A_folds <- lapply(seq_len(K), function(k) cbind(A_std[[k]], A_std[[k]]))
+  q2 <- fit; q2$A_folds <- lapply(seq_len(K), function(k) cbind(A_raw[[k]], A_raw[[k]]))
   cc_compensator_columns(q2, actions = list(a = "u_action"),
                          coparty = "diff_respParty", econ = "diff_p1_num",
                          social = "diff_p2_num", governance = ATTR[5:10],

@@ -30,7 +30,7 @@ D <- unique(as.matrix(assembled$deltaX))
 p <- ncol(D)
 cat("unique realized contrasts:", nrow(D), " p:", p, "\n")
 
-a_model <- as.numeric(as.matrix(full$A)[, 1L])
+a_raw <- as.numeric(as.matrix(full$A)[, 1L])
 certify <- function(D, a, label) {
   w <- as.numeric(D %*% a)
   M <- w * D
@@ -48,25 +48,13 @@ certify <- function(D, a, label) {
     frac_below_1em3_maxw = mean(abs(w) < 1e-3 * max(abs(w))))
 }
 
-res <- certify(D, a_model, "model_scale")
-## Raw-scale variant when the standardization vector is recoverable:
-## columns rescale by sd_dx, the loading by 1/sd_dx, so w is IDENTICAL;
-## only the column geometry (hence the condition number) changes.
-sdv <- full$sd_dx
-if (is.null(sdv) && !is.null(assembled$sd_dx_folds)) {
-  sdv <- Reduce(`+`, lapply(assembled$sd_dx_folds, as.numeric)) /
-    length(assembled$sd_dx_folds)
-}
-if (!is.null(sdv)) {
-  sdv <- as.numeric(sdv)
-  stopifnot(length(sdv) == p, all(sdv > 0))
-  D_raw <- sweep(D, 2L, sdv, `*`)
-  a_raw <- a_model / sdv
-  res <- rbind(res, certify(D_raw, a_raw, "raw_scale_foldmean_sd"))
-}
+## Both assembled$deltaX and the selected refit's A are already in raw
+## contrast units. Applying the stored training scale again is an error.
+res <- certify(D, a_raw, "raw_contrast_scale")
 print(res, digits = 4)
 
-out <- "/Users/xyq/Dropbox/Research_Hub/Projects/ConjointStructural/2608_issues/Yiqing/applications"
+out <- Sys.getenv("SCONJOINT_OUTPUT_DIR", unset = dir)
+dir.create(out, recursive = TRUE, showWarnings = FALSE)
 write.csv(res, file.path(out, "gs_injectivity_certificate_v21_2026-08-28.csv"),
           row.names = FALSE)
 cat("written:", file.path(out, "gs_injectivity_certificate_v21_2026-08-28.csv"), "\n")

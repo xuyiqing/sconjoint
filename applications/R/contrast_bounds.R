@@ -20,28 +20,20 @@
 ## 0. Locate and load the audited source of record.
 ## ---------------------------------------------------------------------
 
-## Production location is applications/R/share_bounds.R inside the package
-## root (the machine that holds the fits). The Dropbox path is the
-## documented fallback for local development on machines where the file
-## has not been copied into the repo yet.
+## The source of record is applications/R/share_bounds.R in this checkout.
+## An explicit root may be supplied by a driver. Otherwise use the configured
+## checkout. Never fall back to a private working copy outside Git.
 sb_share_bounds_path <- function(root = NULL) {
-  cand <- character()
-  if (!is.null(root)) {
-    cand <- c(cand, file.path(root, "applications/R/share_bounds.R"))
+  if (is.null(root)) {
+    root <- Sys.getenv("SCONJOINT_ROOT", unset =
+      getOption("sconjoint.project_root", path.expand("~/GitHub/sconjoint")))
   }
-  cand <- c(
-    cand,
-    file.path(path.expand("~/GitHub/sconjoint"),
-              "applications/R/share_bounds.R"),
-    path.expand(file.path(
-      "~/Dropbox/Research_Hub/Projects/ConjointStructural/2608_issues",
-      "Yiqing/bound_for_share/code/share_bounds.R")))
-  hit <- cand[file.exists(cand)]
-  if (!length(hit)) {
-    stop("Cannot find the audited share_bounds.R. Looked in:\n  ",
-         paste(cand, collapse = "\n  "), call. = FALSE)
+  path <- file.path(root, "applications/R/share_bounds.R")
+  if (!file.exists(path)) {
+    stop("Cannot find the checked-in share_bounds.R at ", path, ".",
+         call. = FALSE)
   }
-  hit[[1L]]
+  path
 }
 
 ## Idempotent: if the driver already sourced share_bounds.R, leave it be.
@@ -154,8 +146,8 @@ sb_as_contrast_matrix <- function(contrasts, attr_names) {
 ## contrast, and sb_fitted_dispersion() returns ||A_raw' c||_2 fold-averaged
 ## --- both computed by the audited functions, unmodified.
 ##
-## sd_dx_folds is set to 1 because A_folds is replaced by the ALREADY-raw
-## projected loadings, and sb_raw_A_folds() divides by sd_dx_folds.
+## sd_dx_folds is set to 1 because the projected object has no training-scale
+## transform of its own. `sb_raw_A_folds()` reads its already-raw A_folds.
 sb_project_assembled <- function(assembled, C) {
   A_raw <- sb_raw_A_folds(assembled)
   p <- nrow(A_raw[[1L]])

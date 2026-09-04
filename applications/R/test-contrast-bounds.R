@@ -56,13 +56,9 @@ here <- tryCatch({
 ## exercise a stale mirror while the driver used the repo file. Same order
 ## as the code under test now.
 repo_sb <- file.path(here, "share_bounds.R")
-dropbox_sb <- path.expand(file.path(
-  "~/Dropbox/Research_Hub/Projects/ConjointStructural/2608_issues",
-  "Yiqing/bound_for_share/code/share_bounds.R"))
-share_bounds_path <- if (file.exists(repo_sb)) repo_sb else dropbox_sb
+share_bounds_path <- repo_sb
 if (!file.exists(share_bounds_path)) {
-  stop("Cannot locate the audited share_bounds.R (looked at ", dropbox_sb,
-       " and ", repo_sb, ").")
+  stop("Cannot locate the checked-in share_bounds.R at ", repo_sb, ".")
 }
 cat("audited source : ", share_bounds_path, "\n", sep = "")
 source(share_bounds_path)
@@ -254,7 +250,7 @@ tryCatch({
     keep <- !duplicated(rid)
     M <- as.matrix(fit$mu_hat)[keep, , drop = FALSE]
     Araw <- lapply(seq_len(fit$K), function(k)
-      as.matrix(fit$A_folds[[k]]) / as.numeric(fit$sd_dx_folds[[k]]))
+      as.matrix(fit$A_folds[[k]]))
     for (jj in seq_along(cl)) {
       cfull <- stats::setNames(numeric(6L), fit$attr_names)
       v <- cl[[jj]]; cfull[names(v)] <- v

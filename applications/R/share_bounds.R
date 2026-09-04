@@ -35,14 +35,18 @@ SB_INFERENCE_POPULATION <- paste0(
   "superpopulation (scmix_dml retains the direct empirical-P_Z influence ",
   "term); NOT the finite realized-N target conditional on observed Z")
 
-## Loadings on the raw contrast scale. A is optimized on standardized
-## contrasts; dividing rows by the per-fold DeltaX scale recovers raw units
-## (same convention as scmix_calibrate_zero()).
+## Loadings on the raw contrast scale. The package converts each selected
+## refit's loading before storing `A_folds` in an assembled object. Do not
+## divide these matrices by `sd_dx_folds` again. The latter records the
+## training transform and is retained for reproducibility only.
 sb_raw_A_folds <- function(assembled) {
   lapply(seq_len(assembled$K), function(k) {
     A <- as.matrix(assembled$A_folds[[k]])
-    sc <- as.numeric(assembled$sd_dx_folds[[k]])
-    A / sc
+    if (any(!is.finite(A))) {
+      stop("Assembled fold ", k, " contains a non-finite raw-scale loading.",
+           call. = FALSE)
+    }
+    A
   })
 }
 

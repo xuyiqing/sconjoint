@@ -8,7 +8,12 @@
 ##
 ## Base R + digest. Source alongside the runner that writes the artifact.
 
-prov_git_commit <- function(root = path.expand("~/GitHub/sconjoint")) {
+prov_default_root <- function() normalizePath(Sys.getenv(
+  "SCONJOINT_ROOT", unset = getOption(
+    "sconjoint.project_root", path.expand("~/GitHub/sconjoint"))),
+  mustWork = TRUE)
+
+prov_git_commit <- function(root = prov_default_root()) {
   out <- tryCatch(
     suppressWarnings(system2("git", c("-C", shQuote(root), "rev-parse",
                                       "--short", "HEAD"),
@@ -34,8 +39,7 @@ prov_object_hash <- function(x) {
 }
 
 ## Source hashes for the files whose code produced the artifact.
-prov_source_hashes <- function(files,
-                               root = path.expand("~/GitHub/sconjoint")) {
+prov_source_hashes <- function(files, root = prov_default_root()) {
   paths <- ifelse(file.exists(files), files, file.path(root, files))
   paste(sprintf("%s=%s", basename(paths),
                 substr(vapply(paths, prov_file_hash, character(1L)), 1L, 12L)),
@@ -53,7 +57,7 @@ sb_stamp_provenance <- function(tab, app, profile, fit = NULL,
                                 target_label = "directional_share_bound",
                                 sources = c("applications/R/share_bounds.R",
                                             "applications/R/contrast_bounds.R"),
-                                root = path.expand("~/GitHub/sconjoint")) {
+                                root = prov_default_root()) {
   tab$prov_application <- app
   tab$prov_profile <- profile
   tab$prov_commit <- prov_git_commit(root)

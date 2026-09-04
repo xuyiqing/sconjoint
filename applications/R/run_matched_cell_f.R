@@ -65,8 +65,7 @@ if (is_gate) {
                           y_override = as.numeric(nested$raw_data$y),
                           gate_seed = gseed)
   ref <- nested$tuning[[k_index]]
-  ref_A <- as.matrix(ref$refit$A) /
-    as.numeric(ref$refit$preprocessing$deltaX$scale)
+  ref_A <- as.matrix(ref$refit$A)
   cell$gate <- list(
     selected_match = identical(cell$selected_name, ref$selected$name),
     reference_selected = ref$selected$name,

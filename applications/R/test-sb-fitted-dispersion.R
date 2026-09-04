@@ -44,12 +44,13 @@ chk("p=4 unchanged (length)", length(d4) == 4L, paste0("length = ", length(d4)))
 chk("p=4 unchanged (values)", isTRUE(all.equal(unname(d4), unname(expect4))),
     paste0("max dev = ", signif(max(abs(d4 - expect4)), 3)))
 
-## --- Case 5: per-coordinate sd_dx scaling still applied -------------
+## --- Case 5: assembled loadings are already raw and never rescaled ---
 f5 <- list(K = 2, A_folds = list(matrix(c(2, 4), 2, 1), matrix(c(2, 4), 2, 1)),
            sd_dx_folds = list(c(2, 4), c(2, 4)))
 d5 <- sb_fitted_dispersion(f5)
-chk("raw-scale division preserved", isTRUE(all.equal(unname(d5), c(1, 1))),
-    paste0("got ", paste(signif(d5, 6), collapse = ", "), " (expected 1, 1)"))
+chk("raw-scale assembled contract preserved",
+    isTRUE(all.equal(unname(d5), c(2, 4))),
+    paste0("got ", paste(signif(d5, 6), collapse = ", "), " (expected 2, 4)"))
 
 cat("\n", if (ok) "ALL PASS" else "FAILURES PRESENT", "\n", sep = "")
 quit(status = if (ok) 0L else 1L)

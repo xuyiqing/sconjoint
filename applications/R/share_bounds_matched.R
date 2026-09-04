@@ -151,8 +151,9 @@ sb_matched_cell <- function(assembled, nested, profile, optimizer,
   gate_ok <- is.list(gate) && isTRUE(gate$pass) && length(sel) == 1L &&
     !is.na(sel) && isTRUE(gate$selection_eligible[sel])
 
-  scale_k <- as.numeric(fk$refit$preprocessing$deltaX$scale)
-  A_raw <- as.matrix(fk$refit$A) / scale_k
+  ## `scmix_tune_matrix(..., refit = TRUE)` has already returned the selected
+  ## refit's loading on the raw contrast scale.
+  A_raw <- as.matrix(fk$refit$A)
   dimnames(A_raw) <- list(assembled$attr_names, NULL)
 
   list(r = as.integer(r), k_index = as.integer(k_index),
