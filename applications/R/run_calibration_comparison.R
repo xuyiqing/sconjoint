@@ -14,7 +14,7 @@
 ## 4000 against the profile's 6000, so A differs from the analysis on two
 ## axes, not one. B isolates the learner swap alone.
 options(stringsAsFactors = FALSE, warn = 1)
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/share_bounds.R"))
 source(file.path(root, "applications/R/share_bounds_matched.R"))

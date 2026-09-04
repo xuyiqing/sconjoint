@@ -17,7 +17,7 @@ options(stringsAsFactors = FALSE, warn = 1)
 a <- commandArgs(trailingOnly = TRUE)
 if (length(a) < 2L) stop("Usage: run_sensitivity_profile.R <app> <profile>")
 app <- a[[1]]; profile <- a[[2]]
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/contrast_bounds.R"))
 source(file.path(root, "applications/R/br_progressivity_contrasts.R"))

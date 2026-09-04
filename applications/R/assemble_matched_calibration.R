@@ -2,7 +2,7 @@
 ## Assemble finished cells into armC_matched.rds, and report the gate.
 ## Safe to run repeatedly: it uses whatever complete replications exist.
 options(stringsAsFactors = FALSE, warn = 1)
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/share_bounds.R"))
 source(file.path(root, "applications/R/share_bounds_matched.R"))

@@ -8,7 +8,7 @@
 ## can and cannot support rather than printing a bare number.
 options(stringsAsFactors = FALSE, warn = 1)
 suppressPackageStartupMessages({library(ggplot2); library(dplyr)})
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 P <- file.path(root, "applications/gs2020/results/mixed_logit/v21_corrected/estimands")
 OUT <- file.path(root, "applications/gs2020/results/mixed_logit/v21_corrected/figures")
 dir.create(OUT, recursive = TRUE, showWarnings = FALSE)

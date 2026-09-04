@@ -18,7 +18,7 @@
 ## used, and the comparison of condition numbers is qualitative.
 
 options(stringsAsFactors = FALSE, warn = 1)
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 dir <- file.path(root, "applications/gs2020/results/mixed_logit/v21_corrected")
 
 assembled <- readRDS(file.path(dir, "fit_primary_assembled.rds"))

@@ -23,5 +23,6 @@ applications/output/
 .R-library/
 inputs/
 runs/
+applications/*/results/
 *.Rds
 *.rds

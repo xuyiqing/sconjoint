@@ -18,7 +18,7 @@ if (length(a) < 3L) stop("Usage: run_matched_cell.R <r> <k_index> <outdir> [gate
 r <- as.integer(a[[1]]); k_index <- as.integer(a[[2]]); outdir <- a[[3]]
 is_gate <- length(a) >= 4L && identical(a[[4]], "gate")
 
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 Sys.setenv(OMP_NUM_THREADS = Sys.getenv("SB_THREADS", "2"),
            MKL_NUM_THREADS = Sys.getenv("SB_THREADS", "2"))
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))

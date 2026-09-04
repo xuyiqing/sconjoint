@@ -25,7 +25,7 @@ log <- function(...) {
   cat(format(Sys.time(), "%H:%M:%S"), "|", ..., "\n"); flush.console()
 }
 
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 wt <- path.expand("~/GitHub/sconjoint-v21-repro")
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/ame_dml.R"))

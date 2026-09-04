@@ -29,7 +29,7 @@ if (length(a) < 2L) {
 }
 app <- a[[1]]; profile <- a[[2]]
 floor_mode <- if (length(a) >= 3L) a[[3]] else "draws"
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 ## contrast_bounds.R loads the audited share_bounds.R itself, preferring
 ## <root>/applications/R/share_bounds.R (its production location) and

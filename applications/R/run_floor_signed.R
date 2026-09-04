@@ -22,7 +22,7 @@ if (length(a) < 4L) {
 app <- a[[1]]; profile <- a[[2]]
 hidden <- as.integer(strsplit(a[[3]], "-")[[1]])
 wd <- as.numeric(a[[4]])
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/share_bounds.R"))
 source(file.path(root, "applications/R/provenance.R"))

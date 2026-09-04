@@ -3,7 +3,7 @@
 ## v2.1 reproduction fit (closed form + simulation cross-check per the
 ## algorithm memo). PROVISIONAL pending author review.
 options(stringsAsFactors = FALSE, warn = 1)
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 wt <- path.expand("~/GitHub/sconjoint-v21-repro")
 suppressPackageStartupMessages(pkgload::load_all(wt, quiet = TRUE))
 source(file.path(root, "applications/R/estimands_v21.R"))

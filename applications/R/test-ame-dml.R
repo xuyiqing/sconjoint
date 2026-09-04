@@ -16,7 +16,7 @@
 options(stringsAsFactors = FALSE, warn = 1)
 set.seed(20260827L)
 
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 source(file.path(root, "applications/R/ame_dml.R"))
 source(file.path(root, "applications/R/estimands_v21.R"))

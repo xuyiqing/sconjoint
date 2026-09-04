@@ -5,7 +5,7 @@
 ## calibration of record (R = 10, folds 1-2, 4000 epochs, gamma 0.05) so the
 ## only thing that moves is the learner.
 options(stringsAsFactors = FALSE, warn = 1)
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 Sys.setenv(OMP_NUM_THREADS = Sys.getenv("SB_THREADS", "2"),
            MKL_NUM_THREADS = Sys.getenv("SB_THREADS", "2"))
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))

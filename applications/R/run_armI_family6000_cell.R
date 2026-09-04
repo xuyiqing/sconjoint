@@ -15,7 +15,7 @@ options(stringsAsFactors = FALSE, warn = 1)
 a <- commandArgs(trailingOnly = TRUE)
 r <- as.integer(a[[1]]); k <- as.integer(a[[2]]); outdir <- a[[3]]
 fam <- if (length(a) >= 4L) a[[4]] else "relu"
-root <- path.expand("~/GitHub/sconjoint")
+root <- normalizePath(Sys.getenv("SCONJOINT_ROOT", unset = path.expand("~/GitHub/sconjoint")), mustWork = TRUE)
 Sys.setenv(OMP_NUM_THREADS = "2", MKL_NUM_THREADS = "2")
 suppressPackageStartupMessages(pkgload::load_all(root, quiet = TRUE))
 try(torch::torch_set_num_threads(2L), silent = TRUE)
