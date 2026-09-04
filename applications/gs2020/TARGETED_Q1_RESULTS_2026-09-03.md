@@ -1,6 +1,6 @@
 # Graham–Svolik corrected targeted q = 1 results
 
-Run date: 2026-09-03. Code commit: `d11046e7e7009d83d694e8203dfe739bd1e7fea5`.
+Run date: 2026-09-03. Analysis commit: `defc4b64f84b492e02ff1f7ebca424aed5444d9f`.
 Primary output: `runs/gs2020/v21_corrected/targeted_q1_estimand/`.
 
 ## What changed
