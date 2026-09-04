@@ -55,6 +55,7 @@ fake_cov <- diag(c(0.01, 0.02, 0.03))
 dimnames(fake_cov) <- list(c("h", "h2", "hr"), c("h", "h2", "hr"))
 fake <- structure(list(
   estimate = c(h = 0.2, h2 = 0.3, hr = 0.4),
+  plugin_estimate = c(h = 0.1, h2 = 0.15, hr = 0.2),
   diagnostic_covariance = fake_cov,
   status = "conditional_unverified", inference_available = FALSE,
   analysis_signature = "synthetic"), class = c("scmix_dml", "list"))
@@ -65,6 +66,41 @@ check("directional decomposition obeys H_T = H_Z + H_R",
             tr$estimate[["H_R"]]) < 1e-14)
 check("unverified primitives cannot produce formal intervals",
       !isTRUE(tr$inference_available) && all(is.na(tr$ci_lower)))
+plug_h <- tq1_plugin_transform(fake, "directional_heterogeneity",
+                               c("h", "h2", "hr"))
+check("plug-in heterogeneity transform uses plug-in primitives",
+      abs(plug_h[["H_Z"]] - 0.14) < 1e-14 &&
+        abs(plug_h[["H_T"]] - 0.34) < 1e-14 &&
+        abs(plug_h[["share_Z"]] - 0.14 / 0.34) < 1e-14)
+
+single <- structure(list(
+  estimate = c(x = 0.25), plugin_estimate = c(x = 0.20),
+  one_step_adjustment = c(x = 0.05), diagnostic_se = c(x = 0.10),
+  diagnostic_covariance = matrix(0.01, 1L, 1L,
+                                 dimnames = list("x", "x")),
+  se = c(x = NA_real_), ci_lower = c(x = NA_real_),
+  ci_upper = c(x = NA_real_), status = "conditional_unverified",
+  target_inference_available = c(x = FALSE), reason = "synthetic",
+  fold_details = rep(list(list(
+    riesz_equation_relative_residual = 0.02,
+    ridge_relative_sensitivity = 0.03,
+    information_structural_min = 0.04, selected_nu = 0)), 2L)),
+  class = c("scmix_dml", "list"))
+single_summary <- tq1_family_summary(single, "single")
+check("one-target family summary preserves fold by target shape",
+      nrow(single_summary) == 1L && single_summary$target == "x" &&
+        single_summary$fold1_riesz == 0.02 &&
+        single_summary$fold2_ridge == 0.03)
+
+ratio <- structure(list(plugin_estimate = c(num = 0.12, den = 0.30)),
+                   class = c("scmix_dml", "list"))
+check("plug-in subgroup transform is a ratio of plug-in primitives",
+      abs(tq1_plugin_transform(ratio, "subgroup_ratio",
+                               c("num", "den")) - 0.4) < 1e-14)
+
+bound <- tq1_bind_rows(list(data.frame(a = 1), data.frame(b = 2)))
+check("row binder retains the union of diagnostic columns",
+      identical(names(bound), c("a", "b")) && nrow(bound) == 2L)
 
 fit_path <- file.path(root,
   "applications/gs2020/results/mixed_logit/v21_corrected/fit_primary_assembled.rds")

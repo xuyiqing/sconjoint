@@ -208,10 +208,14 @@ tq1_family_summary <- function(dml, family, level = 0.95) {
   labels <- names(dml$estimate)
   K <- length(dml$fold_details)
   extract <- function(field) {
-    out <- t(vapply(dml$fold_details, function(fd) {
+    out <- do.call(rbind, lapply(dml$fold_details, function(fd) {
       x <- as.numeric(fd[[field]])
       if (length(x) == 1L) rep(x, length(labels)) else x
-    }, numeric(length(labels))))
+    }))
+    if (!is.matrix(out)) out <- matrix(out, nrow = K, byrow = TRUE)
+    if (!identical(dim(out), c(K, length(labels)))) {
+      stop("Unexpected fold-diagnostic shape for ", field, ".")
+    }
     dimnames(out) <- list(paste0("fold", seq_len(K)), labels)
     out
   }
@@ -247,6 +251,50 @@ tq1_family_summary <- function(dml, family, level = 0.95) {
     out[[paste0("fold", k, "_nu")]] <- nu[k, ]
     out[[paste0("fold", k, "_information_min")]] <- info[k, ]
   }
+  out
+}
+
+## Apply a named smooth transformation to the cross-fitted plug-in primitive
+## vector. scmix_delta_transform() intentionally transforms the one-step
+## primitive vector, so application tables need this separate calculation to
+## avoid silently presenting a one-step transform as the structural plug-in.
+tq1_plugin_transform <- function(
+    dml, type = c("subgroup_ratio", "directional_heterogeneity"),
+    primitives) {
+  type <- match.arg(type)
+  if (!inherits(dml, "scmix_dml") || is.null(dml$plugin_estimate) ||
+      !all(primitives %in% names(dml$plugin_estimate))) {
+    stop("The requested plug-in primitives are not available.")
+  }
+  est <- as.numeric(dml$plugin_estimate[primitives])
+  if (any(!is.finite(est))) stop("Plug-in primitives must be finite.")
+  if (identical(type, "subgroup_ratio")) {
+    if (length(est) != 2L || est[2L] == 0) {
+      return(stats::setNames(NA_real_, "subgroup_ratio"))
+    }
+    return(stats::setNames(est[1L] / est[2L], "subgroup_ratio"))
+  }
+  if (length(est) != 3L) {
+    stop("Directional heterogeneity requires three plug-in primitives.")
+  }
+  H_Z <- est[2L] - est[1L]^2
+  H_R <- est[3L]
+  H_T <- H_Z + H_R
+  c(H_Z = H_Z, H_R = H_R, H_T = H_T,
+    share_Z = if (H_T != 0) H_Z / H_T else NA_real_)
+}
+
+tq1_bind_rows <- function(rows) {
+  rows <- Filter(Negate(is.null), rows)
+  if (!length(rows)) return(NULL)
+  columns <- unique(unlist(lapply(rows, names), use.names = FALSE))
+  rows <- lapply(rows, function(x) {
+    missing <- setdiff(columns, names(x))
+    for (nm in missing) x[[nm]] <- NA
+    x[, columns, drop = FALSE]
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
   out
 }
 
