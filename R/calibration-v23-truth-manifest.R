@@ -138,13 +138,16 @@
 scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
   manifest_path <- .scmix_v23_step3_asset_file(
     "protocol", .scmix_v23_truth_files[["manifest"]])
-  raw <- as.list(read.dcf(manifest_path)[1L, , drop = TRUE])
+  raw <- as.list(base::read.dcf(manifest_path)[1L, , drop = TRUE])
   if (!identical(raw[["Plan-Id"]], plan$plan_id) ||
       !identical(raw[["Protocol-Id"]], plan$protocol_id) ||
       !identical(raw[["Status"]], "frozen_before_synthetic_outcomes") ||
       !identical(raw[["Application-Outcomes-Used"]], "false") ||
-      !identical(raw[["Synthetic-Outcomes-Generated-Before-Freeze"]],
-                 "false")) {
+      !identical(raw[[paste0(
+        "Synthetic-Outcomes-From-Frozen-Design-Payloads-Generated-",
+        "Before-Freeze")]], "false") ||
+      !identical(raw[["Toy-Fixture-Scope"]],
+                 "outside_design_matched_step3_study")) {
     stop("The Step-3 truth manifest is not the frozen outcome-free artifact.",
          call. = FALSE)
   }
@@ -164,7 +167,9 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
     severity_registry_sha256 = unname(as.character(tools::sha256sum(
       .scmix_v23_step3_file("severity")))),
     target_registry_sha256 = unname(as.character(tools::sha256sum(
-      .scmix_v23_step3_file("targets")))))
+      .scmix_v23_step3_file("targets")))),
+    plan_dcf_sha256 = unname(as.character(tools::sha256sum(
+      .scmix_v23_step3_file("plan")))))
   declared_hash <- c(
     target_truth_file_sha256 = raw[["Target-Truth-SHA256"]],
     design_diagnostics_file_sha256 =
@@ -172,7 +177,8 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
     design_manifest_sha256 = raw[["Design-Manifest-SHA256"]],
     dgp_registry_sha256 = raw[["DGP-Registry-SHA256"]],
     severity_registry_sha256 = raw[["Severity-Registry-SHA256"]],
-    target_registry_sha256 = raw[["Target-Registry-SHA256"]])
+    target_registry_sha256 = raw[["Target-Registry-SHA256"]],
+    plan_dcf_sha256 = raw[["Plan-DCF-SHA256"]])
   if (!identical(observed_hash, declared_hash)) {
     stop("A frozen truth or source-registry SHA-256 does not match.",
          call. = FALSE)
@@ -218,7 +224,8 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
     target_truths = target, design_diagnostics = diagnostic,
     source_hashes = observed_hash,
     application_outcomes_used = FALSE,
-    frozen_before_synthetic_outcomes = TRUE,
+    no_frozen_design_outcomes_before_freeze = TRUE,
+    toy_fixture_scope = "outside_design_matched_step3_study",
     production_manifest_created = FALSE)
   .scmix_v23_step3_sign(payload, "scmix_v23_truth_manifest")
 }
