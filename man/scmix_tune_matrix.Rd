@@ -24,7 +24,17 @@ scmix_tune_matrix(
   weight_bound = 10,
   opt_tol = 1e-07,
   grad_tol = 1e-04,
+  kkt_tol = NULL,
+  protocol_mode = c("calibration", "production"),
+  calibration_artifact = NULL,
+  analysis_contract = NULL,
+  polish_max_iter = 50L,
+  polish_history_size = 50L,
+  polish_tolerance_grad = 1e-10,
+  polish_tolerance_change = 1e-12,
+  polish_lr = 1,
   nested_objective_tol = 1e-06,
+  nested_fit_relative_cutoff = NULL,
   selection_tie_tol = 1e-08,
   seed = NULL,
   device = "cpu",
@@ -59,6 +69,27 @@ should ordinarily be held fixed here and studied with fresh refits via
 \item{a_bound}{Positive raw-coefficient Frobenius bound for the loading.}
 
 \item{weight_bound}{Positive coordinatewise network-parameter bound.}
+
+\item{kkt_tol}{Simulation-calibrated projected-KKT cutoff. A missing cutoff
+leaves v2.2 eligibility withheld.}
+
+\item{protocol_mode}{Explicitly marks a fit as \code{"calibration"} or
+\code{"production"}. Calibration-mode candidate selection is diagnostic and
+cannot grant v2.2 eligibility.}
+
+\item{calibration_artifact, analysis_contract}{Protocol-linked calibration
+inputs. Production selection fails closed unless the inference contract
+validates the complete artifact and its frozen hash.}
+
+\item{polish_max_iter, polish_history_size, polish_tolerance_grad,
+polish_tolerance_change, polish_lr}{Controls for the double-precision
+full-batch L-BFGS polish.}
+
+\item{nested_objective_tol}{Diagnostic relative mean-objective tolerance used
+while generating calibration fits.}
+
+\item{nested_fit_relative_cutoff}{Frozen F007 relative mean-objective cutoff.
+It remains \code{NULL} until Step 3 calibration.}
 
 \item{refit}{Refit the selected specification on all supplied rows. These
 rows must themselves be one outer training sample when used for DML.}

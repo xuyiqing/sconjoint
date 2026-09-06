@@ -38,6 +38,19 @@
   value
 }
 
+.scmix_stable_state_hash <- function(x) {
+  bytes <- as.integer(serialize(x, NULL, ascii = FALSE, version = 2L))
+  modulus <- 2147483629
+  roll <- function(seed, multiplier) {
+    value <- as.double(seed)
+    for (byte in bytes) value <- (value * multiplier + byte + 1) %% modulus
+    as.integer(value)
+  }
+  paste0("scmix-state-v1-",
+         sprintf("%08x", roll(14695981, 65599)),
+         sprintf("%08x", roll(21661363, 131071)))
+}
+
 .scmix_state_order_vector <- function(x, expected_names, what,
                                       positive = FALSE,
                                       logical_only = FALSE) {
@@ -178,6 +191,7 @@
     architecture = list(
       p = p, p_Z = p_Z, q = q, hidden = hidden,
       mean_family = mean_family,
+      compute_dtype = .scmix_net_dtype_label(net),
       mu_bound = unname(mu_bound), kappa_bound = unname(kappa_bound),
       alpha_bound = unname(alpha_bound),
       a_bound = unname(a_bound), weight_bound = unname(weight_bound),
@@ -192,6 +206,14 @@
     moderator_names = moderator_names,
     analysis_signature = analysis_signature,
     scope = scope,
+    loading_contract = list(
+      contract_id = "scmix-loading-scale-v1",
+      canonical_structural_scale = "raw",
+      stored_loading_scale = "optimization",
+      stored_loading_field = "state_dict$A",
+      coefficient_scale_field = "architecture$coefficient_scale",
+      raw_to_optimization =
+        "A_optimization = diag(coefficient_scale) %*% A_raw"),
     prediction_contract = paste(
       "Raw moderator rows are transformed with preprocessing$Z; network",
       "outputs are divided by architecture$coefficient_scale to return",
@@ -202,6 +224,66 @@
   class(out) <- c("scmix_network_state", "list")
   .scmix_validate_network_state(out)
   out
+}
+
+## Complete the lightweight state dictionaries retained by the optimizer with
+## one already validated architecture/preprocessing template. This keeps every
+## production start portable without retaining duplicate live Torch pointers.
+.scmix_complete_multistart_artifacts <- function(fit, template_state,
+                                                  coefficient_scale) {
+  starts <- fit$start_artifacts
+  if (!is.list(starts) || !length(starts)) return(NULL)
+  q <- template_state$architecture$q
+  p <- length(coefficient_scale)
+  out <- lapply(starts, function(x) {
+    bundle <- template_state
+    bundle$state_dict <- x$state_dict
+    bundle$state_shapes <- x$state_shapes
+    bundle$state_dtypes <- x$state_dtypes
+    bundle$scope <- paste0(template_state$scope, "; optimizer start ", x$start)
+    .scmix_validate_network_state(bundle)
+    A_opt <- .scmix_loading_matrix(x$A_optimization, p = p, q = q,
+                                   what = "start A_optimization")
+    A_raw <- .scmix_loading_to_raw(A_opt, coefficient_scale)
+    list(
+      start = as.integer(x$start), start_id = x$start_id,
+      state_hash = x$state_hash,
+      selected = isTRUE(x$selected),
+      mean_objective = as.numeric(x$mean_objective),
+      objective_definition_id = x$objective_definition_id,
+      unpenalized_mean_nll = as.numeric(x$unpenalized_mean_nll),
+      relative_objective_from_best = NA_real_,
+      A_raw = A_raw, A_optimization = A_opt,
+      kappa = as.numeric(x$kappa), dtype = x$dtype,
+      protocol_mode = x$protocol_mode, polished = isTRUE(x$polished),
+      calibration_hash = x$calibration_hash %||% NA_character_,
+      v22_optimization_status = x$v22_optimization_status,
+      network_state = bundle)
+  })
+  objective <- vapply(out, `[[`, numeric(1L), "mean_objective")
+  best <- min(objective)
+  relative <- (objective - best) / max(1, abs(best))
+  for (s in seq_along(out)) {
+    out[[s]]$relative_objective_from_best <- relative[s]
+  }
+  structure(out,
+            best_start = which.min(objective),
+            protocol_mode = unique(vapply(out, `[[`, character(1L),
+                                           "protocol_mode")),
+            adapter_contract = list(
+              consumer = "scmix_v22_multistart_stability",
+              record_fields = c(
+                "start_id", "state_hash", "mean_objective",
+                "objective_definition_id", "polished", "dtype",
+                "protocol_mode", "calibration_hash"),
+              application_runner_adds = c(
+                "target_estimates", "raw_if_standard_errors",
+                "analysis_signature", "registry_hash"),
+              objective_orientation = "lower_is_better",
+              target_values_must_be_computed_from = paste(
+                "the record's network_state, A_raw, and kappa; never from",
+                "the selected fit for a nonselected start")),
+            class = c("scmix_multistart_artifacts", "list"))
 }
 
 .scmix_validate_network_state <- function(bundle) {
@@ -226,6 +308,20 @@
     .sc_mixed_mean_family("legacy", a$hidden)
   } else {
     .sc_mixed_mean_family(a$mean_family, a$hidden)
+  }
+  if (!is.null(a$compute_dtype) &&
+      (!is.character(a$compute_dtype) || length(a$compute_dtype) != 1L ||
+       is.na(a$compute_dtype) ||
+       !a$compute_dtype %in% c("float32", "float64"))) {
+    stop("Network-state `compute_dtype` must be 'float32' or 'float64'.",
+         call. = FALSE)
+  }
+  if (!is.null(bundle$loading_contract) &&
+      (!is.list(bundle$loading_contract) ||
+       !identical(bundle$loading_contract$contract_id,
+                  "scmix-loading-scale-v1"))) {
+    stop("The portable state's loading-scale contract is unsupported.",
+         call. = FALSE)
   }
   .scmix_state_positive(a$mu_bound, "mu_bound")
   .scmix_state_positive(a$kappa_bound, "kappa_bound")
@@ -290,6 +386,16 @@ scmix_restore_network <- function(bundle, device = "cpu") {
   .scmix_validate_network_state(bundle)
   a <- bundle$architecture
   is_v1 <- identical(bundle$format_version, 1L)
+  compute_dtype <- a$compute_dtype
+  if (is.null(compute_dtype)) {
+    ## States written before v2.2 did not record a module dtype. Preserve
+    ## their Float behavior when the tensor manifest says Float; new states
+    ## explicitly record float64 and never take this compatibility branch.
+    recorded <- tolower(unlist(bundle$state_dtypes, use.names = FALSE))
+    compute_dtype <- if (any(grepl("double|float64", recorded))) {
+      "float64"
+    } else "float32"
+  }
   ## Building a module initializes parameters randomly. The local seed prevents
   ## a pure reload operation from advancing the caller's Torch RNG stream.
   net <- torch::with_torch_manual_seed({
@@ -299,7 +405,8 @@ scmix_restore_network <- function(bundle, device = "cpu") {
       mu_bound = a$mu_bound, kappa_bound = a$kappa_bound,
       alpha_bound = if (is_v1) 5 else a$alpha_bound,
       a_bound = a$a_bound, weight_bound = a$weight_bound,
-      coefficient_scale = a$coefficient_scale
+      coefficient_scale = a$coefficient_scale,
+      compute_dtype = compute_dtype
     )
   }, seed = 1L)
   target <- net$state_dict()

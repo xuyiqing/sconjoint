@@ -12,8 +12,13 @@ scmix_tune_matrix(deltaX, y, Z, respondent_id, grid, q = NULL, K = 3L,
   n_epochs = 400L, learning_rate = 0.01,
   n_starts = 2L, mu_bound = 10, kappa_bound = 10,
   alpha_bound = 5, a_bound = 10, weight_bound = 10,
-  opt_tol = 1e-7, grad_tol = 1e-4,
-  nested_objective_tol = 1e-6, selection_tie_tol = 1e-8,
+  opt_tol = 1e-7, grad_tol = 1e-4, kkt_tol = NULL,
+  protocol_mode = c("calibration", "production"),
+  calibration_artifact = NULL, analysis_contract = NULL,
+  polish_max_iter = 50L, polish_history_size = 50L,
+  polish_tolerance_grad = 1e-10, polish_tolerance_change = 1e-12,
+  polish_lr = 1, nested_objective_tol = 1e-6,
+  nested_fit_relative_cutoff = NULL, selection_tie_tol = 1e-8,
   seed = NULL, device = "cpu",
   refit = TRUE, refit_integration_grid = NULL,
   keep_cv_fits = FALSE, verbose = FALSE)
@@ -46,11 +51,17 @@ inference is not selection-adjusted.}
 \item{allow_integration_tuning}{Permit integration resolution to vary in
 learner CV only as an explicitly diagnostic exercise.}
 \item{n_epochs, learning_rate, n_starts, mu_bound, kappa_bound, alpha_bound,
-opt_tol, grad_tol, nested_objective_tol, selection_tie_tol, seed, device,
+opt_tol, grad_tol, kkt_tol, protocol_mode, polish_max_iter,
+polish_history_size, polish_tolerance_grad, polish_tolerance_change, polish_lr,
+nested_objective_tol, nested_fit_relative_cutoff, selection_tie_tol, seed, device,
 verbose}{Optimization, compact-bound, nested-objective, and tie-breaking
 controls. Corrected candidates share a constant prefit and receive the same
 candidate-stage budget; a continued constant or flexible fit that violates its
 nested-objective dominance gate is ineligible for selection.}
+\item{calibration_artifact, analysis_contract}{The protocol-linked calibration
+artifact and signed analysis contract. In production, optimizer and nested-fit
+cutoffs are read only from a complete artifact whose hash validates against
+that contract. Direct numeric cutoffs cannot certify a v2.2 fit.}
 \item{a_bound}{Positive raw-coefficient Frobenius bound for the loading.}
 \item{weight_bound}{Positive coordinatewise bound for network weights and
 biases.}

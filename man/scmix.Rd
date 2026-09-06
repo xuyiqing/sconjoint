@@ -30,6 +30,15 @@ scmix(
   weight_bound = 10,
   opt_tol = 1e-07,
   grad_tol = 1e-04,
+  kkt_tol = NULL,
+  protocol_mode = c("calibration", "production"),
+  calibration_artifact = NULL,
+  analysis_contract = NULL,
+  polish_max_iter = 50L,
+  polish_history_size = 50L,
+  polish_tolerance_grad = 1e-10,
+  polish_tolerance_change = 1e-12,
+  polish_lr = 1,
   seed = NULL,
   init = NULL,
   device = "cpu",
@@ -111,8 +120,27 @@ optimizer update using the corresponding contrast scales.}
 mean-network weight and bias. Network parameters are projected after every
 optimizer update.}
 
-\item{opt_tol, grad_tol}{Numerical diagnostic tolerances. Passing these
-tolerances does not certify a global optimum.}
+\item{opt_tol, grad_tol}{Legacy Adam-stage stopping controls. They do not
+determine the v2.2 computation gate.}
+
+\item{kkt_tol}{Cutoff for the maximum block-scaled projected-KKT residual
+after the full-batch polish. The application protocol must supply the
+simulation-calibrated value once frozen. While it is \code{NULL}, fits may be
+generated for calibration but v2.2 inference eligibility fails closed.}
+
+\item{protocol_mode}{Either \code{"calibration"} or \code{"production"}.
+Calibration fits retain every diagnostic needed by Step 3 but can never be
+labeled v2.2 eligible. Production is an explicit opt-in after the calibration
+registry and numerical cutoffs have been frozen.}
+
+\item{calibration_artifact, analysis_contract}{Protocol-linked calibration
+inputs. Production mode accepts KKT cutoffs only after the inference contract
+validates this exact artifact and its calibration hash.}
+
+\item{polish_max_iter, polish_history_size, polish_tolerance_grad,
+polish_tolerance_change, polish_lr}{Full-batch L-BFGS polish controls. The
+two L-BFGS tolerances control optimizer termination only. Eligibility is
+determined by \code{kkt_tol} and the recorded non-worsening gate.}
 
 \item{seed}{Reproducibility seed for folds, integration nodes, and starts.}
 

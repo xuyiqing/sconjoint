@@ -155,7 +155,8 @@ test_that("optimization audit reports attained diagnostics, not a global gap", {
   expect_true(all(out$summary$selected_a_bound_active))
   expect_true(out$all_selected_tolerances_met)
   expect_true(out$all_objectives_finite)
-  expect_false(out$all_computational_gates_pass)
+  expect_false(out$all_v22_optimizer_subset_gates_pass)
+  expect_false(sconjoint:::.sc_comp_optimizer_subset_pass(out))
   expect_true(out$all_bound_diagnostics_complete)
   expect_identical(out$analysis_signature, fake$analysis_signature)
   expect_true(out$signature_match)
@@ -260,6 +261,11 @@ test_that("matrix tuning uses respondent folds and training-only preprocessing",
   expect_true(all(out$candidates$selection_eligible))
   expect_true(all(out$fold_computational_gate))
   expect_true(out$candidate_selection_gate$pass)
+  expect_identical(out$protocol_mode, "calibration")
+  expect_true(out$candidate_selection_gate$calibration_only)
+  expect_false(out$candidate_selection_gate$v22_pass)
+  expect_false(out$v22_candidate_selection_gate$pass)
+  expect_false(out$primary_inference_eligible)
   expect_identical(out$scoring,
                    "unpenalized complete respondent-sequence log likelihood")
   for (k in seq_len(2L)) {
@@ -271,6 +277,17 @@ test_that("matrix tuning uses respondent folds and training-only preprocessing",
   expect_match(out$dml_scope, "rerun inside each outer")
   expect_s3_class(out$refit, "scmix_tuned_matrix_fit")
   expect_s3_class(out$refit$network_state, "scmix_network_state")
+  expect_s3_class(out$refit$multistart_artifacts,
+                  "scmix_multistart_artifacts")
+  expect_identical(
+    attr(out$refit$multistart_artifacts, "adapter_contract")$consumer,
+    "scmix_v22_multistart_stability")
+  expect_s3_class(out$refit$multistart_artifacts[[1L]]$network_state,
+                  "scmix_network_state")
+  expect_identical(out$refit$multistart_artifacts[[1L]]$dtype, "float64")
+  expect_identical(
+    dim(scmix_loadings(out$refit$network_state, "raw", "full")),
+    c(1L, 0L))
   expect_equal(out$refit$network_state$integration_grid$U,
                out$refit$integration_grid$U)
   state_path <- tempfile(fileext = ".rds")

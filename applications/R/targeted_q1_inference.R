@@ -69,7 +69,9 @@ tq1_hidden_features <- function(state, Z_raw) {
   if (identical(family, "linear")) return(Z_fit)
   net <- scmix_restore_network(state)
   torch::with_no_grad({
-    h <- torch::torch_tensor(Z_fit, dtype = torch::torch_float())
+    dtype <- net$parameters[[1L]]$dtype
+    device <- net$parameters[[1L]]$device
+    h <- torch::torch_tensor(Z_fit, dtype = dtype, device = device)
     for (j in seq_along(net$hidden)) {
       h <- torch::nnf_relu(net$hidden[[j]](h))
     }
@@ -110,8 +112,14 @@ tq1_rebuild_inference_basis <- function(fit, prediction_tolerance = 5e-6) {
     if (ncol(H)) colnames(H) <- paste0("feature", seq_len(ncol(H)))
     mu_basis[[k]] <- cbind(intercept = 1, H)
     basis_dimension[k] <- ncol(mu_basis[[k]])
-    horizontal <- sconjoint:::.scmix_horizontal_basis(
-      as.matrix(fit$A_folds[[k]]), 1e-8)
+    A_raw <- if (is.list(fit$loading_contract) &&
+        identical(fit$loading_contract$contract_id,
+                  "scmix-loading-scale-v1")) {
+      scmix_loadings(fit, scale = "raw", scope = "fold", fold = k)
+    } else {
+      as.matrix(fit$A_folds[[k]])
+    }
+    horizontal <- sconjoint:::.scmix_horizontal_basis(A_raw, 1e-8)
     tangent_dimension[k] <- 1L + basis_dimension[k] * p + ncol(horizontal)
   }
   list(

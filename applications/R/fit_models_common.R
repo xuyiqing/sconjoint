@@ -188,8 +188,10 @@ if (cli$stage %in% c("primary", "all")) {
       Z_resp_raw <- as.matrix(primary_assembled$Z)[first_row, , drop = FALSE]
       hidden_features <- function(net, Z_transformed) {
         torch::with_no_grad({
+          dtype <- net$parameters[[1L]]$dtype
+          device <- net$parameters[[1L]]$device
           h <- torch::torch_tensor(as.matrix(Z_transformed),
-                                   dtype = torch::torch_float())
+                                   dtype = dtype, device = device)
           for (i in seq_along(net$hidden)) {
             h <- torch::nnf_relu(net$hidden[[i]](h))
           }

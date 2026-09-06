@@ -254,19 +254,20 @@
     stop("Sequence evaluation requires the 'torch' package.", call. = FALSE)
   }
   dev <- torch::torch_device(device)
+  dtype <- .scmix_net_dtype(net)
   rf <- factor(respondent_id, levels = unique(respondent_id))
-  dx <- torch::torch_tensor(deltaX, dtype = torch::torch_float(), device = dev)
-  zt <- torch::torch_tensor(Z, dtype = torch::torch_float(), device = dev)
-  yt <- torch::torch_tensor(as.numeric(y), dtype = torch::torch_float(), device = dev)
+  dx <- torch::torch_tensor(deltaX, dtype = dtype, device = dev)
+  zt <- torch::torch_tensor(Z, dtype = dtype, device = dev)
+  yt <- torch::torch_tensor(as.numeric(y), dtype = dtype, device = dev)
   idx1 <- torch::torch_tensor(as.integer(rf), dtype = torch::torch_long(), device = dev)
   q <- ncol(integration_grid$U)
   U <- if (q == 0L) {
-    torch::torch_zeros(1L, 1L, dtype = torch::torch_float(), device = dev)
+    torch::torch_zeros(1L, 1L, dtype = dtype, device = dev)
   } else {
-    torch::torch_tensor(integration_grid$U, dtype = torch::torch_float(), device = dev)
+    torch::torch_tensor(integration_grid$U, dtype = dtype, device = dev)
   }
   logw <- torch::torch_tensor(log(integration_grid$w),
-                              dtype = torch::torch_float(), device = dev)
+                              dtype = dtype, device = dev)
   net$eval()
   ll <- torch::with_no_grad({
     mu <- net$get_beta(zt)
@@ -340,6 +341,7 @@
 .sc_comp_fit_summary <- function(fit) {
   list(
     best_start = fit$best_start,
+    mean_family = fit$mean_family %||% "legacy",
     starts = fit$start_diagnostics,
     objective = fit$objective,
     gradient_norm = fit$final_gradient_norm,
@@ -359,6 +361,16 @@
     objective_finite = fit$objective_finite,
     optimization_gate_pass = fit$optimization_gate_pass,
     optimization_failure_reasons = fit$optimization_failure_reasons,
+    v22_optimization_gate_pass =
+      isTRUE(fit$v22_optimization_gate_pass),
+    v22_optimization_failure_reasons =
+      fit$v22_optimization_failure_reasons %||%
+        "missing_v22_optimization_diagnostics",
+    protocol_mode = fit$protocol_mode %||% "legacy_unspecified",
+    calibration_verified = isTRUE(fit$calibration_verification$verified),
+    calibration_hash = fit$calibration_verification$calibration_hash %||%
+      NA_character_,
+    optimizer_subset_pass = isTRUE(fit$v22_optimizer_subset_pass),
     stop_reason = fit$stop_reason,
     bounds = fit$bounds,
     alpha_bound_diagnostics_complete = is.list(fit$bounds) &&
@@ -369,16 +381,57 @@
     mean_variation_max = fit$mean_variation_max %||% 0,
     start_objective_range = fit$start_objective_range,
     best_minus_second = fit$best_minus_second,
+    dtype = fit$dtype %||% NA_character_,
+    objective_before_polish = fit$objective_before_polish %||% NA_real_,
+    objective_after_polish = fit$objective_after_polish %||% NA_real_,
+    kkt_before_polish = fit$kkt_before_polish,
+    kkt_after_polish = fit$kkt_after_polish,
+    kkt_returned = fit$kkt_returned,
+    kkt_maximum = fit$kkt_maximum %||% NA_real_,
+    kkt_cutoff = fit$kkt_cutoff %||% NA_real_,
+    kkt_cutoff_source = fit$kkt_cutoff_source %||% NA_character_,
+    lbfgs_completed = isTRUE(fit$lbfgs_completed),
+    lbfgs_nonworsening = isTRUE(fit$lbfgs_nonworsening),
+    polish_iterations = fit$polish_iterations %||% NA_integer_,
+    line_search_status = fit$line_search_status %||% NA_character_,
+    same_objective_all_stages = isTRUE(fit$same_objective_all_stages),
+    polish = fit$polish,
+    v22_optimization_status = fit$v22_optimization_status,
     global_optimality_gap_known = FALSE
   )
+}
+
+## Read the canonical v2.2 optimizer-subset gate while preserving the ability
+## to audit pre-v2.2 serialized fixtures. The legacy alias is never emitted by
+## new audits and is not a global fit- or target-eligibility certificate.
+.sc_comp_optimizer_subset_pass <- function(x) {
+  if (!is.list(x)) return(FALSE)
+  if (!is.null(x$all_v22_optimizer_subset_gates_pass)) {
+    return(isTRUE(x$all_v22_optimizer_subset_gates_pass))
+  }
+  isTRUE(x$all_computational_gates_pass)
 }
 
 .sc_comp_nested_objective_gate <- function(candidate_penalized_nll,
                                             pooled_penalized_nll,
                                             tolerance,
-                                            applicable = TRUE) {
+                                            applicable = TRUE,
+                                            v22_cutoff = NULL,
+                                            v22_applicable = applicable,
+                                            protocol_mode = c(
+                                              "calibration",
+                                              "production"),
+                                            calibration_verified = FALSE,
+                                            calibration_hash = NA_character_) {
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
+  calibration_verified <- isTRUE(calibration_verified)
   if (!is.logical(applicable) || length(applicable) != 1L || is.na(applicable)) {
     stop("`applicable` must be one nonmissing logical value.", call. = FALSE)
+  }
+  if (!is.logical(v22_applicable) || length(v22_applicable) != 1L ||
+      is.na(v22_applicable)) {
+    stop("`v22_applicable` must be one nonmissing logical value.",
+         call. = FALSE)
   }
   if (!is.numeric(tolerance) || length(tolerance) != 1L ||
       !is.finite(tolerance) || tolerance < 0) {
@@ -390,12 +443,66 @@
   finite <- length(candidate) == 1L && length(pooled) == 1L &&
     is.finite(candidate) && is.finite(pooled)
   gap <- if (finite) candidate - pooled else NA_real_
-  pass <- !isTRUE(applicable) || (finite && gap <= tolerance)
+  relative_violation <- if (finite) {
+    max(0, gap) / max(1, abs(pooled))
+  } else NA_real_
+  pass <- !isTRUE(applicable) ||
+    (finite && relative_violation <= tolerance)
+  cutoff_available <- !is.null(v22_cutoff)
+  if (cutoff_available &&
+      (!is.numeric(v22_cutoff) || length(v22_cutoff) != 1L ||
+       !is.finite(v22_cutoff) || v22_cutoff < 0)) {
+    stop("`v22_cutoff` must be NULL or finite and nonnegative.",
+         call. = FALSE)
+  }
+  v22_pass <- isTRUE(v22_applicable) &&
+    identical(protocol_mode, "production") && calibration_verified &&
+    cutoff_available && finite &&
+    relative_violation <= v22_cutoff
   list(
     applicable = isTRUE(applicable), pass = pass,
+    v22_applicable = isTRUE(v22_applicable),
+    v22_pass = v22_pass,
+    protocol_mode = protocol_mode,
+    calibration_only = identical(protocol_mode, "calibration"),
+    calibration_verified = calibration_verified,
+    calibration_hash = calibration_hash,
+    nested_fit_subset_pass = v22_pass &&
+      identical(protocol_mode, "production"),
     candidate_penalized_nll = candidate,
     pooled_penalized_nll = pooled,
-    gap = gap, tolerance = as.numeric(tolerance),
+    gap = gap,
+    relative_violation = relative_violation,
+    statistic = "nested_fit_relative_violation",
+    tolerance = as.numeric(tolerance),
+    v22_cutoff = if (cutoff_available) as.numeric(v22_cutoff) else NA_real_,
+    v22_state = if (!isTRUE(v22_applicable)) {
+      "not_applicable"
+    } else if (!identical(protocol_mode, "production")) {
+      "not_run"
+    } else if (!calibration_verified) {
+      "fail"
+    } else if (!cutoff_available) {
+      "fail"
+    } else if (v22_pass) "pass" else "fail",
+    gate_evidence = list(F007 = list(
+      statistic = "nested_fit_relative_violation",
+      observed = relative_violation,
+      threshold = if (cutoff_available) as.numeric(v22_cutoff) else
+        "CALIBRATE_IN_STEP_3",
+      comparator = "less_than_or_equal",
+      units = "relative_mean_objective",
+      provenance = "paired exact restricted and full fit objectives",
+      state = if (!isTRUE(v22_applicable)) {
+        "not_applicable"
+      } else if (!identical(protocol_mode, "production")) {
+        "not_run"
+      } else if (!calibration_verified) {
+        "fail"
+      } else if (!cutoff_available) {
+        "fail"
+      } else if (v22_pass) "pass" else "fail",
+      pass = v22_pass)),
     failure_reason = if (pass) "" else
       "nested_pooled_objective_not_attained",
     interpretation = if (!isTRUE(applicable)) {
@@ -415,15 +522,17 @@
     stop("Inner-fit diagnostics must be a list.", call. = FALSE)
   }
   bound_state <- .sc_comp_bound_state(fit_summary$bounds)
+  legacy_diagnostic <- identical(fit_summary$mean_family, "legacy")
   nesting <- fit_summary$nested_objective_gate
   nesting_pass <- is.null(nesting) || isTRUE(nesting$pass)
-  pass <- isTRUE(fit_summary$optimization_gate_pass) && bound_state$pass &&
+  pass <- isTRUE(fit_summary$optimization_gate_pass) &&
+    (bound_state$pass || legacy_diagnostic) &&
     nesting_pass
   failure_reasons <- fit_summary$optimization_failure_reasons
   if (!bound_state$complete) {
     failure_reasons <- c(
       failure_reasons, "compact_bound_diagnostics_incomplete")
-  } else if (isTRUE(bound_state$active)) {
+  } else if (isTRUE(bound_state$active) && !legacy_diagnostic) {
     failure_reasons <- c(failure_reasons, "parameter_bound_active")
   }
   if (!nesting_pass) {
@@ -439,6 +548,37 @@
     nested_objective_gate = nesting,
     failure_reasons = unique(as.character(failure_reasons))
   )
+}
+
+.sc_comp_v22_fit_gate <- function(fit_summary) {
+  if (!is.list(fit_summary)) {
+    stop("v2.2 fit diagnostics must be a list.", call. = FALSE)
+  }
+  bound_state <- .sc_comp_bound_state(fit_summary$bounds)
+  nesting <- fit_summary$nested_objective_gate
+  nesting_pass <- is.null(nesting) || !isTRUE(nesting$v22_applicable) ||
+    isTRUE(nesting$v22_pass)
+  pass <- isTRUE(fit_summary$v22_optimization_gate_pass) &&
+    bound_state$pass && nesting_pass
+  failure_reasons <- fit_summary$v22_optimization_failure_reasons
+  if (!bound_state$complete) {
+    failure_reasons <- c(
+      failure_reasons, "compact_bound_diagnostics_incomplete")
+  } else if (isTRUE(bound_state$active)) {
+    failure_reasons <- c(failure_reasons, "parameter_bound_active")
+  }
+  if (!nesting_pass) {
+    failure_reasons <- c(failure_reasons,
+                         "v22_nested_fit_relative_gate_failed_or_pending")
+  }
+  if (!pass && !length(failure_reasons)) {
+    failure_reasons <- "missing_v22_optimization_diagnostics"
+  }
+  list(
+    pass = pass,
+    bound_state = bound_state,
+    nested_objective_gate = nesting,
+    failure_reasons = unique(as.character(failure_reasons)))
 }
 
 #' Select a tuning candidate only from computationally valid inner fits
@@ -538,10 +678,13 @@
 #' validation. For DML, the entire call must occur inside an outer training
 #' sample; running it once on the full sample and reusing the selected nuisance
 #' architecture in every outer fold leaks held-out information.
-#' A candidate is eligible for selection only when every inner-fold fit passes
-#' the fail-closed optimization and compact-bound gate and every validation
-#' score is finite. Scores and failure diagnostics for excluded candidates are
-#' retained, and tuning stops rather than selecting if no candidate is eligible.
+#' In calibration mode, a candidate can be selected only for building the
+#' Step-3 diagnostic corpus and the returned object is marked calibration-only.
+#' In production mode, a candidate is eligible for selection only when every
+#' inner-fold fit passes the protocol-linked optimizer and exact nested-fit
+#' subset gates. Every validation score must also be finite. Scores and failure
+#' diagnostics for excluded candidates are retained, and tuning stops rather
+#' than selecting if no candidate is eligible.
 #'
 #' @param deltaX,y,Z,respondent_id Task-level matrix inputs.
 #' @param grid Data frame or list of candidate lists. Each candidate specifies
@@ -566,6 +709,9 @@
 #' @param keep_cv_fits Retain all inner-fold network objects (memory intensive).
 #' @param a_bound Positive raw-coefficient Frobenius bound for the loading.
 #' @param weight_bound Positive coordinatewise network-parameter bound.
+#' @param calibration_artifact,analysis_contract Protocol-linked calibration
+#'   inputs. Production selection accepts numerical cutoffs only from a
+#'   complete artifact validated against the signed analysis contract.
 #' @param ... Core optimization controls listed explicitly below. Corrected
 #'   families use a shared stage-one constant prefit. Each candidate then gets
 #'   the same declared stage-two epoch/start budget. The continued constant
@@ -585,7 +731,18 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
                               kappa_bound = 10, alpha_bound = 5, a_bound = 10,
                               weight_bound = 10, opt_tol = 1e-7,
                               grad_tol = 1e-4,
+                              kkt_tol = NULL,
+                              protocol_mode = c("calibration",
+                                                 "production"),
+                              calibration_artifact = NULL,
+                              analysis_contract = NULL,
+                              polish_max_iter = 50L,
+                              polish_history_size = 50L,
+                              polish_tolerance_grad = 1e-10,
+                              polish_tolerance_change = 1e-12,
+                              polish_lr = 1,
                               nested_objective_tol = 1e-6,
+                              nested_fit_relative_cutoff = NULL,
                               selection_tie_tol = 1e-8, seed = NULL,
                               device = "cpu", refit = TRUE,
                               refit_integration_grid = NULL,
@@ -593,6 +750,17 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
   dat <- .sc_comp_validate_matrix_data(deltaX, y, Z, respondent_id)
   deltaX <- dat$deltaX; y <- dat$y; Z <- dat$Z
   respondent_id <- dat$respondent_id
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
+  calibration_verification <- .sc_v22_resolve_optimizer_calibration(
+    protocol_mode = protocol_mode,
+    calibration_artifact = calibration_artifact,
+    analysis_contract = analysis_contract,
+    kkt_tol = kkt_tol,
+    nested_fit_relative_cutoff = nested_fit_relative_cutoff)
+  .sc_v22_require_verified_production_calibration(calibration_verification)
+  kkt_tol <- calibration_verification$kkt_cutoff
+  nested_fit_relative_cutoff <-
+    calibration_verification$nested_fit_relative_cutoff
   N <- length(unique(as.character(respondent_id)))
   compact <- .sc_mixed_validate_compact_bounds(
     p = ncol(deltaX), coefficient_scale = rep(1, ncol(deltaX)),
@@ -603,6 +771,14 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       length(nested_objective_tol) != 1L ||
       !is.finite(nested_objective_tol) || nested_objective_tol < 0) {
     stop("`nested_objective_tol` must be finite and nonnegative.",
+         call. = FALSE)
+  }
+  if (!is.null(nested_fit_relative_cutoff) &&
+      (!is.numeric(nested_fit_relative_cutoff) ||
+       length(nested_fit_relative_cutoff) != 1L ||
+       !is.finite(nested_fit_relative_cutoff) ||
+       nested_fit_relative_cutoff < 0)) {
+    stop("`nested_fit_relative_cutoff` must be NULL or finite and nonnegative.",
          call. = FALSE)
   }
   if (!is.numeric(selection_tie_tol) || length(selection_tie_tol) != 1L ||
@@ -661,10 +837,12 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
   fold_score <- matrix(NA_real_, J, K)
   fold_n <- matrix(0L, J, K)
   fold_computational_gate <- matrix(FALSE, J, K)
+  fold_v22_computational_gate <- matrix(FALSE, J, K)
   fold_nesting_gate <- matrix(TRUE, J, K)
   fold_pooled_prefit_gate <- matrix(TRUE, J, K)
   fold_continued_constant_gate <- matrix(TRUE, J, K)
   fold_computational_failure_reasons <- vector("list", J)
+  fold_v22_computational_failure_reasons <- vector("list", J)
   sequence_scores <- vector("list", J)
   cv_optimization <- vector("list", J)
   cv_pooled_prefit_optimization <- vector("list", J)
@@ -680,6 +858,7 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
     cv_optimization[[j]] <- vector("list", K)
     cv_pooled_prefit_optimization[[j]] <- vector("list", K)
     fold_computational_failure_reasons[[j]] <- vector("list", K)
+    fold_v22_computational_failure_reasons[[j]] <- vector("list", K)
     if (isTRUE(keep_cv_fits)) cv_fits[[j]] <- vector("list", K)
     spec <- specs[[j]]
     for (k in seq_len(K)) {
@@ -720,6 +899,13 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
             seed = .sc_comp_seed(seed, "inner-pooled-prefit", k, ikey),
             device = device, verbose = verbose, warm_state = NULL,
             early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+            kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+            calibration_verification = calibration_verification,
+            polish_max_iter = polish_max_iter,
+            polish_history_size = polish_history_size,
+            polish_tolerance_grad = polish_tolerance_grad,
+            polish_tolerance_change = polish_tolerance_change,
+            polish_lr = polish_lr,
             mu_bound = mu_bound, kappa_bound = kappa_bound,
             alpha_bound = compact$alpha_bound,
             a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -756,6 +942,13 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
           "pooled_structural"
         },
         early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+        kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+        calibration_verification = calibration_verification,
+        polish_max_iter = polish_max_iter,
+        polish_history_size = polish_history_size,
+        polish_tolerance_grad = polish_tolerance_grad,
+        polish_tolerance_change = polish_tolerance_change,
+        polish_lr = polish_lr,
         mu_bound = mu_bound, kappa_bound = kappa_bound,
         alpha_bound = compact$alpha_bound,
         a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -769,7 +962,12 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       fit_jk$nested_objective_gate <- .sc_comp_nested_objective_gate(
         candidate_penalized_nll = fit_jk$penalized_loss,
         pooled_penalized_nll = reference_nll,
-        tolerance = nested_objective_tol, applicable = corrected[j])
+        tolerance = nested_objective_tol, applicable = corrected[j],
+        v22_cutoff = nested_fit_relative_cutoff,
+        v22_applicable = corrected[j] && spec$mean_family != "constant",
+        protocol_mode = protocol_mode,
+        calibration_verified = calibration_verification$verified,
+        calibration_hash = calibration_verification$calibration_hash)
       raw_fits[[j]][[k]] <- fit_jk
       ll <- .sc_comp_sequence_loglik(
         fit_jk$net, dx_valid, y[valid], z_valid, respondent_id[valid],
@@ -779,8 +977,14 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       fold_n[j, k] <- length(ll)
       fit_summary <- .sc_comp_fit_summary(fit_jk)
       inner_gate <- .sc_comp_inner_fit_gate(fit_summary)
+      inner_v22_gate <- .sc_comp_v22_fit_gate(fit_summary)
+      pooled_prefit_v22_gate <- if (isTRUE(corrected[j])) {
+        .sc_comp_v22_fit_gate(pooled_prefit_summary)
+      } else list(pass = TRUE, failure_reasons = character())
       continued_constant_gate <- list(pass = TRUE,
                                       failure_reasons = character())
+      continued_constant_v22_gate <- list(
+        pass = TRUE, failure_reasons = character())
       if (isTRUE(corrected[j])) {
         continued_constant_gate <- if (spec$mean_family == "constant") {
           inner_gate
@@ -788,10 +992,20 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
           .sc_comp_inner_fit_gate(
             cv_optimization[[pooled_index[j]]][[k]])
         }
+        continued_constant_v22_gate <- if (
+            spec$mean_family == "constant") {
+          inner_v22_gate
+        } else {
+          .sc_comp_v22_fit_gate(
+            cv_optimization[[pooled_index[j]]][[k]])
+        }
       }
       fold_computational_gate[j, k] <-
         inner_gate$pass && pooled_prefit_gate$pass &&
         continued_constant_gate$pass
+      fold_v22_computational_gate[j, k] <-
+        inner_v22_gate$pass && pooled_prefit_v22_gate$pass &&
+        continued_constant_v22_gate$pass
       fold_nesting_gate[j, k] <-
         isTRUE(fit_summary$nested_objective_gate$pass)
       fold_pooled_prefit_gate[j, k] <- pooled_prefit_gate$pass
@@ -804,6 +1018,15 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
                  if (!continued_constant_gate$pass) paste0(
                    "continued_constant:",
                    continued_constant_gate$failure_reasons) else character()))
+      fold_v22_computational_failure_reasons[[j]][[k]] <-
+        unique(c(inner_v22_gate$failure_reasons,
+                 if (!pooled_prefit_v22_gate$pass) paste0(
+                   "shared_pooled_prefit:",
+                   pooled_prefit_v22_gate$failure_reasons) else character(),
+                 if (!continued_constant_v22_gate$pass) paste0(
+                   "continued_constant:",
+                   continued_constant_v22_gate$failure_reasons) else
+                     character()))
       cv_optimization[[j]][[k]] <- fit_summary
       cv_pooled_prefit_optimization[[j]][[k]] <- pooled_prefit_summary
       if (isTRUE(keep_cv_fits)) cv_fits[[j]][[k]] <- fit_jk$net
@@ -813,8 +1036,16 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
   complexity_rank <- unname(family_complexity[vapply(
     specs, `[[`, character(1L), "mean_family")]) +
     vapply(specs, function(x) sum(x$hidden), numeric(1L)) / 1e6
+  ## Calibration mode must be able to generate the Step-3 diagnostic corpus,
+  ## but it cannot certify a fit. Production selection instead fails closed
+  ## on the complete optimizer/F007 subset gate for every inner-fold fit.
+  selection_gate_for_mode <- if (identical(protocol_mode, "production")) {
+    fold_v22_computational_gate
+  } else {
+    fold_computational_gate
+  }
   selection <- .sc_comp_select_candidate(
-    fold_score, fold_n, fold_computational_gate,
+    fold_score, fold_n, selection_gate_for_mode,
     complexity_rank = complexity_rank, tie_tolerance = selection_tie_tol)
   cv_log_score <- selection$cv_log_score
   selected <- selection$selected
@@ -830,7 +1061,9 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
     cv_sequence_log_score = cv_log_score,
     selection_score = selection$selection_score,
     all_inner_fits_computationally_valid =
-      selection$computationally_eligible,
+      apply(fold_computational_gate, 1L, all),
+    all_inner_fits_v22_eligible =
+      apply(fold_v22_computational_gate, 1L, all),
     all_inner_nesting_gates_pass = apply(fold_nesting_gate, 1L, all),
     all_shared_pooled_prefits_valid = apply(
       fold_pooled_prefit_gate, 1L, all),
@@ -838,6 +1071,10 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       fold_continued_constant_gate, 1L, all),
     all_inner_scores_finite = selection$score_eligible,
     selection_eligible = selection$selection_eligible,
+    selection_protocol_mode = protocol_mode,
+    selection_is_calibration_only = identical(protocol_mode, "calibration"),
+    v22_selection_eligible = selection$selection_eligible &
+      apply(fold_v22_computational_gate, 1L, all),
     ineligible_reason = selection$ineligible_reason,
     within_selection_tie = selection$within_selection_tie,
     complexity_rank = selection$complexity_rank,
@@ -863,6 +1100,17 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       weight_bound = compact$weight_bound,
       opt_tol = as.numeric(opt_tol),
       grad_tol = as.numeric(grad_tol),
+      kkt_tol = if (is.null(kkt_tol)) NA_real_ else as.numeric(kkt_tol),
+      kkt_tol_source = calibration_verification$status,
+      calibration_hash = calibration_verification$calibration_hash,
+      protocol_mode = protocol_mode,
+      nested_fit_relative_cutoff = if (is.null(nested_fit_relative_cutoff))
+        NA_real_ else as.numeric(nested_fit_relative_cutoff),
+      polish_max_iter = as.integer(polish_max_iter),
+      polish_history_size = as.integer(polish_history_size),
+      polish_tolerance_grad = as.numeric(polish_tolerance_grad),
+      polish_tolerance_change = as.numeric(polish_tolerance_change),
+      polish_lr = as.numeric(polish_lr), dtype = "float64",
       nested_objective_tol = as.numeric(nested_objective_tol),
       selection_tie_tol = as.numeric(selection_tie_tol),
       optimization_schedule = paste(
@@ -903,6 +1151,13 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
         seed = .sc_comp_seed(seed, "selected-refit-pooled-prefit", full_key),
         device = device, verbose = verbose, warm_state = NULL,
         early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+        kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+        calibration_verification = calibration_verification,
+        polish_max_iter = polish_max_iter,
+        polish_history_size = polish_history_size,
+        polish_tolerance_grad = polish_tolerance_grad,
+        polish_tolerance_change = polish_tolerance_change,
+        polish_lr = polish_lr,
         mu_bound = mu_bound, kappa_bound = kappa_bound,
         alpha_bound = compact$alpha_bound,
         a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -918,6 +1173,13 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
         warm_state = pooled_prefit_full$net$state_dict(),
         warm_start_mode = "pooled_nested",
         early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+        kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+        calibration_verification = calibration_verification,
+        polish_max_iter = polish_max_iter,
+        polish_history_size = polish_history_size,
+        polish_tolerance_grad = polish_tolerance_grad,
+        polish_tolerance_change = polish_tolerance_change,
+        polish_lr = polish_lr,
         mu_bound = mu_bound, kappa_bound = kappa_bound,
         alpha_bound = compact$alpha_bound,
         a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -926,7 +1188,11 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
         .sc_comp_nested_objective_gate(
           candidate_penalized_nll = pooled_continued_full$penalized_loss,
           pooled_penalized_nll = pooled_prefit_full$penalized_loss,
-          tolerance = nested_objective_tol, applicable = TRUE)
+          tolerance = nested_objective_tol, applicable = TRUE,
+          v22_cutoff = nested_fit_relative_cutoff,
+          v22_applicable = FALSE, protocol_mode = protocol_mode,
+          calibration_verified = calibration_verification$verified,
+          calibration_hash = calibration_verification$calibration_hash)
     }
     ff <- if (corrected_selected && spec$mean_family == "constant") {
       pooled_continued_full
@@ -952,6 +1218,13 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
           "pooled_structural"
         },
         early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+        kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+        calibration_verification = calibration_verification,
+        polish_max_iter = polish_max_iter,
+        polish_history_size = polish_history_size,
+        polish_tolerance_grad = polish_tolerance_grad,
+        polish_tolerance_change = polish_tolerance_change,
+        polish_lr = polish_lr,
         mu_bound = mu_bound, kappa_bound = kappa_bound,
         alpha_bound = compact$alpha_bound,
         a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -964,9 +1237,15 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
           pooled_continued_full$penalized_loss
         } else NA_real_,
         tolerance = nested_objective_tol,
-        applicable = corrected_selected)
+        applicable = corrected_selected,
+        v22_cutoff = nested_fit_relative_cutoff,
+        v22_applicable = corrected_selected &&
+          spec$mean_family != "constant",
+        protocol_mode = protocol_mode,
+        calibration_verified = calibration_verification$verified,
+        calibration_hash = calibration_verification$calibration_hash)
     }
-    A <- ff$A / dx_full_transform$scale
+    A <- .scmix_loading_to_raw(ff$A, dx_full_transform$scale)
     network_state <- .scmix_capture_network_state(
       ff$net, p = ncol(deltaX), p_Z = ncol(Z), q = spec$q,
       hidden = spec$hidden, mean_family = spec$mean_family,
@@ -981,9 +1260,12 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       analysis_signature = analysis_signature,
       scope = "selected refit on all rows supplied to scmix_tune_matrix"
     )
+    multistart_artifacts <- .scmix_complete_multistart_artifacts(
+      ff, network_state, dx_full_transform$scale)
     refitted <- list(
       net = ff$net,
       network_state = network_state,
+      multistart_artifacts = multistart_artifacts,
       mu = sweep(.sc_predict_beta(ff$net, z_full), 2L,
                  dx_full_transform$scale, `/`),
       A = A, Sigma = tcrossprod(A), kappa = ff$kappa,
@@ -1001,10 +1283,25 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
         "the nested reference is the continued constant stage.") else
         "Single legacy candidate stage.",
       analysis_signature = analysis_signature,
+      protocol_mode = protocol_mode,
+      calibration_only = identical(protocol_mode, "calibration"),
+      calibration_verification = calibration_verification,
+      v22_fit_computation_subset_pass =
+        isTRUE(ff$v22_optimization_gate_pass) &&
+        (!isTRUE(ff$nested_objective_gate$v22_applicable) ||
+           isTRUE(ff$nested_objective_gate$v22_pass)) &&
+        identical(protocol_mode, "production"),
       raw_data = list(deltaX = deltaX, y = y, Z = Z,
                       respondent_id = respondent_id),
       scope = "all rows supplied to this outer-training call"
     )
+    refitted <- .scmix_add_loading_contract(
+      refitted, q = spec$q,
+      raw_full = A, optimization_full = ff$A,
+      coefficient_scale_full = dx_full_transform$scale,
+      source = paste(
+        "Selected full-sample refit from respondent-level matrix tuning;",
+        "both scales are paired with the stored training transform."))
     class(refitted) <- c("scmix_tuned_matrix_fit", "list")
   }
 
@@ -1015,13 +1312,28 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
     fold_sequence_log_score = fold_score,
     fold_n_respondents = fold_n, sequence_scores = sequence_scores,
     fold_computational_gate = fold_computational_gate,
+    fold_v22_computational_gate = fold_v22_computational_gate,
     fold_nesting_gate = fold_nesting_gate,
     fold_pooled_prefit_gate = fold_pooled_prefit_gate,
     fold_continued_constant_gate = fold_continued_constant_gate,
     fold_computational_failure_reasons =
       fold_computational_failure_reasons,
+    fold_v22_computational_failure_reasons =
+      fold_v22_computational_failure_reasons,
     candidate_selection_gate = list(
       pass = selection$pass,
+      gate_scope = if (identical(protocol_mode, "calibration")) paste(
+        "precalibration computational validity for generating Step-3 fits;",
+        "not v2.2 inferential eligibility") else paste(
+        "production inner-fold optimizer and exact nested-fit subset gates;",
+        "global fit and target eligibility are assessed elsewhere"),
+      protocol_mode = protocol_mode,
+      calibration_only = identical(protocol_mode, "calibration"),
+      optimizer_subset_pass = selection$pass &&
+        identical(protocol_mode, "production"),
+      v22_pass = identical(protocol_mode, "production") &&
+        isTRUE(calibration_verification$verified) && selection$pass &&
+        isTRUE(apply(fold_v22_computational_gate, 1L, all)[selected]),
       selected_index = selected,
       computationally_eligible = selection$computationally_eligible,
       nesting_eligible = apply(fold_nesting_gate, 1L, all),
@@ -1034,6 +1346,25 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       within_selection_tie = selection$within_selection_tie,
       tie_tolerance = selection$tie_tolerance,
       ineligible_reason = selection$ineligible_reason),
+    v22_candidate_selection_gate = list(
+      pass = identical(protocol_mode, "production") &&
+        isTRUE(calibration_verification$verified) && selection$pass &&
+        isTRUE(apply(fold_v22_computational_gate, 1L, all)[selected]),
+      protocol_mode = protocol_mode,
+      calibration_only = identical(protocol_mode, "calibration"),
+      selected_index = selected,
+      eligible_by_candidate = identical(protocol_mode, "production") &
+        isTRUE(calibration_verification$verified) &
+        selection$selection_eligible &
+        apply(fold_v22_computational_gate, 1L, all),
+      failure_reason = if (selection$pass &&
+          isTRUE(apply(fold_v22_computational_gate, 1L, all)[selected])) {
+        character()
+      } else if (!selection$pass) {
+        "precalibration_candidate_selection_failed"
+      } else {
+        "selected_candidate_failed_v22_optimization_gate"
+      }),
     cv_optimization = cv_optimization,
     cv_pooled_prefit_optimization = cv_pooled_prefit_optimization,
     cv_fits = cv_fits,
@@ -1057,9 +1388,18 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
     integration_policy = integration_policy,
     integration_tuning_diagnostic = integration_policy$diagnostic_only,
     primary_inference_eligible = integration_policy$primary_inference_eligible &&
+      identical(protocol_mode, "production") &&
       length(unique(candidate_table$q)) == 1L &&
-      isTRUE(selection$selection_eligible[selected]),
-    analysis_signature = analysis_signature
+      isTRUE(selection$selection_eligible[selected]) &&
+      isTRUE(apply(fold_v22_computational_gate, 1L, all)[selected]),
+    analysis_signature = analysis_signature,
+    protocol_mode = protocol_mode,
+    calibration_only = identical(protocol_mode, "calibration"),
+    calibration_verification = calibration_verification,
+    v22_candidate_computation_subset_pass =
+      isTRUE(selection$selection_eligible[selected]) &&
+      isTRUE(apply(fold_v22_computational_gate, 1L, all)[selected]) &&
+      identical(protocol_mode, "production")
   )
   class(out) <- c("scmix_tuning", "list")
   out
@@ -1090,12 +1430,29 @@ scmix_refit_selected_matrix <- function(
     n_epochs = 400L, learning_rate = 0.01, n_starts = 2L,
     mu_bound = 10, kappa_bound = 10, alpha_bound = 5,
     a_bound = 10, weight_bound = 10,
-    opt_tol = 1e-7, grad_tol = 1e-4, nested_objective_tol = 1e-6,
+    opt_tol = 1e-7, grad_tol = 1e-4, kkt_tol = NULL,
+    protocol_mode = c("calibration", "production"),
+    calibration_artifact = NULL, analysis_contract = NULL,
+    polish_max_iter = 50L, polish_history_size = 50L,
+    polish_tolerance_grad = 1e-10, polish_tolerance_change = 1e-12,
+    polish_lr = 1, nested_objective_tol = 1e-6,
+    nested_fit_relative_cutoff = NULL,
     seed = NULL,
     device = "cpu", verbose = FALSE, source_analysis_signature = NULL) {
   dat <- .sc_comp_validate_matrix_data(deltaX, y, Z, respondent_id)
   deltaX <- dat$deltaX; y <- dat$y; Z <- dat$Z
   respondent_id <- dat$respondent_id
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
+  calibration_verification <- .sc_v22_resolve_optimizer_calibration(
+    protocol_mode = protocol_mode,
+    calibration_artifact = calibration_artifact,
+    analysis_contract = analysis_contract,
+    kkt_tol = kkt_tol,
+    nested_fit_relative_cutoff = nested_fit_relative_cutoff)
+  .sc_v22_require_verified_production_calibration(calibration_verification)
+  kkt_tol <- calibration_verification$kkt_cutoff
+  nested_fit_relative_cutoff <-
+    calibration_verification$nested_fit_relative_cutoff
   if (!is.list(specification)) {
     stop("`specification` must be one selected learner specification.",
          call. = FALSE)
@@ -1112,6 +1469,14 @@ scmix_refit_selected_matrix <- function(
       length(nested_objective_tol) != 1L ||
       !is.finite(nested_objective_tol) || nested_objective_tol < 0) {
     stop("`nested_objective_tol` must be finite and nonnegative.",
+         call. = FALSE)
+  }
+  if (!is.null(nested_fit_relative_cutoff) &&
+      (!is.numeric(nested_fit_relative_cutoff) ||
+       length(nested_fit_relative_cutoff) != 1L ||
+       !is.finite(nested_fit_relative_cutoff) ||
+       nested_fit_relative_cutoff < 0)) {
+    stop("`nested_fit_relative_cutoff` must be NULL or finite and nonnegative.",
          call. = FALSE)
   }
 
@@ -1157,6 +1522,13 @@ scmix_refit_selected_matrix <- function(
       seed = .sc_comp_seed(seed, "selected-refit-pooled-prefit", fixed_key),
       device = device, verbose = verbose, warm_state = NULL,
       early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+      kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+      calibration_verification = calibration_verification,
+      polish_max_iter = polish_max_iter,
+      polish_history_size = polish_history_size,
+      polish_tolerance_grad = polish_tolerance_grad,
+      polish_tolerance_change = polish_tolerance_change,
+      polish_lr = polish_lr,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
       alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -1171,6 +1543,13 @@ scmix_refit_selected_matrix <- function(
       warm_state = pooled_prefit$net$state_dict(),
       warm_start_mode = "pooled_nested",
       early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+      kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+      calibration_verification = calibration_verification,
+      polish_max_iter = polish_max_iter,
+      polish_history_size = polish_history_size,
+      polish_tolerance_grad = polish_tolerance_grad,
+      polish_tolerance_change = polish_tolerance_change,
+      polish_lr = polish_lr,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
       alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -1179,7 +1558,11 @@ scmix_refit_selected_matrix <- function(
       .sc_comp_nested_objective_gate(
         candidate_penalized_nll = continued_constant$penalized_loss,
         pooled_penalized_nll = pooled_prefit$penalized_loss,
-        tolerance = nested_objective_tol, applicable = TRUE)
+        tolerance = nested_objective_tol, applicable = TRUE,
+        v22_cutoff = nested_fit_relative_cutoff,
+        v22_applicable = FALSE, protocol_mode = protocol_mode,
+        calibration_verified = calibration_verification$verified,
+        calibration_hash = calibration_verification$calibration_hash)
   }
   trained <- if (corrected && spec$mean_family == "constant") {
     continued_constant
@@ -1200,6 +1583,13 @@ scmix_refit_selected_matrix <- function(
         "pooled_structural"
       },
       early_stop = FALSE, opt_tol = opt_tol, grad_tol = grad_tol,
+      kkt_tol = kkt_tol, protocol_mode = protocol_mode,
+      calibration_verification = calibration_verification,
+      polish_max_iter = polish_max_iter,
+      polish_history_size = polish_history_size,
+      polish_tolerance_grad = polish_tolerance_grad,
+      polish_tolerance_change = polish_tolerance_change,
+      polish_lr = polish_lr,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
       alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -1211,7 +1601,12 @@ scmix_refit_selected_matrix <- function(
       pooled_penalized_nll = if (corrected) {
         continued_constant$penalized_loss
       } else NA_real_,
-      tolerance = nested_objective_tol, applicable = corrected)
+      tolerance = nested_objective_tol, applicable = corrected,
+      v22_cutoff = nested_fit_relative_cutoff,
+      v22_applicable = corrected && spec$mean_family != "constant",
+      protocol_mode = protocol_mode,
+      calibration_verified = calibration_verification$verified,
+      calibration_hash = calibration_verification$calibration_hash)
   }
 
   refit_signature <- .sc_analysis_signature(
@@ -1227,6 +1622,17 @@ scmix_refit_selected_matrix <- function(
       alpha_bound = compact$alpha_bound, a_bound = compact$a_bound,
       weight_bound = compact$weight_bound, opt_tol = as.numeric(opt_tol),
       grad_tol = as.numeric(grad_tol),
+      kkt_tol = if (is.null(kkt_tol)) NA_real_ else as.numeric(kkt_tol),
+      kkt_tol_source = calibration_verification$status,
+      calibration_hash = calibration_verification$calibration_hash,
+      protocol_mode = protocol_mode,
+      nested_fit_relative_cutoff = if (is.null(nested_fit_relative_cutoff))
+        NA_real_ else as.numeric(nested_fit_relative_cutoff),
+      polish_max_iter = as.integer(polish_max_iter),
+      polish_history_size = as.integer(polish_history_size),
+      polish_tolerance_grad = as.numeric(polish_tolerance_grad),
+      polish_tolerance_change = as.numeric(polish_tolerance_change),
+      polish_lr = as.numeric(polish_lr), dtype = "float64",
       nested_objective_tol = as.numeric(nested_objective_tol),
       optimization_schedule = if (corrected) {
         "shared pooled prefit plus equal-length candidate stage"
@@ -1248,9 +1654,12 @@ scmix_refit_selected_matrix <- function(
     analysis_signature = linked_signature,
     scope = "fixed post-selection full-sample refit; no retuning"
   )
-  A <- trained$A / scale
+  multistart_artifacts <- .scmix_complete_multistart_artifacts(
+    trained, state, scale)
+  A <- .scmix_loading_to_raw(trained$A, scale)
   out <- list(
     net = trained$net, network_state = state,
+    multistart_artifacts = multistart_artifacts,
     mu = sweep(.sc_predict_beta(trained$net, z_fit), 2L, scale, `/`),
     A = A, Sigma = tcrossprod(A), kappa = trained$kappa,
     specification = spec, integration_grid = grid,
@@ -1272,11 +1681,26 @@ scmix_refit_selected_matrix <- function(
     raw_data = list(deltaX = deltaX, y = y, Z = Z,
                     respondent_id = respondent_id),
     scope = "fixed selected specification refit on all supplied rows",
+    protocol_mode = protocol_mode,
+    calibration_only = identical(protocol_mode, "calibration"),
+    calibration_verification = calibration_verification,
+    v22_fit_computation_subset_pass =
+      isTRUE(trained$v22_optimization_gate_pass) &&
+      (!isTRUE(trained$nested_objective_gate$v22_applicable) ||
+         isTRUE(trained$nested_objective_gate$v22_pass)) &&
+      identical(protocol_mode, "production"),
     retuning_performed = FALSE,
     selection_claim = paste(
       "The specification was supplied by the caller. This refit neither",
       "reruns nor validates candidate selection or nested cross-fitting.")
   )
+  out <- .scmix_add_loading_contract(
+    out, q = spec$q,
+    raw_full = A, optimization_full = trained$A,
+    coefficient_scale_full = scale,
+    source = paste(
+      "Fixed post-selection full-sample refit; both scales are paired with",
+      "the stored DeltaX transform."))
   class(out) <- c("scmix_tuned_matrix_fit", "list")
   out
 }
@@ -1375,6 +1799,18 @@ scmix_tune_outer_matrix <- function(deltaX, y, Z, respondent_id, grid,
     raw_data = list(deltaX = dat$deltaX, y = dat$y, Z = dat$Z,
                     respondent_id = respondent_id),
     analysis_signature = analysis_signature,
+    protocol_mode = {
+      stages <- unique(vapply(fits, function(x) {
+        x$protocol_mode %||% "legacy_unspecified"
+      }, character(1L)))
+      if (length(stages) == 1L) stages else "inconsistent"
+    },
+    calibration_only = all(vapply(fits, function(x) {
+      isTRUE(x$calibration_only)
+    }, logical(1L))),
+    v22_nested_computation_subset_pass = all(vapply(fits, function(x) {
+      isTRUE(x$v22_candidate_computation_subset_pass)
+    }, logical(1L))),
     n_respondents = N,
     nesting = "each tuning and selected refit used outer-training respondents only",
     assembly = paste(
@@ -1463,6 +1899,16 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
   }
   q <- qs[1L]
   p <- ncol(dat$deltaX)
+  loading_contract_gate <- vapply(refits, function(x) {
+    is.list(x$loading_contract) &&
+      identical(x$loading_contract$contract_id, "scmix-loading-scale-v1")
+  }, logical(1L))
+  if (!all(loading_contract_gate) && !isTRUE(diagnostic_only)) {
+    stop(
+      "At least one selected outer refit lacks the explicit loading-scale ",
+      "contract. Legacy loading aliases may be assembled only with ",
+      "diagnostic_only = TRUE; refit before v2.2 inference.", call. = FALSE)
+  }
   grids <- lapply(seq_len(K), function(k) {
     .sc_comp_validate_integration_grid(
       refits[[k]]$integration_grid, q = q,
@@ -1511,41 +1957,64 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
     pooled_prefit_optimization, schedule_stage_gate)
   continued_constant_stage <- lapply(
     continued_constant_optimization, schedule_stage_gate)
+  pooled_prefit_v22_stage <- lapply(pooled_prefit_optimization, function(x) {
+    if (is.null(x)) return(list(pass = TRUE, failure_reasons = character()))
+    .sc_comp_v22_fit_gate(x)
+  })
+  continued_constant_v22_stage <- lapply(
+    continued_constant_optimization, function(x) {
+      if (is.null(x)) return(list(pass = TRUE, failure_reasons = character()))
+      .sc_comp_v22_fit_gate(x)
+    })
   pooled_prefit_gate <- vapply(
     pooled_prefit_stage, `[[`, logical(1L), "pass")
   continued_constant_gate <- vapply(
     continued_constant_stage, `[[`, logical(1L), "pass")
+  pooled_prefit_v22_gate <- vapply(
+    pooled_prefit_v22_stage, `[[`, logical(1L), "pass")
+  continued_constant_v22_gate <- vapply(
+    continued_constant_v22_stage, `[[`, logical(1L), "pass")
   bound_state <- lapply(optimization, function(x) .sc_comp_bound_state(x$bounds))
   bound_gate <- vapply(bound_state, `[[`, logical(1L), "pass")
   nesting_gate <- vapply(optimization, function(x) {
     is.null(x$nested_objective_gate) ||
       isTRUE(x$nested_objective_gate$pass)
   }, logical(1L))
-  optimization_gate <- vapply(seq_along(optimization), function(k) {
+  v22_nesting_gate <- vapply(optimization, function(x) {
+    gate <- x$nested_objective_gate
+    is.null(gate) || !isTRUE(gate$v22_applicable) || isTRUE(gate$v22_pass)
+  }, logical(1L))
+  precalibration_optimization_gate <- vapply(
+    seq_along(optimization), function(k) {
     isTRUE(optimization[[k]]$optimization_gate_pass) && bound_gate[k] &&
       nesting_gate[k] && pooled_prefit_gate[k] &&
       continued_constant_gate[k]
+  }, logical(1L))
+  optimization_gate <- vapply(seq_along(optimization), function(k) {
+    isTRUE(optimization[[k]]$v22_optimization_gate_pass) && bound_gate[k] &&
+      v22_nesting_gate[k] && pooled_prefit_v22_gate[k] &&
+      continued_constant_v22_gate[k]
   }, logical(1L))
   if (isTRUE(require_optimization_gate) && !all(optimization_gate) &&
       !isTRUE(diagnostic_only)) {
     failed <- which(!optimization_gate)
     reasons <- vapply(failed, function(k) {
-      why <- optimization[[k]]$optimization_failure_reasons
+      why <- optimization[[k]]$v22_optimization_failure_reasons
       if (!bound_state[[k]]$complete) {
         why <- c(why, "compact_bound_diagnostics_incomplete")
       } else if (isTRUE(bound_state[[k]]$active)) {
         why <- c(why, "parameter_bound_active")
       }
-      if (!nesting_gate[k]) {
-        why <- c(why, "nested_pooled_objective_not_attained")
+      if (!v22_nesting_gate[k]) {
+        why <- c(why, "v22_nested_fit_relative_gate_failed_or_pending")
       }
-      if (!pooled_prefit_gate[k]) {
+      if (!pooled_prefit_v22_gate[k]) {
         why <- c(why, paste0("shared_pooled_prefit:",
-                             pooled_prefit_stage[[k]]$failure_reasons))
+                             pooled_prefit_v22_stage[[k]]$failure_reasons))
       }
-      if (!continued_constant_gate[k]) {
+      if (!continued_constant_v22_gate[k]) {
         why <- c(why, paste0("continued_constant:",
-                             continued_constant_stage[[k]]$failure_reasons))
+                             continued_constant_v22_stage[[k]]$failure_reasons))
       }
       if (!length(why)) "missing fail-closed diagnostics" else
         paste(unique(why), collapse = ",")
@@ -1567,6 +2036,7 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
   sd_dx_folds <- lapply(dx_transform_folds, `[[`, "scale")
   mu_all_folds <- vector("list", K)
   A_folds <- vector("list", K)
+  A_optimization_folds <- vector("list", K)
   kappa_folds <- numeric(K)
   for (k in seq_len(K)) {
     scale_k <- as.numeric(sd_dx_folds[[k]])
@@ -1576,7 +2046,16 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
     Z_k <- .sc_apply_z_transform(dat$Z, z_transform_folds[[k]])
     mu_all_folds[[k]] <- sweep(
       .sc_predict_beta(nets[[k]], Z_k), 2L, scale_k, `/`)
-    A_folds[[k]] <- as.matrix(refits[[k]]$A)
+    if (loading_contract_gate[k]) {
+      A_folds[[k]] <- scmix_loadings(
+        refits[[k]], scale = "raw", scope = "full")
+      A_optimization_folds[[k]] <- scmix_loadings(
+        refits[[k]], scale = "optimization", scope = "full")
+    } else {
+      A_folds[[k]] <- as.matrix(refits[[k]]$A)
+      A_optimization_folds[[k]] <- .scmix_loading_to_optimization(
+        A_folds[[k]], scale_k)
+    }
     if (!identical(dim(A_folds[[k]]), c(p, q)) ||
         any(!is.finite(A_folds[[k]]))) {
       stop("Outer fold ", k, " has an invalid computational loading.",
@@ -1603,8 +2082,12 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
   if (length(attr_names) != p || length(z_names) != ncol(dat$Z)) {
     stop("`attr_names` or `z_names` has the wrong length.", call. = FALSE)
   }
-  computational_gate_pass <- all(selection_eligible) && all(optimization_gate) &&
+  precalibration_computational_gate_pass <-
+    all(candidate_selection_gate) &&
+    all(precalibration_optimization_gate) && all(loading_contract_gate) &&
     !isTRUE(diagnostic_only)
+  computational_gate_pass <- all(selection_eligible) && all(optimization_gate) &&
+    all(loading_contract_gate) && !isTRUE(diagnostic_only)
   out <- list(
     deltaX = dat$deltaX, y = dat$y, Z = dat$Z,
     respondent_id = dat$respondent_id,
@@ -1614,6 +2097,8 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
     A_folds = A_folds, A_computational_folds = A_folds,
     kappa_folds = kappa_folds, nets = nets,
     network_states = network_states,
+    multistart_artifacts_folds = lapply(refits, `[[`,
+                                        "multistart_artifacts"),
     z_transform_folds = z_transform_folds,
     dx_transform_folds = dx_transform_folds,
     sd_dx_folds = sd_dx_folds,
@@ -1627,16 +2112,34 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
       pooled_prefit_folds = pooled_prefit_optimization,
       continued_constant_folds = continued_constant_optimization,
       gate_by_fold = optimization_gate,
+      precalibration_gate_by_fold = precalibration_optimization_gate,
       candidate_selection_gate_by_fold = candidate_selection_gate,
       nested_objective_gate_by_fold = nesting_gate,
+      v22_nested_objective_gate_by_fold = v22_nesting_gate,
       pooled_prefit_gate_by_fold = pooled_prefit_gate,
       continued_constant_gate_by_fold = continued_constant_gate,
+      pooled_prefit_v22_gate_by_fold = pooled_prefit_v22_gate,
+      continued_constant_v22_gate_by_fold =
+        continued_constant_v22_gate,
       compact_bound_gate_by_fold = bound_gate,
+      loading_contract_gate_by_fold = loading_contract_gate,
       diagnostics_are_certificates = FALSE),
     computational_gate_pass = computational_gate_pass,
+    precalibration_computational_gate_pass =
+      precalibration_computational_gate_pass,
     eligible_for_ordinary_inference = computational_gate_pass,
     diagnostic_only = !computational_gate_pass,
     analysis_signature = nested$analysis_signature,
+    protocol_mode = {
+      stages <- unique(vapply(refits, function(x) {
+        x$protocol_mode %||% "legacy_unspecified"
+      }, character(1L)))
+      if (length(stages) == 1L) stages else "inconsistent"
+    },
+    calibration_only = all(vapply(refits, function(x) {
+      isTRUE(x$calibration_only)
+    }, logical(1L))),
+    v22_fit_computation_subset_pass = computational_gate_pass,
     source = "selected refits from respondent-level nested tuning",
     scope = paste(
       "Fold nuisances for cross-fitted inference; not a full-sample structural",
@@ -1644,6 +2147,14 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
       "the paper's asymptotic numerical-error rate conditions."),
     nested_tuning = nested
   )
+  out <- .scmix_add_loading_contract(
+    out, q = q,
+    raw_folds = A_folds,
+    optimization_folds = A_optimization_folds,
+    coefficient_scale_folds = sd_dx_folds,
+    source = paste(
+      "Selected respondent-level outer refits assembled for cross-fitted",
+      "inference; no full-sample loading is present."))
   class(out) <- c("scmix_nested_assembled", "list")
   out
 }
@@ -1652,9 +2163,11 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
 #'
 #' @param fit An `scmix`, `scmix_tuned_matrix_fit`, or assembled nested fit.
 #' @return Start-by-fit diagnostics, compact-bound gates, the fit analysis
-#'   signature, and scope summaries. Bound activity is available for the
-#'   selected start because the core fit does not retain all nonselected
-#'   networks.
+#'   signature, and scope summaries. Every polished start is retained in a
+#'   separate portable artifact so target-specific F008 evidence can be
+#'   constructed without rerunning the optimizer. This audit covers only the
+#'   optimizer subset of the production protocol. It cannot establish global
+#'   fit or target eligibility.
 #' @export
 scmix_optimization_audit <- function(fit) {
   opt <- fit$optimization
@@ -1678,6 +2191,9 @@ scmix_optimization_audit <- function(fit) {
     }
     if (!"optimization_gate_pass" %in% names(starts)) {
       starts$optimization_gate_pass <- FALSE
+    }
+    if (!"v22_optimization_gate_pass" %in% names(starts)) {
+      starts$v22_optimization_gate_pass <- FALSE
     }
     if (!"objective_finite" %in% names(starts)) {
       starts$objective_finite <- is.finite(starts$objective)
@@ -1722,8 +2238,14 @@ scmix_optimization_audit <- function(fit) {
         "unavailable_legacy_diagnostic" else x$criterion_diagnostic_source,
       selected_state_restored = isTRUE(x$state_restored),
       selected_objective_finite = isTRUE(x$objective_finite),
-      selected_optimization_gate_pass = isTRUE(x$optimization_gate_pass) &&
+      selected_precalibration_gate_pass =
+        isTRUE(x$optimization_gate_pass) && bound$pass,
+      selected_v22_optimization_gate_pass =
+        isTRUE(x$v22_optimization_gate_pass) &&
         bound$pass,
+      selected_optimization_gate_pass =
+        isTRUE(x$v22_optimization_gate_pass) && bound$pass,
+      protocol_mode = x$protocol_mode %||% "legacy_unspecified",
       selected_bound_diagnostics_complete = bound$complete,
       selected_mu_bound_active = bound$mu_active,
       selected_kappa_bound_active = bound$kappa_active,
@@ -1742,8 +2264,14 @@ scmix_optimization_audit <- function(fit) {
                 all(summary$selected_bound_diagnostics_complete),
               all_selected_tolerances_met = all(summary$selected_tolerance_status),
               all_objectives_finite = all(summary$selected_objective_finite),
-              all_computational_gates_pass =
-                all(summary$selected_optimization_gate_pass),
+              all_precalibration_gates_pass =
+                all(summary$selected_precalibration_gate_pass),
+              all_v22_optimizer_subset_gates_pass =
+                all(summary$selected_v22_optimization_gate_pass),
+              gate_scope = paste(
+                "optimizer subset only; this object never certifies global",
+                "fit or target eligibility; all_precalibration_gates_pass",
+                "is diagnostic only"),
               analysis_signature = analysis_signature,
               signature_match = .sc_comp_nonempty_signature(analysis_signature),
               global_optimality_gap_known = FALSE,

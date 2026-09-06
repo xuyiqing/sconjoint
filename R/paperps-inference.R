@@ -190,8 +190,17 @@
 }
 
 .scmix_dml_resolve_A_gh <- function(fit, p, K) {
+  explicit_loading_contract <- is.list(fit$loading_contract) &&
+    identical(fit$loading_contract$contract_id,
+              "scmix-loading-scale-v1")
+  contracted_A_folds <- if (explicit_loading_contract &&
+      isTRUE(fit$loading_contract$folds$available)) {
+    scmix_loadings(fit, scale = "raw", scope = "fold")
+  } else NULL
   q_raw <- if (is.null(fit$q)) {
-    A0 <- if (!is.null(fit$A_computational_folds)) {
+    A0 <- if (!is.null(contracted_A_folds)) {
+      contracted_A_folds
+    } else if (!is.null(fit$A_computational_folds)) {
       fit$A_computational_folds
     } else fit$A_folds
     if (is.null(A0) || !length(A0)) 0L else ncol(A0[[1L]])
@@ -212,10 +221,14 @@
   ## Scores must use the loading actually optimized with the stored finite
   ## nodes. A post-fit Procrustes rotation generally changes a finite-node
   ## approximation even though it leaves AA' unchanged in the exact model.
-  A_source <- if (!is.null(fit$A_computational_folds)) {
+  A_source <- if (!is.null(contracted_A_folds)) {
+    "scmix_loadings(fit, scale = 'raw', scope = 'fold')"
+  } else if (!is.null(fit$A_computational_folds)) {
     "fit$A_computational_folds"
   } else "fit$A_folds"
-  A <- if (!is.null(fit$A_computational_folds)) {
+  A <- if (!is.null(contracted_A_folds)) {
+    contracted_A_folds
+  } else if (!is.null(fit$A_computational_folds)) {
     fit$A_computational_folds
   } else fit$A_folds
   if (!is.list(A) || length(A) != K) {
@@ -230,15 +243,28 @@
     }
     Ak
   })
-  A_full_source <- if (!is.null(fit$A_computational_full)) {
+  contracted_A_full <- if (explicit_loading_contract &&
+      isTRUE(fit$loading_contract$full$available)) {
+    scmix_loadings(fit, scale = "raw", scope = "full")
+  } else NULL
+  A_full_source <- if (!is.null(contracted_A_full)) {
+    "scmix_loadings(fit, scale = 'raw', scope = 'full')"
+  } else if (!is.null(fit$A_computational_full)) {
     "fit$A_computational_full"
   } else if (!is.null(fit$A_full_computational)) {
     "fit$A_full_computational"
   } else if (!is.null(fit$A_hat)) {
-    ## In current scmix fits A_hat is the unrotated full-sample optimizer.
+    ## Legacy/current scmix objects expose A_hat as a raw-scale alias. New
+    ## paper-eligible objects take the explicit accessor branch above.
     "fit$A_hat"
   } else NA_character_
-  A_full <- if (is.na(A_full_source)) NULL else fit[[sub("^fit\\$", "", A_full_source)]]
+  A_full <- if (!is.null(contracted_A_full)) {
+    contracted_A_full
+  } else if (is.na(A_full_source)) {
+    NULL
+  } else {
+    fit[[sub("^fit\\$", "", A_full_source)]]
+  }
   if (!is.null(A_full)) {
     A_full <- .scmix_dml_as_matrix(A_full, what = A_full_source)
     if (!.scmix_dml_dim_equal(A_full, c(p, q))) {
@@ -1625,7 +1651,7 @@ scmix_inference_verification <- function(fit, mu_basis, tangent, numerical,
     isTRUE(opt_artifact$signature_match) &&
     isTRUE(opt_artifact$all_selected_tolerances_met) &&
     isTRUE(opt_artifact$all_objectives_finite) &&
-    isTRUE(opt_artifact$all_computational_gates_pass) &&
+    .sc_comp_optimizer_subset_pass(opt_artifact) &&
     !isTRUE(opt_artifact$any_bound_activity)
   if (!is.list(optimization) || !opt_pass ||
       !.scmix_dml_nonempty_text(optimization$gap_argument) ||
@@ -1714,7 +1740,7 @@ scmix_inference_verification <- function(fit, mu_basis, tangent, numerical,
     isTRUE(opt$signature_match) &&
     isTRUE(opt$all_selected_tolerances_met) &&
     isTRUE(opt$all_objectives_finite) &&
-    isTRUE(opt$all_computational_gates_pass) &&
+    .sc_comp_optimizer_subset_pass(opt) &&
     !isTRUE(opt$any_bound_activity)
   fit_eligibility <- .scmix_dml_fit_eligibility(fit)
   record_valid <- inherits(x, "scmix_inference_verification") &&

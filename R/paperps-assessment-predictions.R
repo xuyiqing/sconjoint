@@ -152,7 +152,14 @@ scmix_heldout_predictions <- function(fit, task_order = NULL,
       length(fit$mu_all_folds) != K || length(fit$kappa_folds) != K) {
     stop("The outer-fold nuisance collection is incomplete.", call. = FALSE)
   }
-  A_folds <- fit$A_computational_folds %||% fit$A_folds
+  A_folds <- if (is.list(fit$loading_contract) &&
+      identical(fit$loading_contract$contract_id,
+                "scmix-loading-scale-v1") &&
+      isTRUE(fit$loading_contract$folds$available)) {
+    scmix_loadings(fit, scale = "raw", scope = "fold")
+  } else {
+    fit$A_computational_folds %||% fit$A_folds
+  }
   q <- as.integer(fit$q %||% if (is.null(A_folds)) 0L else ncol(A_folds[[1L]]))
   if (q < 0L || q > ncol(dx) - 1L ||
       (q > 0L && (!is.list(A_folds) || length(A_folds) != K))) {

@@ -22,7 +22,17 @@ scmix_refit_selected_matrix(
   weight_bound = 10,
   opt_tol = 1e-07,
   grad_tol = 1e-04,
+  kkt_tol = NULL,
+  protocol_mode = c("calibration", "production"),
+  calibration_artifact = NULL,
+  analysis_contract = NULL,
+  polish_max_iter = 50L,
+  polish_history_size = 50L,
+  polish_tolerance_grad = 1e-10,
+  polish_tolerance_change = 1e-12,
+  polish_lr = 1,
   nested_objective_tol = 1e-06,
+  nested_fit_relative_cutoff = NULL,
   seed = NULL,
   device = "cpu",
   verbose = FALSE,
@@ -42,6 +52,22 @@ scmix_refit_selected_matrix(
 \item{a_bound}{Positive raw-coefficient Frobenius bound for the loading.}
 
 \item{weight_bound}{Positive coordinatewise network-parameter bound.}
+
+\item{kkt_tol}{Simulation-calibrated projected-KKT cutoff.}
+
+\item{protocol_mode}{Explicitly marks a calibration or production refit.}
+
+\item{calibration_artifact, analysis_contract}{Protocol-linked calibration
+inputs. Production mode accepts numerical cutoffs only from a complete
+artifact validated against the analysis contract.}
+
+\item{polish_max_iter, polish_history_size, polish_tolerance_grad,
+polish_tolerance_change, polish_lr}{Full-batch L-BFGS polish controls.}
+
+\item{nested_objective_tol}{Diagnostic relative nested-fit tolerance.}
+
+\item{nested_fit_relative_cutoff}{Frozen F007 cutoff, or \code{NULL} while
+calibration remains pending.}
 
 \item{source_analysis_signature}{Optional signature of the tuning analysis
 that selected \code{specification}; retained only as provenance.}

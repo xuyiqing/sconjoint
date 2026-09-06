@@ -207,8 +207,10 @@
   }
   net$eval()
   net_dev <- tryCatch(net$parameters[[1L]]$device, error = function(e) NULL)
-  zt <- torch::torch_tensor(Z_new, dtype = torch::torch_float())
-  if (!is.null(net_dev)) zt <- zt$to(device = net_dev)
+  net_dtype <- tryCatch(net$parameters[[1L]]$dtype,
+                        error = function(e) torch::torch_float())
+  zt <- torch::torch_tensor(Z_new, dtype = net_dtype)
+  if (!is.null(net_dev)) zt <- zt$to(device = net_dev, dtype = net_dtype)
   beta <- torch::with_no_grad({
     net$get_beta(zt)
   })

@@ -1648,7 +1648,7 @@ scmix_reporting_gates <- function(mrs_denominator = NULL, mrs_margin = NULL,
       stringsAsFactors = FALSE)
     opt_ok <- !is.null(optimization_gate) &&
       isTRUE(optimization_gate$all_selected_tolerances_met) &&
-      isTRUE(optimization_gate$all_computational_gates_pass) &&
+      .sc_comp_optimizer_subset_pass(optimization_gate) &&
       !isTRUE(optimization_gate$any_bound_activity)
     add_evidence("optimization evidence", opt_ok,
                  if (is.null(optimization_gate)) "optimization audit missing" else
@@ -1909,7 +1909,7 @@ scmix_assess <- function(fit = NULL, design_audit = NULL,
   } else "not available"
   optimization_ok <- !is.null(optimization) &&
     isTRUE(optimization$all_selected_tolerances_met) &&
-    isTRUE(optimization$all_computational_gates_pass) &&
+    .sc_comp_optimizer_subset_pass(optimization) &&
     !isTRUE(optimization$any_bound_activity)
   numerical_gate <- if (inherits(numerical, "scmix_integration_refinement"))
     numerical$gate else numerical

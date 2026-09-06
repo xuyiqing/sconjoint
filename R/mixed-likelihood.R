@@ -513,10 +513,12 @@
                                     mu_bound = 10, kappa_bound = 10,
                                     alpha_bound = 5,
                                     a_bound = 10, weight_bound = 10,
-                                    coefficient_scale = rep(1, p)) {
+                                    coefficient_scale = rep(1, p),
+                                    compute_dtype = c("float64", "float32")) {
   if (!requireNamespace("torch", quietly = TRUE)) {
     stop(".sc_build_mixed_network(): the 'torch' package is required.")
   }
+  compute_dtype <- match.arg(compute_dtype)
   family <- .sc_mixed_mean_family(mean_family, hidden)
   hidden <- family$hidden
   mean_family <- family$mean_family
@@ -552,7 +554,7 @@
         self$register_buffer(
           "mu_bound_internal",
           torch::torch_tensor(mu_bound * compact$coefficient_scale,
-                              dtype = torch::torch_float()))
+                              dtype = torch::torch_float64()))
       }
       layers <- list()
       in_dim <- p_Z
@@ -578,13 +580,17 @@
       self$kappa_raw <- torch::nn_parameter(torch::torch_zeros(1L))
       if (q > 0L) {
         scale_t <- torch::torch_tensor(compact$coefficient_scale,
-                                       dtype = torch::torch_float())$unsqueeze(2L)
+                                       dtype = torch::torch_float64())$unsqueeze(2L)
         self$A <- torch::nn_parameter(
           torch::torch_randn(p, q) * a_init_sd * scale_t
         )
       }
     },
     get_beta = function(z) {
+      ## New mixed-logit fits are optimized in float64. Casting here also lets
+      ## diagnostic callers pass ordinary float32 tensors without creating a
+      ## silent mixed-dtype matrix multiplication.
+      z <- z$to(dtype = self$kappa_raw$dtype, device = self$kappa_raw$device)
       if (self$mean_family == "constant") {
         alpha <- self$alpha_raw$unsqueeze(1L)$expand(c(z$shape[[1L]],
                                                        self$p_beta))
@@ -621,6 +627,14 @@
     }
   )
   net <- generator()
+  ## Protocol v2.2 requires every stochastic stage and the final full-batch
+  ## polish to use double precision. This converts linear-layer parameters as
+  ## well as registered buffers before the first objective evaluation.
+  net$to(dtype = if (compute_dtype == "float64") {
+    torch::torch_float64()
+  } else {
+    torch::torch_float32()
+  })
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
     alpha_bound = compact$alpha_bound,
@@ -858,6 +872,15 @@
                                 patience = 3L,
                                 opt_tol = 1e-7,
                                 grad_tol = 1e-4,
+                                kkt_tol = NULL,
+                                protocol_mode = c("calibration",
+                                                  "production"),
+                                calibration_verification = NULL,
+                                polish_max_iter = 50L,
+                                polish_history_size = 50L,
+                                polish_tolerance_grad = 1e-10,
+                                polish_tolerance_change = 1e-12,
+                                polish_lr = 1,
                                 mu_bound = 10,
                                 kappa_bound = 10,
                                 alpha_bound = 5,
@@ -868,6 +891,7 @@
     stop(".sc_train_mixed_one(): the 'torch' package is required.")
   }
   warm_start_mode <- match.arg(warm_start_mode)
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
   n_epochs <- as.integer(n_epochs)
   if (is.na(n_epochs) || n_epochs < 1L) {
     stop(".sc_train_mixed_one(): `n_epochs` must be positive.")
@@ -883,6 +907,20 @@
       opt_tol < 0 || !is.numeric(grad_tol) || length(grad_tol) != 1L ||
       !is.finite(grad_tol) || grad_tol < 0) {
     stop(".sc_train_mixed_one(): optimization tolerances must be finite and nonnegative.")
+  }
+  ## A numerical value alone never establishes the v2.2 cutoff provenance.
+  ## Public entry points attach the protocol-linked verification result. The
+  ## fallback labels below cover only direct internal diagnostic calls.
+  kkt_tol_source <- calibration_verification$status %||%
+    if (identical(protocol_mode, "calibration")) {
+      "calibration_only"
+    } else {
+      "unverified_production_cutoff"
+    }
+  if (!is.null(kkt_tol) &&
+      (!is.numeric(kkt_tol) || length(kkt_tol) != 1L ||
+       !is.finite(kkt_tol) || kkt_tol < 0)) {
+    stop(".sc_train_mixed_one(): `kkt_tol` must be NULL or finite and nonnegative.")
   }
   compact <- .sc_mixed_validate_compact_bounds(
     p = ncol(deltaX), coefficient_scale = coefficient_scale,
@@ -909,11 +947,11 @@
     rf <- factor(respondent_id[rows], levels = unique(respondent_id[rows]))
     list(
       dx = torch::torch_tensor(deltaX[rows, , drop = FALSE],
-                               dtype = torch::torch_float(), device = dev),
+                               dtype = torch::torch_float64(), device = dev),
       zt = torch::torch_tensor(Z[rows, , drop = FALSE],
-                               dtype = torch::torch_float(), device = dev),
+                               dtype = torch::torch_float64(), device = dev),
       yt = torch::torch_tensor(as.numeric(y[rows]),
-                               dtype = torch::torch_float(), device = dev),
+                               dtype = torch::torch_float64(), device = dev),
       idx1 = torch::torch_tensor(as.integer(rf), dtype = torch::torch_long(),
                                  device = dev),
       N = nlevels(rf)
@@ -926,11 +964,11 @@
   ## Some torch builds do not construct zero-column tensors reliably. The
   ## q = 0 likelihood never reads U_t, so use a harmless one-point placeholder.
   U_t <- if (q == 0L) {
-    torch::torch_zeros(1L, 1L, dtype = torch::torch_float(), device = dev)
+    torch::torch_zeros(1L, 1L, dtype = torch::torch_float64(), device = dev)
   } else {
-    torch::torch_tensor(gh$U, dtype = torch::torch_float(), device = dev)
+    torch::torch_tensor(gh$U, dtype = torch::torch_float64(), device = dev)
   }
-  logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float(),
+  logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float64(),
                                 device = dev)
 
   net <- .sc_build_mixed_network(
@@ -1000,6 +1038,8 @@
   previous_check <- Inf
   stopped_at <- n_epochs
   stop_reason <- "maximum_epochs"
+  last_finite_checkpoint <- .scmix_clone_network_state(net)
+  checkpoint_epoch <- 0L
 
   for (epoch in seq_len(n_epochs)) {
     net$train()
@@ -1009,17 +1049,35 @@
     loss <- nll + .sc_mixed_penalty(net, weight_decay)
     loss$backward()
     grad_now <- .sc_mixed_gradient_norm(net)
+    loss_now <- as.numeric(loss$item())
+    nll_now <- as.numeric(nll$item())
+    if (!is.finite(loss_now) || !is.finite(nll_now) ||
+        !is.finite(grad_now)) {
+      .scmix_load_network_state(net, last_finite_checkpoint)
+      stopped_at <- checkpoint_epoch
+      stop_reason <- "adam_nonfinite_state_restored"
+      break
+    }
     optimizer$step()
     .sc_mixed_project_parameters(
       net, coefficient_scale = compact$coefficient_scale,
       alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound
     )
-    loss_trace[epoch] <- as.numeric(loss$item())
-    nll_trace[epoch] <- as.numeric(nll$item())
+    loss_trace[epoch] <- loss_now
+    nll_trace[epoch] <- nll_now
     grad_trace[epoch] <- grad_now
 
     if (epoch %% check_every == 0L) {
+      if (.scmix_network_all_finite(net)) {
+        last_finite_checkpoint <- .scmix_clone_network_state(net)
+        checkpoint_epoch <- epoch
+      } else {
+        .scmix_load_network_state(net, last_finite_checkpoint)
+        stopped_at <- checkpoint_epoch
+        stop_reason <- "adam_nonfinite_state_restored"
+        break
+      }
       current <- loss_trace[epoch]
       rel_change <- abs(previous_check - current) / max(1, abs(previous_check))
       if (is.finite(rel_change) && rel_change <= opt_tol && grad_now <= grad_tol) {
@@ -1042,7 +1100,7 @@
         val_trace <- c(val_trace, vloss)
         if (vloss < best_val - opt_tol) {
           best_val <- vloss
-          best_state <- lapply(net$state_dict(), function(t) t$clone())
+          best_state <- .scmix_clone_network_state(net)
           bad_checks <- 0L
         } else {
           bad_checks <- bad_checks + 1L
@@ -1059,18 +1117,102 @@
                       loss_trace[epoch]))
     }
   }
-  state_restored <- isTRUE(early_stop) && !is.null(best_state)
-  if (state_restored) net$load_state_dict(best_state)
+  if (!.scmix_network_all_finite(net)) {
+    .scmix_load_network_state(net, last_finite_checkpoint)
+    stopped_at <- checkpoint_epoch
+    stop_reason <- "adam_nonfinite_state_restored"
+  }
+  adam_state_restored <- identical(stop_reason,
+                                   "adam_nonfinite_state_restored")
+  validation_state_restored <- isTRUE(early_stop) && !is.null(best_state)
+  if (validation_state_restored) {
+    .scmix_load_network_state(net, best_state)
+  }
+  state_restored <- adam_state_restored || validation_state_restored
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
     alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
 
+  polish <- .sc_mixed_lbfgs_polish(
+    net = net, data = all_data, U_t = U_t, logw_t = logw_t,
+    weight_decay = weight_decay,
+    coefficient_scale = compact$coefficient_scale,
+    kappa_bound = kappa_bound, alpha_bound = compact$alpha_bound,
+    a_bound = compact$a_bound, weight_bound = compact$weight_bound,
+    max_iter = polish_max_iter, history_size = polish_history_size,
+    tolerance_grad = polish_tolerance_grad,
+    tolerance_change = polish_tolerance_change, lr = polish_lr,
+    same_objective_all_stages = !isTRUE(early_stop))
+  candidate_net <- polish$net
+  fallback_net <- polish$fallback_net
+  invisible(gc(verbose = FALSE))
+
+  ## Recreate the full-batch tensors after the isolated libtorch optimizer.
+  ## This also protects the returned fit on builds whose failed line search
+  ## can leave tensors used by its closure in a nonfinite state.
+  all_data <- mk_tensors(rep(TRUE, length(y)))
+  U_t <- if (q == 0L) {
+    torch::torch_zeros(1L, 1L, dtype = torch::torch_float64(), device = dev)
+  } else {
+    torch::torch_tensor(gh$U, dtype = torch::torch_float64(), device = dev)
+  }
+  logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float64(),
+                                device = dev)
+
+  ## Audit the settled module after the R torch optimizer and closure have
+  ## left scope. The binding may finalize strong-Wolfe trial storage only at
+  ## that boundary, so this is the authoritative post-polish objective/KKT.
+  settled_candidate <- .sc_mixed_evaluate_full_objective(
+    candidate_net, all_data, U_t, logw_t, weight_decay,
+    compact$coefficient_scale, kappa_bound, compact$alpha_bound,
+    compact$a_bound, compact$weight_bound, backward = TRUE)
+  settled_nonworsening <- is.finite(settled_candidate$objective) &&
+    settled_candidate$objective <= polish$objective_before_polish +
+      polish$nonworsening_numerical_allowance
+  settled_accepted <- isTRUE(polish$completed) &&
+    identical(polish$projection_changed, FALSE) && settled_nonworsening
+  net <- if (settled_accepted) candidate_net else fallback_net
+  if (!settled_accepted) {
+    all_data <- mk_tensors(rep(TRUE, length(y)))
+    settled_returned <- .sc_mixed_evaluate_full_objective(
+      net, all_data, U_t, logw_t, weight_decay,
+      compact$coefficient_scale, kappa_bound, compact$alpha_bound,
+      compact$a_bound, compact$weight_bound, backward = TRUE)
+  } else {
+    settled_returned <- settled_candidate
+  }
+  polish$accepted <- settled_accepted
+  polish$lbfgs_nonworsening <- settled_nonworsening
+  polish$settled_state_status <- if (settled_accepted) {
+    "accepted_after_optimizer_finalization"
+  } else if (!isTRUE(polish$completed)) {
+    "optimizer_failed_and_prepolish_state_returned"
+  } else if (isTRUE(polish$projection_changed)) {
+    "endpoint_required_projection_and_prepolish_state_returned"
+  } else {
+    "settled_endpoint_worsened_or_nonfinite_and_prepolish_state_returned"
+  }
+  polish$objective_after_polish <- settled_candidate$objective
+  polish$unpenalized_objective_after_polish <-
+    settled_candidate$unpenalized
+  polish$kkt_after_polish <- settled_candidate$kkt
+  polish$objective_returned <- settled_returned$objective
+  polish$kkt_returned <- settled_returned$kkt
+  polish$absolute_gradient_returned <- settled_returned$gradient
+  polish$returned_matches_accepted_objective <-
+    !settled_accepted || isTRUE(all.equal(
+      settled_returned$objective, settled_candidate$objective,
+      tolerance = polish$nonworsening_numerical_allowance,
+      check.attributes = FALSE))
+  polish$net <- NULL
+  polish$fallback_net <- NULL
+
   ## Re-evaluate the returned state on every respondent supplied to this
   ## start, so starts remain comparable even when validation stopping is used.
   net$eval()
-  optimizer$zero_grad()
+  net$zero_grad()
   final_nll_t <- .sc_mixed_nll(net, all_data$dx, all_data$zt, all_data$yt,
                                U_t, logw_t, all_data$idx1, all_data$N)
   final_loss_t <- final_nll_t + .sc_mixed_penalty(net, weight_decay)
@@ -1098,21 +1240,28 @@
     alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
-  ## loss_trace[stopped_at] is evaluated immediately before the final Adam
-  ## update. It is therefore the correct adjacent attained state only when
-  ## early stopping did not reserve a validation subset and did not restore a
-  ## different state after the loop.
-  previous_attained_loss <- if (!isTRUE(early_stop) && n_recorded >= 1L) {
-    loss_trace[stopped_at]
-  } else {
-    NA_real_
-  }
-  status <- .sc_mixed_optimization_status(
-    final_loss = final_penalized_loss, final_nll = final_nll,
-    previous_loss = previous_attained_loss, gradient = final_gradient,
-    opt_tol = opt_tol, grad_tol = grad_tol, bounds = bounds,
-    state_restored = state_restored
-  )
+  status <- .sc_mixed_v22_optimization_status(
+    polish = polish, bounds = bounds, kkt_cutoff = kkt_tol,
+    protocol_mode = protocol_mode,
+    calibration_verified = isTRUE(calibration_verification$verified),
+    calibration_failure_reason =
+      calibration_verification$failure_reason %||% character())
+  legacy_compatibility_gate <- identical(mean_family, "legacy") &&
+    isTRUE(status$objective_finite)
+  operational_gate <- if (identical(mean_family, "legacy")) {
+    legacy_compatibility_gate
+  } else status$precalibration_fit_valid
+  operational_failure_reasons <- if (identical(mean_family, "legacy")) {
+    c(if (!isTRUE(status$objective_finite)) "nonfinite_objective",
+      if (!isTRUE(status$gate_evidence$F003$pass))
+        "nonfinite_derivatives_v22_only")
+  } else status$precalibration_failure_reasons
+  last_relative_change <- abs(polish$objective_after_polish -
+                                polish$objective_before_polish) /
+    max(1, abs(polish$objective_before_polish))
+  ## Retain the returned module in `net`, but do not duplicate an external
+  ## pointer inside the serializable polish audit.
+  polish$net <- NULL
 
   list(
     net = net,
@@ -1129,29 +1278,63 @@
     structural_gradient_norm = final_gradient$structural,
     alpha_gradient_norm = final_gradient$alpha,
     sieve_gradient_norm = final_gradient$sieve,
-    converged = status$objective_finite && status$stationarity_met &&
-      status$criterion_tolerance_met,
+    ## Step 3 must be able to generate fits before its KKT cutoff exists.
+    ## `optimization_gate_pass` therefore records pre-calibration numerical
+    ## validity for corrected families and a narrow legacy-reproducibility
+    ## gate for old families. Only `v22_optimization_gate_pass` grants paper
+    ## eligibility.
+    converged = operational_gate,
     stationarity_met = status$stationarity_met,
     structural_stationarity_met = status$structural_stationarity_met,
     alpha_stationarity_met = status$alpha_stationarity_met,
     sieve_stationarity_met = status$sieve_stationarity_met,
-    last_relative_change = status$last_relative_change,
-    criterion_tolerance_met = status$criterion_tolerance_met,
-    criterion_diagnostic_source = status$criterion_diagnostic_source,
-    state_restored = status$state_restored,
-    objective_components = status$objective_components,
+    last_relative_change = last_relative_change,
+    criterion_tolerance_met = isTRUE(polish$completed) &&
+      isTRUE(polish$lbfgs_nonworsening),
+    criterion_diagnostic_source =
+      "same full-batch objective before and after L-BFGS polish",
+    state_restored = state_restored,
+    objective_components = c(
+      penalized_nll = final_penalized_loss,
+      unpenalized_nll = final_nll,
+      penalty = final_penalized_loss - final_nll),
     objective_finite = status$objective_finite,
     bound_diagnostics_complete = status$bound_diagnostics_complete,
     bound_activity = status$bound_activity,
-    optimization_gate_pass = status$optimization_gate_pass,
-    optimization_failure_reasons = status$failure_reasons,
-    stop_reason = stop_reason,
+    optimization_gate_pass = operational_gate,
+    optimization_failure_reasons = unique(operational_failure_reasons),
+    legacy_compatibility_gate = legacy_compatibility_gate,
+    v22_optimization_gate_pass = status$optimization_gate_pass,
+    v22_optimization_failure_reasons = status$failure_reasons,
+    protocol_mode = protocol_mode,
+    calibration_only = identical(protocol_mode, "calibration"),
+    calibration_verification = calibration_verification,
+    v22_optimizer_subset_pass = isTRUE(status$optimizer_subset_pass),
+    stop_reason = paste0(stop_reason, if (isTRUE(polish$accepted)) {
+      "+lbfgs_polish"
+    } else "+lbfgs_polish_rejected"),
     early_stop = early_stop,
     warm_start_mode = warm_start_mode,
     mean_family = mean_family,
     alpha_bound = compact$alpha_bound,
     deviation_from_origin_max = deviation_from_origin_max,
     mean_variation_max = mean_variation_max,
+    dtype = polish$dtype,
+    polish = polish,
+    objective_before_polish = polish$objective_before_polish,
+    objective_after_polish = polish$objective_after_polish,
+    kkt_before_polish = polish$kkt_before_polish,
+    kkt_after_polish = polish$kkt_after_polish,
+    kkt_returned = polish$kkt_returned,
+    kkt_maximum = status$kkt_maximum,
+    kkt_cutoff = status$kkt_cutoff,
+    kkt_cutoff_source = kkt_tol_source,
+    lbfgs_completed = status$lbfgs_completed,
+    lbfgs_nonworsening = status$lbfgs_nonworsening,
+    polish_iterations = polish$iterations,
+    line_search_status = polish$line_search_status,
+    same_objective_all_stages = status$same_objective_all_stages,
+    v22_optimization_status = status,
     A = A_hat,
     kappa = kappa_hat,
     bounds = bounds
@@ -1207,6 +1390,17 @@
     penalized_nll = -objective,
     unpenalized_nll = vapply(fits, `[[`, numeric(1L), "final_loss"),
     gradient_norm = vapply(fits, `[[`, numeric(1L), "final_gradient_norm"),
+    projected_kkt_maximum = vapply(fits, `[[`, numeric(1L), "kkt_maximum"),
+    kkt_cutoff = vapply(fits, `[[`, numeric(1L), "kkt_cutoff"),
+    dtype = vapply(fits, `[[`, character(1L), "dtype"),
+    lbfgs_completed = vapply(fits, `[[`, logical(1L), "lbfgs_completed"),
+    lbfgs_nonworsening = vapply(fits, `[[`, logical(1L),
+                                "lbfgs_nonworsening"),
+    polish_iterations = vapply(fits, function(x) {
+      as.integer(x$polish_iterations)
+    }, integer(1L)),
+    line_search_status = vapply(fits, `[[`, character(1L),
+                                "line_search_status"),
     structural_gradient_norm = vapply(fits, `[[`, numeric(1L),
                                         "structural_gradient_norm"),
     alpha_gradient_norm = vapply(fits, function(x) {
@@ -1231,6 +1425,9 @@
     bound_activity = vapply(fits, `[[`, logical(1L), "bound_activity"),
     optimization_gate_pass = vapply(fits, `[[`, logical(1L),
                                        "optimization_gate_pass"),
+    v22_optimization_gate_pass = vapply(fits, `[[`, logical(1L),
+                                           "v22_optimization_gate_pass"),
+    protocol_mode = vapply(fits, `[[`, character(1L), "protocol_mode"),
     converged = vapply(fits, `[[`, logical(1L), "converged"),
     epochs = vapply(fits, `[[`, integer(1L), "stopped_at"),
     stop_reason = vapply(fits, `[[`, character(1L), "stop_reason"),
@@ -1241,6 +1438,45 @@
                                   "mean_variation_max"),
     stringsAsFactors = FALSE
   )
+  ## Preserve every polished start in ordinary CPU arrays. F008 is target
+  ## specific, so its statistic is computed later from registered targets,
+  ## but those computations must not require rerunning or trusting a
+  ## user-supplied description of the nonselected solutions.
+  ans$start_artifacts <- lapply(seq_along(fits), function(s) {
+    fit_s <- fits[[s]]
+    live <- fit_s$net$state_dict()
+    state <- lapply(live, .scmix_tensor_cpu_array)
+    names(state) <- names(live)
+    shapes <- lapply(live, function(x) as.integer(x$shape))
+    dtypes <- lapply(live, function(x) as.character(x$dtype))
+    names(shapes) <- names(dtypes) <- names(live)
+    start_id <- sprintf("start_%03d", s)
+    state_hash <- .scmix_stable_state_hash(list(
+      state_dict = state, A_optimization = fit_s$A,
+      kappa = fit_s$kappa))
+    list(
+      start = as.integer(s),
+      start_id = start_id,
+      state_hash = state_hash,
+      selected = identical(as.integer(s), as.integer(best)),
+      mean_objective = as.numeric(fit_s$penalized_loss),
+      objective_definition_id = paste0(
+        "mean_negative_complete_sequence_loglik_per_respondent_",
+        "plus_declared_penalty_in_nats"),
+      unpenalized_mean_nll = as.numeric(fit_s$final_loss),
+      state_dict = state,
+      state_shapes = shapes,
+      state_dtypes = dtypes,
+      A_optimization = fit_s$A,
+      kappa = fit_s$kappa,
+      dtype = fit_s$dtype,
+      polished = isTRUE(fit_s$lbfgs_completed) &&
+        isTRUE(fit_s$polish$accepted),
+      protocol_mode = fit_s$protocol_mode,
+      calibration_hash = fit_s$calibration_verification$calibration_hash %||%
+        NA_character_,
+      v22_optimization_status = fit_s$v22_optimization_status)
+  })
   sorted <- sort(objective[finite_objective], decreasing = TRUE)
   ans$start_objective_range <- diff(range(objective[finite_objective]))
   ans$best_minus_second <- if (length(sorted) >= 2L) sorted[1L] - sorted[2L] else NA_real_
@@ -1308,8 +1544,23 @@
 #' @param weight_bound Positive finite coordinatewise bound on every
 #'   mean-network weight and bias. Network parameters are projected after every
 #'   optimizer update.
-#' @param opt_tol,grad_tol Numerical diagnostic tolerances. Passing these
-#'   tolerances does not certify a global optimum.
+#' @param opt_tol,grad_tol Legacy Adam-stage stopping controls. They do not
+#'   determine the v2.2 computation gate.
+#' @param kkt_tol Cutoff for the maximum block-scaled projected-KKT residual
+#'   after the full-batch polish. The application protocol must supply the
+#'   simulation-calibrated value once frozen. While it is `NULL`, fits may be
+#'   generated for calibration but v2.2 inference eligibility fails closed.
+#' @param protocol_mode Either `"calibration"` or `"production"`.
+#'   Calibration fits retain every diagnostic needed by Step 3 but can
+#'   never be labeled v2.2 eligible. Production is an explicit opt-in after
+#'   the calibration registry and numerical cutoffs have been frozen.
+#' @param calibration_artifact,analysis_contract Protocol-linked calibration
+#'   inputs. Production mode accepts KKT cutoffs only after the inference
+#'   contract validates this exact artifact and its calibration hash.
+#' @param polish_max_iter,polish_history_size,polish_tolerance_grad,
+#'   polish_tolerance_change,polish_lr Full-batch L-BFGS polish controls.
+#'   The two L-BFGS tolerances control optimizer termination only. Eligibility
+#'   is determined by `kkt_tol` and the recorded non-worsening gate.
 #' @param seed Reproducibility seed for folds, integration nodes, and starts.
 #' @param device Torch device.
 #' @param verbose Print optimization progress.
@@ -1351,12 +1602,29 @@ scmix <- function(formula, data,
                   weight_bound = 10,
                   opt_tol = 1e-7,
                   grad_tol = 1e-4,
+                  kkt_tol = NULL,
+                  protocol_mode = c("calibration", "production"),
+                  calibration_artifact = NULL,
+                  analysis_contract = NULL,
+                  polish_max_iter = 50L,
+                  polish_history_size = 50L,
+                  polish_tolerance_grad = 1e-10,
+                  polish_tolerance_change = 1e-12,
+                  polish_lr = 1,
                   seed = NULL,
                   init = NULL,
                   device = "cpu",
                   verbose = FALSE,
                   early_stop = FALSE) {
   call <- match.call()
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
+  calibration_verification <- .sc_v22_resolve_optimizer_calibration(
+    protocol_mode = protocol_mode,
+    calibration_artifact = calibration_artifact,
+    analysis_contract = analysis_contract,
+    kkt_tol = kkt_tol)
+  .sc_v22_require_verified_production_calibration(calibration_verification)
+  kkt_tol_use <- calibration_verification$kkt_cutoff
   respondent <- .sc_coerce_colname(respondent, "respondent")
   task <- .sc_coerce_colname(task, "task")
   profile <- .sc_coerce_colname(profile, "profile")
@@ -1446,7 +1714,13 @@ scmix <- function(formula, data,
       ## normalize_deltaX = FALSE); scmix trains on standardized contrasts,
       ## where mu_std = mu_raw * sd_dx, so rescale the output layer rows
       if ("param_layer.weight" %in% names(warm_state)) {
-        sd_t <- torch::torch_tensor(sd_dx, dtype = torch::torch_float())
+        ## Preserve the warm state's dtype. New v2.2 fits use Double, while
+        ## legacy Float warm starts remain readable and are cast by the new
+        ## module's state loader.
+        warm_dtype <- warm_state[["param_layer.weight"]]$dtype
+        warm_device <- warm_state[["param_layer.weight"]]$device
+        sd_t <- torch::torch_tensor(sd_dx, dtype = warm_dtype,
+                                    device = warm_device)
         warm_state[["param_layer.weight"]] <-
           warm_state[["param_layer.weight"]] * sd_t$unsqueeze(2L)
         warm_state[["param_layer.bias"]] <-
@@ -1463,11 +1737,13 @@ scmix <- function(formula, data,
   mu_hat <- matrix(NA_real_, nrow = n, ncol = ncol(deltaX))
   mu_all_folds <- vector("list", K)
   A_folds <- vector("list", K)
+  A_optimization_folds <- vector("list", K)
   kappa_folds <- numeric(K)
   sd_dx_folds <- vector("list", K)
   dx_transform_folds <- vector("list", K)
   z_transform_folds <- vector("list", K)
   loss_traces <- vector("list", K)
+  start_artifacts_folds <- vector("list", K)
   optimization_folds <- vector("list", K)
   nets <- vector("list", K)
 
@@ -1495,7 +1771,14 @@ scmix <- function(formula, data,
       warm_state = NULL,
       early_stop = early_stop,
       n_starts = n_starts,
-      opt_tol = opt_tol, grad_tol = grad_tol,
+      opt_tol = opt_tol, grad_tol = grad_tol, kkt_tol = kkt_tol_use,
+      protocol_mode = protocol_mode,
+      calibration_verification = calibration_verification,
+      polish_max_iter = polish_max_iter,
+      polish_history_size = polish_history_size,
+      polish_tolerance_grad = polish_tolerance_grad,
+      polish_tolerance_change = polish_tolerance_change,
+      polish_lr = polish_lr,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
       alpha_bound = compact$alpha_bound,
       a_bound = compact$a_bound, weight_bound = compact$weight_bound,
@@ -1511,37 +1794,13 @@ scmix <- function(formula, data,
     mu_all_folds[[k]] <- sweep(
       .sc_predict_beta(fit_k$net, Z_all_k), 2L, sd_dx_folds[[k]], `/`)
     mu_hat[out_k, ] <- mu_all_folds[[k]][out_k, , drop = FALSE]
-    A_folds[[k]] <- fit_k$A / sd_dx_folds[[k]]
+    A_folds[[k]] <- .scmix_loading_to_raw(
+      fit_k$A, sd_dx_folds[[k]])
+    A_optimization_folds[[k]] <- fit_k$A
     kappa_folds[k] <- fit_k$kappa
     loss_traces[[k]] <- fit_k$loss_trace
-    optimization_folds[[k]] <- list(
-      best_start = fit_k$best_start,
-      starts = fit_k$start_diagnostics,
-      objective = fit_k$objective,
-      gradient_norm = fit_k$final_gradient_norm,
-      gradient_by_parameter = fit_k$final_gradient_by_parameter,
-      structural_gradient_norm = fit_k$structural_gradient_norm,
-      alpha_gradient_norm = fit_k$alpha_gradient_norm,
-      sieve_gradient_norm = fit_k$sieve_gradient_norm,
-      converged = fit_k$converged,
-      stationarity_met = fit_k$stationarity_met,
-      structural_stationarity_met = fit_k$structural_stationarity_met,
-      alpha_stationarity_met = fit_k$alpha_stationarity_met,
-      sieve_stationarity_met = fit_k$sieve_stationarity_met,
-      last_relative_change = fit_k$last_relative_change,
-      criterion_tolerance_met = fit_k$criterion_tolerance_met,
-      criterion_diagnostic_source = fit_k$criterion_diagnostic_source,
-      state_restored = fit_k$state_restored,
-      objective_components = fit_k$objective_components,
-      objective_finite = fit_k$objective_finite,
-      optimization_gate_pass = fit_k$optimization_gate_pass,
-      optimization_failure_reasons = fit_k$optimization_failure_reasons,
-      stop_reason = fit_k$stop_reason,
-      bounds = fit_k$bounds,
-      start_objective_range = fit_k$start_objective_range,
-      best_minus_second = fit_k$best_minus_second,
-      global_optimality_gap_known = FALSE
-    )
+    optimization_folds[[k]] <- .sc_comp_fit_summary(fit_k)
+    start_artifacts_folds[[k]] <- fit_k$start_artifacts
     nets[[k]] <- fit_k$net
     if (verbose) {
       message(sprintf("scmix fold %d/%d done (nll = %.5f)", k, K, fit_k$final_loss))
@@ -1564,19 +1823,33 @@ scmix <- function(formula, data,
     device = device, verbose = verbose,
     warm_state = warm_state, early_stop = early_stop,
     n_starts = n_starts, opt_tol = opt_tol, grad_tol = grad_tol,
+    kkt_tol = kkt_tol_use,
+    protocol_mode = protocol_mode,
+    calibration_verification = calibration_verification,
+    polish_max_iter = polish_max_iter,
+    polish_history_size = polish_history_size,
+    polish_tolerance_grad = polish_tolerance_grad,
+    polish_tolerance_change = polish_tolerance_change,
+    polish_lr = polish_lr,
     mu_bound = mu_bound, kappa_bound = kappa_bound,
     alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound,
     coefficient_scale = sd_dx
   )
   mu_full <- sweep(.sc_predict_beta(full_fit$net, Z_full), 2L, sd_dx, `/`)
-  A_full <- full_fit$A / sd_dx
+  A_full <- .scmix_loading_to_raw(full_fit$A, sd_dx)
   Sigma_hat <- tcrossprod(A_full)
   optimization_gate_by_fold <- vapply(
     optimization_folds,
     function(x) isTRUE(x$optimization_gate_pass), logical(1L))
   computational_optimization_gate_pass <-
     isTRUE(full_fit$optimization_gate_pass) && all(optimization_gate_by_fold)
+  v22_optimization_gate_by_fold <- vapply(
+    optimization_folds,
+    function(x) isTRUE(x$v22_optimization_gate_pass), logical(1L))
+  v22_computational_optimization_gate_pass <-
+    isTRUE(full_fit$v22_optimization_gate_pass) &&
+    all(v22_optimization_gate_by_fold)
 
   ## A is identified only up to right rotation. For descriptive output we
   ## retain a Procrustes-aligned copy, but A_folds itself remains exactly the
@@ -1614,6 +1887,17 @@ scmix <- function(formula, data,
       weight_bound = compact$weight_bound,
       opt_tol = as.numeric(opt_tol),
       grad_tol = as.numeric(grad_tol),
+      kkt_tol = if (is.null(kkt_tol_use)) NA_real_ else
+        as.numeric(kkt_tol_use),
+      kkt_tol_source = calibration_verification$status,
+      calibration_hash = calibration_verification$calibration_hash,
+      protocol_mode = protocol_mode,
+      polish_max_iter = as.integer(polish_max_iter),
+      polish_history_size = as.integer(polish_history_size),
+      polish_tolerance_grad = as.numeric(polish_tolerance_grad),
+      polish_tolerance_change = as.numeric(polish_tolerance_change),
+      polish_lr = as.numeric(polish_lr),
+      dtype = "float64",
       early_stop = isTRUE(early_stop),
       init_used_for_full_fit = !is.null(warm_state)
     )
@@ -1650,6 +1934,15 @@ scmix <- function(formula, data,
       scope = paste0("outer-fold nuisance fit ", k)
     )
   })
+  multistart_full <- .scmix_complete_multistart_artifacts(
+    full_fit, network_state_full, sd_dx)
+  multistart_folds <- lapply(seq_len(K), function(k) {
+    ## The selected fold network is already represented by its portable
+    ## template; substitute each retained start state into that same contract.
+    .scmix_complete_multistart_artifacts(
+      list(start_artifacts = start_artifacts_folds[[k]]),
+      network_state_folds[[k]], sd_dx_folds[[k]])
+  })
 
   fit <- list(
     mu_hat = mu_hat,               # task rows; constant within respondent
@@ -1658,8 +1951,10 @@ scmix <- function(formula, data,
     kappa_hat = full_fit$kappa,
     kappa_folds = kappa_folds,
     A_hat = A_full,
+    A_computational_full = A_full,   # legacy alias; explicitly raw scale
     Sigma_hat = Sigma_hat,
-    A_folds = A_folds,               # optimized; used by likelihood/scores
+    A_folds = A_folds,               # legacy raw-scale alias
+    A_computational_folds = A_folds, # legacy alias; explicitly raw scale
     A_folds_aligned = A_folds_aligned, # reporting only
     factor_alignment = list(reference = "full-sample A",
                             method = if (q > 0L) "orthogonal Procrustes" else "none",
@@ -1711,38 +2006,22 @@ scmix <- function(formula, data,
                   weight_units = "coordinatewise network parameter",
                   internal_mu_scale = "standardized contrasts"),
     optimization = list(
-      full = list(best_start = full_fit$best_start,
-                  starts = full_fit$start_diagnostics,
-                  objective = full_fit$objective,
-                  gradient_norm = full_fit$final_gradient_norm,
-                  gradient_by_parameter = full_fit$final_gradient_by_parameter,
-                  structural_gradient_norm = full_fit$structural_gradient_norm,
-                  alpha_gradient_norm = full_fit$alpha_gradient_norm,
-                  sieve_gradient_norm = full_fit$sieve_gradient_norm,
-                  converged = full_fit$converged,
-                  stationarity_met = full_fit$stationarity_met,
-                  structural_stationarity_met = full_fit$structural_stationarity_met,
-                  alpha_stationarity_met = full_fit$alpha_stationarity_met,
-                  sieve_stationarity_met = full_fit$sieve_stationarity_met,
-                  last_relative_change = full_fit$last_relative_change,
-                  criterion_tolerance_met = full_fit$criterion_tolerance_met,
-                  criterion_diagnostic_source = full_fit$criterion_diagnostic_source,
-                  state_restored = full_fit$state_restored,
-                  objective_components = full_fit$objective_components,
-                  objective_finite = full_fit$objective_finite,
-                  optimization_gate_pass = full_fit$optimization_gate_pass,
-                  optimization_failure_reasons = full_fit$optimization_failure_reasons,
-                  stop_reason = full_fit$stop_reason,
-                  bounds = full_fit$bounds,
-                  start_objective_range = full_fit$start_objective_range,
-                  best_minus_second = full_fit$best_minus_second,
-                  global_optimality_gap_known = FALSE),
+      full = .sc_comp_fit_summary(full_fit),
       folds = optimization_folds,
       gate_by_fold = optimization_gate_by_fold,
+      v22_gate_by_fold = v22_optimization_gate_by_fold,
       diagnostics_are_certificates = FALSE
     ),
     computational_optimization_gate_pass =
       computational_optimization_gate_pass,
+    v22_computational_optimization_gate_pass =
+      v22_computational_optimization_gate_pass,
+    protocol_mode = protocol_mode,
+    calibration_only = identical(protocol_mode, "calibration"),
+    calibration_verification = calibration_verification,
+    v22_fit_computation_subset_pass =
+      isTRUE(v22_computational_optimization_gate_pass) &&
+      identical(protocol_mode, "production"),
     analysis_signature = analysis_signature,
     seed = seed,
     loss_traces = loss_traces,
@@ -1750,8 +2029,19 @@ scmix <- function(formula, data,
     full_net = full_fit$net,
     network_state_folds = network_state_folds,
     network_state_full = network_state_full,
+    multistart_artifacts = list(full = multistart_full,
+                                folds = multistart_folds),
     call = call
   )
+  fit <- .scmix_add_loading_contract(
+    fit, q = q,
+    raw_full = A_full, optimization_full = full_fit$A,
+    coefficient_scale_full = sd_dx,
+    raw_folds = A_folds, optimization_folds = A_optimization_folds,
+    coefficient_scale_folds = sd_dx_folds,
+    source = paste(
+      "Explicit raw and optimizer-scale loadings from the full fit and",
+      "respondent-level outer-fold fits."))
   class(fit) <- c("scmix", "list")
   fit
 }
@@ -1786,13 +2076,20 @@ print.scmix <- function(x, ...) {
       " = %.3g/%.3g\n"),
       od$best_start, nrow(od$starts), od$gradient_norm,
       structural_gradient))
-    overall_gate <- if (!is.null(x$computational_optimization_gate_pass)) {
+    operational_gate <- if (!is.null(x$computational_optimization_gate_pass)) {
       x$computational_optimization_gate_pass
     } else od$optimization_gate_pass
     cat(sprintf(paste0(
-      "  full-and-fold computational gate: %s",
-      " (attained-solution diagnostic only)\n"),
-      if (isTRUE(overall_gate)) "pass" else "fail"))
+      "  pre-calibration/legacy operational gate: %s",
+      " (not v2.2 eligibility)\n"),
+      if (isTRUE(operational_gate)) "pass" else "fail"))
+    v22_gate <- if (!is.null(x$v22_computational_optimization_gate_pass)) {
+      x$v22_computational_optimization_gate_pass
+    } else isTRUE(od$v22_optimization_gate_pass)
+    cat(sprintf("  v2.2 full-and-fold optimization gate: %s [%s]\n",
+                if (isTRUE(v22_gate)) "pass" else "fail",
+                x$protocol_mode %||% od$protocol_mode %||%
+                  "legacy_unspecified"))
   }
   .scmix_print_floor(x)
   invisible(x)
