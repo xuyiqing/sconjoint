@@ -20,6 +20,27 @@
   "null_space_materiality_cutoff", "numerical_rank_tolerance",
   "defect_cutoff", "ridge_cutoff")
 
+.v22_calibration_source_hash <- "cal-source"
+.v22_calibration_values <- function() {
+  constants <- stats::setNames(rep(10, length(.v22_calibration_names)),
+                               .v22_calibration_names)
+  constants[c("near_optimum_objective_cutoff",
+              "nested_fit_relative_cutoff")] <- .1
+  constants[["multistart_target_se_cutoff"]] <- 1
+  constants
+}
+.v22_approved_calibration <- list(
+  protocol_id = .v22_protocol,
+  status = "frozen_for_production",
+  calibration_hash = scmix_v22_calibration_hash(
+    .v22_calibration_values(), .v22_calibration_source_hash),
+  source_hash = .v22_calibration_source_hash,
+  manifest_fingerprint = "synthetic-package-manifest-fingerprint")
+testthat::local_mocked_bindings(
+  .scmix_v22_approved_calibration_manifest = function()
+    .v22_approved_calibration,
+  .package = "sconjoint", .env = testthat:::teardown_env())
+
 .v22_sign <- function(x, class_name) {
   sconjoint:::.scmix_v22_comp_sign(x, class_name)
 }
@@ -57,7 +78,7 @@
 }
 
 .v22_calibration <- function(analysis, constants,
-                             source_hash = "cal-source") {
+                             source_hash = .v22_calibration_source_hash) {
   constants <- as.list(constants[sort(names(constants), method = "radix")])
   .v22_sign(list(
     protocol_id = .v22_protocol,
@@ -65,6 +86,7 @@
     analysis_contract_fingerprint = analysis$fingerprint,
     calibration_hash = analysis$calibration_hash,
     source_hash = source_hash, constants = constants, complete = TRUE,
+    approval_manifest = .v22_approved_calibration,
     provenance = "design-matched simulation fixture"),
     "scmix_v22_calibration_artifact")
 }
@@ -103,11 +125,7 @@
   fit_registry <- scmix_v22_fit_scope_registry(
     "app", specification_id, paste0(specification_id, "-fit"), "fold_1",
     starts, integration)
-  constants <- stats::setNames(rep(10, length(.v22_calibration_names)),
-                               .v22_calibration_names)
-  constants[c("near_optimum_objective_cutoff",
-              "nested_fit_relative_cutoff")] <- .1
-  constants[["multistart_target_se_cutoff"]] <- 1
+  constants <- .v22_calibration_values()
   analysis <- .v22_analysis(
     paste0("analysis-", specification_id), specification_id,
     integration, fit_registry, constants)

@@ -45,6 +45,8 @@
   "F007", "F008", sprintf("I%03d", 1:5), sprintf("L%03d", 1:2),
   "G002", "G003", "G004", "G006", sprintf("R%03d", 1:5),
   sprintf("C%03d", 1:4), "M002", "M003")
+.scmix_v22_computation_gate_ids <- c(
+  "F007", "F008", sprintf("I%03d", 1:5))
 
 .scmix_v22_gate_dictionary <- local({
   make <- function(ids, category, scope, severity) data.frame(
@@ -1952,6 +1954,12 @@ scmix_v22_gate_artifact <- function(gates, registry, analysis_contract,
     stop("Externally signed gate artifacts may not replace local gate(s): ",
          paste(forbidden, collapse = ", "), ".", call. = FALSE)
   }
+  computation_forbidden <- intersect(
+    unique(gates$gate_id), .scmix_v22_computation_gate_ids)
+  if (length(computation_forbidden)) {
+    stop("Generic external gate artifacts may not supply typed computation gate(s): ",
+         paste(computation_forbidden, collapse = ", "), ".", call. = FALSE)
+  }
   deterministic <- c("analysis", "target", "primitive", "family",
                      "target_parameter_dependencies", "sample",
                      "specification", "application", "fit", "fit_block")
@@ -1999,6 +2007,207 @@ scmix_v22_gate_artifact <- function(gates, registry, analysis_contract,
   payload$fingerprint <- .scmix_v22_fingerprint(payload)
   class(payload) <- c("scmix_v22_gate_artifact", "list")
   payload
+}
+
+.scmix_v22_computation_applicability <- function(contract, registry) {
+  valid_scalar_logical <- function(x) {
+    is.logical(x) && length(x) == 1L && !is.na(x)
+  }
+  ## Missing declarations are treated as applicable. This conservative
+  ## fallback protects old signed contracts rather than converting absence
+  ## into a self-declared exception. Current v2.2 contracts carry every field.
+  exact_pair <- if (valid_scalar_logical(
+      contract$exact_nested_pair_registered)) {
+    contract$exact_nested_pair_registered
+  } else TRUE
+  fit_integration <- if (valid_scalar_logical(
+      contract$fit_uses_numerical_integration)) {
+    contract$fit_uses_numerical_integration
+  } else TRUE
+  q <- contract$q
+  q_positive <- if (is.numeric(q) && length(q) == 1L && is.finite(q) &&
+      q >= 0 && q == as.integer(q)) as.integer(q) > 0L else TRUE
+  starts <- contract$optimizer_starts
+  more_than_one_start <- if (inherits(
+      starts, "scmix_v22_fit_scope_registry") && is.data.frame(starts$starts)) {
+    counts <- table(starts$starts$fit_scope_id)
+    length(counts) > 0L && any(counts > 1L)
+  } else {
+    length(unique(unlist(starts, use.names = FALSE))) > 1L
+  }
+  target_ids <- vapply(registry, `[[`, character(1L), "target_id")
+  target_integration <- stats::setNames(vapply(registry, function(spec) {
+    if (valid_scalar_logical(spec$uses_numerical_integration)) {
+      spec$uses_numerical_integration
+    } else fit_integration
+  }, logical(1L)), target_ids)
+  list(F007 = isTRUE(exact_pair), F008 = isTRUE(more_than_one_start),
+       target_integration = target_integration,
+       fit_integration = isTRUE(fit_integration),
+       covariance_integration = isTRUE(fit_integration) && q_positive)
+}
+
+.scmix_v22_missing_computation_gate <- function(
+    gate_id, scope_id, applicable, threshold, units, message) {
+  dictionary <- .scmix_v22_gate_dictionary[
+    .scmix_v22_gate_dictionary$gate_id == gate_id, , drop = FALSE]
+  state <- if (isTRUE(applicable)) "not_run" else "not_applicable"
+  scmix_v22_gate_record(
+    gate_id, dictionary$category, dictionary$scope, dictionary$severity,
+    state, NA_real_, threshold, "less_than_or_equal", units,
+    "v2.2 typed computation-artifact finalizer",
+    if (isTRUE(applicable)) {
+      paste(message, "Required authenticated evidence was not supplied.")
+    } else {
+      paste(message, "This gate is not applicable under the signed contract.")
+    }, scope_id)
+}
+
+.scmix_v22_computation_placeholder_rows <- function(
+    families, applicability, registry, contract, calibration) {
+  threshold <- function(name) {
+    if (.scmix_v22_validate_calibration(
+        calibration, contract, require_complete = TRUE)) {
+      calibration$constants[[name]]
+    } else "CALIBRATE_IN_STEP_3"
+  }
+  target_ids <- vapply(registry, `[[`, character(1L), "target_id")
+  rows <- list()
+  add <- function(x) rows[[length(rows) + 1L]] <<- x
+  if ("F007" %in% families) add(.scmix_v22_missing_computation_gate(
+    "F007", paste0(contract$specification_id, "::nested_pair"),
+    applicability$F007, threshold("nested_fit_relative_cutoff"),
+    "relative_mean_objective", "Exact nested-fit evidence is conditional on a registered pair."))
+  if ("F008" %in% families) for (id in target_ids) {
+    add(.scmix_v22_missing_computation_gate(
+      "F008", id, applicability$F008,
+      threshold("multistart_target_se_cutoff"), "standard_errors",
+      "Multi-start target stability is conditional on multiple registered starts."))
+  }
+  if ("integration" %in% families) {
+    for (id in target_ids) {
+      applicable <- applicability$target_integration[[id]]
+      add(.scmix_v22_missing_computation_gate(
+        "I001", id, applicable, threshold("integration_target_se_cutoff"),
+        "standard_errors", "Target integration refinement follows the signed target specification."))
+      add(.scmix_v22_missing_computation_gate(
+        "I002", id, applicable, threshold("integration_if_l2_cutoff"),
+        "influence_standard_deviations",
+        "Influence integration refinement follows the signed target specification."))
+    }
+    for (spec in list(
+      list(id = "I003", applicable = applicability$fit_integration,
+           cutoff = "integration_objective_relative_cutoff",
+           units = "relative_mean_objective"),
+      list(id = "I004", applicable = applicability$fit_integration,
+           cutoff = "integration_score_relative_cutoff",
+           units = "relative_normalized_gradient"),
+      list(id = "I005", applicable = applicability$covariance_integration,
+           cutoff = "integration_covariance_relative_cutoff",
+           units = "relative_frobenius_norm"))) {
+      add(.scmix_v22_missing_computation_gate(
+        spec$id, contract$specification_id, spec$applicable,
+        threshold(spec$cutoff), spec$units,
+        "Fit-level integration refinement follows the signed rank and integration contract."))
+    }
+  }
+  if (!length(rows)) NULL else do.call(.scmix_v22_bind_gates, rows)
+}
+
+.scmix_v22_validate_computation_rows <- function(
+    rows, family, applicability, registry, contract) {
+  scmix_v22_validate_gate_record(rows, require_all_ids = FALSE)
+  target_ids <- vapply(registry, `[[`, character(1L), "target_id")
+  require_applicability <- function(z, expected, what) {
+    observed <- z$state != "not_applicable"
+    if (!identical(unname(observed), unname(expected))) {
+      stop("Authenticated ", what,
+           " rows disagree with applicability derived from the signed contract.",
+           call. = FALSE)
+    }
+  }
+  if (identical(family, "F007")) {
+    if (nrow(rows) != 1L || !identical(rows$gate_id, "F007")) {
+      stop("Authenticated F007 evidence must contain exactly one F007 row.",
+           call. = FALSE)
+    }
+    require_applicability(rows, applicability$F007, "F007")
+  } else if (identical(family, "F008")) {
+    if (nrow(rows) != length(target_ids) ||
+        anyDuplicated(rows$scope_id) ||
+        anyNA(match(target_ids, rows$scope_id)) ||
+        any(rows$gate_id != "F008")) {
+      stop("Authenticated F008 evidence must cover every exact target once.",
+           call. = FALSE)
+    }
+    z <- rows[match(target_ids, rows$scope_id), , drop = FALSE]
+    require_applicability(z, rep(applicability$F008, length(target_ids)),
+                          "F008")
+  } else {
+    for (id in c("I001", "I002")) {
+      z <- rows[rows$gate_id == id, , drop = FALSE]
+      if (nrow(z) != length(target_ids) || anyDuplicated(z$scope_id) ||
+          anyNA(match(target_ids, z$scope_id))) {
+        stop("Authenticated ", id,
+             " evidence must cover every exact target once.", call. = FALSE)
+      }
+      z <- z[match(target_ids, z$scope_id), , drop = FALSE]
+      require_applicability(z, unname(applicability$target_integration), id)
+    }
+    expected_fit <- c(I003 = applicability$fit_integration,
+                      I004 = applicability$fit_integration,
+                      I005 = applicability$covariance_integration)
+    for (id in names(expected_fit)) {
+      z <- rows[rows$gate_id == id, , drop = FALSE]
+      if (nrow(z) != 1L ||
+          !identical(z$scope_id, contract$specification_id)) {
+        stop("Authenticated ", id,
+             " evidence must contain the exact fit scope once.", call. = FALSE)
+      }
+      require_applicability(z, expected_fit[[id]], id)
+    }
+  }
+  rows
+}
+
+.scmix_v22_computation_gate_rows <- function(
+    computation_artifacts, contract, registry, calibration) {
+  applicability <- .scmix_v22_computation_applicability(contract, registry)
+  families <- c("F007", "F008", "integration")
+  if (is.null(computation_artifacts)) computation_artifacts <- list()
+  if (!is.list(computation_artifacts)) {
+    computation_artifacts <- list(computation_artifacts)
+  } else if (inherits(computation_artifacts,
+                      c("scmix_v22_nested_fit_stability",
+                        "scmix_v22_multistart_stability",
+                        "scmix_v22_integration_refinement"))) {
+    computation_artifacts <- list(computation_artifacts)
+  }
+  authenticated <- lapply(computation_artifacts, function(artifact) {
+    rows <- scmix_v22_validate_computation_artifact(
+      artifact, contract, registry, calibration)
+    list(family = attr(rows, "computation_artifact_type"), rows = rows,
+         fingerprint = attr(rows, "computation_artifact_fingerprint"))
+  })
+  observed <- vapply(authenticated, `[[`, character(1L), "family")
+  if (any(!observed %in% families) || anyDuplicated(observed)) {
+    stop("Typed computation artifacts must contain at most one exact artifact per F007, F008, or integration family.",
+         call. = FALSE)
+  }
+  supplied <- lapply(authenticated, function(x)
+    .scmix_v22_validate_computation_rows(
+      x$rows, x$family, applicability, registry, contract))
+  missing <- setdiff(families, observed)
+  supplied_rows <- if (!length(supplied)) NULL else
+    do.call(.scmix_v22_bind_gates, supplied)
+  rows <- .scmix_v22_bind_gates(
+    supplied_rows,
+    .scmix_v22_computation_placeholder_rows(
+      missing, applicability, registry, contract, calibration))
+  list(rows = rows, applicability = applicability,
+       fingerprints = if (length(authenticated)) stats::setNames(
+         vapply(authenticated, `[[`, character(1L), "fingerprint"), observed)
+       else character())
 }
 
 .scmix_v22_bind_gates <- function(...) {
@@ -3106,6 +3315,11 @@ scmix_v22_collect <- function(inference, registry, full_sample_plugin = NULL,
 #'   and therefore fails closed.
 #' @param external_gates Complete signed gate rows from the fitting,
 #'   identification, inverse-problem, and specification-assessment pipeline.
+#'   F007, F008, and I001--I005 are excluded and accepted only through
+#'   `computation_artifacts`.
+#' @param computation_artifacts Optional intact typed computation artifacts.
+#'   Supply at most one F007, one F008, and one integration-refinement
+#'   artifact. Missing applicable evidence remains `not_run` and fails closed.
 #' @param complete_external_record Set `TRUE` only after that record has been
 #'   validated against the signed registry and protocol hash.
 #' @param level Confidence level.
@@ -3114,6 +3328,7 @@ scmix_v22_collect <- function(inference, registry, full_sample_plugin = NULL,
 scmix_v22_finalize_collections <- function(
     collections,
     multiplier_bank = NULL, calibration = NULL, external_gates = NULL,
+    computation_artifacts = NULL,
     complete_external_record = FALSE, level = 0.95) {
   if (!is.list(collections) || !length(collections) ||
       !all(vapply(collections, inherits, logical(1L),
@@ -3237,6 +3452,27 @@ scmix_v22_finalize_collections <- function(
                                       "scmix_v22_gate_artifact")) {
     external_gates$gates
   } else external_gates
+  protected_external <- if (is.data.frame(external_gate_rows) &&
+      "gate_id" %in% names(external_gate_rows)) {
+    intersect(unique(external_gate_rows$gate_id),
+              .scmix_v22_computation_gate_ids)
+  } else character()
+  if (length(protected_external)) {
+    stop("Generic external_gates may not supply typed computation gate(s): ",
+         paste(protected_external, collapse = ", "),
+         ". Use computation_artifacts.", call. = FALSE)
+  }
+  if (is.null(common_contract)) {
+    if (!is.null(computation_artifacts)) {
+      stop("Typed computation artifacts require one intact common analysis contract.",
+           call. = FALSE)
+    }
+    computation <- list(rows = NULL, applicability = NULL,
+                        fingerprints = character())
+  } else {
+    computation <- .scmix_v22_computation_gate_rows(
+      computation_artifacts, common_contract, signed_registry, calibration)
+  }
   family_target_complete <- all(vapply(split(
     signed_registry, vapply(signed_registry, `[[`, character(1L),
                                              "target_family_id")),
@@ -3372,7 +3608,8 @@ scmix_v22_finalize_collections <- function(
       x, x$source_inference, calibration_values, fam, level,
       multiplier_bank, common_contract)
     all_gates <- .scmix_v22_bind_gates(
-      external_gate_rows, integrity_gates, local, riesz$gates)
+      external_gate_rows, computation$rows, integrity_gates, local,
+      riesz$gates)
     all_gates <- .scmix_v22_deduplicate_identical_gates(all_gates)
     record_complete <- FALSE
     if (isTRUE(complete_external_record) && gate_artifact_ok &&
@@ -3442,6 +3679,9 @@ scmix_v22_finalize_collections <- function(
                            "raw_one_step", "reported_estimate"),
     targets = results, family_resampling = family_results,
     registry = signed_registry, external_gates = external_gate_rows,
+    computation_gates = computation$rows,
+    computation_artifact_fingerprints = computation$fingerprints,
+    computation_gate_applicability = computation$applicability,
     external_gate_artifact_fingerprint = if (gate_artifact_ok)
       external_gates$fingerprint else NA_character_,
     analysis_contract_fingerprint = if (all(contract_linked))
@@ -3482,6 +3722,7 @@ scmix_v22_finalize <- function(
     analysis_contract = inference$v22_analysis_contract,
     derivative_audit = inference$v22_derivative_audit,
     multiplier_bank = NULL, calibration = NULL, external_gates = NULL,
+    computation_artifacts = NULL,
     complete_external_record = FALSE, level = 0.95) {
   collection <- scmix_v22_collect(
     inference, registry, full_sample_plugin, analysis_contract,
@@ -3489,6 +3730,7 @@ scmix_v22_finalize <- function(
   scmix_v22_finalize_collections(
     list(collection), multiplier_bank = multiplier_bank,
     calibration = calibration, external_gates = external_gates,
+    computation_artifacts = computation_artifacts,
     complete_external_record = complete_external_record, level = level)
 }
 

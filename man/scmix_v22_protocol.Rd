@@ -116,7 +116,8 @@ scmix_v22_collect(
 
 scmix_v22_finalize_collections(
   collections, multiplier_bank = NULL, calibration = NULL,
-  external_gates = NULL, complete_external_record = FALSE, level = 0.95
+  external_gates = NULL, computation_artifacts = NULL,
+  complete_external_record = FALSE, level = 0.95
 )
 
 scmix_v22_finalize(
@@ -124,6 +125,7 @@ scmix_v22_finalize(
   analysis_contract = inference$v22_analysis_contract,
   derivative_audit = inference$v22_derivative_audit,
   multiplier_bank = NULL, calibration = NULL, external_gates = NULL,
+  computation_artifacts = NULL,
   complete_external_record = FALSE, level = 0.95
 )
 
@@ -200,7 +202,11 @@ record has validated.}
 \item{collections}{One or more target-job collections.}
 \item{multiplier_bank}{One analysis-linked common respondent multiplier bank.}
 \item{calibration}{An intact, exact-values calibration artifact.}
-\item{external_gates}{A complete scoped gate artifact.}
+\item{external_gates}{A complete scoped generic gate artifact. It may not
+supply F007, F008, or I001--I005.}
+\item{computation_artifacts}{At most one intact typed F007 artifact, one
+typed F008 artifact, and one typed I001--I005 integration-refinement artifact.
+Missing applicable evidence remains \code{not_run} and fails closed.}
 \item{level}{Confidence level.}
 \item{x}{A finalized \code{scmix_v22_inference} object.}
 \item{...}{Unused print arguments.}

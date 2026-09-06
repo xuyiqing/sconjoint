@@ -13,12 +13,12 @@
 .v22_contract <- function(signature = "v22-synthetic",
                           code_commit = "test-code",
                           riesz_inner_seed = 17L,
-                          coordinate_registry = c("u1", "u2"), q = 1L,
+                          coordinate_registry = c("u1", "u2"), q = 0L,
                           coordinate_subset = coordinate_registry,
                           derivative_subset_rule =
                             "all registered structural coordinates",
-                          fit_uses_numerical_integration = TRUE,
-                          exact_nested_pair_registered = TRUE) {
+                          fit_uses_numerical_integration = FALSE,
+                          exact_nested_pair_registered = FALSE) {
   scmix_v22_analysis_contract(
     analysis_signature = signature, application_id = "synthetic-app",
     specification_id = "synthetic-q1", specification_role = "primary",
@@ -26,7 +26,7 @@
     completion_rule = "complete sequences", missing_data_rule = "none",
     outer_folds = list(fold1 = "signed", fold2 = "signed"), inner_folds = 2L,
     preprocessing_rule = "training only", integration_rule = "fixed nodes",
-    optimizer_starts = 1:2, learner_grid = "fixed",
+    optimizer_starts = "start_001", learner_grid = "fixed",
     ridge_grid = c("0", "n_k^-1", "n_k^-3/4", "n_k^-1/2"),
     seeds = list(multiplier = 73L, riesz_inner = riesz_inner_seed),
     code_commit = code_commit,
@@ -39,6 +39,15 @@
     derivative_coordinate_registry = coordinate_registry,
     derivative_coordinate_subset = coordinate_subset,
     derivative_subset_rule = derivative_subset_rule)
+}
+
+## Most inference-unit fixtures do not exercise numerical integration. Make
+## that declaration explicit so the typed I001--I005 path is fail-closed only
+## in the dedicated computation-artifact tests below.
+.v22_signed_target_spec <- sconjoint::scmix_v22_target_spec
+scmix_v22_target_spec <- function(..., uses_numerical_integration = FALSE) {
+  .v22_signed_target_spec(
+    ..., uses_numerical_integration = uses_numerical_integration)
 }
 
 .v22_fake_dml <- function(crossfit, raw, influence,
@@ -174,7 +183,8 @@ testthat::local_mocked_bindings(
   .package = "sconjoint", .env = testthat:::teardown_env())
 
 .v22_external_gates <- function(registry, contract) {
-  local_ids <- sconjoint:::.scmix_v22_local_gate_ids
+  local_ids <- c(sconjoint:::.scmix_v22_local_gate_ids,
+                 sconjoint:::.scmix_v22_computation_gate_ids)
   out <- scmix_v22_gate_template()
   out <- out[!out$gate_id %in% local_ids, , drop = FALSE]
   out <- do.call(rbind, lapply(seq_len(nrow(out)), function(i) {
@@ -193,6 +203,16 @@ testthat::local_mocked_bindings(
   out$units <- "boolean"
   out$provenance <- "signed synthetic test artifact"
   out$message <- paste("Synthetic passing evidence for", out$gate_id)
+  applicable <- mapply(
+    sconjoint:::.scmix_v22_external_gate_applicable,
+    out$gate_id, out$scope_id,
+    MoreArgs = list(registry = registry, contract = contract),
+    USE.NAMES = FALSE)
+  stopifnot(!anyNA(applicable))
+  out$state[!applicable] <- "not_applicable"
+  out$message[!applicable] <- paste(
+    "Not applicable under the signed synthetic contract for",
+    out$gate_id[!applicable])
   rownames(out) <- NULL
   scmix_v22_gate_artifact(
     out, registry, contract, "synthetic signed gate artifact")
@@ -425,6 +445,148 @@ test_that("missing calibration or gate evidence fails closed but keeps diagnosti
   expect_true(is.finite(z$reported_estimate))
   expect_true(all(c("P001", "C003", "G006") %in%
                     z$status$hard_failure_codes))
+})
+
+test_that("typed computation gates cannot be supplied through external_gates", {
+  spec <- scmix_v22_target_spec(
+    "vote", "single", "probability", "p", "primitive:p",
+    "A rather than B", "probability", "mean")
+  contract <- .v22_contract()
+  forbidden <- scmix_v22_gate_record(
+    "F008", "fit_computation", "target", "hard_target", "pass",
+    0, 1, "less_than_or_equal", "standard_errors",
+    "generic synthetic artifact", "Synthetic passing F008 evidence.",
+    "vote")
+  expect_error(scmix_v22_gate_artifact(
+    forbidden, list(spec), contract, "generic artifact"),
+    "may not supply typed computation")
+
+  N <- 30L
+  influence <- matrix(seq(-1, 1, length.out = N), ncol = 1L,
+                      dimnames = list(sprintf("r%03d", seq_len(N)), "p"))
+  dml <- .v22_fake_dml(c(p = .5), c(p = .52), influence)
+  legacy <- .v22_external_gates(list(spec), dml$v22_analysis_contract)
+  legacy_payload <- unclass(legacy); legacy_payload$fingerprint <- NULL
+  legacy_payload$gates <- rbind(legacy_payload$gates, forbidden)
+  legacy_payload$fingerprint <- sconjoint:::.scmix_v22_fingerprint(
+    legacy_payload)
+  class(legacy_payload) <- c("scmix_v22_gate_artifact", "list")
+  expect_error(scmix_v22_finalize(
+    dml, list(spec),
+    full_sample_plugin = .v22_full_plugin(dml, c(p = .51)),
+    derivative_audit = .v22_derivative(dml, list(spec)),
+    calibration = .v22_calibration, external_gates = legacy_payload,
+    complete_external_record = TRUE), "may not supply typed computation")
+})
+
+test_that("missing applicable typed computation evidence remains not_run", {
+  spec <- scmix_v22_target_spec(
+    "vote", "single", "probability", "p", "primitive:p",
+    "A rather than B", "probability", "mean",
+    uses_numerical_integration = TRUE)
+  contract <- .v22_contract()
+  payload <- unclass(contract); payload$fingerprint <- NULL
+  payload$q <- 1L
+  payload$fit_uses_numerical_integration <- TRUE
+  payload$exact_nested_pair_registered <- TRUE
+  payload$optimizer_starts <- c("start_001", "start_002")
+  payload$fingerprint <- sconjoint:::.scmix_v22_fingerprint(payload)
+  class(payload) <- c("scmix_v22_analysis_contract", "list")
+  calibration <- scmix_v22_calibration_artifact(
+    .v22_calibration_values, payload, .v22_calibration_source_hash,
+    "applicable computation fixture")
+  computation <- sconjoint:::.scmix_v22_computation_gate_rows(
+    NULL, payload, list(spec), calibration)
+  expect_setequal(unique(computation$rows$gate_id),
+                  sconjoint:::.scmix_v22_computation_gate_ids)
+  expect_true(all(computation$rows$state == "not_run"))
+
+  ## The public finalizer must retain the same fail-closed target rows rather
+  ## than silently treating absent typed evidence as a pass.
+  n <- 30L
+  influence <- matrix(seq(-1, 1, length.out = n), ncol = 1L,
+                      dimnames = list(sprintf("r%03d", seq_len(n)), "p"))
+  dml <- .v22_fake_dml(c(p = .5), c(p = .52), influence)
+  finalized <- scmix_v22_finalize(
+    dml, list(spec),
+    full_sample_plugin = .v22_full_plugin(dml, c(p = .51)),
+    derivative_audit = .v22_derivative(dml, list(spec)),
+    calibration = .v22_calibration,
+    external_gates = .v22_external_gates(
+      list(spec), dml$v22_analysis_contract),
+    complete_external_record = TRUE)
+  target_i <- finalized$computation_gates[
+    finalized$computation_gates$gate_id %in% c("I001", "I002"), ,
+    drop = FALSE]
+  expect_true(all(target_i$state == "not_run"))
+  expect_identical(finalized$targets$vote$status$target_status, "withheld")
+})
+
+test_that("typed computation artifacts are authenticated and unique by family", {
+  spec <- scmix_v22_target_spec(
+    "vote", "single", "probability", "p", "primitive:p",
+    "A rather than B", "probability", "mean")
+  contract <- .v22_contract()
+  payload <- unclass(contract); payload$fingerprint <- NULL
+  payload$optimizer_starts <- c("start_001", "start_002")
+  payload$fingerprint <- sconjoint:::.scmix_v22_fingerprint(payload)
+  class(payload) <- c("scmix_v22_analysis_contract", "list")
+  calibration <- scmix_v22_calibration_artifact(
+    .v22_calibration_values, payload, .v22_calibration_source_hash,
+    "typed computation fixture")
+  f008_gate <- scmix_v22_gate_record(
+    "F008", "fit_computation", "target", "hard_target", "pass",
+    0, 1, "less_than_or_equal", "standard_errors",
+    "typed F008 fixture", "Targets are stable across registered starts.",
+    "vote")
+  artifact <- sconjoint:::.scmix_v22_comp_sign(list(
+    protocol_id = sconjoint:::.scmix_v22_protocol_id,
+    protocol_mode = "production",
+    analysis_contract_fingerprint = payload$fingerprint,
+    registry_fingerprint = sconjoint:::.scmix_v22_fingerprint(list(spec)),
+    calibration_artifact_fingerprint = calibration$fingerprint,
+    gates = f008_gate), "scmix_v22_multistart_stability")
+  computation <- sconjoint:::.scmix_v22_computation_gate_rows(
+    list(artifact), payload, list(spec), calibration)
+  observed_f008 <- computation$rows[
+    computation$rows$gate_id == "F008", , drop = FALSE]
+  expect_identical(observed_f008$state, "pass")
+  expect_identical(unname(computation$fingerprints[["F008"]]),
+                   artifact$fingerprint)
+
+  ## Exercise the public integration point, including audit output that binds
+  ## the exact authenticated artifact fingerprint.
+  n <- 30L
+  influence <- matrix(seq(-1, 1, length.out = n), ncol = 1L,
+                      dimnames = list(sprintf("r%03d", seq_len(n)), "p"))
+  dml <- .v22_fake_dml(c(p = .5), c(p = .52), influence)
+  dml$v22_analysis_contract <- payload
+  finalized <- scmix_v22_finalize(
+    dml, list(spec),
+    full_sample_plugin = .v22_full_plugin(dml, c(p = .51)),
+    derivative_audit = .v22_derivative(dml, list(spec)),
+    calibration = calibration,
+    external_gates = .v22_external_gates(list(spec), payload),
+    computation_artifacts = list(artifact),
+    complete_external_record = TRUE)
+  finalized_f008 <- finalized$computation_gates[
+    finalized$computation_gates$gate_id == "F008", , drop = FALSE]
+  expect_identical(finalized_f008$state, "pass")
+  expect_identical(
+    unname(finalized$computation_artifact_fingerprints[["F008"]]),
+    artifact$fingerprint)
+  expect_error(sconjoint:::.scmix_v22_computation_gate_rows(
+    list(artifact, artifact), payload, list(spec), calibration),
+    "at most one exact artifact")
+
+  inconsistent <- unclass(artifact); inconsistent$fingerprint <- NULL
+  inconsistent$gates$state <- "not_applicable"
+  inconsistent$gates$message <- "F008 does not apply to a single start."
+  inconsistent <- sconjoint:::.scmix_v22_comp_sign(
+    inconsistent, "scmix_v22_multistart_stability")
+  expect_error(sconjoint:::.scmix_v22_computation_gate_rows(
+    list(inconsistent), payload, list(spec), calibration),
+    "disagree with applicability")
 })
 
 test_that("missing honest outer-fold information stays NA without -Inf warnings", {
@@ -1159,13 +1321,7 @@ test_that("unconditional gates and derived applicability cannot be waived", {
     TRUE, TRUE, "equal", "boolean", "audit", "unsupported pass", "p")
   expect_error(scmix_v22_gate_artifact(
     wrong_conditional, list(spec), contract, "audit"),
-    "contract-derived applicability")
-  right_conditional <- wrong_conditional
-  right_conditional$state <- "not_applicable"
-  right_conditional$message <- "Not applicable because this target uses no numerical integration."
-  expect_s3_class(scmix_v22_gate_artifact(
-    right_conditional, list(spec), contract, "audit"),
-    "scmix_v22_gate_artifact")
+    "may not supply typed computation")
 })
 
 test_that("calibration cannot certify without the package-shipped Step-3 manifest", {
