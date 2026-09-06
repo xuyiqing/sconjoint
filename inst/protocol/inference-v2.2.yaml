@@ -1,0 +1,857 @@
+protocol_id: paperps-inference-2026-09-05-v2.2
+protocol_version: 2.2.0
+frozen_on: 2026-09-05
+status: structure_frozen_calibration_pending
+normative_document: INFERENCE_PROTOCOL_V22.md
+supersedes_for_new_runs: paperps-v2.1-application-gates
+
+outcome_lock:
+  application_reruns_allowed_before_calibration: false
+  threshold_selection_may_use_application_pass_fail: false
+  amendment_requires_new_protocol_id: true
+  amendment_requires_all_affected_applications_rerun: true
+
+analysis:
+  sampling_unit: respondent
+  fold_unit: respondent
+  resampling_unit: respondent
+  split_tasks_across_folds: false
+  primary_rank: 1
+  sensitivity_specifications:
+    - restricted_q1_mean
+    - q0
+    - q2
+  model_selection_on_evaluation_fold: prohibited
+  explicit_protocol_evidence_required: true
+  legacy_missing_fields_pass: false
+
+required_registry_fields:
+  - application_id
+  - specification_id
+  - specification_role
+  - target_id
+  - target_type
+  - target_orientation
+  - target_units
+  - target_domain
+  - target_family_id
+  - target_parameter_dependencies
+  - primitive_registry_ids
+  - target_to_primitive_map
+  - confirmatory_status
+  - respondent_sample_rule
+  - completion_rule
+  - missing_data_rule
+  - outer_folds
+  - inner_folds
+  - preprocessing_rule
+  - integration_rule
+  - optimizer_starts
+  - learner_grid
+  - ridge_grid
+  - seeds
+  - code_commit
+  - data_hash
+  - design_hash
+  - calibration_hash
+
+estimator:
+  retained_estimates:
+    - full_sample_plugin
+    - crossfit_plugin
+    - raw_one_step
+    - reported_estimate
+  reported_estimator: chart_stabilized_one_step
+  scalar_update: inverse_chart_of_chart_plugin_plus_chart_derivative_times_correction
+  influence_source: raw_one_step
+  confidence_center: reported_estimate
+  confidence_center_justification: interior_first_order_equivalence
+  asymptotic_scope: regular_interior_only
+  tmle: not_part_of_v2.2
+  charts:
+    unrestricted: identity
+    bounded: scaled_logit
+    lower_bounded: shifted_log
+    upper_bounded: reflected_shifted_log
+    probability: logit
+    subgroup_share: logit_share_plus_logit_denominator
+    directional_heterogeneity: log_explained_variance_plus_log_residual_variance
+
+target_domains:
+  probability:
+    space: "[0,1]"
+    confidence_mapping: scalar_support_intersection
+  preference_direction_share:
+    space: "[0,1]"
+    confidence_mapping: scalar_support_intersection
+  compensating_benefit_share:
+    space: "[0,1]"
+    confidence_mapping: scalar_support_intersection
+  subgroup_share:
+    primitives: [numerator, denominator]
+    constraints: ["0 <= numerator", "numerator <= denominator", "denominator <= 1"]
+    interior_margin: CALIBRATE_IN_STEP_3
+    confidence_mapping: primitive_set_mapping
+  directional_heterogeneity:
+    primitives: [explained_variance, residual_variance]
+    supporting_audit_moments: [mean, second_moment]
+    derived: [total_variance, explained_share]
+    constraints:
+      - "explained_variance >= 0"
+      - "residual_variance >= 0"
+    target_domain: "explained_variance + residual_variance > 0"
+    regularity_margin: CALIBRATE_IN_STEP_3
+    regularity_margin_is_known_support: false
+    origin_mapping_rule: closure_is_full_unit_interval
+    confidence_mapping: primitive_set_mapping
+  mean_tradeoff_mrs_ratio:
+    primitives: [numerator, denominator]
+    denominator_margin: CALIBRATE_IN_STEP_3
+    confidence_mapping: joint_ratio_set
+
+confidence_sets:
+  construct_before_constraint_mapping: true
+  center: reported_estimate
+  influence_values: centered_raw_one_step_influence
+  center_requires_interior_equivalence_gate: true
+  scalar_rule: intersect_if_set_with_known_space
+  vector_rule: intersect_joint_max_t_rectangle_with_admissible_primitive_set
+  nonlinear_rule: infimum_and_supremum_over_intersected_primitive_set
+  empty_intersection: hard_target_failure
+  touches_boundary: boundary_limited
+  unrelated_or_reestimated_standard_error_for_reported_estimate: prohibited
+  clipped_bootstrap_draw_interval: prohibited
+
+linearization:
+  diagnostics:
+    correction_se_ratio: "abs(raw_one_step - crossfit_plugin) / se"
+    chart_discrepancy_se_ratio: "abs(reported_estimate - raw_one_step) / se"
+    nonlinear_remainder_se_ratio: "abs(chart_mapped_transform - first_order_transform) / transformed_se"
+    raw_domain_distance: "infimum over admissible u of max_j abs(raw_j-u_j)/se_j"
+    plugin_boundary_distance: "infimum over boundary u of max_j abs(crossfit_plugin_j-u_j)/se_j"
+    confidence_set_boundary_touch: boolean
+  raw_range_violation_alone: warning
+  zero_or_nonfinite_se: hard_target_failure
+  chart_discrepancy_cutoff: CALIBRATE_IN_STEP_3
+  nonlinear_remainder_cutoff: CALIBRATE_IN_STEP_3
+  interior_distance_cutoff: CALIBRATE_IN_STEP_3
+
+optimization:
+  dtype: float64
+  stochastic_initialization_allowed: true
+  final_polish: full_batch_lbfgs
+  same_objective_all_stages: true
+  objective: mean_negative_complete_sequence_loglik_per_respondent_plus_declared_penalty_in_nats
+  objective_zero: probability_one_and_zero_penalty
+  kkt_metric: block_scaled_projected_gradient_rms
+  parameterization: "theta_block = S_block * u_block with positive diagonal S_block"
+  objective_scale: "max(1, abs(mean_objective))"
+  horizontal_loading_rule: quotient_rotations_then_use_tangent_block_norm
+  required_blocks:
+    - position_effect
+    - unpenalized_mean_reference
+    - centered_mean_deviation
+    - horizontal_loadings
+    - all_structural_coordinates
+  artificial_bound_activity: hard_fit_failure
+  lbfgs_nonworsening: hard_fit_failure
+  kkt_cutoff: CALIBRATE_IN_STEP_3
+  integration_target_se_cutoff: CALIBRATE_IN_STEP_3
+  integration_if_l2_cutoff: CALIBRATE_IN_STEP_3
+  integration_objective_relative_cutoff: CALIBRATE_IN_STEP_3
+  integration_score_relative_cutoff: CALIBRATE_IN_STEP_3
+  integration_covariance_relative_cutoff: CALIBRATE_IN_STEP_3
+  near_optimum_objective_cutoff: CALIBRATE_IN_STEP_3
+  multistart_target_se_cutoff: CALIBRATE_IN_STEP_3
+  nested_fit_relative_cutoff: CALIBRATE_IN_STEP_3
+  required_artifacts:
+    - dtype
+    - objective_before_polish
+    - objective_after_polish
+    - kkt_before_polish
+    - kkt_after_polish
+    - polish_iterations
+    - line_search_status
+    - nonworsening_status
+
+integration_refinement:
+  production_rule: level_a
+  higher_resolution_rule: signed_level_b
+  nesting_required_when_supported: true
+  nuisance_selection_and_folds_held_fixed: true
+  comparisons:
+    - fixed_parameters_recompute_likelihood_score_covariance_targets_riesz_and_influence
+    - repolish_from_level_a_then_recompute_likelihood_score_covariance_targets_riesz_and_influence
+  aggregation: worse_of_fixed_parameter_and_repolished_comparisons
+  metrics:
+    target: "abs(theta_b-theta_a)/se_a"
+    influence: "rms(IF_b-IF_a)/sd(IF_a)"
+    objective: "abs(Q_b-Q_a)/max(1,abs(Q_a))"
+    score: "l2(g_b-g_a)/max(1,l2(g_a))"
+    covariance: "frobenius(Sigma_b-Sigma_a)/max(1,frobenius(Sigma_a))"
+
+loading_contract:
+  accessor_required: true
+  accessor_scales: [raw, optimization]
+  accessor_scopes: [full, fold]
+  round_trip_test_required: true
+  fitted_probability_invariance_test_required: true
+  ambiguous_aliases_paper_eligible: false
+
+identification_regularity:
+  q_fixed_before_fit: true
+  local_certificate_every_final_specification: true
+  certificate_must_name_scope: true
+  certificate_failure_propagation: signed_block_to_target_dependency_map
+  local_rank_implies_global_injectivity: false
+  local_rank_implies_finite_sample_precision: false
+  full_and_fold_exact_rank_required: true
+  known_support_separate_from_release_margin: true
+  boundary_release_metrics: standard_error_distance
+  active_eigenvalue_standardized_cutoff: CALIBRATE_IN_STEP_3
+  generalized_information_margin: CALIBRATE_IN_STEP_3
+  directional_variance_standardized_cutoff: CALIBRATE_IN_STEP_3
+  total_heterogeneity_standardized_cutoff: CALIBRATE_IN_STEP_3
+  denominator_standardized_cutoff: CALIBRATE_IN_STEP_3
+  raw_unit_values_role: supporting_diagnostic_only
+
+riesz:
+  unit: respondent
+  separate_solve_per_scalar_primitive: true
+  preserve_joint_respondent_order_for_composites: true
+  derivative_coordinates: structural_orthonormal
+  derivative_step: "machine_epsilon^(1/3) * max(1, abs(normalized_coordinate))"
+  derivative_refinement: centered_steps_h_and_h_over_2
+  derivative_metric: relative_l2_difference_in_structural_orthonormal_coordinates
+  derivative_cutoff: CALIBRATE_IN_STEP_3
+  derivative_runtime_subset: deterministic_and_signed_if_not_full
+  selection: respondent_inner_validation
+  refit_outcome_dependent_nuisance_within_inner_training: true
+  validation_matrix_normalization: respondent_mean
+  validation_risk: "alpha' I_validation alpha - 2 alpha' g_validation"
+  validation_risk_aggregation: validation_respondent_weighted_mean_over_inner_folds
+  tie_tolerance: "1e-12 * max(1, abs(minimum_risk))"
+  tie_breaker: largest_ridge
+  final_refit: all_outer_training_respondents_at_selected_ridge
+  ridge_selection_evaluation: inner_respondent_validation
+  certification_evaluation: untouched_outer_evaluation_fold
+  ridge_grid: [0, "n_k^-1", "n_k^-3/4", "n_k^-1/2"]
+  stability_neighborhood: zero_plus_adjacent_values_around_selected
+  defect_metric: information_dual_norm_for_one_information_se_perturbation_over_if_sd
+  null_space_metric: "norm((I - I I_plus) g) / max(norm(g), 1e-15)"
+  null_space_materiality_cutoff: CALIBRATE_IN_STEP_3
+  numerical_rank_tolerance: CALIBRATE_IN_STEP_3
+  influence_sd_for_defect: final_pooled_crossfit_respondent_influence_sd_by_primitive
+  defect_aggregation: maximum_over_outer_folds_and_primitive_components
+  ridge_metric: maximum_target_or_endpoint_change_over_se
+  composite_ridge_perturbation: one_primitive_at_a_time
+  cartesian_ridge_perturbation: optional_stress_diagnostic
+  defect_cutoff: CALIBRATE_IN_STEP_3
+  ridge_cutoff: CALIBRATE_IN_STEP_3
+  positive_ridge_requires_vanishing_sequence_provenance: true
+  legacy_metrics:
+    relative_equation_residual_cutoff: 0.05
+    relative_correction_sensitivity_cutoff: 0.10
+    role: historical_diagnostic_only
+
+resampling:
+  primary: respondent_multiplier_bootstrap
+  multiplier_distribution: normal
+  final_draws: 9999
+  common_multiplier_per_respondent_across_unique_family_primitives: true
+  multiplier_matrix_generated_once_per_analysis_seed: true
+  task_level_resampling: prohibited
+  family_columns: deduplicated_unique_scalar_primitives_by_registry_id
+  family_statistic: maximum_absolute_studentized_over_unique_primitives
+  target_interval: map_simultaneous_primitive_rectangle
+  target_order_invariance_required: true
+  job_partition_invariance_required: true
+  full_pairs_bootstrap:
+    role: optional_diagnostic
+    unit: respondent_with_all_tasks
+    refit_preprocess_tune_fit_riesz_and_gates: true
+    may_override_failed_gate: false
+  parametric_bootstrap:
+    role: step_3_model_conditional_calibration
+    may_override_failed_gate: false
+
+multiplicity:
+  family_membership_frozen: true
+  drop_failed_member_and_recompute_max_t: prohibited
+  complete_family_method: common_draw_max_t
+  missing_influence_fallback: fixed_family_bonferroni_using_original_unique_primitive_count
+  majority_claim_interval: simultaneous_or_fixed_family
+
+gate_record_schema:
+  required_fields:
+    - gate_id
+    - category
+    - scope
+    - severity
+    - state
+    - statistic
+    - threshold
+    - comparator
+    - units
+    - provenance
+    - message
+  allowed_states: [pass, warn, fail, not_run, not_applicable]
+  allowed_severities: [hard_fit, hard_target, hard_family, warning, interpretation]
+  severity_consequences:
+    hard_fit: fit_status_withheld_and_all_fit_dependent_targets_withheld
+    hard_target: affected_target_inference_withheld
+    hard_family: complete_simultaneous_family_status_withheld
+    warning: retain_calculation_and_attach_warning_code
+    interpretation: set_interpretation_status_supported_qualified_or_unsupported
+  not_applicable_requires_reason: true
+  missing_required_evidence_for_applicable_gate: fail
+  categories:
+    - protocol_integrity
+    - design_data
+    - fit_computation
+    - numerical_integration
+    - loading_contract
+    - nuisance_verification
+    - identification_regularity
+    - inverse_problem
+    - target_constraint
+    - resampling_multiplicity
+    - specification_assessment
+
+gate_applicability:
+  default: always
+  F007: exact_nested_restricted_and_full_pair_is_registered
+  F008: more_than_one_production_start_is_registered
+  I001: target_or_primitive_uses_numerical_integration
+  I002: target_or_primitive_uses_numerical_integration
+  I003: fit_uses_numerical_integration
+  I004: fit_uses_numerical_integration
+  I005: q_is_greater_than_zero_and_fit_uses_numerical_integration
+  L001: q_is_greater_than_zero
+  L002: q_is_greater_than_zero
+  G002: q_is_greater_than_zero
+  G003: target_depends_on_the_certified_parameter_block
+  G004: q_is_greater_than_zero
+  G006: target_has_a_boundary_denominator_or_interior_regularity_condition
+  R001: target_requests_regular_one_step_inference
+  R002: target_requests_regular_one_step_inference
+  R003: target_requests_regular_one_step_inference
+  R004: target_requests_regular_one_step_inference
+  R005: selected_ridge_is_positive
+  C001: target_uses_a_nonidentity_chart_or_constrained_primitive_map
+  C002: target_has_known_support_constraints
+  C003: target_uses_a_nonidentity_chart_or_nonlinear_primitive_map
+  C004: target_has_known_support_constraints
+  M002: target_family_has_more_than_one_unique_registered_primitive
+  M003: target_family_has_more_than_one_unique_registered_primitive
+
+gates:
+  - gate_id: P001
+    category: protocol_integrity
+    scope: analysis
+    severity: hard_fit
+    state: not_run
+    statistic: signed_registry_complete
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: signed_application_registry
+    message: target, family, fold, seed, and specification registry must be complete
+  - gate_id: P002
+    category: protocol_integrity
+    scope: analysis
+    severity: hard_fit
+    state: not_run
+    statistic: artifact_hashes_match
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: analysis_manifest
+    message: protocol, calibration, code, data, design, and artifact hashes must match
+  - gate_id: D001
+    category: design_data
+    scope: target
+    severity: interpretation
+    state: not_run
+    statistic: randomized_design_support_status
+    threshold: declared_target_support
+    comparator: contains
+    units: support_cells
+    provenance: design_audit
+    message: design support determines whether interpretation is supported, qualified, or extrapolative
+  - gate_id: D002
+    category: design_data
+    scope: sample
+    severity: interpretation
+    state: not_run
+    statistic: completion_and_missingness_status
+    threshold: declared_sampling_interpretation
+    comparator: consistent_with
+    units: audit_record
+    provenance: completion_audit
+    message: incomplete or selected sequences qualify the target population
+  - gate_id: F001
+    category: fit_computation
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: explicit_v2_2_evidence_present
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: fit_manifest
+    message: legacy absence of eligibility fields is a failure
+  - gate_id: F002
+    category: fit_computation
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: dtype_is_float64
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: optimizer_artifact
+    message: every production objective and derivative evaluation must use double precision
+  - gate_id: F003
+    category: fit_computation
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: objective_and_derivatives_finite
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: optimizer_artifact
+    message: nonfinite objective or derivative values withhold the fit
+  - gate_id: F004
+    category: fit_computation
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: lbfgs_polish_completed_and_nonworsening
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: optimizer_artifact
+    message: the declared full-batch L-BFGS stage must complete without worsening the objective
+  - gate_id: F005
+    category: fit_computation
+    scope: fit_block
+    severity: hard_fit
+    state: not_run
+    statistic: maximum_block_scaled_projected_kkt
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: dimensionless
+    provenance: optimizer_artifact
+    message: every declared block and the joint structural vector must pass
+  - gate_id: F006
+    category: fit_computation
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: any_artificial_bound_active
+    threshold: false
+    comparator: equal
+    units: boolean
+    provenance: optimizer_artifact
+    message: artificial computational bounds may not determine a production solution
+  - gate_id: F007
+    category: fit_computation
+    scope: nested_fit
+    severity: hard_fit
+    state: not_run
+    statistic: nested_fit_relative_violation
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: relative_mean_objective
+    provenance: tuning_artifact
+    message: the flexible family may not materially underperform its exact embedded restriction
+  - gate_id: F008
+    category: fit_computation
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: near_optimum_multistart_target_change_over_se
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: standard_errors
+    provenance: multistart_artifact
+    message: registered targets must be stable across polished near-optimum starts
+  - gate_id: I001
+    category: numerical_integration
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: maximum_refinement_target_change_over_se
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: standard_errors
+    provenance: integration_refinement_artifact
+    message: target values must be stable under the declared higher integration resolution
+  - gate_id: I002
+    category: numerical_integration
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: refinement_influence_l2_over_influence_sd
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: influence_standard_deviations
+    provenance: integration_refinement_artifact
+    message: influence contributions must be stable under integration refinement
+  - gate_id: I003
+    category: numerical_integration
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: refinement_objective_relative_change
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: relative_mean_objective
+    provenance: integration_refinement_artifact
+    message: fixed-fit and repolished likelihood evaluations must be stable
+  - gate_id: I004
+    category: numerical_integration
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: refinement_full_batch_score_relative_change
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: relative_normalized_gradient
+    provenance: integration_refinement_artifact
+    message: fixed-fit and repolished scores must be stable
+  - gate_id: I005
+    category: numerical_integration
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: refinement_covariance_relative_frobenius_change
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: relative_frobenius_norm
+    provenance: integration_refinement_artifact
+    message: fitted structural covariance must be stable
+  - gate_id: L001
+    category: loading_contract
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: raw_optimization_loading_round_trip
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: loading_contract_test
+    message: raw and optimization-scale loadings must round trip without ambiguity
+  - gate_id: L002
+    category: loading_contract
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: fitted_probability_scale_invariance
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: maximum_absolute_probability_difference
+    provenance: loading_contract_test
+    message: equivalent preprocessing scales must yield invariant fitted probabilities
+  - gate_id: N001
+    category: nuisance_verification
+    scope: analysis
+    severity: hard_fit
+    state: not_run
+    statistic: respondents_wholly_nested_in_folds
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: fold_manifest
+    message: no respondent may cross a training and evaluation boundary
+  - gate_id: N002
+    category: nuisance_verification
+    scope: analysis
+    severity: hard_fit
+    state: not_run
+    statistic: outcome_dependent_steps_training_only
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: pipeline_trace
+    message: preprocessing, tuning, nuisance fitting, and Riesz selection must be nested correctly
+  - gate_id: N003
+    category: nuisance_verification
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: signatures_nesting_and_rate_argument_present
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: verification_manifest
+    message: implementation evidence and a written maintained-rate argument are required; rates are not empirically verified
+  - gate_id: G001
+    category: identification_regularity
+    scope: specification
+    severity: hard_fit
+    state: not_run
+    statistic: rank_fixed_before_outcome_fit
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: signed_application_registry
+    message: outcome-selected rank cannot receive fixed-rank inference on the same data
+  - gate_id: G002
+    category: identification_regularity
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: exact_declared_rank_full_and_outer_folds
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: rank_artifact
+    message: every full and fold loading must have the declared exact rank
+  - gate_id: G003
+    category: identification_regularity
+    scope: target_parameter_dependencies
+    severity: hard_target
+    state: not_run
+    statistic: scoped_local_injectivity_certificate_full_rank
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: jacobian_certificate
+    message: failure propagates only through the signed block-to-target map and implies neither global injectivity nor precision
+  - gate_id: G004
+    category: identification_regularity
+    scope: fit
+    severity: hard_fit
+    state: not_run
+    statistic: minimum_active_eigenvalue_over_its_standard_error
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: greater_than_or_equal
+    units: standard_errors
+    provenance: rank_artifact
+    message: active covariance directions must remain separated from the rank boundary
+  - gate_id: G005
+    category: identification_regularity
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: target_generalized_information_minimum
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: greater_than_or_equal
+    units: declared_structural_norm
+    provenance: target_information_artifact
+    message: global information cannot replace target-specific information
+  - gate_id: G006
+    category: identification_regularity
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: minimum_target_boundary_distance_over_standard_error
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: greater_than_or_equal
+    units: standard_errors
+    provenance: target_constraint_artifact
+    message: variances, total heterogeneity, subgroup probabilities, and denominators require their declared interior margins
+  - gate_id: R001
+    category: inverse_problem
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: analytic_or_refined_derivative_verified
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: derivative_artifact
+    message: each primitive derivative must be analytic or pass the frozen refinement calculation
+  - gate_id: R002
+    category: inverse_problem
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: honest_riesz_null_space_defect
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: relative_gradient_norm
+    provenance: outer_fold_riesz_certification_artifact
+    message: a Moore-Penrose inverse may not hide a target derivative outside the information range
+  - gate_id: R003
+    category: inverse_problem
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: honest_information_scaled_riesz_defect
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: influence_standard_deviations
+    provenance: outer_fold_riesz_certification_artifact
+    message: gate on the maximum untouched-outer-fold defect over primitive coordinates
+  - gate_id: R004
+    category: inverse_problem
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: ridge_neighborhood_target_or_endpoint_change_over_se
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: standard_errors
+    provenance: ridge_stability_artifact
+    message: perturb one primitive ridge at a time over zero and adjacent declared values
+  - gate_id: R005
+    category: inverse_problem
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: positive_ridge_has_vanishing_sequence_provenance
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: ridge_stability_artifact
+    message: a selected positive ridge requires a documented vanishing sequence
+  - gate_id: C001
+    category: target_constraint
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: crossfit_plugin_in_relative_interior
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: target_constraint_artifact
+    message: the chart update is regular only from the declared relative interior
+  - gate_id: C002
+    category: target_constraint
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: constrained_confidence_set_nonempty
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: confidence_set_artifact
+    message: an empty intersection with known support withholds inference
+  - gate_id: C003
+    category: target_constraint
+    scope: target
+    severity: hard_target
+    state: not_run
+    statistic: maximum_chart_or_nonlinear_discrepancy_over_se
+    threshold: CALIBRATE_IN_STEP_3
+    comparator: less_than_or_equal
+    units: standard_errors
+    provenance: linearization_artifact
+    message: range stabilization cannot conceal a failed local approximation
+  - gate_id: C004
+    category: target_constraint
+    scope: target
+    severity: warning
+    state: not_run
+    statistic: raw_one_step_outside_known_support
+    threshold: false
+    comparator: equal
+    units: boolean
+    provenance: target_constraint_artifact
+    message: range violation alone is a warning and triggers the full linearization audit
+  - gate_id: M001
+    category: resampling_multiplicity
+    scope: primitive
+    severity: hard_target
+    state: not_run
+    statistic: standard_error_finite_and_positive
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: influence_artifact
+    message: each inferential primitive requires a finite positive respondent-level standard error
+  - gate_id: M002
+    category: resampling_multiplicity
+    scope: family
+    severity: hard_family
+    state: not_run
+    statistic: family_membership_matches_signed_registry
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: family_manifest
+    message: failed primitives may not be removed to reduce multiplicity
+  - gate_id: M003
+    category: resampling_multiplicity
+    scope: family
+    severity: hard_family
+    state: not_run
+    statistic: common_respondent_multiplier_matrix_reused
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: multiplier_artifact
+    message: target order and job partition must not change simultaneous inference
+  - gate_id: S001
+    category: specification_assessment
+    scope: application
+    severity: interpretation
+    state: not_run
+    statistic: required_assessment_battery_complete
+    threshold: true
+    comparator: equal
+    units: boolean
+    provenance: specification_assessment_manifest
+    message: incomplete assessment qualifies interpretation and cannot be offset by numerical fit
+
+status_schema:
+  calculation_status: [not_computed, computed]
+  fit_status: [eligible, diagnostic_only, withheld]
+  target_status: [conditional_available, diagnostic_only, withheld]
+  release_class: [regular_interior, boundary_limited, constraint_mapped, none]
+  interval_method: [regular_if, support_intersection, primitive_set_mapping, fixed_family_bonferroni, none]
+  multiplicity_status: [simultaneous_complete, bonferroni_incomplete, pointwise_only, none]
+  interpretation_status: [supported, qualified, unsupported]
+  required_diagnostics: [hard_failure_codes, warning_codes, first_failed_gate]
+
+specification_assessment:
+  required:
+    - heldout_complete_sequence_log_scores
+    - heldout_marginal_and_joint_calibration
+    - q0_q1_restricted_q1_q2_common_fold_comparison
+    - within_respondent_response_counts
+    - within_respondent_transitions
+    - repeated_contrast_checks
+    - position_checks
+    - task_order_checks
+    - structural_ame_vs_design_amce
+    - residual_shape_sensitivity
+    - serial_dependence_sensitivity
+    - covariance_and_scale_sensitivity
+    - completion_and_missingness_sensitivity
+    - target_specific_information_diagnostics
+  role: interpretation_eligibility_not_gate_override
+
+legacy:
+  scmix_signshare:
+    paper_aligned: false
+    role: diagnostic_only_until_reconciled_or_retired
+  v2_1_application_artifacts:
+    grandfathered_into_v2_2: false
+
+step_3_calibration:
+  may_change_metric_definitions: false
+  may_change_gate_order: false
+  may_use_application_narrative_as_objective: false
+  required_operating_characteristics:
+    - unconditional_coverage
+    - coverage_conditional_on_release
+    - false_certification_rate
+    - interval_length
+    - empty_constraint_set_rate
+    - uninformative_constraint_set_rate
+    - gate_passage_frequency
+  required_regimes:
+    - well_informed_interior
+    - probability_near_boundary
+    - directional_variance_near_zero
+    - weak_inverse_problem
+    - optimization_error
+    - integration_error
+    - residual_shape_misspecification
+    - serial_dependence
+    - informative_completion

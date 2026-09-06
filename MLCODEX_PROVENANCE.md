@@ -24,6 +24,22 @@ are recorded under `provenance/`. New runs must write to a fresh directory under
 `runs/` and record the source commit, R session, seeds, input hashes, and output
 hashes.
 
+## Frozen inference protocol
+
+The prospective v2.2 inference contract is
+`paperps-inference-2026-09-05-v2.2`. Its normative documents are
+`INFERENCE_PROTOCOL_V22.md` and `inst/protocol/inference-v2.2.yaml`.
+The protocol structure was frozen before any v2.2 application rerun. Numerical
+cutoffs marked `CALIBRATE_IN_STEP_3` must be fixed by the simulation stage and
+fingerprinted with the implementation before any application can receive a
+v2.2 inferential status. Existing v2.1 artifacts are not grandfathered.
+
+At the date of the protocol freeze, the package does not yet implement the
+complete contract. In particular, the optimizer, range-respecting point,
+confidence-set mapping, honest Riesz certification, and cross-target family
+multiplier machinery remain Step 2 work. The protocol document's current-code
+crosswalk is the authoritative gap list.
+
 ## Required reproduction check
 
 Before an expensive rerun, the untouched baseline must pass Yiqing's one-cell
