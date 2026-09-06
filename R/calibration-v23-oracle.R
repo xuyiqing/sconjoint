@@ -977,6 +977,7 @@ scmix_v23_oracle_truths <- function(
     targets$primitive_a_estimate <- targets$primitive_b_estimate <- NA_real_
   targets$subgroup_constraint_scale <-
     targets$subgroup_constraint_margin_standardized <- NA_real_
+  targets$subgroup_constraint_margin_raw <- NA_real_
   for (key in c("subgroup_share__z_high", "subgroup_share__z_low")) {
     j <- match(key, targets$target_key)
     b_value <- if (identical(key, "subgroup_share__z_high"))
@@ -986,7 +987,10 @@ scmix_v23_oracle_truths <- function(
     targets$primitive_a_truth[[j]] <- b_value * truth[[key]]
     targets$primitive_b_estimate[[j]] <- b_value
     targets$primitive_a_estimate[[j]] <- b_value * estimate[[key]]
-    targets$subgroup_constraint_scale[[j]] <- scale
+    targets$subgroup_constraint_scale[[j]] <- 1
+    targets$subgroup_constraint_margin_raw[[j]] <- min(
+      targets$primitive_a_estimate[[j]], 1 - b_value,
+      b_value - targets$primitive_a_estimate[[j]])
     targets$subgroup_constraint_margin_standardized[[j]] <- min(
       targets$primitive_a_estimate[[j]], 1 - b_value,
       b_value - targets$primitive_a_estimate[[j]]) / scale
@@ -1046,7 +1050,7 @@ scmix_v23_oracle_truths <- function(
       max(se[[target]], sqrt(.Machine$double.eps))
     subgroup_margin <- if (target %in% c(
         "subgroup_share__z_high", "subgroup_share__z_low")) {
-      targets$subgroup_constraint_margin_standardized[
+      targets$subgroup_constraint_margin_raw[
         match(target, targets$target_key)]
     } else NA_real_
     metric <- c(
