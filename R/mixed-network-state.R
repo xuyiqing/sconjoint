@@ -265,6 +265,7 @@
     A_raw <- .scmix_loading_to_raw(A_opt, coefficient_scale)
     record <- list(
       start = as.integer(x$start), start_id = x$start_id,
+      seed = x$seed,
       state_hash = x$state_hash,
       selected = isTRUE(x$selected),
       mean_objective = as.numeric(x$mean_objective),
@@ -297,7 +298,7 @@
             adapter_contract = list(
               consumer = "scmix_v22_multistart_stability",
               record_fields = c(
-                "start_id", "state_hash", "mean_objective",
+                "start_id", "seed", "state_hash", "mean_objective",
                 "objective_definition_id", "polished", "dtype",
                 "protocol_mode", "calibration_hash", "analysis_signature",
                 "scope", "optimizer_evidence", "artifact_fingerprint"),
@@ -326,7 +327,7 @@
     stop("Malformed scmix multistart artifact set.", call. = FALSE)
   }
   required <- c(
-    "start_id", "state_hash", "mean_objective", "objective_definition_id",
+    "start_id", "seed", "state_hash", "mean_objective", "objective_definition_id",
     "polished", "dtype", "protocol_mode", "calibration_hash",
     "analysis_signature", "scope", "optimizer_evidence",
     "artifact_fingerprint", "network_state", "A_raw", "A_optimization",
@@ -338,6 +339,9 @@
         !identical(record$dtype, "float64") ||
         !record$protocol_mode %in% c("calibration", "production") ||
         !is.character(record$start_id) || length(record$start_id) != 1L ||
+        !(is.null(record$seed) ||
+          (is.numeric(record$seed) && length(record$seed) == 1L &&
+           is.finite(record$seed) && record$seed == as.integer(record$seed))) ||
         !is.character(record$state_hash) || length(record$state_hash) != 1L ||
         !is.numeric(record$mean_objective) ||
         length(record$mean_objective) != 1L ||

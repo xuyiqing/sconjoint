@@ -1480,6 +1480,11 @@
   ## user-supplied description of the nonselected solutions.
   ans$start_artifacts <- lapply(seq_along(fits), function(s) {
     fit_s <- fits[[s]]
+    seed_s <- if (is.null(seed)) NULL else {
+      out <- (as.double(seed) + 104729 * (s - 1L)) %%
+        (.Machine$integer.max - 1)
+      as.integer(out + 1)
+    }
     live <- fit_s$net$state_dict()
     state <- lapply(live, .scmix_tensor_cpu_array)
     names(state) <- names(live)
@@ -1534,6 +1539,7 @@
     list(
       start = as.integer(s),
       start_id = start_id,
+      seed = seed_s,
       state_hash = state_hash,
       selected = identical(as.integer(s), as.integer(best)),
       mean_objective = as.numeric(fit_s$penalized_loss),
