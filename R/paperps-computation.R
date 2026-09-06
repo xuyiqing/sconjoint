@@ -1246,6 +1246,17 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
         calibration_hash = calibration_verification$calibration_hash)
     }
     A <- .scmix_loading_to_raw(ff$A, dx_full_transform$scale)
+    refit_scope <-
+      "selected refit on all rows supplied to scmix_tune_matrix"
+    loading_invariance <- .scmix_loading_invariance_evidence(
+      ff$net, deltaX, y, z_full, respondent_id, integration_grid,
+      dx_full_transform$scale, analysis_signature = analysis_signature,
+      scope = refit_scope, protocol_mode = protocol_mode,
+      calibration_verified = calibration_verification$verified,
+      calibration_hash = calibration_verification$calibration_hash,
+      probability_cutoff =
+        calibration_verification$loading_probability_invariance_cutoff,
+      device = device)
     network_state <- .scmix_capture_network_state(
       ff$net, p = ncol(deltaX), p_Z = ncol(Z), q = spec$q,
       hidden = spec$hidden, mean_family = spec$mean_family,
@@ -1258,8 +1269,10 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       coefficient_names = colnames(deltaX), moderator_names = colnames(Z),
       integration_grid = integration_grid,
       analysis_signature = analysis_signature,
-      scope = "selected refit on all rows supplied to scmix_tune_matrix"
+      scope = refit_scope
     )
+    network_state <- .scmix_attach_network_loading_evidence(
+      network_state, loading_invariance)
     multistart_artifacts <- .scmix_complete_multistart_artifacts(
       ff, network_state, dx_full_transform$scale)
     refitted <- list(
@@ -1299,6 +1312,7 @@ scmix_tune_matrix <- function(deltaX, y, Z, respondent_id, grid, q = NULL,
       refitted, q = spec$q,
       raw_full = A, optimization_full = ff$A,
       coefficient_scale_full = dx_full_transform$scale,
+      invariance_evidence = loading_invariance,
       source = paste(
         "Selected full-sample refit from respondent-level matrix tuning;",
         "both scales are paired with the stored training transform."))
@@ -1642,6 +1656,16 @@ scmix_refit_selected_matrix <- function(
       !is.na(source_analysis_signature) && nzchar(source_analysis_signature)) {
     source_analysis_signature
   } else refit_signature
+  refit_scope <- "fixed post-selection full-sample refit; no retuning"
+  loading_invariance <- .scmix_loading_invariance_evidence(
+    trained$net, deltaX, y, z_fit, respondent_id, grid, scale,
+    analysis_signature = linked_signature, scope = refit_scope,
+    protocol_mode = protocol_mode,
+    calibration_verified = calibration_verification$verified,
+    calibration_hash = calibration_verification$calibration_hash,
+    probability_cutoff =
+      calibration_verification$loading_probability_invariance_cutoff,
+    device = device)
   state <- .scmix_capture_network_state(
     trained$net, p = ncol(deltaX), p_Z = ncol(Z), q = spec$q,
     hidden = spec$hidden, mean_family = spec$mean_family,
@@ -1652,8 +1676,9 @@ scmix_refit_selected_matrix <- function(
     dx_transform = dx_transform, coefficient_names = colnames(deltaX),
     moderator_names = colnames(Z), integration_grid = grid,
     analysis_signature = linked_signature,
-    scope = "fixed post-selection full-sample refit; no retuning"
+    scope = refit_scope
   )
+  state <- .scmix_attach_network_loading_evidence(state, loading_invariance)
   multistart_artifacts <- .scmix_complete_multistart_artifacts(
     trained, state, scale)
   A <- .scmix_loading_to_raw(trained$A, scale)
@@ -1698,6 +1723,7 @@ scmix_refit_selected_matrix <- function(
     out, q = spec$q,
     raw_full = A, optimization_full = trained$A,
     coefficient_scale_full = scale,
+    invariance_evidence = loading_invariance,
     source = paste(
       "Fixed post-selection full-sample refit; both scales are paired with",
       "the stored DeltaX transform."))
@@ -1900,8 +1926,14 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
   q <- qs[1L]
   p <- ncol(dat$deltaX)
   loading_contract_gate <- vapply(refits, function(x) {
-    is.list(x$loading_contract) &&
-      identical(x$loading_contract$contract_id, "scmix-loading-scale-v1")
+    valid <- isTRUE(tryCatch({
+      .scmix_validate_loading_contract(x)
+      TRUE
+    }, error = function(e) FALSE))
+    l002 <- x$loading_contract$gate_evidence$L002
+    valid && (!identical(x$protocol_mode, "production") ||
+                (is.list(l002) && identical(l002$state, "pass") &&
+                   isTRUE(l002$pass)))
   }, logical(1L))
   if (!all(loading_contract_gate) && !isTRUE(diagnostic_only)) {
     stop(
@@ -2147,11 +2179,20 @@ scmix_assemble_nested <- function(nested, attr_names = NULL, z_names = NULL,
       "the paper's asymptotic numerical-error rate conditions."),
     nested_tuning = nested
   )
+  assembled_l002 <- lapply(refits, function(x) {
+    evidence <- x$loading_contract$gate_evidence$L002$fit_scoped_evidence
+    if (is.list(evidence) && length(evidence) == 1L) evidence[[1L]] else NULL
+  })
+  if (!all(vapply(assembled_l002, inherits, logical(1L),
+                  what = "scmix_loading_invariance_evidence"))) {
+    assembled_l002 <- NULL
+  }
   out <- .scmix_add_loading_contract(
     out, q = q,
     raw_folds = A_folds,
     optimization_folds = A_optimization_folds,
     coefficient_scale_folds = sd_dx_folds,
+    invariance_evidence = assembled_l002,
     source = paste(
       "Selected respondent-level outer refits assembled for cross-fitted",
       "inference; no full-sample loading is present."))

@@ -226,6 +226,19 @@
   out
 }
 
+.scmix_attach_network_loading_evidence <- function(bundle, evidence) {
+  .scmix_validate_network_state(bundle)
+  .scmix_validate_loading_invariance_evidence(evidence)
+  if (!identical(bundle$analysis_signature, evidence$analysis_signature) ||
+      !identical(bundle$scope, evidence$scope)) {
+    stop("L002 evidence does not match the portable network-state scope.",
+         call. = FALSE)
+  }
+  bundle$loading_contract$gate_evidence <- list(L002 = evidence)
+  .scmix_validate_network_state(bundle)
+  bundle
+}
+
 ## Complete the lightweight state dictionaries retained by the optimizer with
 ## one already validated architecture/preprocessing template. This keeps every
 ## production start portable without retaining duplicate live Torch pointers.
@@ -240,12 +253,17 @@
     bundle$state_dict <- x$state_dict
     bundle$state_shapes <- x$state_shapes
     bundle$state_dtypes <- x$state_dtypes
-    bundle$scope <- paste0(template_state$scope, "; optimizer start ", x$start)
+    ## The fit scope remains identical across starts. `start_id` supplies the
+    ## within-fit identity and the record fingerprint binds the two together.
+    ## L002 is evidence for the selected fit, not for every nonselected start.
+    ## Do not silently copy selected-fit probability evidence onto another
+    ## state; F008 consumers reconstruct their own registered targets.
+    bundle$loading_contract$gate_evidence <- NULL
     .scmix_validate_network_state(bundle)
     A_opt <- .scmix_loading_matrix(x$A_optimization, p = p, q = q,
                                    what = "start A_optimization")
     A_raw <- .scmix_loading_to_raw(A_opt, coefficient_scale)
-    list(
+    record <- list(
       start = as.integer(x$start), start_id = x$start_id,
       state_hash = x$state_hash,
       selected = isTRUE(x$selected),
@@ -257,16 +275,22 @@
       kappa = as.numeric(x$kappa), dtype = x$dtype,
       protocol_mode = x$protocol_mode, polished = isTRUE(x$polished),
       calibration_hash = x$calibration_hash %||% NA_character_,
+      analysis_signature = bundle$analysis_signature,
+      scope = bundle$scope,
+      optimizer_evidence = x$optimizer_evidence,
       v22_optimization_status = x$v22_optimization_status,
       network_state = bundle)
+    record
   })
   objective <- vapply(out, `[[`, numeric(1L), "mean_objective")
   best <- min(objective)
   relative <- (objective - best) / max(1, abs(best))
   for (s in seq_along(out)) {
     out[[s]]$relative_objective_from_best <- relative[s]
+    out[[s]]$artifact_fingerprint <-
+      .scmix_multistart_record_fingerprint(out[[s]])
   }
-  structure(out,
+  result <- structure(out,
             best_start = which.min(objective),
             protocol_mode = unique(vapply(out, `[[`, character(1L),
                                            "protocol_mode")),
@@ -275,7 +299,8 @@
               record_fields = c(
                 "start_id", "state_hash", "mean_objective",
                 "objective_definition_id", "polished", "dtype",
-                "protocol_mode", "calibration_hash"),
+                "protocol_mode", "calibration_hash", "analysis_signature",
+                "scope", "optimizer_evidence", "artifact_fingerprint"),
               application_runner_adds = c(
                 "target_estimates", "raw_if_standard_errors",
                 "analysis_signature", "registry_hash"),
@@ -284,6 +309,99 @@
                 "the record's network_state, A_raw, and kappa; never from",
                 "the selected fit for a nonselected start")),
             class = c("scmix_multistart_artifacts", "list"))
+  attr(result, "artifact_set_fingerprint") <- .scmix_stable_state_hash(
+    lapply(result, `[[`, "artifact_fingerprint"))
+  .scmix_validate_multistart_artifacts(result)
+  result
+}
+
+.scmix_multistart_record_fingerprint <- function(x) {
+  x$artifact_fingerprint <- NULL
+  .scmix_stable_state_hash(x)
+}
+
+.scmix_validate_multistart_artifacts <- function(x) {
+  if (!inherits(x, "scmix_multistart_artifacts") || !is.list(x) ||
+      !length(x)) {
+    stop("Malformed scmix multistart artifact set.", call. = FALSE)
+  }
+  required <- c(
+    "start_id", "state_hash", "mean_objective", "objective_definition_id",
+    "polished", "dtype", "protocol_mode", "calibration_hash",
+    "analysis_signature", "scope", "optimizer_evidence",
+    "artifact_fingerprint", "network_state", "A_raw", "A_optimization",
+    "kappa")
+  for (s in seq_along(x)) {
+    record <- x[[s]]
+    if (!is.list(record) || !all(required %in% names(record)) ||
+        !identical(record$objective_definition_id, .scmix_v22_objective_id) ||
+        !identical(record$dtype, "float64") ||
+        !record$protocol_mode %in% c("calibration", "production") ||
+        !is.character(record$start_id) || length(record$start_id) != 1L ||
+        !is.character(record$state_hash) || length(record$state_hash) != 1L ||
+        !is.numeric(record$mean_objective) ||
+        length(record$mean_objective) != 1L ||
+        !is.finite(record$mean_objective) ||
+        !inherits(record$network_state, "scmix_network_state")) {
+      stop("Malformed multistart record ", s, ".", call. = FALSE)
+    }
+    .scmix_validate_network_state(record$network_state)
+    if (!identical(record$analysis_signature,
+                   record$network_state$analysis_signature) ||
+        !identical(record$scope, record$network_state$scope)) {
+      stop("Multistart record ", s,
+           " is not bound to its network-state scope and analysis.",
+           call. = FALSE)
+    }
+    state_hash <- .scmix_stable_state_hash(list(
+      state_dict = record$network_state$state_dict,
+      A_optimization = record$A_optimization, kappa = record$kappa))
+    if (!identical(record$state_hash, state_hash)) {
+      stop("Multistart record ", s, " has a state-hash mismatch.",
+           call. = FALSE)
+    }
+    evidence <- record$optimizer_evidence
+    objective <- evidence$objective
+    polish <- evidence$polish
+    required_evidence <- is.list(evidence) &&
+      identical(evidence$protocol_id,
+                "paperps-inference-2026-09-05-v2.2") &&
+      identical(evidence$protocol_mode, record$protocol_mode) &&
+      identical(evidence$calibration_hash, record$calibration_hash) &&
+      is.list(objective) && is.list(polish) && is.list(evidence$bounds) &&
+      is.list(evidence$kkt) && is.list(evidence$gate_evidence) &&
+      identical(objective$definition_id, .scmix_v22_objective_id) &&
+      identical(polish$method_id, .scmix_v22_polish_method) &&
+      identical(polish$method, "full_batch_lbfgs") &&
+      identical(polish$line_search, "strong_wolfe") &&
+      all(c("before_polish", "after_polish", "returned",
+            "nonworsening_numerical_allowance") %in% names(objective)) &&
+      all(c("completed", "accepted", "projection_changed", "nonworsening",
+            "same_objective_all_stages",
+            "returned_matches_accepted_objective", "iterations",
+            "function_evaluations", "line_search_status") %in% names(polish)) &&
+      all(c("before_polish", "after_polish", "returned") %in%
+            names(evidence$kkt)) &&
+      all(paste0("F00", 1:6) %in% names(evidence$gate_evidence))
+    if (!required_evidence) {
+      stop("Multistart record ", s,
+           " lacks complete optimizer evidence.", call. = FALSE)
+    }
+    expected <- .scmix_multistart_record_fingerprint(record)
+    if (!identical(record$artifact_fingerprint, expected)) {
+      stop("Multistart record ", s,
+           " has an optimizer-evidence fingerprint mismatch (stored ",
+           record$artifact_fingerprint, ", recomputed ", expected, ").",
+           call. = FALSE)
+    }
+  }
+  expected_set <- .scmix_stable_state_hash(
+    lapply(x, `[[`, "artifact_fingerprint"))
+  if (!identical(attr(x, "artifact_set_fingerprint"), expected_set)) {
+    stop("The multistart artifact-set fingerprint does not match its records.",
+         call. = FALSE)
+  }
+  invisible(x)
 }
 
 .scmix_validate_network_state <- function(bundle) {
@@ -365,6 +483,17 @@
         !is.character(dtype) || length(dtype) != 1L || is.na(dtype) ||
         !nzchar(dtype)) {
       stop("Malformed serialized tensor `", nm, "`.", call. = FALSE)
+    }
+  }
+  l002 <- bundle$loading_contract$gate_evidence$L002
+  if (!is.null(l002)) {
+    .scmix_validate_loading_invariance_evidence(l002)
+    if (!identical(bundle$analysis_signature, l002$analysis_signature) ||
+        !identical(bundle$scope, l002$scope) ||
+        !identical(l002$network_state_hash,
+                   .scmix_stable_state_hash(bundle$state_dict))) {
+      stop("Portable-state L002 evidence is bound to another scope or state.",
+           call. = FALSE)
     }
   }
   invisible(bundle)

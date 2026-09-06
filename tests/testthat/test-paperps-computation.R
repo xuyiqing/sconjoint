@@ -285,6 +285,48 @@ test_that("matrix tuning uses respondent folds and training-only preprocessing",
   expect_s3_class(out$refit$multistart_artifacts[[1L]]$network_state,
                   "scmix_network_state")
   expect_identical(out$refit$multistart_artifacts[[1L]]$dtype, "float64")
+  expect_invisible(sconjoint:::.scmix_validate_multistart_artifacts(
+    out$refit$multistart_artifacts))
+  evidence <- out$refit$multistart_artifacts[[1L]]$optimizer_evidence
+  expect_identical(evidence$objective$definition_id,
+                   sconjoint:::.scmix_v22_objective_id)
+  expect_identical(evidence$polish$method_id,
+                   sconjoint:::.scmix_v22_polish_method)
+  expect_true(all(c("before_polish", "after_polish", "returned") %in%
+                    names(evidence$kkt)))
+  expect_true(all(paste0("F00", 1:6) %in% names(evidence$gate_evidence)))
+  tampered_start <- out$refit$multistart_artifacts
+  tampered_start[[1L]]$optimizer_evidence$objective$returned <-
+    tampered_start[[1L]]$optimizer_evidence$objective$returned + 1
+  expect_error(
+    sconjoint:::.scmix_validate_multistart_artifacts(tampered_start),
+    "fingerprint mismatch")
+  tampered_kkt <- out$refit$multistart_artifacts
+  tampered_kkt[[1L]]$optimizer_evidence$kkt$returned$maximum <-
+    tampered_kkt[[1L]]$optimizer_evidence$kkt$returned$maximum + 1
+  expect_error(
+    sconjoint:::.scmix_validate_multistart_artifacts(tampered_kkt),
+    "fingerprint mismatch")
+  tampered_calibration <- out$refit$multistart_artifacts
+  tampered_calibration[[1L]]$calibration_hash <- "another-calibration"
+  expect_error(
+    sconjoint:::.scmix_validate_multistart_artifacts(tampered_calibration),
+    "complete optimizer evidence|fingerprint mismatch")
+  tampered_scope <- out$refit$multistart_artifacts
+  tampered_scope[[1L]]$scope <- "another fit"
+  expect_error(
+    sconjoint:::.scmix_validate_multistart_artifacts(tampered_scope),
+    "not bound")
+  expect_s3_class(
+    out$refit$loading_contract$gate_evidence$L002$fit_scoped_evidence[[1L]],
+    "scmix_loading_invariance_evidence")
+  expect_identical(out$refit$loading_contract$gate_evidence$L002$state,
+                   "not_run")
+  tampered_loading <- out$refit
+  tampered_loading$loading_contract$gate_evidence$L002$
+    fit_scoped_evidence[[1L]]$maximum_absolute_probability_difference <- 1
+  expect_error(scmix_loadings(tampered_loading, "raw", "full"),
+               "tampered L002")
   expect_identical(
     dim(scmix_loadings(out$refit$network_state, "raw", "full")),
     c(1L, 0L))

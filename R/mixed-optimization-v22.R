@@ -1,6 +1,11 @@
 ## Double-precision polishing and scale-free projected-KKT diagnostics for the
 ## frozen paperps inference protocol v2.2.
 
+.scmix_v22_objective_id <- paste0(
+  "mean_negative_complete_sequence_loglik_per_respondent_",
+  "plus_declared_penalty_in_nats")
+.scmix_v22_polish_method <- "full_batch_lbfgs_strong_wolfe"
+
 .scmix_net_dtype <- function(net) {
   params <- net$parameters
   if (!length(params)) {
@@ -184,16 +189,27 @@
   deviation_names <- setdiff(names(params), c("A", "kappa_raw", "alpha_raw"))
   deviation_residual <- numeric()
   deviation_gradient <- numeric()
+  corrected_output <- !is.null(net$mean_family) &&
+    !identical(net$mean_family, "legacy")
   for (nm in deviation_names) {
     theta <- .scmix_parameter_array(params[[nm]])
     gradient <- .scmix_parameter_array(params[[nm]], gradient = TRUE)
+    parameter_scale <- if (corrected_output &&
+        identical(nm, "param_layer.weight")) {
+      matrix(coefficient_scale * weight_bound, nrow = p,
+             ncol = ncol(as.matrix(theta)))
+    } else {
+      weight_bound
+    }
     deviation_residual <- c(
       deviation_residual,
       .scmix_box_projected_residual(
-        theta, gradient, scale = weight_bound, lower = -1,
+        theta, gradient, scale = parameter_scale, lower = -1,
         upper = 1, objective_scale = objective_scale))
     deviation_gradient <- c(deviation_gradient,
-                            as.numeric(gradient) * weight_bound /
+                            as.numeric(gradient) *
+                              rep(as.numeric(parameter_scale),
+                                  length.out = length(gradient)) /
                               objective_scale)
   }
   residuals$centered_mean_deviation <- deviation_residual
@@ -201,7 +217,9 @@
     "centered_mean_deviation", deviation_residual, deviation_gradient,
     dimension = length(deviation_residual),
     applicable = length(deviation_names) > 0L,
-    scale_rule = "each deviation parameter divided by declared weight bound",
+    scale_rule = paste(
+      "hidden parameters divided by the declared weight bound; corrected",
+      "output-map rows additionally divided by their training contrast scale"),
     constraint = "unit box after optimizer-coordinate normalization",
     note = if (!length(deviation_names))
       "Constant mean family has no centered deviation coordinates." else "")
@@ -334,7 +352,9 @@
       a_bound = a_bound, weight_bound = weight_bound)
   } else NULL
   list(loss = loss, objective = objective, unpenalized = unpenalized,
-       penalty = objective - unpenalized, gradient = gradient, kkt = kkt)
+       penalty = objective - unpenalized,
+       objective_definition_id = .scmix_v22_objective_id,
+       gradient = gradient, kkt = kkt)
 }
 
 .sc_mixed_lbfgs_polish <- function(net, data, U_t, logw_t, weight_decay,
@@ -466,7 +486,7 @@
   ## A line-search endpoint that must be projected is not an L-BFGS endpoint
   ## for the declared constrained problem. Restore the feasible pre-polish
   ## state and fail the v2.2 gate rather than certifying the projected point.
-  accepted <- completed && nonworsening && !is.null(attempted) &&
+  accepted <- isTRUE(completed) && isTRUE(nonworsening) && !is.null(attempted) &&
     identical(projection_changed, FALSE)
   ## Detach an accepted endpoint from the optimizer object before that object
   ## is finalized. This avoids any backend-specific lifetime coupling between
@@ -513,9 +533,11 @@
     objective_definition = paste(
       "mean negative complete-sequence log likelihood per respondent plus",
       "the declared mean-deviation penalty, in nats"),
+    objective_definition_id = .scmix_v22_objective_id,
     same_objective_all_stages = isTRUE(same_objective_all_stages),
     method = "full_batch_lbfgs",
     line_search = "strong_wolfe",
+    optimization_method_id = .scmix_v22_polish_method,
     line_search_status = if (!completed) {
       paste0("optimizer_error: ", error_message)
     } else if (!is.finite(after_objective)) {
@@ -566,6 +588,7 @@
       failure_reason = "calibration_mode_cannot_certify",
       kkt_cutoff = kkt_tol,
       nested_fit_relative_cutoff = nested_fit_relative_cutoff,
+      loading_probability_invariance_cutoff = NULL,
       calibration_hash = NA_character_))
   }
   ## Numeric production cutoffs are not an authorization path. They must come
@@ -576,6 +599,7 @@
       status = "direct_numeric_cutoff_rejected",
       failure_reason = "production_cutoff_not_from_calibration_artifact",
       kkt_cutoff = NULL, nested_fit_relative_cutoff = NULL,
+      loading_probability_invariance_cutoff = NULL,
       calibration_hash = NA_character_))
   }
   validator <- get0(".scmix_v22_validate_calibration", mode = "function",
@@ -588,6 +612,7 @@
       status = "calibration_artifact_unavailable",
       failure_reason = "production_calibration_artifact_not_verified",
       kkt_cutoff = NULL, nested_fit_relative_cutoff = NULL,
+      loading_probability_invariance_cutoff = NULL,
       calibration_hash = NA_character_))
   }
   valid <- isTRUE(tryCatch(
@@ -595,7 +620,8 @@
               require_complete = TRUE),
     error = function(e) FALSE))
   constants <- calibration_artifact$constants
-  required <- c("kkt_cutoff", "nested_fit_relative_cutoff")
+  required <- c("kkt_cutoff", "nested_fit_relative_cutoff",
+                "loading_probability_invariance_cutoff")
   constants_ok <- is.numeric(constants) && !is.null(names(constants)) &&
     all(required %in% names(constants)) &&
     all(is.finite(constants[required])) && all(constants[required] >= 0)
@@ -605,6 +631,7 @@
       status = "calibration_artifact_invalid_or_incomplete",
       failure_reason = "production_calibration_artifact_not_verified",
       kkt_cutoff = NULL, nested_fit_relative_cutoff = NULL,
+      loading_probability_invariance_cutoff = NULL,
       calibration_hash = NA_character_))
   }
   list(
@@ -613,6 +640,8 @@
     kkt_cutoff = unname(constants[["kkt_cutoff"]]),
     nested_fit_relative_cutoff =
       unname(constants[["nested_fit_relative_cutoff"]]),
+    loading_probability_invariance_cutoff =
+      unname(constants[["loading_probability_invariance_cutoff"]]),
     calibration_hash = as.character(calibration_artifact$calibration_hash))
 }
 
@@ -662,8 +691,15 @@
     }, logical(1L)))
   bound_activity <- !bound_complete ||
     any(unlist(bounds[required_bound_flags], use.names = FALSE))
+  objective_contract_exact <-
+    identical(polish$objective_definition_id, .scmix_v22_objective_id)
+  polish_contract_exact <-
+    identical(polish$optimization_method_id, .scmix_v22_polish_method) &&
+    identical(polish$method, "full_batch_lbfgs") &&
+    identical(polish$line_search, "strong_wolfe")
   required_artifacts_present <-
     identical(polish$protocol_id, "paperps-inference-2026-09-05-v2.2") &&
+    objective_contract_exact && polish_contract_exact &&
     is.character(polish$dtype) && length(polish$dtype) == 1L &&
     is.numeric(polish$objective_before_polish) &&
     length(polish$objective_before_polish) == 1L &&
@@ -677,11 +713,21 @@
     !is.na(polish$line_search_status) && nzchar(polish$line_search_status) &&
     is.logical(polish$lbfgs_nonworsening) &&
     length(polish$lbfgs_nonworsening) == 1L &&
-    !is.na(polish$lbfgs_nonworsening)
+    !is.na(polish$lbfgs_nonworsening) &&
+    is.logical(polish$returned_matches_accepted_objective) &&
+    length(polish$returned_matches_accepted_objective) == 1L &&
+    isTRUE(polish$returned_matches_accepted_objective) &&
+    mean_reference_available
   absolute_gradient <- unlist(
     polish$absolute_gradient_returned$by_parameter, use.names = TRUE)
   derivatives_finite <- length(absolute_gradient) > 0L &&
     all(is.finite(absolute_gradient)) && kkt_finite
+  polish_gate_pass <- required_artifacts_present &&
+    isTRUE(polish$completed) && isTRUE(polish$accepted) &&
+    identical(polish$projection_changed, FALSE) &&
+    isTRUE(polish$lbfgs_nonworsening) &&
+    isTRUE(polish$same_objective_all_stages) &&
+    isTRUE(polish$returned_matches_accepted_objective)
   failure <- character()
   if (!required_artifacts_present) {
     failure <- c(failure, "missing_explicit_v22_optimizer_evidence")
@@ -694,6 +740,11 @@
   }
   if (!isTRUE(polish$lbfgs_nonworsening)) failure <- c(failure, "lbfgs_polish_worsened_objective")
   if (!isTRUE(polish$same_objective_all_stages)) failure <- c(failure, "optimizer_objective_changed")
+  if (!objective_contract_exact) failure <- c(failure, "optimizer_objective_definition_mismatch")
+  if (!polish_contract_exact) failure <- c(failure, "optimizer_polish_method_mismatch")
+  if (!isTRUE(polish$returned_matches_accepted_objective)) {
+    failure <- c(failure, "returned_state_objective_mismatch")
+  }
   if (!objective_finite) failure <- c(failure, "nonfinite_objective")
   if (!derivatives_finite) failure <- c(failure, "nonfinite_derivatives")
   if (!kkt_finite) failure <- c(failure, "nonfinite_or_missing_projected_kkt")
@@ -737,6 +788,12 @@
     F001 = list(
       statistic = "explicit_v2_2_evidence_present",
       observed = required_artifacts_present, threshold = TRUE,
+      objective_definition_id = polish$objective_definition_id,
+      required_objective_definition_id = .scmix_v22_objective_id,
+      optimization_method_id = polish$optimization_method_id,
+      required_optimization_method_id = .scmix_v22_polish_method,
+      same_objective_all_stages =
+        isTRUE(polish$same_objective_all_stages),
       pass = required_artifacts_present,
       state = if (required_artifacts_present) "pass" else "fail"),
     F002 = list(
@@ -751,13 +808,19 @@
       state = if (objective_finite && derivatives_finite) "pass" else "fail"),
     F004 = list(
       statistic = "lbfgs_polish_completed_and_nonworsening",
-      observed = isTRUE(polish$completed) &&
-        isTRUE(polish$lbfgs_nonworsening) && isTRUE(polish$accepted),
+      observed = polish_gate_pass,
       threshold = TRUE,
-      pass = isTRUE(polish$completed) &&
-        isTRUE(polish$lbfgs_nonworsening) && isTRUE(polish$accepted),
-      state = if (isTRUE(polish$completed) &&
-          isTRUE(polish$lbfgs_nonworsening) && isTRUE(polish$accepted)) {
+      objective_definition_id = polish$objective_definition_id,
+      optimization_method_id = polish$optimization_method_id,
+      completed = isTRUE(polish$completed),
+      accepted = isTRUE(polish$accepted),
+      projection_changed = polish$projection_changed,
+      nonworsening = isTRUE(polish$lbfgs_nonworsening),
+      same_objective_all_stages = isTRUE(polish$same_objective_all_stages),
+      returned_matches_accepted_objective =
+        isTRUE(polish$returned_matches_accepted_objective),
+      pass = polish_gate_pass,
+      state = if (polish_gate_pass) {
         "pass"
       } else "fail"),
     F005 = list(

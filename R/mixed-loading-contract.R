@@ -39,6 +39,132 @@
   out
 }
 
+.scmix_loading_invariance_fingerprint <- function(x) {
+  x$evidence_fingerprint <- NULL
+  .scmix_stable_state_hash(x)
+}
+
+.scmix_validate_loading_invariance_evidence <- function(x) {
+  required <- c(
+    "protocol_id", "analysis_signature", "scope", "protocol_mode",
+    "calibration_hash", "network_state_hash", "evaluation_data_hash",
+    "maximum_absolute_probability_difference",
+    "maximum_absolute_sequence_loglik_difference", "threshold", "state",
+    "pass", "evidence_fingerprint")
+  if (!inherits(x, "scmix_loading_invariance_evidence") || !is.list(x) ||
+      !all(required %in% names(x)) ||
+      !identical(x$protocol_id, "paperps-inference-2026-09-05-v2.2") ||
+      !x$protocol_mode %in% c("calibration", "production") ||
+      !x$state %in% c("pass", "warn", "fail", "not_run",
+                      "not_applicable") ||
+      !is.numeric(x$maximum_absolute_probability_difference) ||
+      length(x$maximum_absolute_probability_difference) != 1L ||
+      !is.finite(x$maximum_absolute_probability_difference) ||
+      !is.numeric(x$maximum_absolute_sequence_loglik_difference) ||
+      length(x$maximum_absolute_sequence_loglik_difference) != 1L ||
+      !is.finite(x$maximum_absolute_sequence_loglik_difference) ||
+      !identical(x$evidence_fingerprint,
+                 .scmix_loading_invariance_fingerprint(x))) {
+    stop("Malformed or tampered L002 loading-invariance evidence.",
+         call. = FALSE)
+  }
+  invisible(x)
+}
+
+## Evaluate the same fitted respondent-sequence model in optimizer coordinates
+## and raw conjoint coordinates. This is intentionally performed on a live
+## fitted network rather than asserted from the algebraic loading identity.
+.scmix_loading_invariance_evidence <- function(
+    net, deltaX_raw, y, Z_transformed, respondent_id, integration_grid,
+    coefficient_scale, analysis_signature, scope,
+    protocol_mode = c("calibration", "production"),
+    calibration_verified = FALSE, calibration_hash = NA_character_,
+    probability_cutoff = NULL, device = "cpu") {
+  protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
+  deltaX_raw <- as.matrix(deltaX_raw)
+  Z_transformed <- as.matrix(Z_transformed)
+  y <- as.numeric(y)
+  coefficient_scale <- .scmix_loading_scale(
+    coefficient_scale, ncol(deltaX_raw), "coefficient_scale")
+  if (nrow(deltaX_raw) != length(y) || nrow(Z_transformed) != length(y) ||
+      length(respondent_id) != length(y) || any(!is.finite(deltaX_raw)) ||
+      any(!is.finite(Z_transformed)) || any(!y %in% c(0, 1))) {
+    stop("Malformed data for L002 loading-invariance evidence.", call. = FALSE)
+  }
+  deltaX_opt <- sweep(deltaX_raw, 2L, coefficient_scale, `/`)
+  mu_opt <- .sc_predict_beta(net, Z_transformed)
+  mu_raw <- sweep(mu_opt, 2L, coefficient_scale, `/`)
+  q <- net$q
+  A_opt <- if (q == 0L) matrix(numeric(), ncol(deltaX_raw), 0L) else
+    as.matrix(torch::as_array(net$A$detach()$cpu()))
+  A_raw <- .scmix_loading_to_raw(A_opt, coefficient_scale)
+  kappa <- as.numeric(net$get_kappa()$detach()$cpu()$item())
+  U <- as.matrix(integration_grid$U)
+  w <- as.numeric(integration_grid$w)
+  optimizer_index <- kappa + rowSums(deltaX_opt * mu_opt)
+  raw_index <- kappa + rowSums(deltaX_raw * mu_raw)
+  optimizer_factor <- deltaX_opt %*% A_opt %*% t(U)
+  raw_factor <- deltaX_raw %*% A_raw %*% t(U)
+  optimizer_eta <- sweep(optimizer_factor, 1L, optimizer_index, `+`)
+  raw_eta <- sweep(raw_factor, 1L, raw_index, `+`)
+  probability_difference <- max(abs(
+    stats::plogis(optimizer_eta) - stats::plogis(raw_eta)))
+
+  optimizer_sequence <- .sc_comp_sequence_loglik(
+    net, deltaX_opt, y, Z_transformed, respondent_id, integration_grid,
+    device = device)
+  log_sigmoid <- function(x) -pmax(-x, 0) - log1p(exp(-abs(x)))
+  raw_lp <- y * log_sigmoid(raw_eta) +
+    (1 - y) * log_sigmoid(-raw_eta)
+  respondent_levels <- unique(as.character(respondent_id))
+  raw_sequence <- vapply(respondent_levels, function(id) {
+    rows <- as.character(respondent_id) == id
+    by_draw <- colSums(raw_lp[rows, , drop = FALSE])
+    maximum <- max(by_draw)
+    maximum + log(sum(w * exp(by_draw - maximum)))
+  }, numeric(1L))
+  sequence_difference <- max(abs(
+    unname(optimizer_sequence[respondent_levels]) - raw_sequence))
+  cutoff_available <- is.numeric(probability_cutoff) &&
+    length(probability_cutoff) == 1L && is.finite(probability_cutoff) &&
+    probability_cutoff >= 0
+  gate_pass <- identical(protocol_mode, "production") &&
+    isTRUE(calibration_verified) && cutoff_available &&
+    probability_difference <= probability_cutoff
+  out <- list(
+    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    analysis_signature = analysis_signature, scope = scope,
+    protocol_mode = protocol_mode,
+    calibration_hash = calibration_hash,
+    network_state_hash = .scmix_stable_state_hash(lapply(
+      net$state_dict(), .scmix_tensor_cpu_array)),
+    evaluation_data_hash = .scmix_stable_state_hash(list(
+      deltaX_raw = deltaX_raw, y = y, Z_transformed = Z_transformed,
+      respondent_id = as.character(respondent_id),
+      integration_U = U, integration_w = w,
+      coefficient_scale = coefficient_scale)),
+    statistic = "fitted_probability_scale_invariance",
+    maximum_absolute_probability_difference = probability_difference,
+    maximum_absolute_sequence_loglik_difference = sequence_difference,
+    threshold = if (cutoff_available) probability_cutoff else
+      "CALIBRATE_IN_STEP_3",
+    comparator = "less_than_or_equal",
+    units = "maximum_absolute_probability_difference",
+    provenance = paste(
+      "live fitted network evaluated on the same respondent sequences in",
+      "raw and optimization contrast coordinates"),
+    pass = gate_pass,
+    state = if (identical(protocol_mode, "calibration")) {
+      "not_run"
+    } else if (!isTRUE(calibration_verified) || !cutoff_available) {
+      "fail"
+    } else if (gate_pass) "pass" else "fail")
+  class(out) <- c("scmix_loading_invariance_evidence", "list")
+  out$evidence_fingerprint <- .scmix_loading_invariance_fingerprint(out)
+  .scmix_validate_loading_invariance_evidence(out)
+  out
+}
+
 .scmix_add_loading_contract <- function(object, q,
                                         raw_full = NULL,
                                         optimization_full = NULL,
@@ -46,6 +172,7 @@
                                         raw_folds = NULL,
                                         optimization_folds = NULL,
                                         coefficient_scale_folds = NULL,
+                                        invariance_evidence = NULL,
                                         source = NULL) {
   q <- as.integer(q)
   p <- if (!is.null(coefficient_scale_full)) {
@@ -151,6 +278,25 @@
   object$A_optimization_full <- if (full_available) optimization_full else NULL
   object$A_raw_folds <- if (fold_available) raw_folds else NULL
   object$A_optimization_folds <- if (fold_available) optimization_folds else NULL
+  evidence_list <- if (is.null(invariance_evidence)) list() else
+    if (inherits(invariance_evidence, "scmix_loading_invariance_evidence")) {
+      list(invariance_evidence)
+    } else invariance_evidence
+  if (!is.list(evidence_list)) {
+    stop("`invariance_evidence` must be an L002 evidence object or list.",
+         call. = FALSE)
+  }
+  if (length(evidence_list)) {
+    lapply(evidence_list, .scmix_validate_loading_invariance_evidence)
+  }
+  l002_state <- if (!length(evidence_list)) "not_run" else if (
+      all(vapply(evidence_list, function(x) identical(x$state, "pass"),
+                 logical(1L)))) "pass" else if (
+      all(vapply(evidence_list, function(x) identical(x$state, "not_run"),
+                 logical(1L)))) "not_run" else "fail"
+  l002_observed <- if (length(evidence_list)) max(vapply(
+    evidence_list, `[[`, numeric(1L),
+    "maximum_absolute_probability_difference")) else NA_real_
   object$loading_contract <- list(
     contract_id = "scmix-loading-scale-v1",
     contract_version = 1L,
@@ -182,6 +328,23 @@
         "legacy name for raw outer-fold loadings; do not infer scale from",
         "this alias")),
     source = source,
+    gate_evidence = list(
+      L001 = list(
+        statistic = "raw_optimization_loading_round_trip",
+        observed = round_trip_pass, threshold = TRUE, comparator = "equal",
+        units = "boolean", provenance = "loading_contract_test",
+        pass = round_trip_pass,
+        state = if (round_trip_pass) "pass" else "fail"),
+      L002 = list(
+        statistic = "fitted_probability_scale_invariance",
+        observed = l002_observed,
+        threshold = if (length(evidence_list))
+          evidence_list[[1L]]$threshold else "CALIBRATE_IN_STEP_3",
+        comparator = "less_than_or_equal",
+        units = "maximum_absolute_probability_difference",
+        provenance = "loading_contract_test",
+        pass = identical(l002_state, "pass"), state = l002_state,
+        fit_scoped_evidence = evidence_list)),
     construction_check = list(
       max_round_trip_error = max_error,
       tolerance = max(round_trip_tolerance),
@@ -236,15 +399,24 @@
                  paste0("fold ", k))
     }
   }
+  l002 <- contract$gate_evidence$L002$fit_scoped_evidence
+  if (!is.null(l002)) {
+    if (!is.list(l002)) {
+      stop("Malformed L002 evidence in the loading contract.", call. = FALSE)
+    }
+    lapply(l002, .scmix_validate_loading_invariance_evidence)
+  }
   invisible(contract)
 }
 
 #' Extract mixed-logit loadings on an explicit scale
 #'
 #' Returns the loading paired with either the raw conjoint contrasts or the
-#' standardized contrasts used by the optimizer. New fits store both forms and
-#' a versioned round-trip contract. Legacy aliases such as `A`, `A_hat`, and
-#' `A_computational_folds` are deliberately not guessed by this accessor.
+#' standardized contrasts used by the optimizer. New fits store both forms, a
+#' versioned round-trip contract, and fit-scoped L002 evidence from evaluating
+#' the live respondent-sequence model under equivalent preprocessing scales.
+#' Legacy aliases such as `A`, `A_hat`, and `A_computational_folds` are
+#' deliberately not guessed by this accessor.
 #'
 #' @param object An `scmix`, `scmix_tuned_matrix_fit`,
 #'   `scmix_nested_assembled`, or portable `scmix_network_state` object.

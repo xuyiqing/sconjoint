@@ -51,12 +51,16 @@ test_that("v2.2 optimization gate fails closed before cutoff calibration", {
     scaled_gradient_rms = c(1e-5, 2e-5))
   polish <- list(
     protocol_id = "paperps-inference-2026-09-05-v2.2",
+    objective_definition_id = sconjoint:::.scmix_v22_objective_id,
+    optimization_method_id = sconjoint:::.scmix_v22_polish_method,
+    method = "full_batch_lbfgs", line_search = "strong_wolfe",
     dtype = "float64", completed = TRUE, accepted = TRUE,
     projection_changed = FALSE, lbfgs_nonworsening = TRUE,
     same_objective_all_stages = TRUE,
     objective_before_polish = 1.1, objective_after_polish = 1,
     objective_returned = 1, iterations = 2L,
     line_search_status = "optimizer_returned_strong_wolfe",
+    returned_matches_accepted_objective = TRUE,
     kkt_before_polish = list(all_finite = TRUE),
     kkt_after_polish = list(all_finite = TRUE),
     kkt_returned = list(all_finite = TRUE, maximum = 2e-5,
@@ -103,6 +107,122 @@ test_that("v2.2 optimization gate fails closed before cutoff calibration", {
   expect_false(projected$optimization_gate_pass)
   expect_true("lbfgs_endpoint_required_projection" %in%
                 projected$failure_reasons)
+})
+
+test_that("F001-F006 cannot all pass when a top-level optimizer gate fails", {
+  blocks <- data.frame(
+    block = c("unpenalized_mean_reference", "all_structural_coordinates"),
+    applicable = TRUE, dimension = c(1L, 2L),
+    projected_kkt_rms = c(1e-6, 2e-6),
+    scaled_gradient_rms = c(1e-6, 2e-6))
+  base <- list(
+    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    objective_definition_id = sconjoint:::.scmix_v22_objective_id,
+    optimization_method_id = sconjoint:::.scmix_v22_polish_method,
+    method = "full_batch_lbfgs", line_search = "strong_wolfe",
+    dtype = "float64", completed = TRUE, accepted = TRUE,
+    projection_changed = FALSE, lbfgs_nonworsening = TRUE,
+    same_objective_all_stages = TRUE,
+    returned_matches_accepted_objective = TRUE,
+    objective_before_polish = 1.1, objective_after_polish = 1,
+    objective_returned = 1, iterations = 2L,
+    line_search_status = "optimizer_returned_strong_wolfe",
+    kkt_before_polish = list(all_finite = TRUE),
+    kkt_after_polish = list(all_finite = TRUE),
+    kkt_returned = list(all_finite = TRUE, maximum = 2e-6,
+                        blocks = blocks),
+    absolute_gradient_returned = list(by_parameter = c(alpha_raw = 1e-6)))
+  bounds <- list(mu_active = FALSE, kappa_active = FALSE,
+                 a_active = FALSE, weight_active = FALSE,
+                 alpha_active = FALSE,
+                 alpha_diagnostics_applicable = TRUE)
+  tamper <- list(
+    objective_definition_id = "wrong_objective",
+    optimization_method_id = "wrong_method",
+    same_objective_all_stages = FALSE,
+    projection_changed = TRUE,
+    returned_matches_accepted_objective = FALSE)
+  for (field in names(tamper)) {
+    bad <- base
+    bad[[field]] <- tamper[[field]]
+    status <- sconjoint:::.sc_mixed_v22_optimization_status(
+      bad, bounds, kkt_cutoff = 1e-4, protocol_mode = "production",
+      calibration_verified = TRUE)
+    states <- vapply(status$gate_evidence[paste0("F00", 1:6)], `[[`,
+                     character(1L), "state")
+    expect_false(status$optimization_gate_pass, info = field)
+    expect_true(any(states == "fail"), info = field)
+  }
+})
+
+test_that("corrected output scaling preserves objective, KKT, and sequences", {
+  skip_if_not_installed("torch")
+  p <- 2L
+  raw_dx <- matrix(c(-1, .2, .5, -.3, .8, .7, -.4, 1.1), 4L, p)
+  Z <- matrix(c(-1, -.2, .4, 1), ncol = 1L)
+  y <- c(1, 0, 1, 0)
+  rid <- c(1, 1, 2, 2)
+  grid <- sconjoint:::.sc_gh_grid(1L, 7L)
+  alpha_raw <- c(.2, -.1)
+  deviation_raw <- matrix(c(.35, -.25), p, 1L)
+  A_raw <- matrix(c(.15, -.2), p, 1L)
+  make_case <- function(scale) {
+    net <- sconjoint:::.sc_build_mixed_network(
+      p = p, p_Z = 1L, q = 1L, hidden = integer(), mean_family = "linear",
+      coefficient_scale = scale, a_bound = 3, weight_bound = 2)
+    state <- sconjoint:::.scmix_clone_network_state(net)
+    state$alpha_raw <- alpha_raw * scale
+    state$param_layer.weight <- deviation_raw * scale
+    state$A <- A_raw * scale
+    state$kappa_raw <- array(0.1, dim = 1L)
+    sconjoint:::.scmix_load_network_state(net, state)
+    dx <- sweep(raw_dx, 2L, scale, `/`)
+    data <- list(
+      dx = torch::torch_tensor(dx, dtype = torch::torch_float64()),
+      zt = torch::torch_tensor(Z, dtype = torch::torch_float64()),
+      yt = torch::torch_tensor(y, dtype = torch::torch_float64()),
+      idx1 = torch::torch_tensor(rid, dtype = torch::torch_long()), N = 2L)
+    U <- torch::torch_tensor(grid$U, dtype = torch::torch_float64())
+    logw <- torch::torch_tensor(log(grid$w), dtype = torch::torch_float64())
+    evaluated <- sconjoint:::.sc_mixed_evaluate_full_objective(
+      net, data, U, logw, weight_decay = .03,
+      coefficient_scale = scale, kappa_bound = 10, alpha_bound = 5,
+      a_bound = 3, weight_bound = 2, backward = TRUE)
+    evidence <- sconjoint:::.scmix_loading_invariance_evidence(
+      net, raw_dx, y, Z, rid, grid, scale,
+      analysis_signature = "scale-invariance-test", scope = "unit-fit",
+      protocol_mode = "calibration")
+    list(net = net, evaluated = evaluated, evidence = evidence)
+  }
+  one <- make_case(c(1, 1))
+  two <- make_case(c(.25, 4))
+  expect_equal(one$evaluated$objective, two$evaluated$objective,
+               tolerance = 1e-12)
+  expect_equal(one$evaluated$unpenalized, two$evaluated$unpenalized,
+               tolerance = 1e-12)
+  expect_equal(one$evaluated$kkt$blocks$projected_kkt_rms,
+               two$evaluated$kkt$blocks$projected_kkt_rms,
+               tolerance = 1e-11)
+  expect_lte(one$evidence$maximum_absolute_probability_difference, 1e-14)
+  expect_lte(two$evidence$maximum_absolute_probability_difference, 1e-14)
+  expect_lte(one$evidence$maximum_absolute_sequence_loglik_difference, 1e-12)
+  expect_lte(two$evidence$maximum_absolute_sequence_loglik_difference, 1e-12)
+  expect_identical(one$evidence$state, "not_run")
+
+  bounded <- two$net
+  torch::with_no_grad({
+    scale <- torch::torch_tensor(c(.25, 4), dtype = torch::torch_float64())$
+      unsqueeze(2L)
+    bounded$param_layer$weight$copy_(
+      torch::torch_tensor(matrix(c(3, -4), p, 1L),
+                          dtype = torch::torch_float64()) * scale)
+  })
+  sconjoint:::.sc_mixed_project_parameters(
+    bounded, coefficient_scale = c(.25, 4), alpha_bound = 5,
+    a_bound = 3, weight_bound = 2)
+  output_raw <- sweep(as.matrix(torch::as_array(
+    bounded$param_layer$weight$detach()$cpu())), 1L, c(.25, 4), `/`)
+  expect_equal(as.numeric(output_raw), c(2, -2), tolerance = 1e-12)
 })
 
 test_that("float64 L-BFGS polish is settled, nonworsening, and audited", {

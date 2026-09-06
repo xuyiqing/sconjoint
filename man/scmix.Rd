@@ -116,9 +116,10 @@ output box.}
 raw coefficient units. Training-scale loadings are projected after every
 optimizer update using the corresponding contrast scales.}
 
-\item{weight_bound}{Positive finite coordinatewise bound on every
-mean-network weight and bias. Network parameters are projected after every
-optimizer update.}
+\item{weight_bound}{Positive finite coordinatewise raw-unit bound for the
+corrected deviation output map and optimizer-coordinate bound for hidden
+weights and biases. Output rows are rescaled with the training contrast
+scales. Network parameters are projected after every optimizer update.}
 
 \item{opt_tol, grad_tol}{Legacy Adam-stage stopping controls. They do not
 determine the v2.2 computation gate.}

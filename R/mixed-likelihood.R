@@ -387,9 +387,13 @@
 #' projection is with respect to that raw-unit Frobenius norm. In the corrected
 #' families, `alpha_raw / coefficient_scale` is the unpenalized conditional
 #' mean at the training-coded origin and is projected coordinatewise in raw
-#' coefficient units. Deviation-network weights and biases are separately
-#' clipped at `weight_bound`. The legacy family retains its original all-mean-
-#' parameter projection solely for version-1 reproducibility.
+#' coefficient units. In corrected linear and ReLU families, each row of the
+#' deviation output map is also a coefficient-scale coordinate. Its optimizer
+#' bound is therefore `coefficient_scale[j] * weight_bound`, which represents
+#' the same raw output-map bound in every equivalent contrast preprocessing.
+#' Hidden weights and biases retain the scalar `weight_bound`. The legacy
+#' family retains its original all-mean-parameter projection solely for
+#' version-1 reproducibility.
 #'
 #' @keywords internal
 #' @noRd
@@ -402,10 +406,23 @@
     alpha_bound = alpha_bound)
   excluded <- c("A", "kappa_raw", "alpha_raw")
   sieve_names <- setdiff(names(net$parameters), excluded)
+  corrected_output <- !is.null(net$mean_family) &&
+    !identical(net$mean_family, "legacy") &&
+    "param_layer.weight" %in% sieve_names
   torch::with_no_grad({
     for (nm in sieve_names) {
-      net$parameters[[nm]]$clamp_(min = -compact$weight_bound,
-                                  max = compact$weight_bound)
+      if (corrected_output && identical(nm, "param_layer.weight")) {
+        row_bound <- torch::torch_tensor(
+          compact$coefficient_scale * compact$weight_bound,
+          dtype = net$parameters[[nm]]$dtype,
+          device = net$parameters[[nm]]$device)$unsqueeze(2L)
+        net$parameters[[nm]]$copy_(torch::torch_maximum(
+          torch::torch_minimum(net$parameters[[nm]], row_bound),
+          -row_bound))
+      } else {
+        net$parameters[[nm]]$clamp_(min = -compact$weight_bound,
+                                    max = compact$weight_bound)
+      }
     }
     if ("alpha_raw" %in% names(net$parameters)) {
       scale_t <- torch::torch_tensor(
@@ -445,9 +462,16 @@
     alpha_bound = alpha_bound)
   sieve_names <- setdiff(names(net$parameters),
                          c("A", "kappa_raw", "alpha_raw"))
+  corrected_output <- !is.null(net$mean_family) &&
+    !identical(net$mean_family, "legacy")
   weight_max <- if (length(sieve_names)) {
     max(vapply(sieve_names, function(nm) {
-      as.numeric(net$parameters[[nm]]$detach()$abs()$max()$item())
+      value <- .scmix_parameter_array(net$parameters[[nm]])
+      if (corrected_output && identical(nm, "param_layer.weight")) {
+        value <- sweep(as.matrix(value), 1L,
+                       compact$coefficient_scale, `/`)
+      }
+      max(abs(value), 0)
     }, numeric(1L)))
   } else 0
   alpha_raw <- if ("alpha_raw" %in% names(net$parameters)) {
@@ -546,6 +570,7 @@
       self$mean_family <- mean_family
       self$mu_bound <- mu_bound
       self$kappa_bound <- kappa_bound
+      self$coefficient_scale <- compact$coefficient_scale
       if (mean_family != "legacy") {
         ## DeltaX is divided by coefficient_scale for optimization, hence the
         ## internal coefficient is beta-dagger = D beta. Coordinatewise
@@ -692,7 +717,18 @@
   }
   out <- torch::torch_zeros(1L, dtype = net$kappa_raw$dtype,
                             device = net$kappa_raw$device)
-  for (nm in nms) out <- out + torch::torch_sum(net$parameters[[nm]]^2)
+  corrected_output <- !is.null(net$mean_family) &&
+    !identical(net$mean_family, "legacy")
+  for (nm in nms) {
+    value <- net$parameters[[nm]]
+    if (corrected_output && identical(nm, "param_layer.weight")) {
+      scale_t <- torch::torch_tensor(
+        net$coefficient_scale,
+        dtype = value$dtype, device = value$device)$unsqueeze(2L)
+      value <- value / scale_t
+    }
+    out <- out + torch::torch_sum(value^2)
+  }
   weight_decay * out
 }
 
@@ -1454,6 +1490,47 @@
     state_hash <- .scmix_stable_state_hash(list(
       state_dict = state, A_optimization = fit_s$A,
       kappa = fit_s$kappa))
+    optimizer_evidence <- list(
+      protocol_id = fit_s$polish$protocol_id,
+      protocol_mode = fit_s$protocol_mode,
+      calibration_hash = fit_s$calibration_verification$calibration_hash %||%
+        NA_character_,
+      objective = list(
+        before_polish = fit_s$polish$objective_before_polish,
+        after_polish = fit_s$polish$objective_after_polish,
+        returned = fit_s$polish$objective_returned,
+        unpenalized_before_polish =
+          fit_s$polish$unpenalized_objective_before_polish,
+        unpenalized_after_polish =
+          fit_s$polish$unpenalized_objective_after_polish,
+        nonworsening_numerical_allowance =
+          fit_s$polish$nonworsening_numerical_allowance,
+        definition = fit_s$polish$objective_definition,
+        definition_id = fit_s$polish$objective_definition_id),
+      polish = list(
+        method = fit_s$polish$method,
+        line_search = fit_s$polish$line_search,
+        method_id = fit_s$polish$optimization_method_id,
+        line_search_status = fit_s$polish$line_search_status,
+        completed = isTRUE(fit_s$polish$completed),
+        accepted = isTRUE(fit_s$polish$accepted),
+        projection_changed = fit_s$polish$projection_changed,
+        nonworsening = isTRUE(fit_s$polish$lbfgs_nonworsening),
+        same_objective_all_stages =
+          isTRUE(fit_s$polish$same_objective_all_stages),
+        returned_matches_accepted_objective =
+          isTRUE(fit_s$polish$returned_matches_accepted_objective),
+        iterations = fit_s$polish$iterations,
+        function_evaluations = fit_s$polish$function_evaluations,
+        closure_calls = fit_s$polish$closure_calls),
+      bounds = fit_s$bounds,
+      kkt = list(
+        before_polish = fit_s$polish$kkt_before_polish,
+        after_polish = fit_s$polish$kkt_after_polish,
+        returned = fit_s$polish$kkt_returned),
+      gate_evidence = fit_s$v22_optimization_status$gate_evidence,
+      gate_failure_reasons =
+        fit_s$v22_optimization_status$failure_reasons)
     list(
       start = as.integer(s),
       start_id = start_id,
@@ -1475,6 +1552,7 @@
       protocol_mode = fit_s$protocol_mode,
       calibration_hash = fit_s$calibration_verification$calibration_hash %||%
         NA_character_,
+      optimizer_evidence = optimizer_evidence,
       v22_optimization_status = fit_s$v22_optimization_status)
   })
   sorted <- sort(objective[finite_objective], decreasing = TRUE)
@@ -1541,9 +1619,10 @@
 #' @param a_bound Positive finite Frobenius-norm bound on the loading matrix in
 #'   raw coefficient units. Training-scale loadings are projected after every
 #'   optimizer update using the corresponding contrast scales.
-#' @param weight_bound Positive finite coordinatewise bound on every
-#'   mean-network weight and bias. Network parameters are projected after every
-#'   optimizer update.
+#' @param weight_bound Positive finite coordinatewise raw-unit bound for the
+#'   corrected deviation output map and optimizer-coordinate bound for hidden
+#'   weights and biases. Output rows are rescaled with the training contrast
+#'   scales. Network parameters are projected after every optimizer update.
 #' @param opt_tol,grad_tol Legacy Adam-stage stopping controls. They do not
 #'   determine the v2.2 computation gate.
 #' @param kkt_tol Cutoff for the maximum block-scaled projected-KKT residual
@@ -1903,6 +1982,30 @@ scmix <- function(formula, data,
     )
   )
 
+  full_scope <- "full-sample structural plug-in fit"
+  fold_scopes <- paste0("outer-fold nuisance fit ", seq_len(K))
+  loading_invariance_full <- .scmix_loading_invariance_evidence(
+    full_fit$net, deltaX, y, Z_full, resp_task, gh, sd_dx,
+    analysis_signature = analysis_signature, scope = full_scope,
+    protocol_mode = protocol_mode,
+    calibration_verified = calibration_verification$verified,
+    calibration_hash = calibration_verification$calibration_hash,
+    probability_cutoff =
+      calibration_verification$loading_probability_invariance_cutoff,
+    device = device)
+  loading_invariance_folds <- lapply(seq_len(K), function(k) {
+    Z_all_k <- .sc_apply_z_transform(Z_task, z_transform_folds[[k]])
+    .scmix_loading_invariance_evidence(
+      nets[[k]], deltaX, y, Z_all_k, resp_task, gh, sd_dx_folds[[k]],
+      analysis_signature = analysis_signature, scope = fold_scopes[k],
+      protocol_mode = protocol_mode,
+      calibration_verified = calibration_verification$verified,
+      calibration_hash = calibration_verification$calibration_hash,
+      probability_cutoff =
+        calibration_verification$loading_probability_invariance_cutoff,
+      device = device)
+  })
+
   ## Torch nn_modules contain session-local external pointers and are not
   ## durable when embedded directly in an RDS file.  Retain the live modules
   ## for backward compatibility within this process, and also capture a
@@ -1917,10 +2020,12 @@ scmix <- function(formula, data,
     dx_transform = dx_transform_full, coefficient_names = enc$x_names,
     moderator_names = enc$z_names, integration_grid = gh,
     analysis_signature = analysis_signature,
-    scope = "full-sample structural plug-in fit"
+    scope = full_scope
   )
+  network_state_full <- .scmix_attach_network_loading_evidence(
+    network_state_full, loading_invariance_full)
   network_state_folds <- lapply(seq_len(K), function(k) {
-    .scmix_capture_network_state(
+    state <- .scmix_capture_network_state(
       nets[[k]], p = p, p_Z = ncol(Z_task), q = q, hidden = hidden_use,
       mean_family = family_use,
       mu_bound = mu_bound, kappa_bound = kappa_bound,
@@ -1931,8 +2036,10 @@ scmix <- function(formula, data,
       dx_transform = dx_transform_folds[[k]],
       coefficient_names = enc$x_names, moderator_names = enc$z_names,
       integration_grid = gh, analysis_signature = analysis_signature,
-      scope = paste0("outer-fold nuisance fit ", k)
+      scope = fold_scopes[k]
     )
+    .scmix_attach_network_loading_evidence(
+      state, loading_invariance_folds[[k]])
   })
   multistart_full <- .scmix_complete_multistart_artifacts(
     full_fit, network_state_full, sd_dx)
@@ -2039,6 +2146,8 @@ scmix <- function(formula, data,
     coefficient_scale_full = sd_dx,
     raw_folds = A_folds, optimization_folds = A_optimization_folds,
     coefficient_scale_folds = sd_dx_folds,
+    invariance_evidence = c(list(loading_invariance_full),
+                            loading_invariance_folds),
     source = paste(
       "Explicit raw and optimizer-scale loadings from the full fit and",
       "respondent-level outer-fold fits."))

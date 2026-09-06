@@ -28,7 +28,9 @@ Attributes record the scale, scope, contract ID, and associated contrast scale.
 }
 \description{
 Returns the loading paired with either the raw conjoint contrasts or the
-standardized contrasts used by the optimizer. New fits store both forms and a
-versioned round-trip contract. Legacy aliases such as \code{A}, \code{A_hat},
-and \code{A_computational_folds} are deliberately not guessed by this accessor.
+standardized contrasts used by the optimizer. New fits store both forms, a
+versioned round-trip contract, and fit-scoped L002 evidence from evaluating
+the live respondent-sequence model under equivalent preprocessing scales.
+Legacy aliases such as \code{A}, \code{A_hat}, and
+\code{A_computational_folds} are deliberately not guessed by this accessor.
 }
