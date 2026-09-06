@@ -28,6 +28,20 @@ test_that("v2.3 Step-3 plan is complete, response-free, and prospective", {
   expect_identical(plan$counts[["torch_threads_per_worker"]], 1L)
   expect_identical(plan$counts[["blas_threads_per_worker"]], 1L)
   expect_identical(plan$counts[["transport_validation_reps"]], 1L)
+  expect_identical(plan$counts[["numerical_ordinary_outer_folds"]], 2L)
+  expect_identical(plan$counts[["numerical_ordinary_inner_folds"]], 2L)
+  expect_identical(plan$counts[["numerical_ordinary_optimizer_starts"]], 2L)
+  expect_identical(plan$counts[["numerical_ordinary_reference_gh_nodes"]],
+                   15L)
+  expect_identical(plan$counts[["numerical_ordinary_refined_gh_nodes"]],
+                   31L)
+  expect_identical(plan$counts[["transport_outer_folds"]], 5L)
+  expect_identical(plan$counts[["transport_inner_folds"]], 2L)
+  expect_identical(plan$counts[["transport_optimizer_starts"]], 3L)
+  expect_identical(plan$counts[["transport_reference_gh_nodes"]], 31L)
+  expect_identical(plan$counts[["transport_refined_gh_nodes"]], 61L)
+  expect_identical(
+    plan$counts[["transport_common_respondent_multipliers"]], 9999L)
   expect_identical(
     plan$counts[["minimum_released_for_conditional_coverage"]], 1000L)
   expect_equal(plan$rates[["maximum_interval_median_ratio_to_oracle"]],
@@ -56,6 +70,12 @@ test_that("v2.3 Step-3 plan is complete, response-free, and prospective", {
                           "frozen_inclusive_comparator"))
   expect_match(plan$raw[["Validation-Interval-Efficiency-Criterion"]],
                "ideal_unconstrained_linear_Wald_benchmark", fixed = TRUE)
+  expect_match(plan$raw[["Moderator-Selection"]],
+               "first_response_free_Z_column_with_nonzero", fixed = TRUE)
+  expect_match(plan$raw[["Subgroup-Definition"]],
+               "z_greater_than_zero_after_standardization", fixed = TRUE)
+  expect_match(plan$raw[["Subgroup-Definition"]],
+               "ties_belong_to_low", fixed = TRUE)
 })
 
 test_that("subgroup target retains the frozen a-over-b composite contract", {
@@ -70,6 +90,9 @@ test_that("subgroup target retains the frozen a-over-b composite contract", {
             "subgroup_z_low_numerator_a",
             "subgroup_z_low_denominator_b"), collapse = ";"))
   expect_match(row$truth_definition, "target=a_B/b_B", fixed = TRUE)
+  expect_identical(
+    row$variant_ids,
+    "z_positive_after_standardization;z_nonpositive_after_standardization")
   expect_identical(row$primitive_constraints,
                    "for_each_variant_0<a_B<b_B<1")
   expect_identical(row$chart_coordinates,

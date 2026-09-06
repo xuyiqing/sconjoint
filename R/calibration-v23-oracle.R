@@ -39,8 +39,8 @@
 .scmix_v23_oracle_variants <- c(
   unrestricted_mean_direction = "all_respondents",
   probability = "all_respondents",
-  subgroup_share__z_high = "z_above_design_median",
-  subgroup_share__z_low = "z_at_or_below_design_median",
+  subgroup_share__z_high = "z_positive_after_standardization",
+  subgroup_share__z_low = "z_nonpositive_after_standardization",
   preference_direction_share = "r_positive",
   compensating_benefit_share = "r_plus_0.5_times_d_positive",
   directional_heterogeneity = "r_explained_share",
@@ -249,9 +249,13 @@
   }
   z_raw <- z_resp[, varying[[1L]]]
   z <- as.numeric((z_raw - mean(z_raw)) / stats::sd(z_raw))
-  subgroup <- z > stats::median(z)
+  ## The first respondent-varying moderator is centered at its empirical
+  ## respondent mean before scaling.  Thus z > 0 is the fixed above-mean
+  ## subgroup and z <= 0 is its complement.  This remains meaningful for a
+  ## binary first moderator, unlike a strict above-median split.
+  subgroup <- z > 0
   if (!any(subgroup) || all(subgroup)) {
-    stop("The frozen above-median subgroup is empty or universal.",
+    stop("The frozen above-mean subgroup is empty or universal.",
          call. = FALSE)
   }
   order_in_respondent <- integer(length(group))

@@ -263,8 +263,23 @@ scmix_v23_calibration_plan <- function() {
       "Numerical-Calibration-Base-Outcomes-Per-Design",
     numerical_validation_base_outcomes =
       "Numerical-Validation-Base-Outcomes-Per-Design",
+    numerical_ordinary_outer_folds = "Numerical-Ordinary-Outer-Folds",
+    numerical_ordinary_inner_folds = "Numerical-Ordinary-Inner-Folds",
+    numerical_ordinary_optimizer_starts =
+      "Numerical-Ordinary-Optimizer-Starts",
+    numerical_ordinary_reference_gh_nodes =
+      "Numerical-Ordinary-Reference-GH-Nodes",
+    numerical_ordinary_refined_gh_nodes =
+      "Numerical-Ordinary-Refined-GH-Nodes",
     transport_validation_reps =
       "Transport-Validation-Replications-Per-Design",
+    transport_outer_folds = "Transport-Outer-Folds",
+    transport_inner_folds = "Transport-Inner-Folds",
+    transport_optimizer_starts = "Transport-Optimizer-Starts",
+    transport_reference_gh_nodes = "Transport-Reference-GH-Nodes",
+    transport_refined_gh_nodes = "Transport-Refined-GH-Nodes",
+    transport_common_respondent_multipliers =
+      "Transport-Common-Respondent-Multipliers",
     oracle_calibration_seed = "Oracle-Calibration-Master-Seed",
     oracle_validation_seed = "Oracle-Validation-Master-Seed",
     numerical_calibration_seed = "Numerical-Calibration-Master-Seed",
@@ -563,8 +578,11 @@ scmix_v23_load_frozen_design <- function(design_id) {
     z <- if (length(varying)) rescale(z_resp[, varying[[1L]]]) else
       rescale(seq_along(id_levels))
   } else z <- rescale(seq_along(id_levels))
-  subgroup <- z > stats::median(z)
-  if (!any(subgroup) || all(subgroup)) subgroup <- seq_along(z) %% 2L == 0L
+  subgroup <- z > 0
+  if (!any(subgroup) || all(subgroup)) {
+    stop("The response-free above-mean subgroup is empty or universal.",
+         call. = FALSE)
+  }
   info_ratio <- min(pmax(eig$values, 0)) /
     max(max(pmax(eig$values, 0)), .Machine$double.eps)
   list(

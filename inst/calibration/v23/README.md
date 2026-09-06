@@ -38,6 +38,13 @@ respondent-equal subgroup probability. Its maintained coordinates obey
 diagnostic is `min(a, 1 - b, b - a)`, minimized again over the two variants.
 It is measured on the raw probability scale without standard-error
 standardization before division by its independently calibrated cutoff.
+The moderator is the first response-free `Z` column with nonzero
+respondent-level variation. It is centered at its empirical respondent mean
+and divided by its respondent-level sample standard deviation. The fixed high
+group has standardized `z > 0`; the fixed low group has `z <= 0`, with ties in
+the low group. This rule preserves a binary first moderator, including the
+Saha-Weeks gender split, instead of replacing it when a strict above-median
+group would be empty.
 The directional primitive margin is the raw `min(H_Z, H_R)` in
 normalized-direction variance units. It is separate from the standardized
 residual-variance and total-heterogeneity cutoffs. The MRS primitive margin is
