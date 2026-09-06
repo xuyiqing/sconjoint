@@ -15,9 +15,15 @@
   roots <- roots[nzchar(roots)]
   candidate <- file.path(roots, "R", file_name)
   found <- candidate[file.exists(candidate)]
+  installed_copy <- system.file(
+    "calibration", "v23", "source", file_name, package = "sconjoint")
+  if (nzchar(installed_copy) && file.exists(installed_copy)) {
+    found <- c(found, installed_copy)
+  }
   if (!length(found)) {
-    stop("Cannot locate frozen Step-3 source file `R/", file_name, "`.",
-         call. = FALSE)
+    stop(
+      "Cannot locate frozen Step-3 source file `R/", file_name,
+      "` or its installed audit copy.", call. = FALSE)
   }
   normalizePath(found[[1L]], mustWork = TRUE)
 }

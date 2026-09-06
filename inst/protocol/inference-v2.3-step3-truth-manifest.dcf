@@ -16,7 +16,7 @@ Oracle-Code-File: R/calibration-v23-oracle.R
 Oracle-Code-SHA256: 18b0069461d0ee56d9e2618bf0ef22e1b86d124b8574c58756cbd68befcc72d4
 Oracle-Contract-Commit: 6c0d00d715b506c49047667ebb3dbe8e4b81b69e
 Truth-Builder-Code-File: R/calibration-v23-truth-manifest.R
-Truth-Builder-Code-SHA256: 40e32832ee3d6d5a8504c40823de8e6c20c66a048a6450fef7fb21b2beab5ff1
+Truth-Builder-Code-SHA256: 6b4aacc28dfb59ede0c72c4238ebb74b52ec7bb3cb73aa96b56cca6518641a8f
 Calibration-Harness-Code-File: R/calibration-v23.R
 Calibration-Harness-Code-SHA256: b0ff876d0c0b813fd6189cdb3edc3b8b517aa81d3cf5c99686af3ada43768ef6
 Truth-Generation-Function: scmix_v23_oracle_truths

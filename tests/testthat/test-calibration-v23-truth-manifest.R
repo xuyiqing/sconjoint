@@ -72,3 +72,26 @@ test_that("truth-manifest signatures detect in-memory tampering", {
   expect_false(sconjoint:::.scmix_v23_step3_intact(
     damaged, "scmix_v23_truth_manifest"))
 })
+
+test_that("installed audit copies match the frozen source files", {
+  source_root <- Sys.getenv("SCONJOINT_SOURCE_ROOT", unset = "")
+  if (!nzchar(source_root)) {
+    source_root <- normalizePath(
+      file.path(testthat::test_path(), "..", ".."), mustWork = TRUE)
+  }
+  source_names <- c(
+    "calibration-v23-oracle.R",
+    "calibration-v23-truth-manifest.R",
+    "calibration-v23.R")
+  for (source_name in source_names) {
+    live <- file.path(source_root, "R", source_name)
+    audit <- file.path(
+      source_root, "inst", "calibration", "v23", "source", source_name)
+    if (!file.exists(live) || !file.exists(audit)) {
+      skip("Source-copy equality is checked in the package source tree.")
+    }
+    expect_identical(
+      unname(as.character(tools::sha256sum(live))),
+      unname(as.character(tools::sha256sum(audit))))
+  }
+})

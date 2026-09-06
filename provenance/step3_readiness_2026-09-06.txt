@@ -1,0 +1,110 @@
+Step 3 readiness record
+Date: 2026-09-06
+Protocol: paperps-inference-2026-09-06-v2.3
+
+Scope
+-----
+This record covers the prospective design-matched calibration study. It does
+not cover application outcomes or application reruns.
+
+Outcome lock
+------------
+No synthetic outcome was generated from the frozen br2017, gs2020, or sw2022
+response-free payload before the target truths and design diagnostics were
+frozen. Tiny synthetic unit-test fixtures are outside the design-matched study
+and use none of the three frozen payloads. No application outcome was read by
+the truth generator.
+
+Response-free record
+--------------------
+The frozen record contains three signed design payloads, 600 target truths
+(3 designs x 25 severity cells x 8 target variants), and three design
+diagnostic rows. The truth manifest binds the plan, DGP, severity and target
+registries, target-truth table, and design-diagnostic table by SHA-256.
+
+Pre-outcome audit result
+------------------------
+The initially proposed local-Gaussian oracle is based on marginal-composite
+population moments. It does not reproduce the package's integrated
+respondent-sequence fit, nested cross-fitting, target-specific empirical Riesz
+solves, outer-fold diagnostics, or common respondent multiplier procedure.
+It is therefore a geometry/face-validity surrogate and cannot authorize a
+production calibration.
+
+The actual-fit numerical runner now calls the package's q=1 full and nested
+fit path and has separate ordinary and transport contracts. Its signed
+readiness check remains false because nine required end-to-end adapters are
+not implemented. These include target recomputation, level-B target and
+influence evaluation, repolishing, derivative coordinates, known-rank
+benchmarks, multiplier linkage, registered fault fits, q=2 sentinels, and the
+joint F008 selector.
+
+An installed-package check found one additional portability error before the
+branch was shared. The truth-manifest validator originally looked only for
+source-tree R files, which are not present at those paths after package
+installation. The package now ships immutable audit copies of the three
+truth-generation source files under inst/calibration/v23/source, checks their
+SHA-256 values against the prospective truth manifest, and tests that the
+copies equal the source-tree files. This repair changes no truth, outcome, or
+calibration constant.
+
+Corrections made before any frozen-design outcome
+-------------------------------------------------
+- The subgroup split uses the first respondent-varying response-free moderator
+  centered at its empirical mean. High is z > 0 and low is z <= 0. This keeps
+  the Saha-Weeks binary moderator instead of creating an empty subgroup.
+- The mean MRS target is -numerator/denominator, matching the paper.
+- Scalar chart and nonlinear composite diagnostics have distinct consumers.
+- G004 is a fit-level q=1 active-eigenvalue diagnostic and is not a substitute
+  for target-direction residual variance.
+- Preference-direction and compensating-share targets do not inherit the
+  directional-heterogeneity primitive gates.
+- Unsafe severity labels are target specific. In particular, shrinking the
+  residual loading while leaving explained heterogeneity positive does not
+  create an unsafe cell for the total-heterogeneity diagnostic.
+
+Decision
+--------
+The design-matched simulation was stopped at readiness. No production values
+file or approval manifest was created. All 26 CALIBRATE_IN_STEP_3 constants
+remain unset, every applicable calibrated production gate fails closed, and
+no application result changed. The incomplete operational record is reported
+in the running method/code memo, not as a validated appendix simulation.
+
+Verification commands
+---------------------
+The final checks were run after the target registry and truth manifest were
+re-frozen. The six focused test files passed 317 expectations in total: 110
+for the plan, 30 for the truth manifest and installed source copies, 47 for
+the oracle, 34 for the statistical contract, 56 for the numerical runner, and
+40 for the package calibration contract. The four calibration source files
+parsed and all 113 Rd files passed tools::checkRd.
+
+The source package built and installed under R 4.5.3. The installed package
+loaded the 600-row truth manifest and returned false for outcome-generation,
+threshold-selection, and production-promotion readiness. R CMD check ran the
+complete test suite successfully. It ended with two pre-existing documentation
+warnings about duplicate aliases and older usage entries. It had no code,
+installation, example, or test error. The check used
+_R_CHECK_FORCE_SUGGESTS_=false because covr and quarto were not installed and
+network access was unavailable.
+
+The final truth-manifest fingerprint is:
+
+  6e4179b184a02feba95ee3feb7e3e6b9be899a3d4afb77bc8cfa51c68007b704
+
+The installed-package readiness fingerprint is:
+
+  36eb55b29f5d4a4b164354b3ac38c7551e9585ffbc8b17cad8281bdf61f57341
+
+Representative verification commands were:
+
+  applications/bin/Rscript45 -e 'pkgload::load_all(".", quiet=TRUE); testthat::test_file("tests/testthat/test-calibration-v23-plan.R"); testthat::test_file("tests/testthat/test-calibration-v23-truth-manifest.R"); testthat::test_file("tests/testthat/test-calibration-v23-oracle.R"); testthat::test_file("tests/testthat/test-calibration-v23-statistical-contract.R"); testthat::test_file("tests/testthat/test-calibration-v23-numerical.R"); testthat::test_file("tests/testthat/test-step3-calibration-contract.R")'
+  applications/bin/Rscript45 -e 'parse(file="R/calibration-v23.R"); parse(file="R/calibration-v23-truth-manifest.R"); parse(file="R/calibration-v23-oracle.R"); parse(file="R/calibration-v23-numerical.R")'
+  shasum -a 256 -c provenance/inference_protocol_v2.2.sha256
+  shasum -a 256 -c provenance/inference_protocol_v2.3.sha256
+
+Production calibration files intentionally absent
+-------------------------------------------------
+  inst/protocol/inference-v2.3-calibration-values.dcf
+  inst/protocol/inference-v2.3-calibration.dcf

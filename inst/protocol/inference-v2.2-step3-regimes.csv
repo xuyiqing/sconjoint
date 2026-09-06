@@ -8,4 +8,3 @@ regime_index,regime_id,role,targeted_failure,perturbation,primary_diagnostic_fam
 7,residual_shape_misspecification,interpretation_sensitivity,false,centered nonnormal persistent heterogeneity,specification_assessment
 8,serial_dependence,interpretation_sensitivity,false,within-respondent task shocks follow an AR(1) process,specification_assessment
 9,informative_completion,interpretation_sensitivity,false,task observation depends on latent preferences and choice difficulty,specification_assessment
-
