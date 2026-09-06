@@ -1,0 +1,44 @@
+Step 2 verification record
+Date: 2026-09-06
+Protocol: paperps-inference-2026-09-05-v2.2
+Branch: codex/inference-v22-implementation
+Audited implementation head before this record: d138610
+
+Frozen protocol integrity
+- shasum -a 256 -c provenance/inference_protocol_v2.2.sha256
+- PASS for INFERENCE_PROTOCOL_V22.md and inst/protocol/inference-v2.2.yaml
+
+Focused v2.2 and compatibility checks
+- Inference, computation-contract, legacy computation, fit/loading,
+  loading-contract, optimizer, and network-state focused suites all passed.
+- applications/R/test-targeted-q1-inference.R passed 20 of 20 checks.
+- All 70 R source files parsed.
+- All 111 Rd files passed tools::checkRd().
+- tools::codoc() reported only the pre-existing autoplot re-export entry.
+
+Full repository test run
+- Every Step 2 test passed.
+- The legacy repository-wide run retained 13 non-Step-2 failures. Ten are
+  bit-exact interaction golden-file comparisons with differences generally at
+  about 1e-9 under the current R/runtime. Two are future/parallelly localhost
+  worker startup errors in the current sandboxed R runtime. One requires the
+  archived Saha--Weeks pilot manifest, which is not present in this working
+  copy. These failures occur outside the new v2.2 files and were not hidden or
+  converted into passes.
+
+Package build and check
+- R 4.5.3 source build succeeded for sconjoint 0.3.2.9000.
+- R CMD check completed with zero errors. After correcting two new namespace
+  findings, the remaining package-wide warnings concern pre-existing duplicate
+  Rd aliases and legacy Rd usage mismatches. Suggested packages unavailable in
+  the offline check are reported as informational only.
+
+Scope and limitations
+- No production Step-3 calibration manifest exists. Applicable calibrated
+  gates therefore fail closed.
+- No application was rerun, and no v2.1 application artifact was certified as
+  v2.2.
+- The nested-refit runner verifies respondent splits and retained artifacts,
+  but production provenance must still retain the callback code because no R
+  validator can prove the semantics of arbitrary callback code by inspection.
+- No external push was made.

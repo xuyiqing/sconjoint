@@ -19,12 +19,15 @@ scmix_dml(
   active_eigenvalue_min = NULL,
   rank_tolerance = 1e-8,
   information_eigenvalue_min = NULL,
-  derivative_eps = 1e-5,
+  derivative_eps = .Machine$double.eps^(1 / 3),
   allow_numeric_derivatives = FALSE,
   derivative_refinement_factor = 2,
   derivative_refinement_tolerance = 1e-3,
   riesz_equation_tolerance = 5e-2,
   ridge_sensitivity_tolerance = 1e-1,
+  v22_riesz_evidence = NULL,
+  riesz_numerical_rank_tolerance = 1e-10,
+  v22_registry = NULL,
   verification = NULL,
   multiplier_draws = 999L,
   multiplier = c("normal", "rademacher"),
@@ -143,6 +146,21 @@ residual for conditionally supported inference.}
 
 \item{ridge_sensitivity_tolerance}{Maximum relative change in the score
 correction under the selected ridge versus zero ridge.}
+
+\item{v22_riesz_evidence}{Optional intact protocol-v2.2 evidence returned by
+\code{scmix_v22_riesz_evidence()}. It contains executed respondent-level inner
+nuisance refits, the exact fold-size ridge grids, validation risks, and the
+separately selected ridge for every minimal scalar primitive.}
+
+\item{riesz_numerical_rank_tolerance}{Numerical-rank tolerance recorded for
+the honest untouched-outer-fold information-range and information-scaled
+Riesz diagnostics. Protocol-v2.2 finalization checks it against the exact
+linked calibration artifact.}
+
+\item{v22_registry}{Optional list of signed
+\code{scmix_v22_target_spec()} objects. When supplied, Riesz fitting uses the
+minimal registered primitive vector directly. Directional heterogeneity uses
+separate explained-variance and residual-variance solves.}
 
 \item{verification}{A record returned by
 \code{scmix_inference_verification()}. An arbitrary list of booleans is not
