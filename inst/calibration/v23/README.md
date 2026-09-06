@@ -30,10 +30,22 @@ evaluated jointly without retuning. G006 divides every applicable boundary
 component by its own cutoff and passes exactly when the minimum ratio is at
 least one. There are no cross-constant aliases.
 
+Each high- or low-moderator subgroup share is the composite `a / b`, where
+`a` is the respondent-equal mean of the subgroup indicator times that
+respondent's integrated task-mean choice probability and `b` is the
+respondent-equal subgroup probability. Its maintained coordinates obey
+`0 < a < b < 1` and use the chart `logit(a / b), logit(b)`. The subgroup G006
+diagnostic is `min(a, 1 - b, b - a)`, minimized again over the two variants.
+It is measured on the raw probability scale without standard-error
+standardization before division by its independently calibrated cutoff.
+
 Every adverse severity row is labeled `safe`, `transition`, or `unsafe`.
 Only unsafe rows enter the false-certification denominator. Selection and
 validation enforce benign passage and unsafe false certification separately
-within each design. Serial-dependence choices use a stationary Gaussian AR(1)
+within each design. Benign calibration includes both the well-informed
+reference and the safe row of the constant's own targeted regime.
+Interpretation-sensitivity regimes do not enter certification calibration.
+Serial-dependence choices use a stationary Gaussian AR(1)
 copula that preserves each task's marginal logit probability. The completion
 sensitivity uses duplicated finite-population PPS respondent selection within
 exact task-count strata, which preserves the original task-count histogram.
@@ -64,3 +76,10 @@ interval-length medians and 90th percentiles, empty and uninformative sets,
 every gate-state frequency, and first-failure frequency. Numerical severity
 replays stay clustered by their independent synthetic base outcome and never
 enter a Wilson calculation as independent trials.
+
+Conditional coverage requires at least 1,000 released replications per design
+and target. In each well-informed oracle cell, interval efficiency compares
+the reported natural-scale length with the ideal unconstrained linear-Wald
+length `2 * z_0.975 * SE`, or the exact oracle Fieller benchmark for a ratio.
+The median reported-to-benchmark ratio may not exceed 1.25 and its type-8 90th
+percentile may not exceed 2.0.

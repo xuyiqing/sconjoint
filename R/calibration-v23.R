@@ -273,6 +273,10 @@ scmix_v23_calibration_plan <- function() {
     maximum_workers = "Maximum-Workers",
     torch_threads_per_worker = "Torch-Threads-Per-Worker",
     blas_threads_per_worker = "BLAS-Threads-Per-Worker")
+  numeric_fields <- c(
+    numeric_fields,
+    minimum_released_for_conditional_coverage =
+      "Minimum-Released-For-Conditional-Coverage")
   counts <- vapply(numeric_fields, function(nm)
     .scmix_v23_step3_number(raw[[nm]], nm, integer = TRUE), integer(1L))
   rates <- c(
@@ -283,7 +287,13 @@ scmix_v23_calibration_plan <- function() {
       "Minimum-Benign-Calibration-Passage"),
     maximum_calibration_false_certification = .scmix_v23_step3_number(
       raw[["Maximum-Targeted-Calibration-False-Certification"]],
-      "Maximum-Targeted-Calibration-False-Certification"))
+      "Maximum-Targeted-Calibration-False-Certification"),
+    maximum_interval_median_ratio_to_oracle = .scmix_v23_step3_number(
+      raw[["Maximum-Well-Informed-Interval-Median-Ratio-To-Oracle"]],
+      "Maximum-Well-Informed-Interval-Median-Ratio-To-Oracle"),
+    maximum_interval_p90_ratio_to_oracle = .scmix_v23_step3_number(
+      raw[["Maximum-Well-Informed-Interval-P90-Ratio-To-Oracle"]],
+      "Maximum-Well-Informed-Interval-P90-Ratio-To-Oracle"))
   payload <- list(
     plan_id = raw[["Plan-Id"]], protocol_id = raw[["Protocol-Id"]],
     frozen_on = raw[["Frozen-On"]], status = raw[["Status"]],
@@ -1069,17 +1079,22 @@ scmix_v23_load_frozen_design <- function(design_id) {
       adverse_id <- plan$constants$targeted_failure_regime[
         match(id, plan$constants$constant)]
       by_design <- lapply(unique(dat$design_id), function(design_id) {
-        benign <- dat$value[
+        benign_reference <- dat$value[
           dat$design_id == design_id &
             dat$regime_id == "well_informed_interior" &
+            dat$certification_truth == "safe"]
+        benign_near <- dat$value[
+          dat$design_id == design_id & dat$regime_id == adverse_id &
             dat$certification_truth == "safe"]
         adverse <- dat$value[
           dat$design_id == design_id & dat$regime_id == adverse_id &
             dat$certification_truth == "unsafe"]
-        if (!length(benign) || !length(adverse)) {
-          stop("Threshold evidence lacks a per-design benign or unsafe cell.",
+        if (!length(benign_reference) || !length(benign_near) ||
+            !length(adverse)) {
+          stop("Threshold evidence lacks a per-design reference, safe-near, or unsafe cell.",
                call. = FALSE)
         }
+        benign <- c(benign_reference, benign_near)
         c(benign = mean(.scmix_v23_step3_pass(
           benign, cutoff, comparator)),
           adverse = mean(.scmix_v23_step3_pass(

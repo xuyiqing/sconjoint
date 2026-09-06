@@ -28,6 +28,11 @@ test_that("v2.3 Step-3 plan is complete, response-free, and prospective", {
   expect_identical(plan$counts[["torch_threads_per_worker"]], 1L)
   expect_identical(plan$counts[["blas_threads_per_worker"]], 1L)
   expect_identical(plan$counts[["transport_validation_reps"]], 1L)
+  expect_identical(
+    plan$counts[["minimum_released_for_conditional_coverage"]], 1000L)
+  expect_equal(plan$rates[["maximum_interval_median_ratio_to_oracle"]],
+               1.25)
+  expect_equal(plan$rates[["maximum_interval_p90_ratio_to_oracle"]], 2)
   expect_match(plan$raw[["G006-Compound-Rule"]],
                "own_independently_calibrated_cutoff", fixed = TRUE)
   expect_match(plan$raw[["Boundary-Alias-Policy"]],
@@ -49,6 +54,31 @@ test_that("v2.3 Step-3 plan is complete, response-free, and prospective", {
   expect_identical(plan$raw[["Candidate-Grid"]],
                    paste0("observed_finite_metric_values_only_with_the_",
                           "frozen_inclusive_comparator"))
+  expect_match(plan$raw[["Validation-Interval-Efficiency-Criterion"]],
+               "ideal_unconstrained_linear_Wald_benchmark", fixed = TRUE)
+})
+
+test_that("subgroup target retains the frozen a-over-b composite contract", {
+  plan <- scmix_v23_calibration_plan()
+  row <- plan$targets[plan$targets$target_id == "subgroup_share", ,
+                      drop = FALSE]
+  expect_identical(row$target_family_id, "subgroup_ratio_family")
+  expect_identical(
+    row$primitive_registry_ids,
+    paste(c("subgroup_z_high_numerator_a",
+            "subgroup_z_high_denominator_b",
+            "subgroup_z_low_numerator_a",
+            "subgroup_z_low_denominator_b"), collapse = ";"))
+  expect_match(row$truth_definition, "target=a_B/b_B", fixed = TRUE)
+  expect_identical(row$primitive_constraints,
+                   "for_each_variant_0<a_B<b_B<1")
+  expect_identical(row$chart_coordinates,
+                   "for_each_variant_[logit(a_B/b_B);logit(b_B)]")
+  expect_match(row$g006_boundary_components_and_standardization,
+               "D_B=min(a_B;1-b_B;b_B-a_B)", fixed = TRUE)
+  expect_match(row$g006_boundary_components_and_standardization,
+               "raw_probability_scale_with_no_SE_standardization",
+               fixed = TRUE)
 })
 
 test_that("committed design wrappers are hashed response-free templates", {
@@ -195,12 +225,13 @@ test_that("threshold selection excludes transition rows from false certification
   evidence <- list()
   evidence[[id]] <- do.call(rbind, lapply(designs, function(design_id)
     data.frame(
-      value = c(1, 0, 2), design_id = design_id,
+      value = c(1, 1, 0, 2), design_id = design_id,
       regime_id = c("well_informed_interior",
                     "probability_near_boundary",
+                    "probability_near_boundary",
                     "probability_near_boundary"),
-      severity_id = c("reference", "moderate", "severe"),
-      certification_truth = c("safe", "transition", "unsafe"),
+      severity_id = c("reference", "mild", "moderate", "severe"),
+      certification_truth = c("safe", "safe", "transition", "unsafe"),
       stringsAsFactors = FALSE)))
   out <- sconjoint:::.scmix_v23_step3_select_group(id, evidence, plan)
   expect_true(out$feasible)
@@ -217,11 +248,12 @@ test_that("threshold constraints are enforced separately by design", {
     unsafe <- rep(2, 100)
     if (i == 1L) unsafe[1:2] <- 0.5
     data.frame(
-      value = c(1, unsafe), design_id = design_id,
+      value = c(1, 1, unsafe), design_id = design_id,
       regime_id = c("well_informed_interior",
+                    "probability_near_boundary",
                     rep("probability_near_boundary", 100)),
-      severity_id = c("reference", rep("severe", 100)),
-      certification_truth = c("safe", rep("unsafe", 100)),
+      severity_id = c("reference", "mild", rep("severe", 100)),
+      certification_truth = c("safe", "safe", rep("unsafe", 100)),
       stringsAsFactors = FALSE)
   })
   evidence <- list()
