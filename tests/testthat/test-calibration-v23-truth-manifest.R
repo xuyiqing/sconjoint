@@ -6,6 +6,9 @@ test_that("v2.3 target truths were frozen before synthetic outcomes", {
     truth, "scmix_v23_truth_manifest"))
   expect_identical(truth$plan_id, plan$plan_id)
   expect_identical(truth$protocol_id, plan$protocol_id)
+  expect_identical(plan$raw[["Mean-Tradeoff-Sign-Convention"]],
+                   paste0("negative_mean_prespecified_numerator_divided_",
+                          "by_mean_prespecified_denominator"))
   expect_false(truth$application_outcomes_used)
   expect_true(truth$no_frozen_design_outcomes_before_freeze)
   expect_identical(truth$toy_fixture_scope,
@@ -16,6 +19,12 @@ test_that("v2.3 target truths were frozen before synthetic outcomes", {
   expect_identical(truth$design_diagnostics$design_id,
                    c("br2017", "gs2020", "sw2022"))
   expect_true(all(grepl("^[[:xdigit:]]{64}$", truth$source_hashes)))
+  expect_identical(
+    unique(truth$target_truths$variant_id[
+      truth$target_truths$target_id == "mean_tradeoff_mrs_ratio"]),
+    "negative_s_over_d")
+  expect_true(all(truth$target_truths$truth[
+    truth$target_truths$target_id == "mean_tradeoff_mrs_ratio"] < 0))
 })
 
 test_that("frozen subgroup truths obey the respondent-equal a-over-b contract", {

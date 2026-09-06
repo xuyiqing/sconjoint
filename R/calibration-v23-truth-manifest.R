@@ -5,6 +5,23 @@
   target_truths = "inference-v2.3-step3-target-truths.csv",
   design_diagnostics = "inference-v2.3-step3-design-diagnostics.csv")
 
+.scmix_v23_truth_source_file <- function(file_name) {
+  protocol_root <- tryCatch(
+    dirname(dirname(dirname(.scmix_v23_step3_file("plan")))),
+    error = function(e) "")
+  roots <- unique(c(
+    getwd(), protocol_root,
+    Sys.getenv("SCONJOINT_SOURCE_ROOT", unset = "")))
+  roots <- roots[nzchar(roots)]
+  candidate <- file.path(roots, "R", file_name)
+  found <- candidate[file.exists(candidate)]
+  if (!length(found)) {
+    stop("Cannot locate frozen Step-3 source file `R/", file_name, "`.",
+         call. = FALSE)
+  }
+  normalizePath(found[[1L]], mustWork = TRUE)
+}
+
 .scmix_v23_truth_format_number <- function(x) {
   ifelse(is.na(x), "NA", sprintf("%.17g", x))
 }
@@ -173,6 +190,15 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
       .scmix_v23_step3_file("targets")))),
     plan_dcf_sha256 = unname(as.character(tools::sha256sum(
       .scmix_v23_step3_file("plan")))))
+  source_path <- c(
+    oracle_code_sha256 = .scmix_v23_truth_source_file(
+      "calibration-v23-oracle.R"),
+    truth_builder_code_sha256 = .scmix_v23_truth_source_file(
+      "calibration-v23-truth-manifest.R"),
+    calibration_harness_code_sha256 = .scmix_v23_truth_source_file(
+      "calibration-v23.R"))
+  observed_source_hash <- vapply(source_path, function(path)
+    unname(as.character(tools::sha256sum(path))), character(1L))
   declared_hash <- c(
     target_truth_file_sha256 = raw[["Target-Truth-SHA256"]],
     design_diagnostics_file_sha256 =
@@ -184,6 +210,15 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
     plan_dcf_sha256 = raw[["Plan-DCF-SHA256"]])
   if (!identical(observed_hash, declared_hash)) {
     stop("A frozen truth or source-registry SHA-256 does not match.",
+         call. = FALSE)
+  }
+  declared_source_hash <- c(
+    oracle_code_sha256 = raw[["Oracle-Code-SHA256"]],
+    truth_builder_code_sha256 = raw[["Truth-Builder-Code-SHA256"]],
+    calibration_harness_code_sha256 =
+      raw[["Calibration-Harness-Code-SHA256"]])
+  if (!identical(observed_source_hash, declared_source_hash)) {
+    stop("A frozen truth-generation source SHA-256 does not match.",
          call. = FALSE)
   }
   target <- utils::read.csv(target_path, stringsAsFactors = FALSE,
@@ -225,7 +260,7 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
     plan_id = plan$plan_id, protocol_id = plan$protocol_id,
     plan_fingerprint = plan$fingerprint, frozen_on = raw[["Frozen-On"]],
     target_truths = target, design_diagnostics = diagnostic,
-    source_hashes = observed_hash,
+    source_hashes = c(observed_hash, observed_source_hash),
     application_outcomes_used = FALSE,
     no_frozen_design_outcomes_before_freeze = TRUE,
     toy_fixture_scope = "outside_design_matched_step3_study",
