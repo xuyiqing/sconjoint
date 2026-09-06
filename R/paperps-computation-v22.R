@@ -8,6 +8,442 @@
 .scmix_v22_comp_protocol_id <- "paperps-inference-2026-09-05-v2.2"
 .scmix_v22_pending_cutoff <- "CALIBRATE_IN_STEP_3"
 
+.scmix_v22_comp_fingerprint <- function(x) {
+  path <- tempfile("scmix-v22-comp-fingerprint-", fileext = ".rds")
+  on.exit(unlink(path), add = TRUE)
+  saveRDS(x, path, version = 3, compress = FALSE)
+  unname(as.character(tools::md5sum(path)))
+}
+
+.scmix_v22_comp_sign <- function(payload, class_name) {
+  payload$fingerprint <- .scmix_v22_comp_fingerprint(payload)
+  class(payload) <- c(class_name, "list")
+  payload
+}
+
+.scmix_v22_comp_intact <- function(x, class_name) {
+  if (!inherits(x, class_name) || !is.list(x)) return(FALSE)
+  payload <- unclass(x)
+  recorded <- payload$fingerprint
+  payload$fingerprint <- NULL
+  is.character(recorded) && length(recorded) == 1L && !is.na(recorded) &&
+    identical(recorded, .scmix_v22_comp_fingerprint(payload))
+}
+
+.scmix_v22_comp_public_intact <- function(x, class_name) {
+  if (exists(".scmix_v22_intact", mode = "function", inherits = TRUE)) {
+    checker <- get(".scmix_v22_intact", mode = "function", inherits = TRUE)
+    return(isTRUE(checker(x, class_name)))
+  }
+  .scmix_v22_comp_intact(x, class_name)
+}
+
+.scmix_v22_comp_registry <- function(registry) {
+  if (!is.list(registry) || !length(registry) ||
+      !all(vapply(registry, .scmix_v22_comp_public_intact, logical(1L),
+                  class_name = "scmix_v22_target_spec"))) {
+    stop("`registry` must contain intact fingerprinted v2.2 target specifications.",
+         call. = FALSE)
+  }
+  ids <- vapply(registry, `[[`, character(1L), "target_id")
+  if (anyDuplicated(ids)) stop("Target registry IDs must be unique.",
+                               call. = FALSE)
+  registry <- registry[order(ids, method = "radix")]
+  list(payload = registry,
+       fingerprint = .scmix_v22_comp_fingerprint(registry))
+}
+
+.scmix_v22_comp_contract <- function(analysis_contract) {
+  if (!.scmix_v22_comp_public_intact(
+      analysis_contract, "scmix_v22_analysis_contract")) {
+    stop("`analysis_contract` must be an intact fingerprinted v2.2 contract.",
+         call. = FALSE)
+  }
+  analysis_contract
+}
+
+#' Sign the frozen numerical-integration contract
+#'
+#' @param q Structural rank.
+#' @param method Registered integration method.
+#' @param uses_numerical_integration Whether the fit uses numerical integration.
+#' @param level_a_rule_id,level_b_rule_id Frozen rule IDs.
+#' @param level_a_resolution,level_b_resolution Numeric resolutions. Level B
+#'   must be strictly larger whenever numerical integration is used.
+#' @param level_a_rule_hash,level_b_rule_hash Immutable rule hashes.
+#' @param nesting_supported Whether this registered method supports nesting.
+#' @param nesting_evidence_hash Required immutable evidence when nesting is
+#'   supported.
+#' @param covariance_dimension Dimension of the structural covariance matrix,
+#'   normally the number of coded attributes. It is not the factor rank.
+#' @return An intact fingerprinted integration contract.
+#' @export
+scmix_v22_integration_contract <- function(
+    q, method, uses_numerical_integration,
+    level_a_rule_id, level_b_rule_id,
+    level_a_resolution, level_b_resolution,
+    level_a_rule_hash, level_b_rule_hash,
+    nesting_supported, nesting_evidence_hash = NULL,
+    covariance_dimension) {
+  if (!is.numeric(q) || length(q) != 1L || is.na(q) || q < 0 ||
+      q != as.integer(q)) stop("`q` must be one nonnegative integer.",
+                               call. = FALSE)
+  if (!is.logical(uses_numerical_integration) ||
+      length(uses_numerical_integration) != 1L ||
+      is.na(uses_numerical_integration) || !is.logical(nesting_supported) ||
+      length(nesting_supported) != 1L || is.na(nesting_supported)) {
+    stop("Integration-use and nesting predicates must be nonmissing logical values.",
+         call. = FALSE)
+  }
+  method <- .scmix_v22_comp_scalar_text(method, "method")
+  text <- c(level_a_rule_id = level_a_rule_id,
+            level_b_rule_id = level_b_rule_id,
+            level_a_rule_hash = level_a_rule_hash,
+            level_b_rule_hash = level_b_rule_hash)
+  text <- stats::setNames(vapply(seq_along(text), function(i)
+    .scmix_v22_comp_scalar_text(text[[i]], names(text)[i]), character(1L)),
+    names(text))
+  resolution <- c(level_a = level_a_resolution, level_b = level_b_resolution)
+  if (!is.numeric(resolution) || any(!is.finite(resolution)) ||
+      any(resolution <= 0) ||
+      (isTRUE(uses_numerical_integration) && resolution[["level_b"]] <=
+         resolution[["level_a"]])) {
+    stop("Numerical level B must have a strictly higher positive resolution than level A.",
+         call. = FALSE)
+  }
+  if (!is.numeric(covariance_dimension) || length(covariance_dimension) != 1L ||
+      is.na(covariance_dimension) || covariance_dimension < 1L ||
+      covariance_dimension != as.integer(covariance_dimension)) {
+    stop("`covariance_dimension` must be one positive integer.",
+         call. = FALSE)
+  }
+  if (isTRUE(nesting_supported)) {
+    nesting_evidence_hash <- .scmix_v22_comp_scalar_text(
+      nesting_evidence_hash, "nesting_evidence_hash")
+  } else if (!is.null(nesting_evidence_hash)) {
+    stop("Nesting evidence may be supplied only when nesting is registered as supported.",
+         call. = FALSE)
+  }
+  .scmix_v22_comp_sign(list(
+    protocol_id = .scmix_v22_comp_protocol_id, q = as.integer(q),
+    method = method,
+    uses_numerical_integration = uses_numerical_integration,
+    level_a = list(rule_id = unname(text[["level_a_rule_id"]]),
+                   resolution = unname(resolution[["level_a"]]),
+                   rule_hash = unname(text[["level_a_rule_hash"]])),
+    level_b = list(rule_id = unname(text[["level_b_rule_id"]]),
+                   resolution = unname(resolution[["level_b"]]),
+                   rule_hash = unname(text[["level_b_rule_hash"]])),
+    nesting_supported = nesting_supported,
+    nesting_evidence_hash = nesting_evidence_hash,
+    covariance_dimension = as.integer(covariance_dimension)),
+    "scmix_v22_integration_contract")
+}
+
+#' Sign the exact fit-scope and optimizer-start registry
+#'
+#' @param application_id,specification_id,fit_id Frozen fit identifiers.
+#' @param outer_fold_ids Complete registered outer-fold IDs.
+#' @param starts A data frame with `fit_scope_id`, `start_id`, and integer
+#'   `seed`. Scope IDs must equal the returned full and outer-fold convention.
+#' @param integration_contract An intact signed integration contract.
+#' @return A fingerprinted fit-scope registry suitable for the
+#'   `optimizer_starts` field of `scmix_v22_analysis_contract()`.
+#' @export
+scmix_v22_fit_scope_registry <- function(
+    application_id, specification_id, fit_id, outer_fold_ids, starts,
+    integration_contract) {
+  text <- c(application_id = application_id,
+            specification_id = specification_id, fit_id = fit_id)
+  text <- stats::setNames(vapply(seq_along(text), function(i)
+    .scmix_v22_comp_scalar_text(text[[i]], names(text)[i]), character(1L)),
+    names(text))
+  if (!.scmix_v22_comp_intact(
+      integration_contract, "scmix_v22_integration_contract")) {
+    stop("`integration_contract` must be intact and fingerprinted.",
+         call. = FALSE)
+  }
+  outer_fold_ids <- as.character(outer_fold_ids)
+  if (!length(outer_fold_ids) || anyNA(outer_fold_ids) ||
+      any(!nzchar(outer_fold_ids)) || anyDuplicated(outer_fold_ids)) {
+    stop("`outer_fold_ids` must contain every unique nonempty outer-fold ID.",
+         call. = FALSE)
+  }
+  scope_ids <- c(
+    paste(text[["specification_id"]], "full", sep = "::"),
+    paste(text[["specification_id"]], "outer", outer_fold_ids, sep = "::"))
+  required <- c("fit_scope_id", "start_id", "seed")
+  if (!is.data.frame(starts) || !all(required %in% names(starts)) ||
+      !nrow(starts) || anyNA(starts[, required])) {
+    stop("`starts` must contain complete fit-scope, start-ID, and seed columns.",
+         call. = FALSE)
+  }
+  starts <- starts[, required, drop = FALSE]
+  starts$fit_scope_id <- as.character(starts$fit_scope_id)
+  starts$start_id <- as.character(starts$start_id)
+  if (!is.numeric(starts$seed) || any(!is.finite(starts$seed)) ||
+      any(starts$seed != as.integer(starts$seed)) ||
+      any(!nzchar(starts$start_id)) ||
+      anyDuplicated(paste(starts$fit_scope_id, starts$start_id))) {
+    stop("Start IDs and integer seeds must be valid and unique within scope.",
+         call. = FALSE)
+  }
+  if (!setequal(unique(starts$fit_scope_id), scope_ids)) {
+    stop("Start registry must include the full fit and every registered outer fold.",
+         call. = FALSE)
+  }
+  counts <- table(starts$fit_scope_id)
+  if (length(unique(as.integer(counts))) != 1L) {
+    stop("Every fit scope must register the same number of starts.",
+         call. = FALSE)
+  }
+  .scmix_v22_comp_sign(list(
+    protocol_id = .scmix_v22_comp_protocol_id,
+    application_id = unname(text[["application_id"]]),
+    specification_id = unname(text[["specification_id"]]),
+    fit_id = unname(text[["fit_id"]]),
+    q = integration_contract$q,
+    integration_contract_fingerprint = integration_contract$fingerprint,
+    uses_numerical_integration =
+      integration_contract$uses_numerical_integration,
+    outer_fold_ids = sort(outer_fold_ids, method = "radix"),
+    fit_scope_ids = sort(scope_ids, method = "radix"),
+    starts = starts[order(starts$fit_scope_id, starts$start_id,
+                          method = "radix"), , drop = FALSE]),
+    "scmix_v22_fit_scope_registry")
+}
+
+.scmix_v22_comp_cutoff_names <- c(
+  "kkt_cutoff", "integration_target_se_cutoff",
+  "integration_if_l2_cutoff", "integration_objective_relative_cutoff",
+  "integration_score_relative_cutoff",
+  "integration_covariance_relative_cutoff",
+  "near_optimum_objective_cutoff", "multistart_target_se_cutoff",
+  "nested_fit_relative_cutoff")
+
+#' Sign the Step-3 computation calibration constants
+#'
+#' @param analysis_contract Intact signed analysis contract.
+#' @param cutoffs Named numeric list containing every frozen computation cutoff.
+#' @param provenance Immutable calibration provenance.
+#' @return A fingerprinted computation-calibration contract.
+#' @export
+scmix_v22_computation_calibration <- function(analysis_contract, cutoffs,
+                                               provenance) {
+  analysis_contract <- .scmix_v22_comp_contract(analysis_contract)
+  if (!is.list(cutoffs) || is.null(names(cutoffs)) ||
+      !identical(sort(names(cutoffs), method = "radix"),
+                 sort(.scmix_v22_comp_cutoff_names, method = "radix"))) {
+    stop("`cutoffs` must contain every and only the frozen computation cutoff.",
+         call. = FALSE)
+  }
+  cutoffs <- cutoffs[.scmix_v22_comp_cutoff_names]
+  if (any(!vapply(cutoffs, function(x)
+    is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0,
+    logical(1L)))) {
+    stop("Every computation cutoff must be one finite nonnegative number.",
+         call. = FALSE)
+  }
+  .scmix_v22_comp_sign(list(
+    protocol_id = .scmix_v22_comp_protocol_id,
+    analysis_contract_fingerprint = analysis_contract$fingerprint,
+    calibration_hash = analysis_contract$calibration_hash,
+    cutoffs = lapply(cutoffs, as.numeric),
+    provenance = .scmix_v22_comp_scalar_text(provenance, "provenance")),
+    "scmix_v22_computation_calibration")
+}
+
+.scmix_v22_comp_bind_contracts <- function(analysis_contract, registry,
+                                            integration_contract,
+                                            calibration_contract = NULL,
+                                            require_calibration = FALSE) {
+  analysis_contract <- .scmix_v22_comp_contract(analysis_contract)
+  registry_info <- .scmix_v22_comp_registry(registry)
+  if (!.scmix_v22_comp_intact(
+      integration_contract, "scmix_v22_integration_contract")) {
+    stop("`integration_contract` must be intact and fingerprinted.",
+         call. = FALSE)
+  }
+  fit_registry <- analysis_contract$optimizer_starts
+  if (!.scmix_v22_comp_intact(
+      fit_registry, "scmix_v22_fit_scope_registry")) {
+    stop("The analysis contract must contain an intact fit-scope/start registry.",
+         call. = FALSE)
+  }
+  fold_ids <- if (is.list(analysis_contract$outer_folds) &&
+      !is.null(names(analysis_contract$outer_folds)) &&
+      all(nzchar(names(analysis_contract$outer_folds)))) {
+    names(analysis_contract$outer_folds)
+  } else sort(unique(as.character(unlist(
+    analysis_contract$outer_folds, use.names = FALSE))), method = "radix")
+  bindings <- c(
+    identical(fit_registry$application_id, analysis_contract$application_id),
+    identical(fit_registry$specification_id,
+              analysis_contract$specification_id),
+    identical(fit_registry$outer_fold_ids,
+              sort(fold_ids, method = "radix")),
+    identical(fit_registry$integration_contract_fingerprint,
+              integration_contract$fingerprint),
+    identical(analysis_contract$integration_rule,
+              integration_contract$fingerprint),
+    identical(fit_registry$q, integration_contract$q),
+    identical(fit_registry$uses_numerical_integration,
+              integration_contract$uses_numerical_integration))
+  if (!all(bindings)) {
+    stop("Analysis, fit-scope, rank, folds, and integration contracts are not exactly bound.",
+         call. = FALSE)
+  }
+  calibration <- NULL
+  if (!is.null(calibration_contract)) {
+    if (!.scmix_v22_comp_intact(
+        calibration_contract, "scmix_v22_computation_calibration") ||
+        !identical(calibration_contract$analysis_contract_fingerprint,
+                   analysis_contract$fingerprint) ||
+        !identical(calibration_contract$calibration_hash,
+                   analysis_contract$calibration_hash)) {
+      stop("The computation calibration is not intact or bound to the exact analysis calibration hash.",
+           call. = FALSE)
+    }
+    calibration <- calibration_contract
+  } else if (isTRUE(require_calibration)) {
+    stop("Production mode requires the intact Step-3 computation calibration.",
+         call. = FALSE)
+  }
+  list(analysis = analysis_contract, registry = registry_info$payload,
+       registry_fingerprint = registry_info$fingerprint,
+       integration = integration_contract, fit_registry = fit_registry,
+       calibration = calibration)
+}
+
+#' Sign optimizer and polish evidence for one registered start
+#'
+#' @param analysis_contract,registry,integration_contract Intact frozen
+#'   contracts.
+#' @param fit_scope_id,start_id,seed Registered start identifiers.
+#' @param state_hash Immutable portable-state hash.
+#' @param objective Minimized frozen mean objective.
+#' @param objective_definition_id Frozen objective ID.
+#' @param dtype Must be `"float64"`.
+#' @param polish_completed,nonworsening Nonmissing polish attestations.
+#' @param objective_before_polish,objective_after_polish Finite objectives.
+#' @param kkt_by_block Named finite projected-KKT values.
+#' @param line_search_status Nonempty final line-search status.
+#' @return An intact per-start optimizer evidence object.
+#' @export
+scmix_v22_start_optimizer_evidence <- function(
+    analysis_contract, registry, integration_contract,
+    fit_scope_id, start_id, seed, state_hash, objective,
+    objective_definition_id, dtype, polish_completed, nonworsening,
+    objective_before_polish, objective_after_polish, kkt_by_block,
+    line_search_status) {
+  bound <- .scmix_v22_comp_bind_contracts(
+    analysis_contract, registry, integration_contract)
+  fit_scope_id <- .scmix_v22_comp_scalar_text(fit_scope_id, "fit_scope_id")
+  start_id <- .scmix_v22_comp_scalar_text(start_id, "start_id")
+  row <- bound$fit_registry$starts[
+    bound$fit_registry$starts$fit_scope_id == fit_scope_id &
+      bound$fit_registry$starts$start_id == start_id, , drop = FALSE]
+  if (nrow(row) != 1L || !is.numeric(seed) || length(seed) != 1L ||
+      seed != as.integer(seed) || !identical(as.integer(seed),
+                                          as.integer(row$seed))) {
+    stop("Start ID, fit scope, and seed do not match the signed start registry.",
+         call. = FALSE)
+  }
+  nums <- c(objective = objective,
+            objective_before_polish = objective_before_polish,
+            objective_after_polish = objective_after_polish)
+  if (any(!is.finite(nums)) || !is.numeric(kkt_by_block) ||
+      !length(kkt_by_block) || is.null(names(kkt_by_block)) ||
+      any(!is.finite(kkt_by_block)) || any(kkt_by_block < 0) ||
+      anyDuplicated(names(kkt_by_block)) || any(!nzchar(names(kkt_by_block)))) {
+    stop("Objective and named KKT evidence must be finite and complete.",
+         call. = FALSE)
+  }
+  if (!is.logical(polish_completed) || length(polish_completed) != 1L ||
+      is.na(polish_completed) || !is.logical(nonworsening) ||
+      length(nonworsening) != 1L || is.na(nonworsening)) {
+    stop("Polish and nonworsening evidence must be nonmissing logical values.",
+         call. = FALSE)
+  }
+  .scmix_v22_comp_sign(list(
+    protocol_id = .scmix_v22_comp_protocol_id,
+    analysis_contract_fingerprint = bound$analysis$fingerprint,
+    registry_fingerprint = bound$registry_fingerprint,
+    integration_contract_fingerprint = bound$integration$fingerprint,
+    fit_registry_fingerprint = bound$fit_registry$fingerprint,
+    application_id = bound$analysis$application_id,
+    specification_id = bound$analysis$specification_id,
+    fit_id = bound$fit_registry$fit_id, q = bound$fit_registry$q,
+    uses_numerical_integration =
+      bound$fit_registry$uses_numerical_integration,
+    fit_scope_id = fit_scope_id, start_id = start_id,
+    seed = as.integer(seed),
+    state_hash = .scmix_v22_comp_scalar_text(state_hash, "state_hash"),
+    objective = as.numeric(objective),
+    objective_definition_id = .scmix_v22_comp_scalar_text(
+      objective_definition_id, "objective_definition_id"),
+    dtype = .scmix_v22_comp_scalar_text(dtype, "dtype"),
+    polish_completed = polish_completed, nonworsening = nonworsening,
+    objective_before_polish = as.numeric(objective_before_polish),
+    objective_after_polish = as.numeric(objective_after_polish),
+    kkt_by_block = kkt_by_block,
+    line_search_status = .scmix_v22_comp_scalar_text(
+      line_search_status, "line_search_status")),
+    "scmix_v22_start_optimizer_evidence")
+}
+
+#' Sign target recomputation at one registered optimizer start
+#'
+#' @param optimizer_evidence Intact start evidence.
+#' @param analysis_contract,registry,integration_contract Intact contracts.
+#' @param reported_estimates,standard_errors Named values in exact target
+#'   registry order.
+#' @return A fingerprinted target-recomputation artifact.
+#' @export
+scmix_v22_target_recomputation <- function(
+    optimizer_evidence, analysis_contract, registry, integration_contract,
+    reported_estimates, standard_errors) {
+  bound <- .scmix_v22_comp_bind_contracts(
+    analysis_contract, registry, integration_contract)
+  if (!.scmix_v22_comp_intact(
+      optimizer_evidence, "scmix_v22_start_optimizer_evidence") ||
+      !identical(optimizer_evidence$analysis_contract_fingerprint,
+                 bound$analysis$fingerprint) ||
+      !identical(optimizer_evidence$registry_fingerprint,
+                 bound$registry_fingerprint) ||
+      !identical(optimizer_evidence$integration_contract_fingerprint,
+                 bound$integration$fingerprint)) {
+    stop("`optimizer_evidence` is not intact or contract-linked.",
+         call. = FALSE)
+  }
+  target_ids <- vapply(bound$registry, `[[`, character(1L), "target_id")
+  reported_estimates <- .scmix_v22_comp_named_numeric(
+    reported_estimates, "reported_estimates")
+  standard_errors <- .scmix_v22_comp_named_numeric(
+    standard_errors, "standard_errors", positive = TRUE)
+  if (!identical(names(reported_estimates), target_ids) ||
+      !identical(names(standard_errors), target_ids)) {
+    stop("Target estimates and raw-IF standard errors must use exact signed registry order.",
+         call. = FALSE)
+  }
+  .scmix_v22_comp_sign(list(
+    protocol_id = .scmix_v22_comp_protocol_id,
+    analysis_contract_fingerprint = bound$analysis$fingerprint,
+    registry_fingerprint = bound$registry_fingerprint,
+    integration_contract_fingerprint = bound$integration$fingerprint,
+    optimizer_evidence_fingerprint = optimizer_evidence$fingerprint,
+    fit_id = bound$fit_registry$fit_id,
+    specification_id = bound$analysis$specification_id,
+    fit_scope_id = optimizer_evidence$fit_scope_id,
+    start_id = optimizer_evidence$start_id,
+    state_hash = optimizer_evidence$state_hash,
+    reported_estimates = reported_estimates,
+    standard_errors = standard_errors,
+    standard_error_definition_id =
+      "centered_raw_one_step_respondent_sequence_influence"),
+    "scmix_v22_target_recomputation")
+}
+
 .scmix_v22_comp_scalar_text <- function(x, what) {
   if (!is.character(x) || length(x) != 1L || is.na(x) ||
       !nzchar(trimws(x))) {
@@ -98,135 +534,129 @@
 #' one-fold substitution or another start path frozen by the application
 #' registry.  The function does not construct such paths itself.
 #'
-#' @param evaluations A data frame with one row for each fit-scope, start, and
-#'   target combination. Required columns are `fit_scope_id`, `start_id`,
-#'   `state_hash`, `objective`, `objective_definition_id`, `polished`, `dtype`,
-#'   `target_id`, `reported_estimate`, `standard_error`,
-#'   `standard_error_definition_id`, `analysis_signature`, and `registry_hash`.
-#'   The standard-error definition must be centered raw one-step respondent
-#'   influence. `objective` is the minimized
-#'   mean penalized negative complete-sequence log likelihood.
-#' @param registered_targets Frozen target IDs.
-#' @param registered_starts Either one vector of start IDs used in every fit
-#'   scope or a named list indexed by fit scope.
-#' @param near_optimum_objective_cutoff Step-3 cutoff for the relative
-#'   objective gap. `NULL` leaves the statistic pending.
-#' @param multistart_target_se_cutoff Step-3 F008 cutoff. `NULL` fails closed
-#'   for production and remains visibly pending in calibration mode.
+#' @param evaluations Intact fingerprinted target-recomputation artifacts.
+#' @param optimizer_evidence Intact fingerprinted optimizer/polish evidence,
+#'   one object for every signed fit-scope and start pair.
+#' @param analysis_contract,registry,integration_contract Intact frozen
+#'   contracts.
+#' @param calibration_contract Intact Step-3 computation calibration. It is
+#'   required in production mode and must match the exact analysis calibration
+#'   hash.
 #' @param protocol_mode Either `"calibration"` or `"production"`.
-#' @param protocol_id Frozen protocol ID.
 #' @return A signed multistart evidence object with all relative objective
 #'   gaps, target changes, targetwise maxima, and F008 gate rows.
 #' @export
 scmix_v22_multistart_stability <- function(
-    evaluations, registered_targets, registered_starts,
-    near_optimum_objective_cutoff = NULL,
-    multistart_target_se_cutoff = NULL,
-    protocol_mode = c("calibration", "production"),
-    protocol_id = "paperps-inference-2026-09-05-v2.2") {
+    evaluations, optimizer_evidence, analysis_contract, registry,
+    integration_contract, calibration_contract = NULL,
+    protocol_mode = c("calibration", "production")) {
   mode <- .scmix_v22_comp_mode(protocol_mode)
-  protocol_id <- .scmix_v22_comp_scalar_text(protocol_id, "protocol_id")
-  if (!identical(protocol_id, .scmix_v22_comp_protocol_id)) {
-    stop("The protocol ID does not match frozen inference protocol v2.2.",
+  bound <- .scmix_v22_comp_bind_contracts(
+    analysis_contract, registry, integration_contract,
+    calibration_contract, require_calibration = identical(mode, "production"))
+  if (!is.list(optimizer_evidence) || !length(optimizer_evidence) ||
+      !all(vapply(optimizer_evidence, .scmix_v22_comp_intact, logical(1L),
+                  class_name = "scmix_v22_start_optimizer_evidence"))) {
+    stop("`optimizer_evidence` must contain intact signed per-start artifacts.",
          call. = FALSE)
   }
-  required <- c(
-    "fit_scope_id", "start_id", "state_hash", "objective",
-    "objective_definition_id", "polished", "dtype", "target_id",
-    "reported_estimate", "standard_error", "standard_error_definition_id",
-    "analysis_signature", "registry_hash")
-  if (!is.data.frame(evaluations) || !all(required %in% names(evaluations)) ||
-      !nrow(evaluations)) {
-    stop("`evaluations` is missing required v2.2 multistart columns.",
+  if (!is.list(evaluations) || !length(evaluations) ||
+      !all(vapply(evaluations, .scmix_v22_comp_intact, logical(1L),
+                  class_name = "scmix_v22_target_recomputation"))) {
+    stop("`evaluations` must contain intact signed target recomputations.",
          call. = FALSE)
   }
-  ev <- evaluations[, required, drop = FALSE]
-  text_columns <- setdiff(required, c(
-    "objective", "polished", "reported_estimate", "standard_error"))
-  if (any(vapply(ev[text_columns], function(x) {
-    !is.character(x) || anyNA(x) || any(!nzchar(x))
-  }, logical(1L)))) {
-    stop("All multistart identifiers and hashes must be nonempty character values.",
+  expected <- bound$fit_registry$starts
+  evidence_key <- vapply(optimizer_evidence, function(x)
+    paste(x$fit_scope_id, x$start_id, sep = "\r"), character(1L))
+  expected_key <- paste(expected$fit_scope_id, expected$start_id, sep = "\r")
+  if (anyDuplicated(evidence_key) || !setequal(evidence_key, expected_key)) {
+    stop("Optimizer evidence must cover every and only the signed fit-scope/start registry.",
          call. = FALSE)
   }
-  if (!is.logical(ev$polished) || anyNA(ev$polished) ||
-      !all(ev$polished)) {
-    stop("Every registered start must be a completed polished state.",
-         call. = FALSE)
-  }
-  if (any(ev$dtype != "float64")) {
-    stop("Every registered start must have dtype `float64`.", call. = FALSE)
-  }
-  if (!is.numeric(ev$objective) || !is.numeric(ev$reported_estimate) ||
-      !is.numeric(ev$standard_error) ||
-      any(!is.finite(ev$objective)) ||
-      any(!is.finite(ev$reported_estimate)) ||
-      any(!is.finite(ev$standard_error)) || any(ev$standard_error <= 0)) {
-    stop("Objectives, target estimates, and positive standard errors must be finite.",
-         call. = FALSE)
-  }
-  registered_targets <- as.character(registered_targets)
-  if (!length(registered_targets) || anyNA(registered_targets) ||
-      any(!nzchar(registered_targets)) || anyDuplicated(registered_targets)) {
-    stop("`registered_targets` must contain unique nonempty target IDs.",
-         call. = FALSE)
-  }
-  if (!setequal(unique(ev$target_id), registered_targets)) {
-    stop("Observed target IDs do not equal the frozen target registry.",
-         call. = FALSE)
-  }
-  scopes <- unique(ev$fit_scope_id)
-  starts <- .scmix_v22_comp_registered_starts(registered_starts, scopes)
-  if (length(unique(ev$analysis_signature)) != 1L ||
-      length(unique(ev$registry_hash)) != 1L ||
-      length(unique(ev$objective_definition_id)) != 1L ||
-      length(unique(ev$standard_error_definition_id)) != 1L) {
-    stop("Analysis, registry, objective, and standard-error identifiers must be constant.",
-         call. = FALSE)
-  }
-  if (!identical(unique(ev$standard_error_definition_id),
-                 "raw_one_step_respondent_influence")) {
-    stop("F008 standard errors must come from centered raw one-step respondent influence values.",
-         call. = FALSE)
-  }
-  key <- paste(ev$fit_scope_id, ev$start_id, ev$target_id, sep = "\r")
-  if (anyDuplicated(key)) {
-    stop("Each fit-scope, start, and target combination must occur once.",
-         call. = FALSE)
-  }
-  for (scope in scopes) {
-    es <- ev[ev$fit_scope_id == scope, , drop = FALSE]
-    if (!setequal(unique(es$start_id), starts[[scope]])) {
-      stop("Observed starts do not equal the frozen registry in scope `",
-           scope, "`.", call. = FALSE)
-    }
-    expected <- expand.grid(
-      start_id = starts[[scope]], target_id = registered_targets,
-      stringsAsFactors = FALSE)
-    observed <- unique(es[, c("start_id", "target_id")])
-    if (nrow(observed) != nrow(expected) ||
-        !setequal(paste(observed$start_id, observed$target_id),
-                  paste(expected$start_id, expected$target_id))) {
-      stop("Every registered start must evaluate every registered target in scope `",
-           scope, "`.", call. = FALSE)
-    }
-    invariant <- split(es, es$start_id)
-    ok <- vapply(invariant, function(z) {
-      length(unique(z$objective)) == 1L &&
-        length(unique(z$state_hash)) == 1L &&
-        length(unique(z$dtype)) == 1L &&
-        length(unique(z$polished)) == 1L
-    }, logical(1L))
-    if (!all(ok)) {
-      stop("Start-level state and objective fields vary across target rows.",
+  optimizer_evidence <- optimizer_evidence[match(expected_key, evidence_key)]
+  objective_id <- paste0(
+    "mean_negative_complete_sequence_loglik_per_respondent_",
+    "plus_declared_penalty_in_nats")
+  for (i in seq_along(optimizer_evidence)) {
+    x <- optimizer_evidence[[i]]
+    row <- expected[i, ]
+    links <- c(
+      identical(x$analysis_contract_fingerprint, bound$analysis$fingerprint),
+      identical(x$registry_fingerprint, bound$registry_fingerprint),
+      identical(x$integration_contract_fingerprint,
+                bound$integration$fingerprint),
+      identical(x$fit_registry_fingerprint, bound$fit_registry$fingerprint),
+      identical(x$fit_id, bound$fit_registry$fit_id),
+      identical(x$specification_id, bound$analysis$specification_id),
+      identical(x$q, bound$integration$q),
+      identical(x$uses_numerical_integration,
+                bound$integration$uses_numerical_integration),
+      identical(x$fit_scope_id, row$fit_scope_id),
+      identical(x$start_id, row$start_id),
+      identical(x$seed, as.integer(row$seed)),
+      identical(x$objective_definition_id, objective_id),
+      identical(x$dtype, "float64"), isTRUE(x$polish_completed),
+      isTRUE(x$nonworsening),
+      is.finite(x$objective_before_polish),
+      is.finite(x$objective_after_polish),
+      x$objective_after_polish <= x$objective_before_polish,
+      is.numeric(x$kkt_by_block) && length(x$kkt_by_block) > 0L &&
+        all(is.finite(x$kkt_by_block)),
+      is.character(x$line_search_status) && length(x$line_search_status) == 1L &&
+        nzchar(x$line_search_status))
+    if (!all(links)) {
+      stop("Per-start optimizer, polish, seed, KKT, or contract evidence is inconsistent.",
            call. = FALSE)
     }
   }
-
-  near_cut <- .scmix_v22_comp_cutoff(
-    near_optimum_objective_cutoff, "near_optimum_objective_cutoff")
-  target_cut <- .scmix_v22_comp_cutoff(
-    multistart_target_se_cutoff, "multistart_target_se_cutoff")
+  recompute_key <- vapply(evaluations, function(x)
+    paste(x$fit_scope_id, x$start_id, sep = "\r"), character(1L))
+  if (anyDuplicated(recompute_key) || !setequal(recompute_key, expected_key)) {
+    stop("Target recomputations must cover every signed fit-scope/start pair.",
+         call. = FALSE)
+  }
+  evaluations <- evaluations[match(expected_key, recompute_key)]
+  registered_targets <- vapply(
+    bound$registry, `[[`, character(1L), "target_id")
+  rows <- vector("list", length(evaluations))
+  for (i in seq_along(evaluations)) {
+    x <- evaluations[[i]]; opt <- optimizer_evidence[[i]]
+    links <- c(
+      identical(x$analysis_contract_fingerprint, bound$analysis$fingerprint),
+      identical(x$registry_fingerprint, bound$registry_fingerprint),
+      identical(x$integration_contract_fingerprint,
+                bound$integration$fingerprint),
+      identical(x$optimizer_evidence_fingerprint, opt$fingerprint),
+      identical(x$fit_id, bound$fit_registry$fit_id),
+      identical(x$specification_id, bound$analysis$specification_id),
+      identical(x$fit_scope_id, opt$fit_scope_id),
+      identical(x$start_id, opt$start_id),
+      identical(x$state_hash, opt$state_hash),
+      identical(names(x$reported_estimates), registered_targets),
+      identical(names(x$standard_errors), registered_targets),
+      identical(x$standard_error_definition_id,
+                "centered_raw_one_step_respondent_sequence_influence"))
+    if (!all(links) || any(!is.finite(x$reported_estimates)) ||
+        any(!is.finite(x$standard_errors)) || any(x$standard_errors <= 0)) {
+      stop("Target recomputation is incomplete or not linked to its exact optimizer state.",
+           call. = FALSE)
+    }
+    rows[[i]] <- data.frame(
+      fit_scope_id = opt$fit_scope_id, start_id = opt$start_id,
+      state_hash = opt$state_hash, objective = opt$objective,
+      target_id = registered_targets,
+      reported_estimate = unname(x$reported_estimates),
+      standard_error = unname(x$standard_errors), stringsAsFactors = FALSE)
+  }
+  ev <- do.call(rbind, rows); rownames(ev) <- NULL
+  scopes <- bound$fit_registry$fit_scope_ids
+  starts <- split(expected$start_id, expected$fit_scope_id)
+  starts <- starts[scopes]
+  near_cut <- if (is.null(bound$calibration)) .scmix_v22_pending_cutoff else
+    bound$calibration$cutoffs$near_optimum_objective_cutoff
+  target_cut <- if (is.null(bound$calibration)) .scmix_v22_pending_cutoff else
+    bound$calibration$cutoffs$multistart_target_se_cutoff
   details <- vector("list", length(scopes))
   names(details) <- scopes
   comparisons <- list()
@@ -303,11 +733,21 @@ scmix_v22_multistart_stability <- function(
   })
   gates <- .scmix_v22_comp_bind_gates(gates)
   out <- list(
-    protocol_id = protocol_id, protocol_mode = mode,
-    analysis_signature = unique(ev$analysis_signature),
-    registry_hash = unique(ev$registry_hash),
-    objective_definition_id = unique(ev$objective_definition_id),
-    standard_error_definition_id = unique(ev$standard_error_definition_id),
+    protocol_id = .scmix_v22_comp_protocol_id, protocol_mode = mode,
+    analysis_signature = bound$analysis$analysis_signature,
+    analysis_contract_fingerprint = bound$analysis$fingerprint,
+    registry_fingerprint = bound$registry_fingerprint,
+    integration_contract_fingerprint = bound$integration$fingerprint,
+    fit_registry_fingerprint = bound$fit_registry$fingerprint,
+    calibration_contract_fingerprint = if (is.null(bound$calibration)) NULL else
+      bound$calibration$fingerprint,
+    calibration_hash = bound$analysis$calibration_hash,
+    fit_id = bound$fit_registry$fit_id,
+    specification_id = bound$analysis$specification_id,
+    q = bound$integration$q,
+    objective_definition_id = objective_id,
+    standard_error_definition_id =
+      "centered_raw_one_step_respondent_sequence_influence",
     registered_targets = registered_targets,
     registered_starts = starts,
     near_optimum_objective_cutoff = near_cut,
@@ -315,13 +755,12 @@ scmix_v22_multistart_stability <- function(
     start_details = start_details, comparisons = comparison_table,
     statistic_by_target = target_statistic, gates = gates,
     calibration_only = identical(mode, "calibration"),
-    production_ready = identical(mode, "production") &&
+    selected_gate_subset_passed = identical(mode, "production") &&
       all(gates$state %in% c("pass", "not_applicable")),
     application_runner_note = paste(
       "The application runner, not this pure validator, must recompute each",
       "registered target under every registered polished start path."))
-  class(out) <- c("scmix_v22_multistart_stability", "list")
-  out
+  .scmix_v22_comp_sign(out, "scmix_v22_multistart_stability")
 }
 
 .scmix_v22_comp_named_numeric <- function(x, what, positive = FALSE) {
@@ -345,9 +784,8 @@ scmix_v22_multistart_stability <- function(
 .scmix_v22_comp_if_ratio <- function(a, b) {
   rms <- sqrt(mean((b - a)^2))
   sigma <- sqrt(mean((a - mean(a))^2))
-  if (sigma == 0) {
-    if (rms == 0) 0 else Inf
-  } else rms / sigma
+  if (!is.finite(sigma) || sigma <= 0 || !is.finite(rms)) return(NA_real_)
+  rms / sigma
 }
 
 .scmix_v22_comp_validate_evaluation <- function(x, what,
@@ -363,6 +801,10 @@ scmix_v22_multistart_stability <- function(
     "integrated_target_ids", "integrated_primitive_ids")
   if (!is.list(x) || !all(required %in% names(x))) {
     stop("`", what, "` is missing required v2.2 evaluation fields.",
+         call. = FALSE)
+  }
+  if (!.scmix_v22_comp_intact(x, "scmix_v22_integration_evaluation")) {
+    stop("`", what, "` must be an intact fingerprinted integration evaluation.",
          call. = FALSE)
   }
   for (nm in c("protocol_id", "analysis_signature", "registry_hash",
@@ -425,9 +867,16 @@ scmix_v22_multistart_stability <- function(
   x$covariance <- x$covariance[names(x$objective)]
   if (any(vapply(x$covariance, function(z) {
     !is.matrix(z) || !is.numeric(z) || nrow(z) != ncol(z) ||
-      any(!is.finite(z))
+      nrow(z) < 1L || any(!is.finite(z)) || is.null(rownames(z)) ||
+      is.null(colnames(z)) || any(!nzchar(rownames(z))) ||
+      any(!nzchar(colnames(z))) || anyDuplicated(rownames(z)) ||
+      anyDuplicated(colnames(z)) || !identical(rownames(z), colnames(z)) ||
+      max(abs(z - t(z))) > sqrt(.Machine$double.eps) * max(1, max(abs(z))) ||
+      min(eigen((z + t(z)) / 2, symmetric = TRUE,
+                only.values = TRUE)$values) <
+        -sqrt(.Machine$double.eps) * max(1, max(abs(z)))
   }, logical(1L)))) {
-    stop("Every covariance entry must be a finite square matrix.",
+    stop("Every covariance entry must be nonempty, named, symmetric, and positive semidefinite.",
          call. = FALSE)
   }
   x$targets <- .scmix_v22_comp_named_numeric(
@@ -693,9 +1142,9 @@ scmix_v22_integration_compare <- function(
   gates <- list()
   for (id in names(a$targets)) {
     target_applicable <- isTRUE(a$uses_numerical_integration) &&
-      id %in% a$integrated_target_ids
-    influence_applicable <- isTRUE(a$uses_numerical_integration) &&
-      any(target_primitives[[id]] %in% a$integrated_primitive_ids)
+      (id %in% a$integrated_target_ids ||
+       any(target_primitives[[id]] %in% a$integrated_primitive_ids))
+    influence_applicable <- target_applicable
     gates[[length(gates) + 1L]] <- .scmix_v22_comp_gate(
       "I001", "target", "hard_target",
       .scmix_v22_comp_gate_state(worse$target[[id]], target_cut, mode,
@@ -730,7 +1179,7 @@ scmix_v22_integration_compare <- function(
     if (fit_applicable) {
       "The maximum objective discrepancy spans full and outer-fold fits and both branches."
     } else "I003 is not applicable because this fit uses no numerical integration.",
-    "all_full_and_outer_fits")
+    a$specification_id)
   gates[[length(gates) + 1L]] <- .scmix_v22_comp_gate(
     "I004", "fit", "hard_fit",
     .scmix_v22_comp_gate_state(fit_max[["score"]], score_cut, mode,
@@ -741,7 +1190,7 @@ scmix_v22_integration_compare <- function(
     if (fit_applicable) {
       "The maximum full-batch score discrepancy spans full and outer-fold fits and both branches."
     } else "I004 is not applicable because this fit uses no numerical integration.",
-    "all_full_and_outer_fits")
+    a$specification_id)
   covariance_applicable <- fit_applicable && as.integer(a$q) > 0L
   covariance_state <- .scmix_v22_comp_gate_state(
     fit_max[["covariance"]], covariance_cut, mode, covariance_applicable)
@@ -753,7 +1202,7 @@ scmix_v22_integration_compare <- function(
     if (covariance_applicable) {
       "The maximum structural-covariance discrepancy spans full and outer-fold fits and both branches."
     } else "I005 is not applicable because q=0 or the fit uses no numerical integration.",
-    "all_full_and_outer_fits")
+    a$specification_id)
   gates <- .scmix_v22_comp_bind_gates(gates)
   out <- list(
     protocol_id = protocol_id, protocol_mode = mode,
@@ -768,14 +1217,13 @@ scmix_v22_integration_compare <- function(
     influence_statistic_by_target = influence_by_target,
     maximum_fit_metrics = fit_max, target_primitives = target_primitives,
     gates = gates, calibration_only = identical(mode, "calibration"),
-    production_ready = identical(mode, "production") &&
+    selected_gate_subset_passed = identical(mode, "production") &&
       all(gates$state %in% c("pass", "not_applicable")),
     branches = list(level_a = a, fixed_b = f, repolished_b = r),
     application_runner_note = paste(
       "The application runner must compute likelihood, score, covariance,",
       "targets, Riesz solutions, and influence values under both level-B branches."))
-  class(out) <- c("scmix_v22_integration_refinement", "list")
-  out
+  .scmix_v22_comp_sign(out, "scmix_v22_integration_refinement")
 }
 
 #' Orchestrate the two required integration-refinement branches
