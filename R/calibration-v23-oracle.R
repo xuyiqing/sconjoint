@@ -44,7 +44,7 @@
   preference_direction_share = "r_positive",
   compensating_benefit_share = "r_plus_0.5_times_d_positive",
   directional_heterogeneity = "r_explained_share",
-  mean_tradeoff_mrs_ratio = "s_over_d")
+  mean_tradeoff_mrs_ratio = "negative_s_over_d")
 
 .scmix_v23_oracle_number <- function(row, name, default) {
   value <- if (name %in% names(row)) row[[name]][[1L]] else default
@@ -271,7 +271,8 @@
     r = r, s = s, d_regular = d_regular, d_weak = d_weak,
     eigenvalues = pmax(eig$values, 0), active_columns = which(dx$active),
     response_free_hash = if (!is.null(template$hashes))
-      template$hashes$response_free_payload_hash else NA_character_)
+      unname(template$hashes[["response_free_payload_hash"]]) else
+        NA_character_)
 }
 
 .scmix_v23_oracle_theta <- function(config) {
@@ -409,7 +410,7 @@
     preference_direction_share = direction,
     compensating_benefit_share = compensating,
     directional_heterogeneity = explained / (explained + residual),
-    mean_tradeoff_mrs_ratio = numerator / denominator)
+    mean_tradeoff_mrs_ratio = -numerator / denominator)
 }
 
 #' Compute outcome-free Step-3 oracle truths
@@ -863,34 +864,32 @@ scmix_v23_oracle_truths <- function(
 
 .scmix_v23_oracle_gate_map <- list(
   unrestricted_mean_direction = c(
+    "active_eigenvalue_standardized_cutoff",
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"),
-  probability = c("chart_discrepancy_cutoff", "nonlinear_remainder_cutoff",
-                  "interior_distance_cutoff", "generalized_information_margin",
+  probability = c("chart_discrepancy_cutoff", "interior_distance_cutoff",
+                  "active_eigenvalue_standardized_cutoff",
+                  "generalized_information_margin",
                   "null_space_materiality_cutoff", "defect_cutoff",
                   "ridge_cutoff"),
   subgroup_share = c("subgroup_interior_margin",
-                     "chart_discrepancy_cutoff",
                      "nonlinear_remainder_cutoff",
+                     "active_eigenvalue_standardized_cutoff",
                      "generalized_information_margin",
                      "null_space_materiality_cutoff", "defect_cutoff",
                      "ridge_cutoff"),
   preference_direction_share = c(
-    "chart_discrepancy_cutoff", "nonlinear_remainder_cutoff",
+    "chart_discrepancy_cutoff", "interior_distance_cutoff",
     "active_eigenvalue_standardized_cutoff",
-    "directional_variance_standardized_cutoff",
-    "total_heterogeneity_standardized_cutoff",
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"),
   compensating_benefit_share = c(
-    "chart_discrepancy_cutoff", "nonlinear_remainder_cutoff",
+    "chart_discrepancy_cutoff", "interior_distance_cutoff",
     "active_eigenvalue_standardized_cutoff",
-    "directional_variance_standardized_cutoff",
-    "total_heterogeneity_standardized_cutoff",
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"),
   directional_heterogeneity = c(
-    "chart_discrepancy_cutoff", "nonlinear_remainder_cutoff",
+    "nonlinear_remainder_cutoff",
     "directional_heterogeneity_regularity_margin",
     "active_eigenvalue_standardized_cutoff",
     "directional_variance_standardized_cutoff",
@@ -898,10 +897,86 @@ scmix_v23_oracle_truths <- function(
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"),
   mean_tradeoff_mrs_ratio = c(
-    "mean_tradeoff_denominator_margin", "chart_discrepancy_cutoff",
-    "nonlinear_remainder_cutoff", "denominator_standardized_cutoff",
+    "mean_tradeoff_denominator_margin", "nonlinear_remainder_cutoff",
+    "denominator_standardized_cutoff",
+    "active_eigenvalue_standardized_cutoff",
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"))
+
+## A regime-level severity label is not automatically an unsafe label for
+## every target that happens to be reported in that regime.  These bindings
+## state which target (or fit) the frozen perturbation was designed to stress.
+## In particular, shrinking the residual loading does not shrink total
+## directional heterogeneity while the moderator component remains nonzero,
+## so the present DGP supplies no valid unsafe cell for the total-
+## heterogeneity cutoff.  That constant must remain uncalibrated until a
+## prospectively amended DGP supplies one.
+.scmix_v23_oracle_targeted_failure_targets <- list(
+  subgroup_interior_margin = "subgroup_share",
+  directional_heterogeneity_regularity_margin = "directional_heterogeneity",
+  mean_tradeoff_denominator_margin = "mean_tradeoff_mrs_ratio",
+  chart_discrepancy_cutoff = "probability",
+  nonlinear_remainder_cutoff = "subgroup_share",
+  interior_distance_cutoff = "probability",
+  active_eigenvalue_standardized_cutoff = .scmix_v23_oracle_targets,
+  generalized_information_margin = "mean_tradeoff_mrs_ratio",
+  directional_variance_standardized_cutoff = "directional_heterogeneity",
+  total_heterogeneity_standardized_cutoff = character(),
+  denominator_standardized_cutoff = "mean_tradeoff_mrs_ratio",
+  null_space_materiality_cutoff = "mean_tradeoff_mrs_ratio",
+  defect_cutoff = "mean_tradeoff_mrs_ratio",
+  ridge_cutoff = "mean_tradeoff_mrs_ratio")
+
+.scmix_v23_oracle_calibration_unit <- function(constant, target_key,
+                                                target_id) {
+  if (identical(constant, "active_eigenvalue_standardized_cutoff")) {
+    return("fit_q1")
+  }
+  if (identical(target_id, "subgroup_share")) return("subgroup_share_joint")
+  as.character(target_key)
+}
+
+.scmix_v23_oracle_gate_certification <- function(
+    constant, target_id, regime_id, cell_certification_truth, registry) {
+  adverse <- registry$targeted_failure_regime[
+    match(constant, registry$constant)]
+  targets <- .scmix_v23_oracle_targeted_failure_targets[[constant]]
+  targeted <- length(adverse) == 1L && !is.na(adverse) &&
+    identical(as.character(regime_id), as.character(adverse)) &&
+    as.character(target_id) %in% targets
+  if (identical(regime_id, "well_informed_interior")) return("safe")
+  if (!targeted) return("not_targeted")
+  as.character(cell_certification_truth)
+}
+
+.scmix_v23_oracle_target_certification <- function(
+    target_id, regime_id, cell_certification_truth, registry) {
+  constants <- names(Filter(function(targets)
+    as.character(target_id) %in% targets,
+    .scmix_v23_oracle_targeted_failure_targets))
+  targeted <- any(registry$constant %in% constants &
+                    registry$targeted_failure_regime == regime_id)
+  if (identical(regime_id, "well_informed_interior")) return("safe")
+  if (!targeted) return("not_targeted")
+  as.character(cell_certification_truth)
+}
+
+.scmix_v23_oracle_active_eigen_statistic <- function(
+    loading, loading_variance) {
+  if (length(loading) != 1L || length(loading_variance) != 1L ||
+      !is.finite(loading) || !is.finite(loading_variance) ||
+      loading_variance < 0) {
+    stop("Loading and loading variance must be finite, with nonnegative variance.",
+         call. = FALSE)
+  }
+  eigenvalue <- loading^2
+  standard_error <- sqrt(max(
+    4 * loading^2 * loading_variance + 2 * loading_variance^2, 0))
+  standardized <- if (standard_error <= 0) Inf else
+    eigenvalue / standard_error
+  c(eigenvalue = eigenvalue, standard_error = standard_error,
+    standardized = standardized)
+}
 
 .scmix_v23_oracle_one <- function(problem, derivatives, seed, level) {
   set.seed(seed)
@@ -913,6 +988,7 @@ scmix_v23_oracle_truths <- function(
   estimate <- truth <- se <- stats::setNames(
     numeric(length(target_keys)), target_keys)
   lower <- upper <- estimate
+  oracle_benchmark_length <- estimate
   empty <- uninformative <- covered <- rep(FALSE, length(estimate))
   names(empty) <- names(uninformative) <- names(covered) <- names(estimate)
   linear <- plugin <- chart <- estimate
@@ -927,6 +1003,7 @@ scmix_v23_oracle_truths <- function(
       .5 * as.numeric(crossprod(delta, curvature %*% delta))
     se[[target]] <- sqrt(max(as.numeric(
       crossprod(gradient, Vtheta %*% gradient)), 0))
+    oracle_benchmark_length[[target]] <- 2 * zcrit * se[[target]]
     truth[[target]] <- problem$truth[[target]]
     if (identical(target, "directional_heterogeneity")) {
       z_variance <- mean((problem$prep$z_respondent -
@@ -981,10 +1058,18 @@ scmix_v23_oracle_truths <- function(
                     theta_hat[["denominator_moderator_slope"]] * zi)
       joint <- rbind(gnum, gden) %*% Vtheta %*% t(rbind(gnum, gden))
       interval <- .scmix_v23_oracle_fieller(num, den, joint, zcrit)
-      estimate[[target]] <- num / den
+      truth_num <- mean(problem$theta[["numerator_intercept"]] +
+                          problem$theta[["numerator_moderator_slope"]] * zi)
+      truth_den <- mean(problem$theta[["denominator_intercept"]] +
+                          problem$theta[["denominator_moderator_slope"]] * zi)
+      oracle_interval <- .scmix_v23_oracle_fieller(
+        truth_num, truth_den, joint, zcrit)
+      estimate[[target]] <- -num / den
       chart[[target]] <- linear[[target]]
-      lower[[target]] <- interval[["lower"]]
-      upper[[target]] <- interval[["upper"]]
+      lower[[target]] <- -interval[["upper"]]
+      upper[[target]] <- -interval[["lower"]]
+      oracle_benchmark_length[[target]] <-
+        oracle_interval[["upper"]] - oracle_interval[["lower"]]
       empty[[target]] <- as.logical(interval[["empty"]])
       uninformative[[target]] <- as.logical(interval[["uninformative"]])
     } else {
@@ -1007,7 +1092,11 @@ scmix_v23_oracle_truths <- function(
     empty_constraint_set = unname(empty),
     uninformative_constraint_set = unname(uninformative),
     linear_estimate = unname(linear), quadratic_plugin = unname(plugin),
+    oracle_benchmark_length = unname(oracle_benchmark_length),
     stringsAsFactors = FALSE)
+  targets$reported_interval_length <- targets$upper - targets$lower
+  targets$interval_length_ratio_to_oracle <-
+    targets$reported_interval_length / targets$oracle_benchmark_length
   targets$primitive_a_truth <- targets$primitive_b_truth <-
     targets$primitive_a_estimate <- targets$primitive_b_estimate <- NA_real_
   targets$subgroup_constraint_scale <-
@@ -1076,6 +1165,14 @@ scmix_v23_oracle_truths <- function(
   se_hr <- sqrt(max(as.numeric(crossprod(ghr, Vtheta %*% ghr)), 0))
   se_total <- sqrt(max(as.numeric(
     crossprod(ghz + ghr, Vtheta %*% (ghz + ghr))), 0))
+  ## G004 is a fit-level rank-separation diagnostic.  In the rank-one local
+  ## experiment the active covariance eigenvalue is loading^2.  Its Gaussian
+  ## sampling variance retains the second-order term, which is essential near
+  ## zero and keeps this diagnostic distinct from the target-directional
+  ## first-order H_R / se(H_R) diagnostic used by G006.
+  loading_index <- match("loading", names(problem$theta))
+  active <- .scmix_v23_oracle_active_eigen_statistic(
+    theta_hat[["loading"]], Vtheta[loading_index, loading_index])
   gden <- stats::setNames(rep(0, length(problem$theta)), names(problem$theta))
   gden[c("denominator_intercept", "denominator_moderator_slope")] <-
     c(1, mean(zresp))
@@ -1122,9 +1219,8 @@ scmix_v23_oracle_truths <- function(
       nonlinear_remainder_cutoff = ratio(
         plugin[[target]] - linear[[target]], se[[target]]),
       interior_distance_cutoff = ratio(
-        min(derivatives$value[[target]],
-            1 - derivatives$value[[target]]), se[[target]]),
-      active_eigenvalue_standardized_cutoff = ratio(residual, se_hr),
+        min(estimate[[target]], 1 - estimate[[target]]), se[[target]]),
+      active_eigenvalue_standardized_cutoff = active[["standardized"]],
       generalized_information_margin = information,
       directional_variance_standardized_cutoff = ratio(residual, se_hr),
       total_heterogeneity_standardized_cutoff = ratio(
@@ -1140,6 +1236,18 @@ scmix_v23_oracle_truths <- function(
       stringsAsFactors = FALSE)
   }
   gates <- do.call(rbind, gate_rows)
+  gates$calibration_unit_id <- vapply(seq_len(nrow(gates)), function(j)
+    .scmix_v23_oracle_calibration_unit(
+      gates$constant[[j]], gates$target_key[[j]], gates$target_id[[j]]),
+    character(1L))
+  gates$metric_scope <- ifelse(
+    gates$constant == "active_eigenvalue_standardized_cutoff",
+    "fit_q1", "target")
+  gates$statistical_authority <- ifelse(
+    gates$constant %in% c(
+      "null_space_materiality_cutoff", "defect_cutoff", "ridge_cutoff"),
+    "population_information_surrogate_requires_end_to_end_Riesz_validation",
+    "marginal_local_Gaussian_diagnostic_only")
   list(targets = targets, gates = gates, theta_hat = theta_hat,
        finite = all(is.finite(theta_hat)) &&
          all(is.finite(gates$value) | is.infinite(gates$value)))
@@ -1196,6 +1304,13 @@ scmix_v23_run_oracle_calibration <- function(
     replications = NULL, plan = scmix_v23_calibration_plan(), workers = 1L,
     pilot = FALSE) {
   stream <- match.arg(stream)
+  if (!isTRUE(pilot) && exists(
+      ".scmix_v23_step3_intact", mode = "function", inherits = TRUE) &&
+      !get(".scmix_v23_step3_intact", mode = "function", inherits = TRUE)(
+        plan, "scmix_v23_calibration_plan")) {
+    stop("A non-pilot oracle run requires the intact frozen plan.",
+         call. = FALSE)
+  }
   if (inherits(designs, "scmix_v23_design_template") ||
       (is.list(designs) && all(c("deltaX", "Z", "respondent_id", "task_id") %in%
                                 names(designs)))) designs <- list(designs)
@@ -1274,7 +1389,17 @@ scmix_v23_run_oracle_calibration <- function(
       one$targets$regime_id <- regime_id
       one$targets$severity_id <- severity_id
       one$targets$severity_index <- severity_index
-      one$targets$certification_truth <- problem$config$certification_truth
+      one$targets$cell_certification_truth <-
+        problem$config$certification_truth
+      one$targets$target_certification_truth <- vapply(
+        one$targets$target_id, .scmix_v23_oracle_target_certification,
+        character(1L), regime_id = regime_id,
+        cell_certification_truth = problem$config$certification_truth,
+        registry = plan$constants)
+      ## Retain the historical field as the target-specific label.  The
+      ## original severity-grid label is available explicitly above.
+      one$targets$certification_truth <-
+        one$targets$target_certification_truth
       one$targets$severity_role <- problem$config$severity_role
       one$targets$replication <- b
       one$targets$seed <- seed
@@ -1283,7 +1408,15 @@ scmix_v23_run_oracle_calibration <- function(
       one$gates$regime_id <- regime_id
       one$gates$severity_id <- severity_id
       one$gates$severity_index <- severity_index
-      one$gates$certification_truth <- problem$config$certification_truth
+      one$gates$cell_certification_truth <- problem$config$certification_truth
+      one$gates$target_certification_truth <- vapply(
+        seq_len(nrow(one$gates)), function(k)
+          .scmix_v23_oracle_gate_certification(
+            one$gates$constant[[k]], one$gates$target_id[[k]], regime_id,
+            problem$config$certification_truth, plan$constants),
+        character(1L))
+      one$gates$certification_truth <-
+        one$gates$target_certification_truth
       one$gates$severity_role <- problem$config$severity_role
       one$gates$replication <- b
       one$gates$seed <- seed
@@ -1315,8 +1448,12 @@ scmix_v23_run_oracle_calibration <- function(
   cells <- apply_fun(seq_len(nrow(jobs)), run_cell)
   out <- list(
     plan_id = plan$plan_id, protocol_id = plan$protocol_id,
+    plan_fingerprint = plan$fingerprint,
     stream = stream, layer = "oracle_local_gaussian", pilot = isTRUE(pilot),
     engine = "respondent_clustered_marginal_composite_Godambe",
+    design_ids = vapply(designs, `[[`, character(1L), "design_id"),
+    regime_ids = regime_ids, replications_per_cell = B,
+    frozen_replications_per_cell = frozen_reps,
     replications = do.call(rbind, lapply(cells, `[[`, "replications")),
     targets = do.call(rbind, lapply(cells, `[[`, "targets")),
     gates = do.call(rbind, lapply(cells, `[[`, "gates")),
@@ -1325,8 +1462,14 @@ scmix_v23_run_oracle_calibration <- function(
     numerical_proxy_metrics_used = FALSE,
     application_outcomes_used = FALSE,
     production_manifest_created = FALSE,
-    eligible_for_threshold_selection = identical(stream, "calibration") &&
-      !isTRUE(pilot) && B == frozen_reps)
+    statistical_engine_production_authority = FALSE,
+    production_promotion_permitted = FALSE,
+    production_promotion_blocker = paste0(
+      "marginal_local_Gaussian_oracle_requires_end_to_end_sequence_",
+      "likelihood_and_Riesz_validation"),
+    eligible_for_threshold_selection = FALSE,
+    eligible_for_diagnostic_threshold_selection =
+      identical(stream, "calibration") && !isTRUE(pilot) && B == frozen_reps)
   rownames(out$replications) <- rownames(out$targets) <-
     rownames(out$gates) <- NULL
   if (exists(".scmix_v23_step3_sign", mode = "function", inherits = TRUE)) {
@@ -1352,6 +1495,174 @@ scmix_v23_run_oracle_calibration <- function(
   c(lower = max(0, center - half), upper = min(1, center + half))
 }
 
+.scmix_v23_oracle_validation_assessment <- function(targets, run, plan) {
+  columns <- c(
+    "criterion", "design_id", "regime_id", "severity_id", "target_id",
+    "variant_id", "estimate", "lower", "upper", "numerator",
+    "denominator", "passed", "detail")
+  empty_result <- function() {
+    out <- as.data.frame(stats::setNames(replicate(
+      length(columns), logical(0L), simplify = FALSE), columns),
+      stringsAsFactors = FALSE)
+    out[c("criterion", "design_id", "regime_id", "severity_id",
+          "target_id", "variant_id", "detail")] <- lapply(
+            out[c("criterion", "design_id", "regime_id", "severity_id",
+                  "target_id", "variant_id", "detail")], as.character)
+    out[c("estimate", "lower", "upper", "numerator", "denominator")] <-
+      lapply(out[c("estimate", "lower", "upper", "numerator",
+                   "denominator")], as.numeric)
+    out
+  }
+  if (!identical(run$stream, "validation") || isTRUE(run$pilot)) {
+    return(list(criteria = empty_result(), all_statistical_criteria_pass = FALSE,
+                assessed = FALSE,
+                reason = "requires_full_untouched_validation_stream"))
+  }
+  rows <- list()
+  add <- function(criterion, dat, estimate, ci = c(lower = NA, upper = NA),
+                  numerator = NA_real_, denominator = NA_real_, passed,
+                  detail) {
+    rows[[length(rows) + 1L]] <<- data.frame(
+      criterion = criterion, design_id = dat$design_id[[1L]],
+      regime_id = dat$regime_id[[1L]],
+      severity_id = dat$severity_id[[1L]],
+      target_id = dat$target_id[[1L]], variant_id = dat$variant_id[[1L]],
+      estimate = as.numeric(estimate), lower = as.numeric(ci[["lower"]]),
+      upper = as.numeric(ci[["upper"]]), numerator = as.numeric(numerator),
+      denominator = as.numeric(denominator), passed = isTRUE(passed),
+      detail = detail, stringsAsFactors = FALSE)
+  }
+  binomial <- function(criterion, dat, event, denominator, rule, detail) {
+    keep <- denominator %in% TRUE
+    success <- sum(event %in% TRUE & keep)
+    total <- sum(keep)
+    ci <- .scmix_v23_oracle_wilson(success, total)
+    estimate <- if (total) success / total else NA_real_
+    add(criterion, dat, estimate, ci, success, total,
+        rule(estimate, ci, total), detail)
+  }
+
+  ## Coverage and constraint geometry are assessed target by target in the
+  ## well-informed cell.  The two subgroup variants carry the same joint
+  ## coverage/release event, so retain only one copy for these criteria.
+  well <- targets[targets$regime_id == "well_informed_interior", , drop = FALSE]
+  well$validation_variant <- ifelse(
+    well$target_id == "subgroup_share", "high_and_low_joint", well$variant_id)
+  well_groups <- split(well, interaction(
+    well$design_id, well$target_id, well$validation_variant, drop = TRUE))
+  for (dat in well_groups) {
+    if (identical(dat$target_id[[1L]], "subgroup_share")) {
+      dat <- dat[!duplicated(dat$replication), , drop = FALSE]
+      dat$variant_id <- "high_and_low_joint"
+    }
+    coverage_rule <- function(p, ci, n)
+      n > 0 && is.finite(p) && p >= .94 && p <= .96 &&
+      is.finite(ci[["lower"]]) && ci[["lower"]] <= .95 &&
+      is.finite(ci[["upper"]]) && ci[["upper"]] >= .95
+    binomial("well_informed_unconditional_coverage", dat,
+             dat$coverage_assessment_event, rep(TRUE, nrow(dat)),
+             coverage_rule,
+             "point in [0.94,0.96] and Wilson interval contains 0.95")
+    conditional_rule <- function(p, ci, n)
+      n >= plan$counts[["minimum_released_for_conditional_coverage"]] &&
+      coverage_rule(p, ci, n)
+    binomial("well_informed_conditional_coverage", dat,
+             dat$coverage_assessment_event, dat$released,
+             conditional_rule,
+             "coverage rule plus at least the frozen released-count minimum")
+    rare_rule <- function(p, ci, n)
+      n > 0 && is.finite(p) && p <= .01 && is.finite(ci[["upper"]]) &&
+      ci[["upper"]] <= .02
+    binomial("well_informed_empty_set_rate", dat,
+             dat$empty_assessment_event, rep(TRUE, nrow(dat)), rare_rule,
+             "point at most 0.01 and Wilson upper bound at most 0.02")
+    binomial("well_informed_uninformative_set_rate", dat,
+             dat$uninformative_assessment_event, rep(TRUE, nrow(dat)),
+             rare_rule,
+             "point at most 0.01 and Wilson upper bound at most 0.02")
+
+    ## Efficiency remains variant-specific even when subgroup coverage is
+    ## joint.  It uses only intervals that would actually be reported.
+    efficiency_parts <- if (identical(dat$target_id[[1L]], "subgroup_share")) {
+      split(well[well$design_id == dat$design_id[[1L]] &
+                   well$target_id == "subgroup_share", , drop = FALSE],
+            well$variant_id[well$design_id == dat$design_id[[1L]] &
+                              well$target_id == "subgroup_share"],
+            drop = TRUE)
+    } else list(dat)
+    for (eff in efficiency_parts) {
+      ratio <- eff$interval_length_ratio_to_oracle[
+        eff$released & !eff$empty_constraint_set &
+          is.finite(eff$interval_length_ratio_to_oracle) &
+          eff$interval_length_ratio_to_oracle >= 0]
+      n <- length(ratio)
+      median_ratio <- if (n) as.numeric(stats::quantile(
+        ratio, .5, names = FALSE, type = 8)) else NA_real_
+      p90_ratio <- if (n) as.numeric(stats::quantile(
+        ratio, .9, names = FALSE, type = 8)) else NA_real_
+      minimum <- plan$counts[["minimum_released_for_conditional_coverage"]]
+      add("well_informed_interval_median_ratio", eff, median_ratio,
+          denominator = n,
+          passed = n >= minimum && is.finite(median_ratio) &&
+            median_ratio <=
+              plan$rates[["maximum_interval_median_ratio_to_oracle"]],
+          detail = "reported natural length / frozen oracle benchmark <= 1.25")
+      add("well_informed_interval_p90_ratio_type8", eff, p90_ratio,
+          denominator = n,
+          passed = n >= minimum && is.finite(p90_ratio) &&
+            p90_ratio <= plan$rates[["maximum_interval_p90_ratio_to_oracle"]],
+          detail = "type-8 p90 reported length / oracle benchmark <= 2.0")
+    }
+  }
+
+  ## Passage checks are cell-specific.  Pooling the well-informed and mild
+  ## cells could conceal a failure in either one, so every safe target cell is
+  ## evaluated separately.  Only explicitly target-specific unsafe rows enter
+  ## false certification.
+  passage <- targets[targets$target_certification_truth %in% c("safe", "unsafe"),
+                     , drop = FALSE]
+  passage$validation_variant <- ifelse(
+    passage$target_id == "subgroup_share", "high_and_low_joint",
+    passage$variant_id)
+  passage_groups <- split(passage, interaction(
+    passage$design_id, passage$regime_id, passage$severity_id,
+    passage$target_id, passage$validation_variant, drop = TRUE))
+  for (dat in passage_groups) {
+    if (identical(dat$target_id[[1L]], "subgroup_share")) {
+      dat <- dat[!duplicated(dat$replication), , drop = FALSE]
+      dat$variant_id <- "high_and_low_joint"
+    }
+    if (identical(dat$target_certification_truth[[1L]], "safe")) {
+      safe_rule <- function(p, ci, n)
+        n > 0 && is.finite(p) && p >= .90 &&
+        is.finite(ci[["lower"]]) && ci[["lower"]] >= .88
+      binomial("target_specific_benign_passage", dat, dat$released,
+               rep(TRUE, nrow(dat)), safe_rule,
+               "point at least 0.90 and Wilson lower bound at least 0.88")
+    } else {
+      unsafe_rule <- function(p, ci, n)
+        n > 0 && is.finite(p) && p <= .01 &&
+        is.finite(ci[["upper"]]) && ci[["upper"]] <= .02
+      binomial("target_specific_false_certification", dat, dat$released,
+               rep(TRUE, nrow(dat)), unsafe_rule,
+               "point at most 0.01 and Wilson upper bound at most 0.02")
+    }
+  }
+  criteria <- if (length(rows)) do.call(rbind, rows) else empty_result()
+  rownames(criteria) <- NULL
+  expected <- plan$counts[["oracle_validation_reps"]]
+  cell_sizes <- table(targets$design_id, targets$regime_id,
+                      targets$severity_id, targets$target_key)
+  full_count <- length(cell_sizes) > 0L && all(cell_sizes == expected)
+  list(
+    criteria = criteria,
+    all_statistical_criteria_pass = full_count && nrow(criteria) > 0L &&
+      all(criteria$passed),
+    assessed = TRUE, frozen_cell_counts_used = full_count,
+    reason = if (full_count) "all_registered_statistical_criteria_evaluated"
+      else "validation_cell_counts_do_not_match_frozen_2000_replications")
+}
+
 #' Summarize the frozen Step-3 oracle operating characteristics
 #'
 #' @param run A calibration or untouched-validation oracle run.
@@ -1363,9 +1674,31 @@ scmix_v23_run_oracle_calibration <- function(
 #' @export
 scmix_v23_oracle_operating_characteristics <- function(
     run, thresholds, plan = scmix_v23_calibration_plan()) {
-  missing <- setdiff(.scmix_v23_oracle_names, names(thresholds))
-  if (length(missing)) {
-    stop("Missing oracle thresholds: ", paste(missing, collapse = ", "), ".",
+  if (!inherits(run, "scmix_v23_oracle_calibration_run") ||
+      (exists(".scmix_v23_step3_intact", mode = "function", inherits = TRUE) &&
+       !get(".scmix_v23_step3_intact", mode = "function", inherits = TRUE)(
+         run, "scmix_v23_oracle_calibration_run"))) {
+    stop("`run` must be an intact v2.3 oracle run.", call. = FALSE)
+  }
+  if (!identical(run$plan_id, plan$plan_id) ||
+      !identical(run$protocol_id, plan$protocol_id) ||
+      (!isTRUE(run$pilot) &&
+       !identical(run$plan_fingerprint, plan$fingerprint))) {
+    stop("The oracle run and prospective plan do not match.", call. = FALSE)
+  }
+  if (!is.numeric(thresholds) || is.null(names(thresholds)) ||
+      anyDuplicated(names(thresholds)) ||
+      !setequal(names(thresholds), .scmix_v23_oracle_names)) {
+    stop("Oracle evaluation requires exactly the 14 named oracle constants.",
+         call. = FALSE)
+  }
+  thresholds <- thresholds[.scmix_v23_oracle_names]
+  registry_threshold <- plan$constants[
+    match(names(thresholds), plan$constants$constant), , drop = FALSE]
+  positive <- registry_threshold$comparator == "greater_than_or_equal"
+  if (any(!is.finite(thresholds)) || any(thresholds[!positive] < 0) ||
+      any(thresholds[positive] <= 0)) {
+    stop("Oracle cutoffs must be finite and in their frozen nonnegative or strictly positive domains.",
          call. = FALSE)
   }
   gates <- run$gates
@@ -1375,15 +1708,44 @@ scmix_v23_oracle_operating_characteristics <- function(
   gates$pass <- .scmix_v23_oracle_pass(
     gates$value, gates$threshold, gates$comparator)
   gates$state <- ifelse(gates$pass, "pass", "fail")
+  gates$release_unit_id <- ifelse(
+    gates$target_id == "subgroup_share", "subgroup_share_joint",
+    gates$target_key)
   key <- paste(gates$design_id, gates$regime_id, gates$severity_id,
-               gates$replication, gates$target_key, sep = "\r")
+               gates$replication, gates$release_unit_id, sep = "\r")
   release <- tapply(gates$pass, key, function(x) all(x %in% TRUE))
-  target_key <- paste(
-    run$targets$design_id, run$targets$regime_id, run$targets$severity_id,
-    run$targets$replication, run$targets$target_key, sep = "\r")
   targets <- run$targets
+  targets$release_unit_id <- ifelse(
+    targets$target_id == "subgroup_share", "subgroup_share_joint",
+    targets$target_key)
+  target_key <- paste(
+    targets$design_id, targets$regime_id, targets$severity_id,
+    targets$replication, targets$release_unit_id, sep = "\r")
   targets$released <- as.logical(release[target_key])
   targets$released[is.na(targets$released)] <- FALSE
+  targets$coverage_assessment_event <- targets$covered
+  targets$empty_assessment_event <- targets$empty_constraint_set
+  targets$uninformative_assessment_event <-
+    targets$uninformative_constraint_set
+  subgroup <- targets$target_id == "subgroup_share"
+  if (any(subgroup)) {
+    subgroup_key <- paste(
+      targets$design_id[subgroup], targets$regime_id[subgroup],
+      targets$severity_id[subgroup], targets$replication[subgroup], sep = "\r")
+    joint_coverage <- tapply(targets$covered[subgroup], subgroup_key,
+                             function(x) all(x %in% TRUE))
+    joint_empty <- tapply(targets$empty_constraint_set[subgroup], subgroup_key,
+                          function(x) any(x %in% TRUE))
+    joint_uninformative <- tapply(
+      targets$uninformative_constraint_set[subgroup], subgroup_key,
+      function(x) any(x %in% TRUE))
+    targets$coverage_assessment_event[subgroup] <-
+      as.logical(joint_coverage[subgroup_key])
+    targets$empty_assessment_event[subgroup] <-
+      as.logical(joint_empty[subgroup_key])
+    targets$uninformative_assessment_event[subgroup] <-
+      as.logical(joint_uninformative[subgroup_key])
+  }
 
   group_cols <- c("design_id", "regime_id", "severity_id",
                   "certification_truth", "target_id", "variant_id")
@@ -1409,19 +1771,23 @@ scmix_v23_oracle_operating_characteristics <- function(
   }
   for (dat in split_target) {
     rows[[length(rows) + 1L]] <- add_binomial(
-      dat, "unconditional_coverage", dat$covered, rep(TRUE, nrow(dat)))
+      dat, "unconditional_coverage", dat$coverage_assessment_event,
+      rep(TRUE, nrow(dat)))
     rows[[length(rows) + 1L]] <- add_binomial(
-      dat, "coverage_conditional_on_release", dat$covered, dat$released)
+      dat, "coverage_conditional_on_release",
+      dat$coverage_assessment_event, dat$released)
     target_constants <- .scmix_v23_oracle_gate_map[[dat$target_id[[1L]]]]
     target_registry <- plan$constants[
       plan$constants$constant %in% target_constants, , drop = FALSE]
-    targeted <- identical(dat$certification_truth[[1L]], "unsafe") &&
+    targeted <- identical(dat$target_certification_truth[[1L]], "unsafe") &&
       any(target_registry$targeted_failure_regime == dat$regime_id[[1L]])
     rows[[length(rows) + 1L]] <- add_binomial(
       dat, "false_certification_rate", dat$released,
       rep(targeted, nrow(dat)))
-    finite_length <- is.finite(dat$upper - dat$lower)
-    length_value <- dat$upper[finite_length] - dat$lower[finite_length]
+    finite_length <- dat$released & !dat$empty_constraint_set &
+      is.finite(dat$reported_interval_length) &
+      dat$reported_interval_length >= 0
+    length_value <- dat$reported_interval_length[finite_length]
     standardized_length <- length_value / dat$se[finite_length]
     summarize_length <- function(characteristic, value, probability) {
       data.frame(
@@ -1533,9 +1899,15 @@ scmix_v23_oracle_operating_characteristics <- function(
     stop("The oracle summary does not contain every frozen operating ",
          "characteristics.", call. = FALSE)
   }
+  validation <- .scmix_v23_oracle_validation_assessment(targets, run, plan)
   list(summary = summary, targets = targets, gates = gates,
        simulated_gate_scope = "oracle_primary_simulated_only",
        unsimulated_constants = setdiff(plan$constants$constant,
                                         .scmix_v23_oracle_names),
-       thresholds_selected_here = FALSE, validation_used_for_tuning = FALSE)
+       thresholds_selected_here = FALSE, validation_used_for_tuning = FALSE,
+       validation = validation,
+       production_promotion_permitted = FALSE,
+       production_promotion_blocker = paste0(
+         "marginal_local_Gaussian_oracle_cannot_authorize_end_to_end_",
+         "sequence_likelihood_or_sample_Riesz_behavior"))
 }

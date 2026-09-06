@@ -1050,8 +1050,10 @@ scmix_v23_load_frozen_design <- function(design_id) {
   .scmix_v23_step3_sign(out, "scmix_v23_oracle_calibration_run")
 }
 
-.scmix_v23_step3_candidate_grid <- function(x) {
-  sort(unique(x[is.finite(x)]))
+.scmix_v23_step3_candidate_grid <- function(x, strictly_positive = FALSE) {
+  out <- x[is.finite(x)]
+  out <- out[if (isTRUE(strictly_positive)) out > 0 else out >= 0]
+  sort(unique(out))
 }
 
 .scmix_v23_step3_pass <- function(value, threshold, comparator) {
@@ -1084,49 +1086,84 @@ scmix_v23_load_frozen_design <- function(design_id) {
     stop("Every frozen alias group must use one comparator.", call. = FALSE)
   }
   comparator <- comparators[[1L]]
+  strictly_positive <- identical(comparator, "greater_than_or_equal") ||
+    any(member_ids == "numerical_rank_tolerance")
   candidates <- .scmix_v23_step3_candidate_grid(unlist(lapply(
-    member_ids, function(id) evidence[[id]]$value), use.names = FALSE))
+    member_ids, function(id) evidence[[id]]$value), use.names = FALSE),
+    strictly_positive = strictly_positive)
   if (!length(candidates)) {
     return(list(threshold = NA_real_, feasible = FALSE,
                 benign_passage = NA_real_, false_certification = NA_real_,
-                reason = "no_finite_metric_evidence"))
+                benign_reference_passage = NA_real_,
+                benign_targeted_safe_passage = NA_real_,
+                reason = "no_admissible_finite_metric_evidence"))
   }
   evaluate <- function(cutoff) {
     member <- lapply(member_ids, function(id) {
       dat <- evidence[[id]]
+      if (!"calibration_unit_id" %in% names(dat)) {
+        dat$calibration_unit_id <- "global"
+      }
       adverse_id <- plan$constants$targeted_failure_regime[
         match(id, plan$constants$constant)]
-      by_design <- lapply(unique(dat$design_id), function(design_id) {
-        benign_reference <- dat$value[
-          dat$design_id == design_id &
-            dat$regime_id == "well_informed_interior" &
-            dat$certification_truth == "safe"]
-        benign_near <- dat$value[
-          dat$design_id == design_id & dat$regime_id == adverse_id &
-            dat$certification_truth == "safe"]
-        adverse <- dat$value[
-          dat$design_id == design_id & dat$regime_id == adverse_id &
-            dat$certification_truth == "unsafe"]
+      targeted_units <- unique(dat$calibration_unit_id[
+        dat$regime_id == adverse_id &
+          dat$certification_truth == "unsafe"])
+      targeted_units <- targeted_units[!is.na(targeted_units) &
+                                         nzchar(targeted_units)]
+      if (!length(targeted_units)) return(NULL)
+      cells <- expand.grid(
+        design_id = unique(dat$design_id),
+        calibration_unit_id = targeted_units,
+        stringsAsFactors = FALSE)
+      by_design_unit <- lapply(seq_len(nrow(cells)), function(j) {
+        design_id <- cells$design_id[[j]]
+        unit <- cells$calibration_unit_id[[j]]
+        in_unit <- dat$design_id == design_id &
+          dat$calibration_unit_id == unit
+        benign_reference <- dat$value[in_unit &
+          dat$regime_id == "well_informed_interior" &
+          dat$certification_truth == "safe"]
+        benign_near <- dat$value[in_unit & dat$regime_id == adverse_id &
+          dat$certification_truth == "safe"]
+        adverse <- dat$value[in_unit & dat$regime_id == adverse_id &
+          dat$certification_truth == "unsafe"]
         if (!length(benign_reference) || !length(benign_near) ||
             !length(adverse)) {
           stop("Threshold evidence lacks a per-design reference, safe-near, or unsafe cell.",
                call. = FALSE)
         }
-        benign <- c(benign_reference, benign_near)
-        c(benign = mean(.scmix_v23_step3_pass(
-          benign, cutoff, comparator)),
+        c(reference = mean(.scmix_v23_step3_pass(
+          benign_reference, cutoff, comparator)),
+          targeted_safe = mean(.scmix_v23_step3_pass(
+            benign_near, cutoff, comparator)),
           adverse = mean(.scmix_v23_step3_pass(
             adverse, cutoff, comparator)))
       })
-      by_design <- do.call(rbind, by_design)
-      c(benign = min(by_design[, "benign"]),
-        adverse = max(by_design[, "adverse"]))
+      by_design_unit <- do.call(rbind, by_design_unit)
+      c(reference = min(by_design_unit[, "reference"]),
+        targeted_safe = min(by_design_unit[, "targeted_safe"]),
+        benign = min(by_design_unit[, c("reference", "targeted_safe")]),
+        adverse = max(by_design_unit[, "adverse"]))
     })
+    if (any(vapply(member, is.null, logical(1L)))) {
+      return(c(reference = NA_real_, targeted_safe = NA_real_,
+               benign = NA_real_, adverse = NA_real_))
+    }
     member <- do.call(rbind, member)
-    c(benign = min(member[, "benign"]),
+    c(reference = min(member[, "reference"]),
+      targeted_safe = min(member[, "targeted_safe"]),
+      benign = min(member[, "benign"]),
       adverse = max(member[, "adverse"]))
   }
-  rates <- t(vapply(candidates, evaluate, numeric(2L)))
+  rates <- t(vapply(candidates, evaluate, numeric(4L)))
+  if (all(!is.finite(rates[, "adverse"]))) {
+    return(list(threshold = NA_real_, feasible = FALSE,
+                benign_passage = NA_real_, false_certification = NA_real_,
+                benign_reference_passage = NA_real_,
+                benign_targeted_safe_passage = NA_real_,
+                reason = "no_target_specific_unsafe_evidence"))
+  }
   feasible <- rates[, "benign"] >=
     plan$rates[["minimum_benign_passage"]] &
     rates[, "adverse"] <=
@@ -1154,6 +1191,10 @@ scmix_v23_load_frozen_design <- function(design_id) {
     threshold = as.numeric(candidates[[chosen]]),
     feasible = isTRUE(feasible[[chosen]]),
     benign_passage = as.numeric(rates[chosen, "benign"]),
+    benign_reference_passage =
+      as.numeric(rates[chosen, "reference"]),
+    benign_targeted_safe_passage =
+      as.numeric(rates[chosen, "targeted_safe"]),
     false_certification = as.numeric(rates[chosen, "adverse"]),
     reason = reason)
 }
@@ -1179,6 +1220,12 @@ scmix_v23_load_frozen_design <- function(design_id) {
 scmix_v23_select_calibration_constants <- function(
     oracle_run, numerical_run = NULL,
     plan = scmix_v23_calibration_plan()) {
+  if (nrow(plan$constants) != 26L || anyDuplicated(plan$constants$constant) ||
+      !identical(plan$constants$constant,
+                 .scmix_v22_required_calibration_names)) {
+    stop("Threshold selection requires the exact frozen 26-constant registry.",
+         call. = FALSE)
+  }
   if (!.scmix_v23_step3_intact(
       oracle_run, "scmix_v23_oracle_calibration_run") ||
       !identical(oracle_run$stream, "calibration") ||
@@ -1203,23 +1250,52 @@ scmix_v23_select_calibration_constants <- function(
     primary <- plan$constants$primary_layer[[i]]
     use_numerical <- identical(primary, "numerical") && numerical_ok &&
       id %in% names(numerical_run$replications)
-    source <- if (use_numerical) numerical_run$replications else
-      oracle_run$replications
+    use_oracle_gates <- identical(primary, "oracle")
+    source <- if (use_numerical) numerical_run$replications else if (
+      use_oracle_gates) {
+      oracle_run$gates[oracle_run$gates$constant == id, , drop = FALSE]
+    } else oracle_run$replications
     required_context <- c(
       "design_id", "regime_id", "severity_id", "certification_truth")
     if (any(!required_context %in% names(source))) {
       stop("Calibration evidence must carry design, regime, severity, and certification truth.",
            call. = FALSE)
     }
-    value <- if (id %in% names(source) &&
-                 (identical(primary, "oracle") || use_numerical)) {
-      as.numeric(source[[id]])
-    } else rep(NA_real_, nrow(source))
-    evidence[[id]] <- data.frame(
-      value = value, design_id = source$design_id,
-      regime_id = source$regime_id, severity_id = source$severity_id,
-      certification_truth = source$certification_truth,
-      stringsAsFactors = FALSE)
+    if (use_oracle_gates) {
+      needed <- c("value", "replication", "calibration_unit_id",
+                  "target_certification_truth")
+      if (any(!needed %in% names(source))) {
+        stop("Oracle evidence lacks target-specific calibration units or labels.",
+             call. = FALSE)
+      }
+      source$certification_truth <- source$target_certification_truth
+      grouping <- c("design_id", "regime_id", "severity_id",
+                    "certification_truth", "replication",
+                    "calibration_unit_id")
+      pieces <- split(source, source[grouping], drop = TRUE)
+      comparator <- plan$constants$comparator[[i]]
+      evidence[[id]] <- do.call(rbind, lapply(pieces, function(dat)
+        data.frame(
+          value = if (identical(comparator, "less_than_or_equal"))
+            max(dat$value) else min(dat$value),
+          design_id = dat$design_id[[1L]],
+          regime_id = dat$regime_id[[1L]],
+          severity_id = dat$severity_id[[1L]],
+          certification_truth = dat$certification_truth[[1L]],
+          replication = dat$replication[[1L]],
+          calibration_unit_id = dat$calibration_unit_id[[1L]],
+          stringsAsFactors = FALSE)))
+      rownames(evidence[[id]]) <- NULL
+    } else {
+      value <- if (id %in% names(source) && use_numerical) {
+        as.numeric(source[[id]])
+      } else rep(NA_real_, nrow(source))
+      evidence[[id]] <- data.frame(
+        value = value, design_id = source$design_id,
+        regime_id = source$regime_id, severity_id = source$severity_id,
+        certification_truth = source$certification_truth,
+        calibration_unit_id = "fit_q1", stringsAsFactors = FALSE)
+    }
     evidence_layer[[id]] <- if (use_numerical) "numerical" else if (
       identical(primary, "oracle")) "oracle" else "missing_numerical"
   }
@@ -1239,6 +1315,9 @@ scmix_v23_select_calibration_constants <- function(
         evidence_layer = evidence_layer[[id]],
         targeted_failure_regime = reg$targeted_failure_regime,
         benign_passage = ans$benign_passage,
+        benign_reference_passage = ans$benign_reference_passage,
+        benign_targeted_safe_passage =
+          ans$benign_targeted_safe_passage,
         calibration_false_certification = ans$false_certification,
         feasible = ans$feasible, selection_reason = ans$reason,
         alias_group = paste(ids, collapse = "="),
@@ -1259,7 +1338,7 @@ scmix_v23_select_calibration_constants <- function(
     "primary_numerical_evidence_missing_no_manifest"
   } else if (!frozen_size) {
     "pilot_proposal_no_manifest"
-  } else "calibration_feasible_pending_untouched_validation"
+  } else "diagnostic_calibration_only_marginal_oracle_no_manifest"
   out <- list(
     plan_id = plan$plan_id, protocol_id = plan$protocol_id,
     plan_fingerprint = plan$fingerprint, constants = constants,
@@ -1268,6 +1347,10 @@ scmix_v23_select_calibration_constants <- function(
     frozen_replication_counts_used = frozen_size,
     validation_used_for_selection = FALSE,
     production_manifest_created = FALSE,
+    production_promotion_permitted = FALSE,
+    production_promotion_blocker = paste0(
+      "marginal_local_Gaussian_oracle_cannot_validate_sample_Riesz_or_",
+      "end_to_end_sequence_likelihood_behavior"),
     forbidden_production_file_names = c(
       "inference-v2.3-calibration-values.dcf",
       "inference-v2.3-calibration.dcf"))
