@@ -1,0 +1,123 @@
+protocol:
+  id: paperps-inference-2026-09-06-v2.3
+  version: "2.3"
+  frozen_on: 2026-09-06
+  status: structure_frozen_calibration_pending
+  supersedes: paperps-inference-2026-09-05-v2.2
+  inherits_except_explicit_amendments:
+    - INFERENCE_PROTOCOL_V22.md
+    - inst/protocol/inference-v2.2.yaml
+
+rank_scope:
+  production_q: 1
+  q0_role: diagnostic_sensitivity_only
+  q2_role: diagnostic_sensitivity_only
+  q2_integration_sentinels_authorize_q2_inference: false
+
+production_calibration:
+  values_file: inference-v2.3-calibration-values.dcf
+  approval_manifest: inference-v2.3-calibration.dcf
+  values_file_present_at_freeze: false
+  approval_manifest_present_at_freeze: false
+  required_identity_fields:
+    Protocol-ID: paperps-inference-2026-09-06-v2.3
+    Status: frozen_for_production
+    Rank-Scope: 1
+  source_hash_algorithm: SHA-256
+  exact_constant_count: 26
+  missing_or_invalid_fails_closed: true
+
+gates:
+  G004:
+    statistic: minimum_active_eigenvalue_over_its_standard_error
+    calibrated_constant: active_eigenvalue_standardized_cutoff
+    threshold_binding: exact
+    comparator: greater_than_or_equal
+    units: standard_errors
+  G005:
+    statistic: target_generalized_information_minimum
+    calibrated_constant: generalized_information_margin
+    threshold_binding: exact
+    comparator: greater_than_or_equal
+    units: declared_structural_norm
+  G006:
+    scope: target
+    severity: hard_target
+    statistic: minimum_applicable_component_statistic_over_its_own_calibrated_cutoff
+    formula: "min_r D_r / c_r"
+    threshold: 1
+    comparator: greater_than_or_equal
+    units: dimensionless
+    missing_nonfinite_or_nonpositive_component_cutoff: not_run
+    component_cutoffs_independent: true
+    components:
+      general_scalar_chart_interior:
+        applies_to: [positive_scalar, probability, preference_direction_share, compensating_benefit_share]
+        statistic: standard_error_distance_to_nearest_chart_boundary
+        calibrated_constant: interior_distance_cutoff
+      subgroup_primitive_interior:
+        applies_to: [subgroup_share]
+        statistic: "min(a, 1-b, b-a)"
+        calibrated_constant: subgroup_interior_margin
+      directional_primitive_interior:
+        applies_to: [directional_heterogeneity]
+        statistic: "min(H_Z, H_R)"
+        calibrated_constant: directional_heterogeneity_regularity_margin
+      directional_residual_variance_standardized:
+        applies_to: [directional_heterogeneity]
+        statistic: "H_R / se(H_R)"
+        calibrated_constant: directional_variance_standardized_cutoff
+      total_heterogeneity_standardized:
+        applies_to: [directional_heterogeneity]
+        statistic: "(H_Z + H_R) / se(H_Z + H_R)"
+        standard_error_source: respondent_level_joint_influence_contributions
+        calibrated_constant: total_heterogeneity_standardized_cutoff
+      mrs_raw_scientific_denominator:
+        applies_to: [mean_tradeoff_mrs_ratio]
+        statistic: "abs(b)"
+        calibrated_constant: mean_tradeoff_denominator_margin
+      mrs_denominator_standardized:
+        applies_to: [mean_tradeoff_mrs_ratio]
+        statistic: "abs(b) / se(b)"
+        calibrated_constant: denominator_standardized_cutoff
+
+other_constant_consumers:
+  chart_discrepancy_cutoff: C003_scalar_chart
+  nonlinear_remainder_cutoff: C003_composite_chart
+  kkt_cutoff: F005
+  integration_target_se_cutoff: I001
+  integration_if_l2_cutoff: I002
+  integration_objective_relative_cutoff: I003
+  integration_score_relative_cutoff: I004
+  integration_covariance_relative_cutoff: I005
+  near_optimum_objective_cutoff: F008_near_optimum_set
+  multistart_target_se_cutoff: F008_target_stability
+  nested_fit_relative_cutoff: F007
+  loading_probability_invariance_cutoff: L002
+  derivative_cutoff: R001
+  null_space_materiality_cutoff: R002_null_space_defect
+  numerical_rank_tolerance: R002_information_pseudoinverse
+  defect_cutoff: R003
+  ridge_cutoff: R004
+
+step_3_calibration:
+  may_use_application_outcomes: false
+  separate_calibration_and_validation_draws: true
+  required_regimes:
+    - well_informed_interior
+    - probability_near_boundary
+    - directional_variance_near_zero
+    - weak_inverse_problem
+    - optimization_error
+    - integration_error
+    - residual_shape_misspecification
+    - serial_dependence
+    - informative_completion
+  required_operating_characteristics:
+    - unconditional_coverage
+    - coverage_conditional_on_release
+    - false_certification_rate
+    - interval_length
+    - empty_constraint_set_rate
+    - uninformative_constraint_set_rate
+    - gate_passage_frequency

@@ -528,7 +528,7 @@
     ## when the preliminary reproduction check above fails.
     net = if (completed) work else net,
     fallback_net = net,
-    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    protocol_id = "paperps-inference-2026-09-06-v2.3",
     dtype = dtype,
     objective_definition = paste(
       "mean negative complete-sequence log likelihood per respondent plus",
@@ -698,7 +698,7 @@
     identical(polish$method, "full_batch_lbfgs") &&
     identical(polish$line_search, "strong_wolfe")
   required_artifacts_present <-
-    identical(polish$protocol_id, "paperps-inference-2026-09-05-v2.2") &&
+    identical(polish$protocol_id, "paperps-inference-2026-09-06-v2.3") &&
     objective_contract_exact && polish_contract_exact &&
     is.character(polish$dtype) && length(polish$dtype) == 1L &&
     is.numeric(polish$objective_before_polish) &&

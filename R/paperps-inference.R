@@ -1274,7 +1274,7 @@ scmix_inference_target <- function(
   ## target/family/primitive IDs, orientation, units, and dependencies are
   ## deliberately supplied later through scmix_v22_target_spec().
   attr(callback, "scmix_v22_metadata_template") <- list(
-    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    protocol_id = "paperps-inference-2026-09-06-v2.3",
     source_type = type,
     recommended_target_type = switch(
       type,
@@ -2420,7 +2420,7 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
         fingerprint_ok &&
         trace_ok &&
         identical(v22_riesz_evidence$protocol_id,
-                  "paperps-inference-2026-09-05-v2.2") &&
+                  "paperps-inference-2026-09-06-v2.3") &&
         identical(v22_riesz_evidence$analysis_signature,
                   .scmix_dml_signature(fit)) &&
         is.character(v22_riesz_evidence$analysis_contract_fingerprint) &&
@@ -2770,7 +2770,7 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     fold_id = layout$fold_resp,
     target_metadata_templates = c(
       if ("theta" %in% targets) list(theta = list(
-        protocol_id = "paperps-inference-2026-09-05-v2.2",
+        protocol_id = "paperps-inference-2026-09-06-v2.3",
         recommended_target_type = "unrestricted_scalar",
         requires_signed_registry = TRUE)) else list(),
       if (!is.null(plugin_targets)) lapply(plugin_targets, function(fun)

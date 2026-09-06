@@ -24,21 +24,23 @@ are recorded under `provenance/`. New runs must write to a fresh directory under
 `runs/` and record the source commit, R session, seeds, input hashes, and output
 hashes.
 
-## Frozen inference protocol
+## Frozen inference protocols
 
-The prospective v2.2 inference contract is
+The historical v2.2 inference contract is
 `paperps-inference-2026-09-05-v2.2`. Its normative documents are
 `INFERENCE_PROTOCOL_V22.md` and `inst/protocol/inference-v2.2.yaml`.
-The protocol structure was frozen before any v2.2 application rerun. Numerical
-cutoffs marked `CALIBRATE_IN_STEP_3` must be fixed by the simulation stage and
-fingerprinted with the implementation before any application can receive a
-v2.2 inferential status. Existing v2.1 artifacts are not grandfathered.
+Its files and checksum remain unchanged as historical audit evidence.
 
-At the date of the protocol freeze, the package does not yet implement the
-complete contract. In particular, the optimizer, range-respecting point,
-confidence-set mapping, honest Riesz certification, and cross-target family
-multiplier machinery remain Step 2 work. The protocol document's current-code
-crosswalk is the authoritative gap list.
+Before simulation calibration, an independent prospective-design review found
+that v2.2 did not give its separately named boundary constants distinct
+operational roles. The narrow v2.3 correction is
+`paperps-inference-2026-09-06-v2.3`. Its normative documents are
+`INFERENCE_PROTOCOL_V23.md` and `inst/protocol/inference-v2.3.yaml`. V2.3 uses
+one normalized compound G006 statistic with independently calibrated component
+cutoffs and limits production calibration to `Rank-Scope: 1`. No production
+values file or approval manifest exists yet. Rank-zero and rank-two results
+remain diagnostic sensitivities, and existing v2.1 or v2.2 artifacts are not
+grandfathered.
 
 ## Required reproduction check
 

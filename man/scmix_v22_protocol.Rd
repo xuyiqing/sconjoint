@@ -5,6 +5,7 @@
 \alias{scmix_v22_calibration_hash}
 \alias{scmix_v22_calibration_artifact}
 \alias{scmix_v22_package_calibration}
+\alias{scmix_v23_package_calibration}
 \alias{scmix_v22_full_plugin_artifact}
 \alias{scmix_v22_multiplier_bank}
 \alias{scmix_v22_run_inner_refits}
@@ -19,7 +20,7 @@
 \alias{scmix_v22_finalize_collections}
 \alias{scmix_v22_finalize}
 \alias{print.scmix_v22_inference}
-\title{Frozen protocol-v2.2 inference artifacts and finalization}
+\title{Frozen protocol-v2.3 inference artifacts through the v22 compatibility API}
 \usage{
 scmix_v22_target_spec(
   target_id, family_id,
@@ -60,6 +61,8 @@ scmix_v22_calibration_artifact(
 )
 
 scmix_v22_package_calibration()
+
+scmix_v23_package_calibration()
 
 scmix_v22_full_plugin_artifact(
   inference, values, analysis_contract, final_fit_hash, code_hash, provenance
@@ -135,7 +138,7 @@ scmix_v22_finalize(
 }
 \arguments{
 \item{target_type}{A frozen target type.}
-\item{domain}{Must be \code{NULL}. The v2.2 domains are frozen, and a change
+\item{domain}{Must be \code{NULL}. The inherited target domains are frozen, and a change
 requires a new protocol ID.}
 \item{provenance}{Nonempty audit documentation.}
 \item{target_id, family_id}{Stable target and substantive-family IDs.}
@@ -194,7 +197,7 @@ must match the protocol dictionary. Mechanically evaluable states must agree
 with the recorded statistic and threshold.}
 \item{scope_id}{The explicit analysis, fit, target, primitive, family, or block
 identifier to which a gate row applies.}
-\item{gates}{A v2.2 gate data frame.}
+\item{gates}{A protocol-v2.3 gate data frame.}
 \item{require_all_ids}{Whether every frozen gate ID must be present.}
 \item{registry}{A list of intact \code{scmix_v22_target_spec} objects.}
 \item{primitive_ids}{Primitive IDs relevant to one target.}
@@ -222,7 +225,10 @@ applicable evidence remains \code{not_run}; loading rows are
 }
 \description{
 Constructs fingerprinted artifacts and performs fail-closed finalization under
-the frozen paperps inference protocol v2.2. The finalizer retains the
+the frozen paperps inference protocol v2.3. The exported function names retain
+their \code{scmix_v22_} prefix for source compatibility. Every newly created
+artifact records the v2.3 Protocol ID, so historical v2.2 artifacts cannot be
+mixed with this implementation. The finalizer retains the
 full-sample plug-in, cross-fit plug-in, raw one-step value, and range-respecting
 reported value as distinct quantities. It maps primitive confidence rectangles
 through the declared constraints and never treats pending calibration constants
@@ -232,8 +238,15 @@ or unsigned evidence as production certification.
 The package-calibration accessor succeeds only when the installed package
 contains the canonical values file and approval manifest. It verifies the
 values file byte for byte with SHA-256 and requires the manifest to bind the
-protocol ID, production status, source hash, calibration hash, and all 26
-constants exactly. In the absence of those approved files, it fails closed.
+protocol ID, production status, \code{Rank-Scope: 1}, source hash, calibration
+hash, and all 26 constants exactly. In the absence of those approved files, it
+fails closed. Production calibration authorizes only a signed \eqn{q=1}
+analysis contract. Rank-zero and rank-two fits remain diagnostic sensitivities.
+
+G004 and G005 use their approved constants exactly. G006 is the minimum across
+applicable component diagnostics after each component is divided by its own
+independently calibrated positive cutoff. Its fixed threshold is one. The
+component table is retained in each finalized target result.
 
 Riesz tuning is respondent-nested and separate by minimal scalar primitive.
 The derivative audit uses centered differences at structural-orthonormal steps

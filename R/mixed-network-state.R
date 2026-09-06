@@ -369,7 +369,7 @@
     polish <- evidence$polish
     required_evidence <- is.list(evidence) &&
       identical(evidence$protocol_id,
-                "paperps-inference-2026-09-05-v2.2") &&
+                "paperps-inference-2026-09-06-v2.3") &&
       identical(evidence$protocol_mode, record$protocol_mode) &&
       identical(evidence$calibration_hash, record$calibration_hash) &&
       is.list(objective) && is.list(polish) && is.list(evidence$bounds) &&

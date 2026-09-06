@@ -6,14 +6,21 @@
   sconjoint:::.scmix_v22_required_calibration_names)
 .v22_calibration_values$chart_discrepancy_cutoff <- 1e6
 .v22_calibration_values$nonlinear_remainder_cutoff <- 1e6
-.v22_calibration_values$interior_distance_cutoff <- 0
+.v22_calibration_values[c(
+  "subgroup_interior_margin",
+  "directional_heterogeneity_regularity_margin",
+  "mean_tradeoff_denominator_margin",
+  "interior_distance_cutoff",
+  "directional_variance_standardized_cutoff",
+  "total_heterogeneity_standardized_cutoff",
+  "denominator_standardized_cutoff")] <- 1e-12
 .v22_calibration_values$numerical_rank_tolerance <- 1e-12
 .v22_calibration_source_hash <- paste(rep("a", 64L), collapse = "")
 
 .v22_contract <- function(signature = "v22-synthetic",
                           code_commit = "test-code",
                           riesz_inner_seed = 17L,
-                          coordinate_registry = c("u1", "u2"), q = 0L,
+                          coordinate_registry = c("u1", "u2"), q = 1L,
                           coordinate_subset = coordinate_registry,
                           derivative_subset_rule =
                             "all registered structural coordinates",
@@ -173,6 +180,7 @@ scmix_v22_target_spec <- function(..., uses_numerical_integration = FALSE) {
 .v22_approved_calibration <- list(
   protocol_id = sconjoint:::.scmix_v22_protocol_id,
   status = "frozen_for_production",
+  rank_scope = 1L,
   calibration_hash = scmix_v22_calibration_hash(
     .v22_calibration_values, .v22_calibration_source_hash),
   source_hash = .v22_calibration_source_hash,

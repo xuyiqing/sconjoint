@@ -53,7 +53,7 @@
     "pass", "evidence_fingerprint")
   if (!inherits(x, "scmix_loading_invariance_evidence") || !is.list(x) ||
       !all(required %in% names(x)) ||
-      !identical(x$protocol_id, "paperps-inference-2026-09-05-v2.2") ||
+      !identical(x$protocol_id, "paperps-inference-2026-09-06-v2.3") ||
       !x$protocol_mode %in% c("calibration", "production") ||
       !x$state %in% c("pass", "warn", "fail", "not_run",
                       "not_applicable") ||
@@ -132,7 +132,7 @@
     isTRUE(calibration_verified) && cutoff_available &&
     probability_difference <= probability_cutoff
   out <- list(
-    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    protocol_id = "paperps-inference-2026-09-06-v2.3",
     analysis_signature = analysis_signature, scope = scope,
     protocol_mode = protocol_mode,
     calibration_hash = calibration_hash,

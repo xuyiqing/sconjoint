@@ -1,15 +1,16 @@
-## Protocol-v2.2 target registration, range-respecting updates, constrained
+## Protocol-v2.3 target registration, range-respecting updates, constrained
 ## confidence sets, common respondent multipliers, and fail-closed statuses.
 ##
-## This file is a compatibility layer around scmix_dml().  It deliberately
-## leaves the raw respondent-sequence DML calculation unchanged.  A v2.2
+## The scmix_v22_* names are retained as a source-compatibility layer around
+## scmix_dml().  This file deliberately leaves the raw respondent-sequence
+## DML calculation unchanged.  A v2.3
 ## result is created only by scmix_v22_finalize(), after the caller supplies a
 ## signed target registry, the full-sample structural plug-in when available,
 ## a common multiplier bank, calibration constants, and the remaining gate
 ## record.  Existing scmix_dml fields therefore remain readable, but they are
 ## never silently relabeled as the paper's reported estimator.
 
-.scmix_v22_protocol_id <- "paperps-inference-2026-09-05-v2.2"
+.scmix_v22_protocol_id <- "paperps-inference-2026-09-06-v2.3"
 .scmix_v22_required_gate_ids <- c(
   "P001", "P002", "D001", "D002",
   sprintf("F%03d", 1:8), sprintf("I%03d", 1:5),
@@ -39,23 +40,24 @@
   "null_space_materiality_cutoff", "numerical_rank_tolerance",
   "defect_cutoff", "ridge_cutoff")
 .scmix_v22_calibration_values_file <-
-  "inference-v2.2-calibration-values.dcf"
+  "inference-v2.3-calibration-values.dcf"
 .scmix_v22_calibration_manifest_file <-
-  "inference-v2.2-calibration.dcf"
+  "inference-v2.3-calibration.dcf"
 
 ## This table is deliberately exhaustive.  It is both implementation
 ## documentation and a machine-checkable guard against adding a calibration
 ## constant that is accepted by the production artifact but never consumed by
-## the protocol.  Aliases in the G006 rows are checked below.
+## the protocol. The seven G006 constants enter distinct components of the
+## v2.3 normalized compound statistic and are never constrained to be equal.
 .scmix_v22_calibration_consumers <- c(
-  subgroup_interior_margin = "G006:subgroup_share",
+  subgroup_interior_margin = "G006:subgroup_primitive_interior",
   directional_heterogeneity_regularity_margin =
-    "G006:directional_heterogeneity:release_threshold",
+    "G006:directional_primitive_interior",
   mean_tradeoff_denominator_margin =
-    "G006:mean_tradeoff_mrs_ratio:release_threshold",
+    "G006:mrs_raw_scientific_denominator",
   chart_discrepancy_cutoff = "C003:scalar_chart",
   nonlinear_remainder_cutoff = "C003:composite_chart",
-  interior_distance_cutoff = "G006:scalar_boundary",
+  interior_distance_cutoff = "G006:general_scalar_chart_interior",
   kkt_cutoff = "F005:blockwise_projected_KKT",
   integration_target_se_cutoff = "I001:target_refinement",
   integration_if_l2_cutoff = "I002:influence_refinement",
@@ -69,17 +71,25 @@
   active_eigenvalue_standardized_cutoff = "G004:active_eigenvalue",
   generalized_information_margin = "G005:target_information",
   directional_variance_standardized_cutoff =
-    "G006:directional_heterogeneity:variance_alias",
+    "G006:directional_residual_variance_standardized",
   total_heterogeneity_standardized_cutoff =
-    "G006:directional_heterogeneity:total_alias",
+    "G006:total_heterogeneity_standardized",
   denominator_standardized_cutoff =
-    "G006:mean_tradeoff_mrs_ratio:denominator_alias",
+    "G006:mrs_denominator_standardized",
   derivative_cutoff = "R001:derivative_refinement",
   null_space_materiality_cutoff = "R002:null_space_defect",
   numerical_rank_tolerance = "R002:information_pseudoinverse",
   defect_cutoff = "R003:honest_Riesz_defect",
   ridge_cutoff = "R004:ridge_neighborhood"
 )
+.scmix_v22_g006_constant_names <- c(
+  "subgroup_interior_margin",
+  "directional_heterogeneity_regularity_margin",
+  "mean_tradeoff_denominator_margin",
+  "interior_distance_cutoff",
+  "directional_variance_standardized_cutoff",
+  "total_heterogeneity_standardized_cutoff",
+  "denominator_standardized_cutoff")
 .scmix_v22_local_gate_ids <- c(
   "P001", "P002", "N002", "G006", sprintf("R%03d", 1:5),
   sprintf("C%03d", 1:4), sprintf("M%03d", 1:3))
@@ -138,7 +148,7 @@
     make("G005", "identification_regularity", "target", "hard_target",
          "greater_than_or_equal", "declared_structural_norm"),
     make("G006", "identification_regularity", "target", "hard_target",
-         "greater_than_or_equal", "standard_errors"),
+         "greater_than_or_equal", "dimensionless"),
     make("R001", "inverse_problem", "primitive", "hard_target",
          "equal", "boolean"),
     make("R002", "inverse_problem", "primitive", "hard_target",
@@ -438,30 +448,25 @@ scmix_v22_target_spec <- function(
   values[sort(names(values), method = "radix")]
 }
 
-.scmix_v22_validate_calibration_aliases <- function(constants) {
-  constants <- try(.scmix_v22_normalize_calibration(
-    constants, require_complete = TRUE), silent = TRUE)
-  if (inherits(constants, "try-error")) return(FALSE)
-  directional <- unlist(constants[c(
-    "directional_heterogeneity_regularity_margin",
-    "directional_variance_standardized_cutoff",
-    "total_heterogeneity_standardized_cutoff")], use.names = FALSE)
-  denominator <- unlist(constants[c(
-    "mean_tradeoff_denominator_margin",
-    "denominator_standardized_cutoff")], use.names = FALSE)
-  all(directional == directional[[1L]]) &&
-    all(denominator == denominator[[1L]])
-}
-
-.scmix_v22_require_calibration_aliases <- function(constants) {
-  if (!.scmix_v22_validate_calibration_aliases(constants)) {
-    stop(
-      paste0(
-        "The frozen G006 statistic has one threshold. Therefore the ",
-        "directional-heterogeneity regularity, directional-variance, and ",
-        "total-heterogeneity aliases must be exactly equal, as must the ",
-        "mean-tradeoff and denominator aliases."),
-      call. = FALSE)
+.scmix_v22_require_operational_calibration <- function(constants) {
+  constants <- .scmix_v22_normalize_calibration(
+    constants, require_complete = TRUE)
+  if (!identical(sort(names(.scmix_v22_calibration_consumers),
+                      method = "radix"),
+                 sort(.scmix_v22_required_calibration_names,
+                      method = "radix"))) {
+    stop("The v2.3 implementation does not consume exactly all 26 calibration constants.",
+         call. = FALSE)
+  }
+  if (anyDuplicated(unname(.scmix_v22_calibration_consumers))) {
+    stop("Every v2.3 calibration constant must have its own operational consumer.",
+         call. = FALSE)
+  }
+  margins <- unlist(constants[.scmix_v22_g006_constant_names],
+                    use.names = FALSE)
+  if (any(!is.finite(margins)) || any(margins <= 0)) {
+    stop("Every v2.3 G006 component cutoff must be strictly positive.",
+         call. = FALSE)
   }
   invisible(constants)
 }
@@ -488,19 +493,22 @@ scmix_v22_target_spec <- function(
 
 .scmix_v22_read_calibration_values <- function(path) {
   raw <- try(read.dcf(path), silent = TRUE)
-  required <- c("Protocol-ID", "Status",
+  required <- c("Protocol-ID", "Status", "Rank-Scope",
                 .scmix_v22_required_calibration_names)
   if (inherits(raw, "try-error") || nrow(raw) != 1L ||
       !identical(sort(colnames(raw), method = "radix"),
                  sort(required, method = "radix"))) {
-    stop("The package calibration-values file must contain exactly one protocol/status row and all 26 constants.",
+    stop("The package calibration-values file must contain exactly one protocol/status/rank-scope row and all 26 constants.",
          call. = FALSE)
   }
   protocol_id <- unname(raw[1L, "Protocol-ID"])
   status <- unname(raw[1L, "Status"])
+  rank_scope <- suppressWarnings(as.integer(raw[1L, "Rank-Scope"]))
   if (!identical(protocol_id, .scmix_v22_protocol_id) ||
-      !identical(status, "frozen_for_production")) {
-    stop("The calibration-values file is not frozen for this protocol ID.",
+      !identical(status, "frozen_for_production") ||
+      is.na(rank_scope) || rank_scope != 1L ||
+      !identical(unname(raw[1L, "Rank-Scope"]), "1")) {
+    stop("The calibration-values file is not frozen for this protocol ID and q=1 rank scope.",
          call. = FALSE)
   }
   text <- raw[1L, .scmix_v22_required_calibration_names]
@@ -508,16 +516,17 @@ scmix_v22_target_spec <- function(
   names(numeric) <- names(text)
   constants <- .scmix_v22_normalize_calibration(
     as.list(numeric), require_complete = TRUE)
-  .scmix_v22_require_calibration_aliases(constants)
+  .scmix_v22_require_operational_calibration(constants)
   list(
     protocol_id = protocol_id,
     status = status,
+    rank_scope = rank_scope,
     constants = constants,
     source_hash = .scmix_v22_sha256_file(path),
     source_file = basename(path))
 }
 
-#' Hash the exact frozen v2.2 calibration values
+#' Hash the exact frozen v2.3 calibration values
 #'
 #' The analysis contract stores this hash. It binds the exact numeric constants
 #' and their immutable source-file hash before any production finalizer can use
@@ -541,11 +550,12 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
   constant_fields <- paste0(
     "Constant-", .scmix_v22_required_calibration_names)
   required <- c("Protocol-ID", "Status", "Calibration-Hash", "Source-Hash",
-                "Values-File", "Constant-Count", constant_fields)
+                "Values-File", "Constant-Count", "Rank-Scope",
+                constant_fields)
   if (inherits(manifest, "try-error") || nrow(manifest) != 1L ||
       !identical(sort(colnames(manifest), method = "radix"),
                  sort(required, method = "radix"))) {
-    stop("The production calibration manifest must contain exactly its six identity fields and all 26 constants.",
+    stop("The production calibration manifest must contain exactly its seven identity fields and all 26 constants.",
          call. = FALSE)
   }
   fields <- as.character(manifest[1L, required])
@@ -558,6 +568,12 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
                  .scmix_v22_protocol_id) ||
       !identical(unname(fields[["Status"]]), "frozen_for_production")) {
     stop("The production calibration manifest has the wrong protocol ID or status.",
+         call. = FALSE)
+  }
+  rank_scope <- suppressWarnings(as.integer(fields[["Rank-Scope"]]))
+  if (is.na(rank_scope) || rank_scope != 1L ||
+      !identical(fields[["Rank-Scope"]], "1")) {
+    stop("The production calibration manifest must have Rank-Scope: 1.",
          call. = FALSE)
   }
   if (!identical(unname(fields[["Values-File"]]),
@@ -583,12 +599,16 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
     stop("The package calibration-values file failed its SHA-256 check.",
          call. = FALSE)
   }
+  if (!identical(loaded$rank_scope, rank_scope)) {
+    stop("The manifest and values file disagree on their q=1 rank scope.",
+         call. = FALSE)
+  }
   constant_text <- fields[constant_fields]
   constants <- suppressWarnings(as.numeric(constant_text))
   names(constants) <- sub("^Constant-", "", names(constant_text))
   constants <- .scmix_v22_normalize_calibration(
     as.list(constants), require_complete = TRUE)
-  .scmix_v22_require_calibration_aliases(constants)
+  .scmix_v22_require_operational_calibration(constants)
   if (!identical(constants, loaded$constants)) {
     stop("The exact 26 constants in the manifest and values file differ.",
          call. = FALSE)
@@ -601,6 +621,7 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
   list(
     protocol_id = .scmix_v22_protocol_id,
     status = "frozen_for_production",
+    rank_scope = rank_scope,
     calibration_hash = calibration_hash,
     source_hash = source_hash,
     values_file = .scmix_v22_calibration_values_file,
@@ -628,10 +649,15 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
     approval, calibration_hash, source_hash, constants) {
   constants <- try(.scmix_v22_normalize_calibration(
     constants, require_complete = TRUE), silent = TRUE)
+  operational <- if (!inherits(constants, "try-error")) {
+    try(.scmix_v22_require_operational_calibration(constants), silent = TRUE)
+  } else constants
   is.list(approval) &&
     !inherits(constants, "try-error") &&
+    !inherits(operational, "try-error") &&
     identical(approval$protocol_id, .scmix_v22_protocol_id) &&
     identical(approval$status, "frozen_for_production") &&
+    identical(approval$rank_scope, 1L) &&
     identical(approval$calibration_hash, calibration_hash) &&
     identical(approval$source_hash, source_hash) &&
     identical(approval$values_file, .scmix_v22_calibration_values_file) &&
@@ -645,13 +671,14 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
     nzchar(approval$manifest_fingerprint)
 }
 
-#' Read the package-approved v2.2 calibration
+#' Read the package-approved v2.3 calibration
 #'
 #' This accessor succeeds only when the package contains both the canonical
 #' values file and its approval manifest, the values file passes a true
-#' SHA-256 check, and the manifest binds the exact complete set of 26 constants
-#' to the frozen protocol.  Step 3 does not ship either production file until
-#' the operating-characteristic study has been completed and approved.
+#' SHA-256 check, and the manifest binds the exact complete set of 26 constants,
+#' `Rank-Scope: 1`, and the frozen protocol ID. Step 3 does not ship either
+#' production file until the operating-characteristic study has been completed
+#' and approved.
 #'
 #' @return A list containing the frozen constants and their immutable hashes.
 #' @export
@@ -661,13 +688,19 @@ scmix_v22_package_calibration <- function() {
       !.scmix_v22_calibration_approval_matches(
         approval, approval$calibration_hash, approval$source_hash,
         approval$constants)) {
-    stop("No intact package-approved v2.2 production calibration is installed.",
+    stop("No intact package-approved v2.3 production calibration is installed.",
          call. = FALSE)
   }
   structure(approval, class = c("scmix_v22_package_calibration", "list"))
 }
 
-#' Link Step-3 constants to a signed v2.2 analysis contract
+#' @rdname scmix_v22_protocol
+#' @export
+scmix_v23_package_calibration <- function() {
+  scmix_v22_package_calibration()
+}
+
+#' Link Step-3 constants to a signed v2.3 analysis contract
 #'
 #' A plain list of cutoffs is never production evidence. This constructor
 #' verifies that the exact values and their immutable source hash equal the
@@ -683,13 +716,19 @@ scmix_v22_calibration_artifact <- function(
     values, analysis_contract, source_hash, provenance) {
   constants <- .scmix_v22_normalize_calibration(values,
                                                  require_complete = TRUE)
+  .scmix_v22_require_operational_calibration(constants)
   if (!.scmix_v22_intact(analysis_contract,
                          "scmix_v22_analysis_contract")) {
-    stop("analysis_contract must be an intact signed v2.2 contract.",
+    stop("analysis_contract must be an intact signed v2.3 contract.",
          call. = FALSE)
   }
   source_hash <- .scmix_v22_text(source_hash, "source_hash")
-  .scmix_v22_require_calibration_aliases(constants)
+  if (!is.numeric(analysis_contract$q) ||
+      length(analysis_contract$q) != 1L || is.na(analysis_contract$q) ||
+      analysis_contract$q != 1) {
+    stop("The package-approved production calibration has Rank-Scope: 1; q=0 and q=2 fits remain diagnostic sensitivities.",
+         call. = FALSE)
+  }
   calibration_hash <- scmix_v22_calibration_hash(constants, source_hash)
   if (!identical(calibration_hash, analysis_contract$calibration_hash)) {
     stop("Exact calibration values and source hash do not match the signed analysis contract.",
@@ -706,6 +745,7 @@ scmix_v22_calibration_artifact <- function(
     analysis_signature = analysis_contract$analysis_signature,
     analysis_contract_fingerprint = analysis_contract$fingerprint,
     calibration_hash = calibration_hash, source_hash = source_hash,
+    rank_scope = approval$rank_scope,
     constants = constants, complete = TRUE,
     approval_manifest = approval,
     provenance = .scmix_v22_text(provenance, "provenance"))
@@ -723,12 +763,18 @@ scmix_v22_calibration_artifact <- function(
   constants <- try(.scmix_v22_normalize_calibration(
     calibration$constants, require_complete = require_complete), silent = TRUE)
   if (inherits(constants, "try-error")) return(FALSE)
+  operational <- try(.scmix_v22_require_operational_calibration(constants),
+                     silent = TRUE)
+  if (inherits(operational, "try-error")) return(FALSE)
   approval <- .scmix_v22_approved_calibration_manifest()
   identical(calibration$protocol_id, .scmix_v22_protocol_id) &&
     identical(calibration$analysis_signature,
               analysis_contract$analysis_signature) &&
     identical(calibration$analysis_contract_fingerprint,
               analysis_contract$fingerprint) &&
+    identical(calibration$rank_scope, 1L) &&
+    is.numeric(analysis_contract$q) && length(analysis_contract$q) == 1L &&
+    !is.na(analysis_contract$q) && analysis_contract$q == 1 &&
     identical(calibration$calibration_hash,
               analysis_contract$calibration_hash) &&
     identical(calibration$calibration_hash,
@@ -738,7 +784,6 @@ scmix_v22_calibration_artifact <- function(
     .scmix_v22_calibration_approval_matches(
       approval, calibration$calibration_hash, calibration$source_hash,
       constants) &&
-    .scmix_v22_validate_calibration_aliases(constants) &&
     (!isTRUE(require_complete) || isTRUE(calibration$complete))
 }
 
@@ -1831,8 +1876,7 @@ scmix_v22_derivative_audit <- function(
   0
 }
 
-.scmix_v22_boundary_distance <- function(type, plugin, se,
-                                          primitive_influence = NULL) {
+.scmix_v22_boundary_distance <- function(type, plugin, se) {
   if (any(!is.finite(plugin)) || any(!is.finite(se)) || any(se <= 0)) {
     return(NA_real_)
   }
@@ -1841,22 +1885,7 @@ scmix_v22_derivative_audit <- function(
     return(min(plugin / se, (1 - plugin) / se))
   }
   if (type == "positive_scalar") return(plugin / se)
-  if (type == "directional_heterogeneity") {
-    primitive_influence <- as.matrix(primitive_influence)
-    if (ncol(primitive_influence) != 2L ||
-        nrow(primitive_influence) < 2L ||
-        any(!is.finite(primitive_influence))) return(NA_real_)
-    total_se <- stats::sd(rowSums(primitive_influence)) /
-      sqrt(nrow(primitive_influence))
-    if (!is.finite(total_se) || total_se <= 0) return(NA_real_)
-    distance <- c(
-      explained_variance = unname(plugin[1L] / se[1L]),
-      residual_variance = unname(plugin[2L] / se[2L]),
-      total_heterogeneity = unname(sum(plugin) / total_se))
-    out <- min(distance)
-    attr(out, "components") <- distance
-    return(out)
-  }
+  if (type == "directional_heterogeneity") return(min(plugin / se))
   if (type == "subgroup_share") {
     a <- plugin[1L]; b <- plugin[2L]
     return(min(a / se[1L], (1 - b) / se[2L],
@@ -1864,6 +1893,53 @@ scmix_v22_derivative_audit <- function(
   }
   if (type == "mean_tradeoff_mrs_ratio") return(abs(plugin[2L]) / se[2L])
   Inf
+}
+
+.scmix_v22_g006_component_statistics <- function(
+    type, plugin, se, primitive_influence) {
+  finite_standardized <- all(is.finite(c(plugin, se))) && all(se > 0)
+  if (type %in% c("probability", "preference_direction_share",
+                  "compensating_benefit_share", "positive_scalar")) {
+    return(c(interior_distance_cutoff = unname(
+      .scmix_v22_boundary_distance(type, plugin, se))))
+  }
+  if (type == "subgroup_share") {
+    if (length(plugin) != 2L || any(!is.finite(plugin))) {
+      return(c(subgroup_interior_margin = NA_real_))
+    }
+    return(c(subgroup_interior_margin = unname(min(
+      plugin[1L], 1 - plugin[2L], plugin[2L] - plugin[1L]))))
+  }
+  if (type == "directional_heterogeneity") {
+    primitive_influence <- as.matrix(primitive_influence)
+    total_se <- if (ncol(primitive_influence) == 2L &&
+      nrow(primitive_influence) >= 2L &&
+      all(is.finite(primitive_influence))) {
+      stats::sd(rowSums(primitive_influence)) /
+        sqrt(nrow(primitive_influence))
+    } else NA_real_
+    return(c(
+      directional_heterogeneity_regularity_margin = if (
+        all(is.finite(plugin))) unname(min(plugin)) else NA_real_,
+      directional_variance_standardized_cutoff = if (
+        finite_standardized) unname(plugin[2L] / se[2L]) else NA_real_,
+      total_heterogeneity_standardized_cutoff = if (
+        all(is.finite(plugin)) && is.finite(total_se) && total_se > 0) {
+        unname(sum(plugin) / total_se)
+      } else NA_real_))
+  }
+  if (type == "mean_tradeoff_mrs_ratio") {
+    raw_denominator <- if (length(plugin) >= 2L &&
+      is.finite(plugin[2L])) unname(abs(plugin[2L])) else NA_real_
+    return(c(
+      mean_tradeoff_denominator_margin = raw_denominator,
+      denominator_standardized_cutoff = if (
+      length(plugin) >= 2L && length(se) >= 2L &&
+      is.finite(plugin[2L]) && is.finite(se[2L]) && se[2L] > 0) {
+      unname(abs(plugin[2L]) / se[2L])
+    } else NA_real_))
+  }
+  numeric()
 }
 
 .scmix_v22_map_rectangle <- function(type, lower, upper) {
@@ -2049,7 +2125,7 @@ scmix_v22_gate_template <- function() {
     scmix_v22_gate_record(
       x$gate_id, x$category, x$scope, x$severity, "not_run",
       NA, "FROM_FROZEN_PROTOCOL", x$comparator, x$units,
-      "inst/protocol/inference-v2.2.yaml",
+      "inst/protocol/inference-v2.3.yaml",
       paste0("Gate ", x$gate_id,
              " has not yet been populated from signed evidence."),
       paste0("TEMPLATE:", x$scope))
@@ -2886,8 +2962,10 @@ scmix_v22_status <- function(
   correction_ratio <- if (is.finite(target_se) && target_se > 0)
     abs(raw_target - cf$target) / target_se else NA_real_
   boundary_distance <- .scmix_v22_boundary_distance(
-    spec$target_type, cf$primitive, primitive_se, primitive_if)
-  boundary_components <- attr(boundary_distance, "components", exact = TRUE)
+    spec$target_type, cf$primitive, primitive_se)
+  g006_component_statistics <-
+    .scmix_v22_g006_component_statistics(
+      spec$target_type, cf$primitive, primitive_se, primitive_if)
   list(
     spec = spec, respondent_id = respondent_id,
     full_sample_plugin = full_target,
@@ -2916,7 +2994,7 @@ scmix_v22_status <- function(
     raw_domain_distance = .scmix_v22_domain_distance(
       spec$target_type, raw_primitive, primitive_se),
     plugin_boundary_distance = as.numeric(boundary_distance),
-    plugin_boundary_components = boundary_components
+    g006_component_statistics = g006_component_statistics
   )
 }
 
@@ -3418,23 +3496,32 @@ scmix_v22_status <- function(
        diagnostics = honest, ridge_neighborhood = ridge)
 }
 
-.scmix_v22_g006_cutoff_name <- function(target_type) {
-  switch(
-    target_type,
-    subgroup_share = "subgroup_interior_margin",
-    directional_heterogeneity =
-      "directional_heterogeneity_regularity_margin",
-    mean_tradeoff_mrs_ratio = "mean_tradeoff_denominator_margin",
-    unrestricted_scalar = NA_character_,
-    "interior_distance_cutoff")
-}
-
-.scmix_v22_g006_cutoff <- function(target_type, calibration) {
-  name <- .scmix_v22_g006_cutoff_name(target_type)
-  if (is.na(name)) return(NA_real_)
-  value <- calibration[[name]]
-  if (is.null(value)) return("CALIBRATE_IN_STEP_3")
-  as.numeric(value)
+.scmix_v22_g006_compound <- function(x, calibration) {
+  statistics <- x$g006_component_statistics
+  if (!length(statistics)) {
+    return(list(applicable = FALSE, statistic = NA_real_, threshold = 1,
+                state = "not_applicable", components = data.frame()))
+  }
+  constants <- names(statistics)
+  cutoffs <- vapply(constants, function(name) {
+    value <- calibration[[name]]
+    if (is.null(value)) NA_real_ else as.numeric(value)
+  }, numeric(1L))
+  valid <- is.finite(statistics) & is.finite(cutoffs) & cutoffs > 0
+  ratios <- rep(NA_real_, length(statistics)); names(ratios) <- constants
+  ratios[valid] <- statistics[valid] / cutoffs[valid]
+  compound <- if (all(valid)) min(ratios) else NA_real_
+  state <- .scmix_v22_gate_state(
+    compound, 1, "greater_than_or_equal")
+  components <- data.frame(
+    component = unname(.scmix_v22_calibration_consumers[constants]),
+    constant_name = constants,
+    statistic = unname(as.numeric(statistics)),
+    calibrated_cutoff = unname(cutoffs),
+    normalized_ratio = unname(ratios),
+    stringsAsFactors = FALSE)
+  list(applicable = TRUE, statistic = compound, threshold = 1,
+       state = state, components = components)
 }
 
 .scmix_v22_local_gates <- function(x, mapped, family_result, calibration) {
@@ -3448,18 +3535,12 @@ scmix_v22_status <- function(
     !identical(x$spec$target_domain$chart, "identity")
   chart_cut <- if (composite) threshold("nonlinear_remainder_cutoff") else
     threshold("chart_discrepancy_cutoff")
-  boundary_cut_name <- .scmix_v22_g006_cutoff_name(
-    x$spec$target_type)
-  boundary_cut <- .scmix_v22_g006_cutoff(
-    x$spec$target_type, calibration)
+  g006 <- .scmix_v22_g006_compound(x, calibration)
   chart_statistic <- if (composite) x$nonlinear_remainder_se_ratio else
     x$chart_discrepancy_se_ratio
   chart_state <- if (chart_applicable) .scmix_v22_gate_state(
     chart_statistic, chart_cut, "less_than_or_equal") else "not_applicable"
-  boundary_applicable <- x$spec$target_type != "unrestricted_scalar"
-  boundary_state <- if (boundary_applicable) .scmix_v22_gate_state(
-    x$plugin_boundary_distance, boundary_cut, "greater_than_or_equal") else
-      "not_applicable"
+  boundary_applicable <- isTRUE(g006$applicable)
   constraint_applicable <- x$spec$target_type != "unrestricted_scalar"
   raw_out <- if (x$spec$target_type %in% c(
     "probability", "preference_direction_share",
@@ -3483,7 +3564,7 @@ scmix_v22_status <- function(
       "Each inferential primitive requires a finite positive respondent-level standard error.",
       x$spec$primitive_registry_ids[j])
   })
-  .scmix_v22_bind_gates(
+  out <- .scmix_v22_bind_gates(
     scmix_v22_gate_record(
       "C001", "target_constraint", "target", "hard_target",
       if (!chart_applicable) "not_applicable" else if (
@@ -3515,16 +3596,13 @@ scmix_v22_status <- function(
       else "The raw one-step point is compatible with known support.", tid),
     scmix_v22_gate_record(
       "G006", "identification_regularity", "target", "hard_target",
-      boundary_state, x$plugin_boundary_distance, boundary_cut,
-      "greater_than_or_equal", "standard_errors",
-      if (is.na(boundary_cut_name)) "v2.2 target finalizer" else paste0(
-        "v2.2 target finalizer; calibration constant ", boundary_cut_name),
+      g006$state, g006$statistic, g006$threshold,
+      "greater_than_or_equal", "dimensionless",
+      "v2.3 normalized componentwise boundary artifact",
       if (!boundary_applicable) "Not applicable to an unrestricted scalar."
-      else if (identical(x$spec$target_type,
-                          "directional_heterogeneity")) {
-        paste("The explained variance, residual variance, and their total",
-              "must each pass the common calibrated standardized margin.")
-      } else "The plug-in must pass its target-specific calibrated boundary margin.",
+      else paste(
+        "Each applicable boundary or regularity component is divided by its",
+        "own calibrated cutoff; the minimum normalized ratio must be at least one."),
       tid),
     do.call(.scmix_v22_bind_gates, m1),
     scmix_v22_gate_record(
@@ -3550,6 +3628,8 @@ scmix_v22_status <- function(
               "respondent multiplier draws.")
       } else family_result$reason, fid)
   )
+  attr(out, "g006_component_evidence") <- g006$components
+  out
 }
 
 #' Collect one independently computed v2.2 target job
@@ -3683,7 +3763,7 @@ scmix_v22_collect <- function(inference, registry, full_sample_plugin = NULL,
     target_se = x$target_se,
     raw_domain_distance = x$raw_domain_distance,
     plugin_boundary_distance = x$plugin_boundary_distance,
-    plugin_boundary_components = x$plugin_boundary_components))
+    g006_component_statistics = x$g006_component_statistics))
   out$fingerprint <- .scmix_v22_fingerprint(list(
     protocol_id = out$protocol_id, target_ids = ids,
     family_ids = vapply(registry, `[[`, character(1L), "target_family_id"),
@@ -3740,7 +3820,7 @@ scmix_v22_collect <- function(inference, registry, full_sample_plugin = NULL,
     target_se = z$target_se,
     raw_domain_distance = z$raw_domain_distance,
     plugin_boundary_distance = z$plugin_boundary_distance,
-    plugin_boundary_components = z$plugin_boundary_components))
+    g006_component_statistics = z$g006_component_statistics))
   .scmix_v22_fingerprint(list(
     protocol_id = x$protocol_id,
     target_ids = vapply(x$registry, `[[`, character(1L), "target_id"),
@@ -4147,11 +4227,13 @@ scmix_v22_finalize_collections <- function(
     x$confidence_set <- if (target_available) formal_map else
       list(nonempty = FALSE, lower = NA_real_, upper = NA_real_,
            boundary_touch = NA, uninformative = FALSE,
-           reason = "formal set withheld by v2.2 gates")
+           reason = "formal set withheld by v2.3 gates")
     x$confidence_center <- x$reported_estimate
     x$family_resampling <- fam
     x$honest_riesz <- riesz$diagnostics
     x$ridge_neighborhood <- riesz$ridge_neighborhood
+    x$g006_component_evidence <- attr(
+      local, "g006_component_evidence", exact = TRUE)
     x$status <- status
     class(x) <- c("scmix_v22_target_result", "list")
     x
@@ -4190,14 +4272,14 @@ scmix_v22_finalize_collections <- function(
       "The chart update is first-order equivalent to the raw one-step",
       "estimator only for regular interior targets. Support intersection",
       "preserves coverage only when the underlying influence-function set",
-      "and every preceding v2.2 gate are valid."
+      "and every preceding v2.3 gate are valid."
     )
   )
   class(out) <- c("scmix_v22_inference", "list")
   out
 }
 
-#' Finalize respondent-sequence DML output under protocol v2.2
+#' Finalize respondent-sequence DML output under protocol v2.3
 #'
 #' Convenience wrapper for a single target job. Use
 #' [scmix_v22_finalize_collections()] after [scmix_v22_collect()] when a frozen
@@ -4227,7 +4309,7 @@ scmix_v22_finalize <- function(
 
 #' @export
 print.scmix_v22_inference <- function(x, ...) {
-  cat("paperps respondent-level inference protocol v2.2\n")
+  cat("paperps respondent-level inference protocol v2.3\n")
   cat("  protocol status:", x$protocol_status, "\n")
   tab <- do.call(rbind, lapply(x$targets, function(z) {
     interval <- if (all(is.na(z$simultaneous_interval)))

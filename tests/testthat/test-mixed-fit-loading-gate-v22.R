@@ -33,6 +33,7 @@
     "code-hash", "data-hash", "design-hash", calibration_hash,
     1L, TRUE, TRUE, "u1", "u1", "all")
   approval <- list(protocol_id = protocol, status = "frozen_for_production",
+                   rank_scope = 1L,
                    calibration_hash = calibration_hash,
                    source_hash = source_hash,
                    values_file =

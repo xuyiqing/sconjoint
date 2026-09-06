@@ -5,7 +5,7 @@
 ## statistics, and emit fail-closed gate rows.  They never refit a model or
 ## silently supply a Step-3 cutoff.
 
-.scmix_v22_comp_protocol_id <- "paperps-inference-2026-09-05-v2.2"
+.scmix_v22_comp_protocol_id <- "paperps-inference-2026-09-06-v2.3"
 .scmix_v22_pending_cutoff <- "CALIBRATE_IN_STEP_3"
 
 .scmix_v22_comp_fingerprint <- function(x) {

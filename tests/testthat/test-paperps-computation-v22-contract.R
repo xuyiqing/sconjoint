@@ -1,4 +1,4 @@
-.v22_protocol <- "paperps-inference-2026-09-05-v2.2"
+.v22_protocol <- "paperps-inference-2026-09-06-v2.3"
 
 .v22_calibration_names <- c(
   "subgroup_interior_margin",
@@ -32,6 +32,7 @@
 .v22_approved_calibration <- list(
   protocol_id = .v22_protocol,
   status = "frozen_for_production",
+  rank_scope = 1L,
   calibration_hash = scmix_v22_calibration_hash(
     .v22_calibration_values(), .v22_calibration_source_hash),
   source_hash = .v22_calibration_source_hash,
@@ -61,7 +62,7 @@ testthat::local_mocked_bindings(
 }
 
 .v22_analysis <- function(
-    signature, specification_id, integration, fit_registry, constants,
+    signature, specification_id, integration, fit_registry, constants, q = 1L,
     source_hash = .v22_calibration_source_hash) {
   constants <- as.list(constants[sort(names(constants), method = "radix")])
   cal_hash <- sconjoint:::.scmix_v22_comp_fingerprint(list(
@@ -80,7 +81,7 @@ testthat::local_mocked_bindings(
     ridge_grid = c("0", "n_k^-1", "n_k^-3/4", "n_k^-1/2"),
     seeds = list(folds = 1L), code_commit = "code",
     data_hash = "data", design_hash = "design",
-    calibration_hash = cal_hash), "scmix_v22_analysis_contract")
+    calibration_hash = cal_hash, q = q), "scmix_v22_analysis_contract")
 }
 
 .v22_calibration <- function(analysis, constants,
@@ -91,7 +92,8 @@ testthat::local_mocked_bindings(
     analysis_signature = analysis$analysis_signature,
     analysis_contract_fingerprint = analysis$fingerprint,
     calibration_hash = analysis$calibration_hash,
-    source_hash = source_hash, constants = constants, complete = TRUE,
+    source_hash = source_hash, rank_scope = 1L,
+    constants = constants, complete = TRUE,
     approval_manifest = .v22_approved_calibration,
     provenance = "design-matched simulation fixture"),
     "scmix_v22_calibration_artifact")
@@ -134,7 +136,7 @@ testthat::local_mocked_bindings(
   constants <- .v22_calibration_values()
   analysis <- .v22_analysis(
     paste0("analysis-", specification_id), specification_id,
-    integration, fit_registry, constants)
+    integration, fit_registry, constants, q = q)
   calibration <- .v22_calibration(analysis, constants)
   list(registry = registry, structural = structural, rule_a = rule_a,
        rule_b = rule_b, integration = integration,

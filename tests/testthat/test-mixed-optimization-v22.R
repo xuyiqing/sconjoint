@@ -50,7 +50,7 @@ test_that("v2.2 optimization gate fails closed before cutoff calibration", {
     projected_kkt_rms = c(1e-5, 2e-5),
     scaled_gradient_rms = c(1e-5, 2e-5))
   polish <- list(
-    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    protocol_id = "paperps-inference-2026-09-06-v2.3",
     objective_definition_id = sconjoint:::.scmix_v22_objective_id,
     optimization_method_id = sconjoint:::.scmix_v22_polish_method,
     method = "full_batch_lbfgs", line_search = "strong_wolfe",
@@ -116,7 +116,7 @@ test_that("F001-F006 cannot all pass when a top-level optimizer gate fails", {
     projected_kkt_rms = c(1e-6, 2e-6),
     scaled_gradient_rms = c(1e-6, 2e-6))
   base <- list(
-    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    protocol_id = "paperps-inference-2026-09-06-v2.3",
     objective_definition_id = sconjoint:::.scmix_v22_objective_id,
     optimization_method_id = sconjoint:::.scmix_v22_polish_method,
     method = "full_batch_lbfgs", line_search = "strong_wolfe",
