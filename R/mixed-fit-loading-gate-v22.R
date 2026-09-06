@@ -148,7 +148,7 @@ scmix_v22_fit_loading_gate_artifact <- function(
     stop("L002 evidence must cover the full fit and every outer fold.",
          call. = FALSE)
   }
-  entries <- setNames(vector("list", length(scope_ids)), scope_ids)
+  entries <- stats::setNames(vector("list", length(scope_ids)), scope_ids)
   for (j in seq_along(scope_ids)) {
     records <- ordered_sets[[j]]
     .scmix_validate_multistart_artifacts(records)

@@ -419,7 +419,7 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
   path <- system.file(
     "protocol", "inference-v2.2-calibration.dcf", package = "sconjoint")
   if (!nzchar(path) || !file.exists(path)) return(NULL)
-  manifest <- try(utils::read.dcf(path), silent = TRUE)
+  manifest <- try(read.dcf(path), silent = TRUE)
   required <- c("Protocol-ID", "Status", "Calibration-Hash", "Source-Hash")
   if (inherits(manifest, "try-error") || nrow(manifest) != 1L ||
       !all(required %in% colnames(manifest))) return(NULL)
@@ -3661,9 +3661,11 @@ scmix_v22_finalize_collections <- function(
   }, character(1L))
   one_final_fit <- all(!is.na(final_fit_hashes)) &&
     length(unique(final_fit_hashes)) == 1L
+  computation_evidence_complete <- !is.null(computation$rows) &&
+    !any(computation$rows$state == "not_run")
   hashes_match <- registry_complete && full_plugins_linked && one_final_fit &&
     riesz_evidence_linked && calibration_linked && fit_loading$linked &&
-    all(collection_intact)
+    computation_evidence_complete && all(collection_intact)
   integrity_gates <- .scmix_v22_bind_gates(
     scmix_v22_gate_record(
       "P001", "protocol_integrity", "analysis", "hard_fit",
@@ -3682,7 +3684,7 @@ scmix_v22_finalize_collections <- function(
       if (hashes_match) {
         "Protocol, code, data, design, fit, plug-in, and gate artifacts are linked by intact fingerprints."
       } else {
-        "One or more required artifact hash, signed full-sample fit plug-in, nested Riesz, or calibration link is absent or mismatched."
+        "One or more required artifact hash, full-sample plug-in, nested Riesz, fit/loading, computation, or calibration link is absent or mismatched."
       }, signatures[[1L]]))
   if (!is.numeric(level) || length(level) != 1L || !is.finite(level) ||
       level <= 0 || level >= 1) stop("level must lie in (0,1).", call. = FALSE)
