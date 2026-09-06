@@ -866,6 +866,8 @@ scmix_v23_oracle_truths <- function(
                   "null_space_materiality_cutoff", "defect_cutoff",
                   "ridge_cutoff"),
   subgroup_share = c("subgroup_interior_margin",
+                     "chart_discrepancy_cutoff",
+                     "nonlinear_remainder_cutoff",
                      "generalized_information_margin",
                      "null_space_materiality_cutoff", "defect_cutoff",
                      "ridge_cutoff"),
@@ -892,7 +894,8 @@ scmix_v23_oracle_truths <- function(
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"),
   mean_tradeoff_mrs_ratio = c(
-    "mean_tradeoff_denominator_margin", "denominator_standardized_cutoff",
+    "mean_tradeoff_denominator_margin", "chart_discrepancy_cutoff",
+    "nonlinear_remainder_cutoff", "denominator_standardized_cutoff",
     "generalized_information_margin", "null_space_materiality_cutoff",
     "defect_cutoff", "ridge_cutoff"))
 
@@ -921,8 +924,34 @@ scmix_v23_oracle_truths <- function(
     se[[target]] <- sqrt(max(as.numeric(
       crossprod(gradient, Vtheta %*% gradient)), 0))
     truth[[target]] <- problem$truth[[target]]
-    if (!target %in% c("mean_tradeoff_mrs_ratio",
-                       "unrestricted_mean_direction")) {
+    if (identical(target, "directional_heterogeneity")) {
+      z_variance <- mean((problem$prep$z_respondent -
+                            mean(problem$prep$z_respondent))^2)
+      hz <- theta_hat[["direction_moderator_slope"]]^2 * z_variance
+      hr <- theta_hat[["loading"]]^2
+      ghz_local <- stats::setNames(rep(0, length(theta_hat)), names(theta_hat))
+      ghr_local <- ghz_local
+      ghz_local[["direction_moderator_slope"]] <-
+        2 * theta_hat[["direction_moderator_slope"]] * z_variance
+      ghr_local[["loading"]] <- 2 * theta_hat[["loading"]]
+      primitive_gradient <- rbind(ghz_local, ghr_local)
+      primitive_covariance <- primitive_gradient %*% Vtheta %*%
+        t(primitive_gradient)
+      primitive <- pmax(c(hz, hr), sqrt(.Machine$double.eps))
+      log_se <- sqrt(pmax(diag(primitive_covariance), 0)) / primitive
+      joint_z <- stats::qnorm(1 - (1 - level) / 4)
+      primitive_lower <- primitive * exp(-joint_z * log_se)
+      primitive_upper <- primitive * exp(joint_z * log_se)
+      estimate[[target]] <- hz / max(hz + hr, .Machine$double.eps)
+      chart[[target]] <- estimate[[target]]
+      lower[[target]] <- primitive_lower[[1L]] /
+        (primitive_lower[[1L]] + primitive_upper[[2L]])
+      upper[[target]] <- primitive_upper[[1L]] /
+        (primitive_upper[[1L]] + primitive_lower[[2L]])
+      uninformative[[target]] <- lower[[target]] <= 1e-8 &&
+        upper[[target]] >= 1 - 1e-8
+    } else if (!target %in% c("mean_tradeoff_mrs_ratio",
+                              "unrestricted_mean_direction")) {
       base <- min(max(derivatives$value[[target]], 1e-10), 1 - 1e-10)
       correction <- (linear[[target]] - base) / (base * (1 - base))
       chart[[target]] <- stats::plogis(stats::qlogis(base) + correction)
@@ -949,12 +978,14 @@ scmix_v23_oracle_truths <- function(
       joint <- rbind(gnum, gden) %*% Vtheta %*% t(rbind(gnum, gden))
       interval <- .scmix_v23_oracle_fieller(num, den, joint, zcrit)
       estimate[[target]] <- num / den
+      chart[[target]] <- linear[[target]]
       lower[[target]] <- interval[["lower"]]
       upper[[target]] <- interval[["upper"]]
       empty[[target]] <- as.logical(interval[["empty"]])
       uninformative[[target]] <- as.logical(interval[["uninformative"]])
     } else {
       estimate[[target]] <- linear[[target]]
+      chart[[target]] <- linear[[target]]
       lower[[target]] <- estimate[[target]] - zcrit * se[[target]]
       upper[[target]] <- estimate[[target]] + zcrit * se[[target]]
     }
@@ -995,6 +1026,30 @@ scmix_v23_oracle_truths <- function(
       targets$primitive_a_estimate[[j]], 1 - b_value,
       b_value - targets$primitive_a_estimate[[j]]) / scale
   }
+  targets$primitive_hz_truth <- targets$primitive_hr_truth <-
+    targets$primitive_hz_estimate <- targets$primitive_hr_estimate <- NA_real_
+  heterogeneity_row <- match("directional_heterogeneity", targets$target_key)
+  z_variance <- mean((problem$prep$z_respondent -
+                        mean(problem$prep$z_respondent))^2)
+  truth_grid <- .scmix_v23_oracle_grid(problem$config, truth = TRUE)
+  truth_u_mean <- sum(truth_grid$w * truth_grid$u)
+  truth_u_variance <- sum(truth_grid$w *
+    (truth_grid$u - truth_u_mean)^2)
+  targets$primitive_hz_truth[[heterogeneity_row]] <-
+    problem$theta[["direction_moderator_slope"]]^2 * z_variance
+  targets$primitive_hr_truth[[heterogeneity_row]] <-
+    problem$theta[["loading"]]^2 * truth_u_variance
+  targets$primitive_hz_estimate[[heterogeneity_row]] <-
+    theta_hat[["direction_moderator_slope"]]^2 * z_variance
+  targets$primitive_hr_estimate[[heterogeneity_row]] <-
+    theta_hat[["loading"]]^2
+  targets$coverage_scope <- "local_Gaussian_scalar_or_joint_mapping"
+  targets$coverage_scope[targets$target_id == "subgroup_share"] <-
+    paste0("local_Gaussian_joint_a_b_mapping_with_conditional_design_",
+           "b_fixed")
+  targets$coverage_scope[
+    targets$target_id == "directional_heterogeneity"] <-
+    "local_Gaussian_joint_log_HZ_HR_rectangle_mapping"
 
   H <- problem$H
   B <- problem$B
@@ -1056,9 +1111,8 @@ scmix_v23_oracle_truths <- function(
     metric <- c(
       subgroup_interior_margin = subgroup_margin,
       directional_heterogeneity_regularity_margin = min(
-        ratio(explained, se_hz), ratio(residual, se_hr),
-        ratio(explained + residual, se_total)),
-      mean_tradeoff_denominator_margin = ratio(denominator, se_denominator),
+        explained, residual),
+      mean_tradeoff_denominator_margin = abs(denominator),
       chart_discrepancy_cutoff = ratio(
         chart[[target]] - linear[[target]], se[[target]]),
       nonlinear_remainder_cutoff = ratio(
