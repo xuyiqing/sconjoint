@@ -49,6 +49,11 @@ scmix_refit_selected_matrix(
 
 \item{preprocessing}{Optional list with stored \code{Z} and \code{deltaX} transforms.}
 
+\item{n_epochs, learning_rate, n_starts, mu_bound, kappa_bound,
+alpha_bound, opt_tol, grad_tol, seed, device, verbose}{Optimization,
+compact-bound, reproducibility, device, and progress controls for the fixed
+refit.}
+
 \item{a_bound}{Positive raw-coefficient Frobenius bound for the loading.}
 
 \item{weight_bound}{Positive coordinatewise network-parameter bound.}

@@ -16,6 +16,13 @@
 ^LICENSE\.md$
 ^ARCHITECTURE\.md$
 ^PAPERPS_ALIGNMENT_AUDIT\.md$
+^IMPLEMENTATION_V22\.md$
+^INFERENCE_PROTOCOL_V22\.md$
+^MLCODEX_PROVENANCE\.md$
+^TARGETED_Q1_RUNBOOK\.md$
+^inputs$
+^runs$
+^provenance$
 ^applications$
 ^\.runtime$
 ^\.R-library$
@@ -23,6 +30,12 @@
 
 # CRAN: ship only a lean core test set (package-load + scfit smoke).
 # The full suite stays in the repo and runs via devtools::test() locally.
+^tests/testthat/test-interactions\.R$
+^tests/testthat/test-mixed-.*\.R$
+^tests/testthat/test-paperps-.*\.R$
+^tests/testthat/test-provenance\.R$
+^tests/testthat/test-specification-assessment-paperps\.R$
+^tests/testthat/test-sw2022-v21-.*\.R$
 ^tests/testthat/test-case-study-smoke\.R$
 ^tests/testthat/test-crossfit-determinism\.R$
 ^tests/testthat/test-data-bs2013\.R$
