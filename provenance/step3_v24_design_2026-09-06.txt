@@ -1,0 +1,61 @@
+Step 3 v2.4 prospective design freeze
+Date: 2026-09-06
+Branch: codex/inference-v24-lean-design
+Base commit: b6371916e44d731a7cde67e24f718d1740f039dd
+Protocol: paperps-inference-2026-09-06-v2.4
+Plan: paperps-lean-validation-2026-09-06-v2.4-v1
+
+Status
+- Fixed-rule validation design, empirical truths, target definitions, seeds,
+  and decision rules frozen. The end-to-end evaluator is not yet frozen.
+- Three response-free N=400 design subsets hash-frozen.
+- Six DGP cells and 78 response-free truths hash-frozen. These cover twelve
+  target variants plus the active covariance eigenvalue in every cell.
+- V2.4 source and machine-readable registries hash-frozen.
+- No calibration stream and no simulation-selected thresholds.
+- No frozen-design synthetic outcomes generated.
+- Two integrity-pilot replications per cell not run.
+- One hundred evidence replications per cell not run.
+- End-to-end evaluator approval absent.
+- Family approval absent.
+- Each future replication resamples 400 complete respondent records with
+  replacement, preserves whole task sequences, and assigns new IDs. Truth is
+  defined under the original frozen 400-respondent empirical distribution.
+- The family-by-cell approval matrix is frozen and mechanical. It records all
+  36 pairs. Thirty are required and six unaffected special-cell pairs are
+  descriptive controls. An approval record cannot override the required rows.
+  Incomplete and Bonferroni-only family outputs do not count as simultaneous
+  family releases.
+- Every cell must complete at least 95 of 100 evidence runs. Regular-family
+  coverage must be at least 0.90 for the fixed 95 percent simultaneous set.
+  Wilson intervals and Monte Carlo standard errors are descriptive. Exact-
+  boundary invalid-release control uses both the observed rate and a one-sided
+  exact Clopper-Pearson upper limit.
+- The 95 percent familywise level and exact type-1 multiplier max-statistic
+  critical-value convention are frozen before outcomes.
+- Twelve excluded pilots may be inspected only for integrity and runtime. The
+  evidence study stops unless six workers are projected to finish within eight
+  hours. A redesign would require a new protocol ID.
+
+Scale correction
+The DGP uses raw contrasts without centering and the estimator's exact
+respondent-weighted RMS scale. Regular directions use eigenvalue-normalized
+coefficient bases with exact dual target contrasts. The GS weak direction is
+not eigenvalue-normalized. Its score RMS remains sqrt(lambda_min).
+
+Verification completed before this record
+- The isolated v2.4 tests and combined v2.3/v2.4 calibration tests passed with
+  no failures, errors, warnings, or skips.
+- A clean temporary package installation loaded the frozen plan, rebuilt the
+  frozen registries, and confirmed the outcome lock from shipped files.
+- R CMD check with unavailable suggested packages disabled completed with only
+  two pre-existing documentation warnings about duplicate aliases and
+  undocumented arguments.
+- All response-free subset, payload, truth, source, and registry hashes matched.
+- Raw and estimator-scale utility indices agreed within 1e-12 in all six cells.
+- The weak-score RMS test matched sqrt(lambda_min), rather than one.
+- The outcome-generation function failed closed as required.
+
+This record is not evidence of estimator coverage or application eligibility.
+Even a successful future study will validate implementation behavior only on
+the three finite empirical templates. Each application must pass its own gates.

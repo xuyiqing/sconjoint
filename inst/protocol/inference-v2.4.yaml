@@ -1,0 +1,78 @@
+protocol_id: paperps-inference-2026-09-06-v2.4
+plan_id: paperps-lean-validation-2026-09-06-v2.4-v1
+frozen_on: 2026-09-06
+status: prospective_validation_design_frozen_outcomes_locked
+threshold_selection: none
+calibration_stream: none
+application_outcomes_permitted: false
+frozen_now: [response_free_designs, empirical_truths, target_definitions, seeds, decision_rules]
+not_yet_frozen: [end_to_end_evaluator, evaluator_settings]
+rank_scope: q1_fit
+designs: [br2017, gs2020, sw2022]
+respondents_per_template: 400
+replication_sampling:
+  unit: complete_respondent_record
+  method: sample_400_with_replacement_from_frozen_template
+  preserve_complete_sequence: true
+  assign_new_replication_ids: true
+  truth_conditioning: original_frozen_400_respondent_empirical_distribution
+cells:
+  - br_regular
+  - gs_regular
+  - sw_regular
+  - br_probability_zero_denominator_boundary
+  - br_q0_rank_boundary
+  - gs_weak_inverse
+integrity_pilot_reps_per_cell: 2
+integrity_pilot_evidence_eligible: false
+pilot_inspection: [execution_integrity, elapsed_time, resource_use]
+pilot_target_or_operating_characteristic_inspection: prohibited
+maximum_workers: 6
+maximum_projected_evidence_wall_hours: 8
+pilot_go_no_go: proceed_only_if_projected_evidence_wall_hours_at_most_8_else_stop_and_require_new_protocol_id
+evidence_reps_per_cell: 100
+evidence_batch_size: 10
+early_success_permitted: false
+early_stop: mathematical_futility_only
+outer_folds: 2
+inner_folds: 2
+optimizer_starts: 2
+reference_gh_nodes: 15
+refined_gh_nodes: 31
+common_respondent_multipliers: 9999
+familywise_confidence_level: 0.95
+multiplier_distribution: independent_standard_normal
+multiplier_influence_centering: subtract_primitive_column_empirical_mean
+multiplier_studentization: square_root_sum_squared_centered_influences
+multiplier_statistic: maximum_absolute_over_all_unique_family_primitives
+multiplier_critical_value: empirical_inverse_ECDF_type1_quantile_at_0.95_no_interpolation
+ridge_rule: Ntrain^(-3/4)
+ridge_sensitivity: [Ntrain^(-1), Ntrain^(-1/2)]
+ridge_selection: none
+target_contract: exact_definitions_and_reference_weights_in_target_registry
+weak_cell_affected_families: [smooth_means, directional_shares, directional_heterogeneity]
+all_cell_completion:
+  point_requirement: 0.95
+regular_family_decision:
+  release_rate_requirement: 0.75
+  conditional_simultaneous_coverage_requirement: 0.90
+  coverage_mc_summary: binomial_MCSE_and_two_sided_Wilson90_using_z_qnorm_0.95_no_continuity_correction
+  coverage_mc_summary_role: descriptive_not_approval_gate
+exact_boundary_decision:
+  invalid_regular_release_rate_requirement: 0.05
+  one_sided_exact95_upper_requirement: 0.10
+  upper_method: Clopper_Pearson_qbeta_0.95_invalid_plus_1_completed_minus_invalid
+weak_or_bounded_decision:
+  successful_withholding_maximum_releases: 5
+  informative_release_minimum: 30
+  informative_release_requires_regular_coverage_rule: true
+  inconclusive_release_count: 6_to_29
+approval:
+  matrix: inference-v2.4-approval-matrix.csv
+  required_rows: 30
+  descriptive_only_rows: 6
+  rule: mechanical_pass_of_every_required_row
+  discretionary_override: prohibited
+family_release_definition: complete_family_simultaneous_interval_for_all_registered_members_with_all_fit_and_target_rules_passed_and_common_multipliers_no_incomplete_or_bonferroni_fallback
+validation_scope: implementation_evidence_on_three_finite_empirical_templates_not_application_certification
+outcome_generation: locked_pending_one_hash_bound_end_to_end_evaluator
