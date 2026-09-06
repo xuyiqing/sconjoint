@@ -1,0 +1,27 @@
+Plan-Id: paperps-step3-calibration-2026-09-06-v1
+Protocol-Id: paperps-inference-2026-09-05-v2.2
+Frozen-On: 2026-09-06
+Status: prospective_calibration_plan_frozen_simulation_not_run
+Design-Template-Ids: br2017,gs2020,sw2022
+Design-Input-Policy: response_free_deltaX_Z_respondent_and_task_layout_only
+Application-Outcomes-Permitted: false
+Oracle-Calibration-Replications-Per-Cell: 2000
+Oracle-Validation-Replications-Per-Cell: 2000
+Numerical-Calibration-Replications-Per-Cell: 8
+Numerical-Validation-Replications-Per-Cell: 8
+Oracle-Calibration-Master-Seed: 100000000
+Oracle-Validation-Master-Seed: 500000000
+Numerical-Calibration-Master-Seed: 900000000
+Numerical-Validation-Master-Seed: 1300000000
+Seed-Formula: master+(design_index-1)*30000000+(regime_index-1)*2000000+replication
+Maximum-Workers: 10
+Nominal-Coverage: 0.95
+Minimum-Benign-Calibration-Passage: 0.90
+Maximum-Targeted-False-Certification: 0.05
+Validation-Monte-Carlo-Interval: two_sided_wilson_95_percent
+Candidate-Grid: observed_finite_metric_values_plus_adjacent_machine_representable_endpoints
+Threshold-Rule: maximize_benign_passage_subject_to_minimum_benign_passage_and_maximum_targeted_false_certification_then_minimize_false_certification_then_choose_stricter_cutoff
+Infeasible-Rule: retain_proposal_with_infeasible_status_and_do_not_create_production_manifest
+Validation-Rule: evaluate_once_on_untouched_validation_stream_and_never_retune_under_this_plan_id
+Production-Manifest-Creation: prohibited
+
