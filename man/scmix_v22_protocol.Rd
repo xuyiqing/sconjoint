@@ -4,6 +4,7 @@
 \alias{scmix_v22_analysis_contract}
 \alias{scmix_v22_calibration_hash}
 \alias{scmix_v22_calibration_artifact}
+\alias{scmix_v22_package_calibration}
 \alias{scmix_v22_full_plugin_artifact}
 \alias{scmix_v22_multiplier_bank}
 \alias{scmix_v22_run_inner_refits}
@@ -57,6 +58,8 @@ scmix_v22_calibration_hash(values, source_hash)
 scmix_v22_calibration_artifact(
   values, analysis_contract, source_hash, provenance
 )
+
+scmix_v22_package_calibration()
 
 scmix_v22_full_plugin_artifact(
   inference, values, analysis_contract, final_fit_hash, code_hash, provenance
@@ -226,6 +229,12 @@ through the declared constraints and never treats pending calibration constants
 or unsigned evidence as production certification.
 }
 \details{
+The package-calibration accessor succeeds only when the installed package
+contains the canonical values file and approval manifest. It verifies the
+values file byte for byte with SHA-256 and requires the manifest to bind the
+protocol ID, production status, source hash, calibration hash, and all 26
+constants exactly. In the absence of those approved files, it fails closed.
+
 Riesz tuning is respondent-nested and separate by minimal scalar primitive.
 The derivative audit uses centered differences at structural-orthonormal steps
 \eqn{h_j=\epsilon^{1/3}\max(1,|u_j|)} and \eqn{h_j/2}. Multi-primitive

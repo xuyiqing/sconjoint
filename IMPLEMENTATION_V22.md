@@ -32,9 +32,29 @@ protocol ID `paperps-inference-2026-09-05-v2.2`.
   gate schema whose scope, severity, comparator, and units are frozen. A
   target-domain change requires a new protocol ID rather than a same-version
   amendment.
-- A package-approved Step-3 calibration manifest. No such production manifest
-  ships in Step 2, so an application cannot mint its own cutoffs and receive
-  v2.2 status.
+- A fail-closed hook for a package-approved Step-3 calibration manifest. No
+  such production manifest ships in Step 2, so an application cannot mint its
+  own cutoffs and receive v2.2 status.
+
+## Step 3 calibration contract
+
+The Step 3 branch adds the production loader without pre-populating any
+simulation result. It expects a canonical values file named
+`inst/protocol/inference-v2.2-calibration-values.dcf` and a separate approval
+manifest named `inst/protocol/inference-v2.2-calibration.dcf`. The loader
+computes a true SHA-256 digest of the values file. The manifest must bind that
+digest, the protocol ID, production status, the derived calibration hash, and
+the exact complete set of 26 constants. Any missing, extra, altered, or
+nonfinite value fails closed.
+
+The manifest also enforces the equality aliases needed by the frozen one-row
+G006 gate. The directional-heterogeneity release margin equals its directional
+variance and total-heterogeneity aliases. The mean-tradeoff margin equals its
+denominator alias. G004 and G005 are checked against the approved active-
+eigenvalue and generalized-information constants rather than trusting an
+external gate row. G006 selects its approved cutoff by target type and the
+directional-heterogeneity boundary statistic includes the standardized total
+heterogeneity as well as both variance components.
 
 ## Deliberately pending after Step 2
 

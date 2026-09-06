@@ -23,7 +23,7 @@
   values <- stats::setNames(
     as.list(rep(1, length(sconjoint:::.scmix_v22_required_calibration_names))),
     sconjoint:::.scmix_v22_required_calibration_names)
-  source_hash <- "fit-gate-calibration-source"
+  source_hash <- paste(rep("c", 64L), collapse = "")
   calibration_hash <- scmix_v22_calibration_hash(values, source_hash)
   contract <- scmix_v22_analysis_contract(
     "fit-gate-analysis", "app", specification_id, "primary", "all",
@@ -35,6 +35,13 @@
   approval <- list(protocol_id = protocol, status = "frozen_for_production",
                    calibration_hash = calibration_hash,
                    source_hash = source_hash,
+                   values_file =
+                     sconjoint:::.scmix_v22_calibration_values_file,
+                   constant_count = length(
+                     sconjoint:::.scmix_v22_required_calibration_names),
+                   constants = sconjoint:::.scmix_v22_normalize_calibration(
+                     values, require_complete = TRUE),
+                   source_verified = TRUE,
                    manifest_fingerprint = "test-manifest")
   testthat::local_mocked_bindings(
     .scmix_v22_approved_calibration_manifest = function() approval,

@@ -8,7 +8,7 @@
 .v22_calibration_values$nonlinear_remainder_cutoff <- 1e6
 .v22_calibration_values$interior_distance_cutoff <- 0
 .v22_calibration_values$numerical_rank_tolerance <- 1e-12
-.v22_calibration_source_hash <- "synthetic-calibration-source-sha256"
+.v22_calibration_source_hash <- paste(rep("a", 64L), collapse = "")
 
 .v22_contract <- function(signature = "v22-synthetic",
                           code_commit = "test-code",
@@ -176,6 +176,11 @@ scmix_v22_target_spec <- function(..., uses_numerical_integration = FALSE) {
   calibration_hash = scmix_v22_calibration_hash(
     .v22_calibration_values, .v22_calibration_source_hash),
   source_hash = .v22_calibration_source_hash,
+  values_file = sconjoint:::.scmix_v22_calibration_values_file,
+  constant_count = length(sconjoint:::.scmix_v22_required_calibration_names),
+  constants = sconjoint:::.scmix_v22_normalize_calibration(
+    .v22_calibration_values, require_complete = TRUE),
+  source_verified = TRUE,
   manifest_fingerprint = "synthetic-package-manifest-fingerprint")
 testthat::local_mocked_bindings(
   .scmix_v22_approved_calibration_manifest = function()
@@ -207,6 +212,16 @@ testthat::local_mocked_bindings(
   out$state <- "pass"
   out$statistic <- I(lapply(values, `[[`, "statistic"))
   out$threshold <- I(lapply(values, `[[`, "threshold"))
+  bindings <- c(G004 = "active_eigenvalue_standardized_cutoff",
+                G005 = "generalized_information_margin")
+  for (gate_id in names(bindings)) {
+    at <- which(out$gate_id == gate_id)
+    for (i in at) {
+      cutoff <- as.numeric(.v22_calibration_values[[bindings[[gate_id]]]])
+      out$statistic[[i]] <- cutoff + 1
+      out$threshold[[i]] <- cutoff
+    }
+  }
   out$provenance <- "signed synthetic test artifact"
   out$message <- paste("Synthetic passing evidence for", out$gate_id)
   applicable <- mapply(
@@ -900,6 +915,10 @@ test_that("split jobs require one signed analysis and full-fit provenance", {
     "honest_evaluation_gradient"]][1L, 1L] <- 2
   expect_error(scmix_v22_finalize_collections(list(tampered_job)),
                "failed fingerprint validation")
+  tampered_boundary <- job_a
+  tampered_boundary$targets[[1L]]$plugin_boundary_distance <- 1e9
+  expect_error(scmix_v22_finalize_collections(list(tampered_boundary)),
+               "failed fingerprint validation")
   other_plugin <- scmix_v22_full_plugin_artifact(
     dml_b, c(b = .5), dml_b$v22_analysis_contract,
     final_fit_hash = "different-final-fit", code_hash = "test-code",
@@ -1407,6 +1426,31 @@ test_that("calibration cannot certify without the package-shipped Step-3 manifes
   expect_error(scmix_v22_calibration_artifact(
     changed, changed_contract, changed_source, "posthoc"),
     "package-shipped Step-3")
+})
+
+test_that("the finalizer rejects an externally weakened G004 or G005 threshold", {
+  ids <- sprintf("r%03d", seq_len(30L))
+  IF <- matrix(seq(-1, 1, length.out = length(ids)), ncol = 1L,
+               dimnames = list(ids, "p"))
+  dml <- .v22_fake_dml(c(p = .5), c(p = .51), IF)
+  spec <- scmix_v22_target_spec(
+    "p", "single", "probability", "p", "primitive:p", "positive",
+    "probability", "mean")
+  external <- .v22_external_gates(list(spec), dml$v22_analysis_contract)
+  rows <- external$gates
+  at <- which(rows$gate_id == "G005")
+  rows$threshold[[at]] <-
+    .v22_calibration_values$generalized_information_margin / 2
+  weakened <- scmix_v22_gate_artifact(
+    rows, list(spec), dml$v22_analysis_contract,
+    "synthetic externally weakened G005")
+  expect_error(scmix_v22_finalize(
+    dml, list(spec),
+    full_sample_plugin = .v22_full_plugin(dml, c(p = .5)),
+    derivative_audit = .v22_derivative(dml, list(spec)),
+    calibration = .v22_calibration, external_gates = weakened,
+    complete_external_record = TRUE),
+    "G005 threshold must equal")
 })
 
 test_that("the derivative subset and rule are frozen in the analysis contract", {

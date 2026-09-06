@@ -20,7 +20,7 @@
   "null_space_materiality_cutoff", "numerical_rank_tolerance",
   "defect_cutoff", "ridge_cutoff")
 
-.v22_calibration_source_hash <- "cal-source"
+.v22_calibration_source_hash <- paste(rep("b", 64L), collapse = "")
 .v22_calibration_values <- function() {
   constants <- stats::setNames(rep(10, length(.v22_calibration_names)),
                                .v22_calibration_names)
@@ -35,6 +35,11 @@
   calibration_hash = scmix_v22_calibration_hash(
     .v22_calibration_values(), .v22_calibration_source_hash),
   source_hash = .v22_calibration_source_hash,
+  values_file = sconjoint:::.scmix_v22_calibration_values_file,
+  constant_count = length(.v22_calibration_names),
+  constants = sconjoint:::.scmix_v22_normalize_calibration(
+    as.list(.v22_calibration_values()), require_complete = TRUE),
+  source_verified = TRUE,
   manifest_fingerprint = "synthetic-package-manifest-fingerprint")
 testthat::local_mocked_bindings(
   .scmix_v22_approved_calibration_manifest = function()
@@ -55,8 +60,9 @@ testthat::local_mocked_bindings(
     "scmix_v22_target_spec")
 }
 
-.v22_analysis <- function(signature, specification_id, integration,
-                          fit_registry, constants, source_hash = "cal-source") {
+.v22_analysis <- function(
+    signature, specification_id, integration, fit_registry, constants,
+    source_hash = .v22_calibration_source_hash) {
   constants <- as.list(constants[sort(names(constants), method = "radix")])
   cal_hash <- sconjoint:::.scmix_v22_comp_fingerprint(list(
     protocol_id = .v22_protocol, source_hash = source_hash,
