@@ -7,8 +7,10 @@ Design-Input-Policy: response_free_deltaX_Z_respondent_and_task_layout_only
 Application-Outcomes-Permitted: false
 Oracle-Calibration-Replications-Per-Cell: 2000
 Oracle-Validation-Replications-Per-Cell: 2000
-Numerical-Calibration-Replications-Per-Cell: 8
-Numerical-Validation-Replications-Per-Cell: 8
+Numerical-Calibration-Replications-Per-Targeted-Cell: 40
+Numerical-Validation-Replications-Per-Targeted-Cell: 40
+Numerical-Calibration-Replications-Per-Interpretation-Cell: 8
+Numerical-Validation-Replications-Per-Interpretation-Cell: 8
 Oracle-Calibration-Master-Seed: 100000000
 Oracle-Validation-Master-Seed: 500000000
 Numerical-Calibration-Master-Seed: 900000000
@@ -17,11 +19,17 @@ Seed-Formula: master+(design_index-1)*30000000+(regime_index-1)*2000000+replicat
 Maximum-Workers: 10
 Nominal-Coverage: 0.95
 Minimum-Benign-Calibration-Passage: 0.90
-Maximum-Targeted-False-Certification: 0.05
+Maximum-Targeted-Calibration-False-Certification: 0.01
 Validation-Monte-Carlo-Interval: two_sided_wilson_95_percent
+Validation-Coverage-Criterion: well_informed_unconditional_and_release_conditional_point_estimates_at_least_0.94_and_95_percent_wilson_intervals_contain_0.95
+Validation-Benign-Passage-Criterion: point_estimate_at_least_0.90_and_95_percent_wilson_lower_bound_at_least_0.88
+Validation-Targeted-False-Certification-Criterion: oracle_point_estimate_at_most_0.05_and_95_percent_wilson_upper_bound_at_most_0.07_within_each_design;pooled_numerical_point_estimate_at_most_0.01_and_95_percent_wilson_upper_bound_at_most_0.05
+Validation-Benign-Constraint-Criterion: empty_and_uninformative_point_rates_at_most_0.01_and_95_percent_wilson_upper_bounds_at_most_0.02
+Validation-Numerical-Completion-Criterion: all_targeted_runs_finite;pooled_well_informed_passage_at_least_0.90;all_interpretation_runs_reported_without_hard_gate_calibration_claim
 Candidate-Grid: observed_finite_metric_values_plus_adjacent_machine_representable_endpoints
 Threshold-Rule: maximize_benign_passage_subject_to_minimum_benign_passage_and_maximum_targeted_false_certification_then_minimize_false_certification_then_choose_stricter_cutoff
+Threshold-Equality-Policy: comparator_equality_passes_with_exact_double_comparison_and_no_hidden_tolerance
+Boundary-Alias-Policy: aliases_share_one_registry_constant_and_must_be_bit_identical
 Infeasible-Rule: retain_proposal_with_infeasible_status_and_do_not_create_production_manifest
 Validation-Rule: evaluate_once_on_untouched_validation_stream_and_never_retune_under_this_plan_id
-Production-Manifest-Creation: prohibited
-
+Production-Manifest-Creation: conditional_on_all_frozen_validation_criteria_passing
