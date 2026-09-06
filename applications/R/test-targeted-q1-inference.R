@@ -15,6 +15,32 @@ check <- function(label, condition) {
   cat("PASS  ", label, "\n", sep = "")
 }
 
+if (requireNamespace("torch", quietly = TRUE)) {
+  Z_dtype <- cbind(z1 = c(-1, 0, 1), z2 = c(0.5, -0.5, 0.25))
+  z_dtype_transform <- sconjoint:::.sc_fit_z_transform(
+    Z_dtype, seq_len(nrow(Z_dtype)))
+  for (kind in c("float32", "float64")) {
+    net_dtype <- sconjoint:::.sc_build_mixed_network(
+      p = 2L, p_Z = 2L, q = 0L, hidden = 3L,
+      coefficient_scale = c(x1 = 1, x2 = 1))
+    net_dtype$to(dtype = if (kind == "float64") {
+      torch::torch_float64()
+    } else torch::torch_float())
+    state_dtype <- sconjoint:::.scmix_capture_network_state(
+      net_dtype, p = 2L, p_Z = 2L, q = 0L, hidden = 3L,
+      mu_bound = 10, kappa_bound = 10, a_bound = 10, weight_bound = 10,
+      coefficient_scale = c(x1 = 1, x2 = 1),
+      z_transform = z_dtype_transform,
+      dx_transform = list(scale = c(x1 = 1, x2 = 1)),
+      coefficient_names = c("x1", "x2"),
+      moderator_names = colnames(Z_dtype))
+    features_dtype <- tq1_hidden_features(state_dtype, Z_dtype)
+    check(paste0("hidden features respect restored ", kind, " state"),
+          identical(dim(features_dtype), c(nrow(Z_dtype), 3L)) &&
+            all(is.finite(features_dtype)))
+  }
+}
+
 attr_names <- c("penalty", "benefit", "other")
 mu <- rbind(c(-0.5, 0.8, 0), c(-0.2, 0.1, 0), c(0.3, -0.1, 0),
             c(-0.7, 1.2, 0))

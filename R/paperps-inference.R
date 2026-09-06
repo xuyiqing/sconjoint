@@ -726,24 +726,23 @@
   N <- nrow(mu); p <- ncol(mu); q <- ncol(A); J <- ncol(base$value)
   der <- .scmix_dml_normalize_derivatives(base$raw, N, J, p, q,
                                           ncol(horizontal), horizontal, A)
-  if (!is.null(der)) {
-    return(c(base[c("value", "labels")], der))
-  }
-  if (!isTRUE(allow_numeric)) {
+  if (is.null(der) && !isTRUE(allow_numeric)) {
     .scmix_dml_stop("scmix_dml(): plugin callback omitted analytic ",
                     "derivatives. Set allow_numeric_derivatives = TRUE to ",
                     "request refined central differences explicitly.")
   }
-  differentiate <- function(h) {
+  differentiate <- function(step_multiplier) {
     dm <- array(0, c(N, J, p))
     for (j in seq_len(p)) {
+      h <- step_multiplier * eps * pmax(1, abs(mu[, j]))
       up <- dn <- mu; up[, j] <- up[, j] + h; dn[, j] <- dn[, j] - h
       vp <- .scmix_dml_target_value(fun, up, kappa, A, Z, respondent_id,
                                     fold, attr_names)$value
       vm <- .scmix_dml_target_value(fun, dn, kappa, A, Z, respondent_id,
                                     fold, attr_names)$value
-      dm[, , j] <- (vp - vm) / (2 * h)
+      dm[, , j] <- sweep(vp - vm, 1L, 2 * h, `/`)
     }
+    h <- step_multiplier * eps * max(1, abs(kappa))
     vp <- .scmix_dml_target_value(fun, mu, kappa + h, A, Z, respondent_id,
                                   fold, attr_names)$value
     vm <- .scmix_dml_target_value(fun, mu, kappa - h, A, Z, respondent_id,
@@ -753,6 +752,8 @@
     if (q > 0L) {
       for (a in seq_len(ncol(horizontal))) {
         D <- matrix(horizontal[, a], nrow(A), ncol(A))
+        coordinate <- as.numeric(crossprod(horizontal[, a], as.vector(A)))
+        h <- step_multiplier * eps * max(1, abs(coordinate))
         vp <- .scmix_dml_target_value(fun, mu, kappa, A + h * D, Z,
                                       respondent_id, fold, attr_names)$value
         vm <- .scmix_dml_target_value(fun, mu, kappa, A - h * D, Z,
@@ -762,14 +763,25 @@
     }
     list(d_mu = dm, d_kappa = dk, d_A_horizontal = dAh)
   }
-  coarse <- differentiate(eps)
-  fine <- differentiate(eps / refinement_factor)
+  coarse <- differentiate(1)
+  fine <- differentiate(1 / refinement_factor)
   vec <- function(x) unlist(x, recursive = TRUE, use.names = FALSE)
-  den <- pmax(abs(vec(fine)), 1)
-  err <- max(abs(vec(coarse) - vec(fine)) / den)
+  l2 <- function(x) sqrt(sum(vec(x)^2))
+  if (is.null(der)) {
+    chosen <- fine
+    err <- l2(Map(`-`, coarse, fine)) / max(l2(fine), 1e-15)
+    source <- "numeric_refined"
+  } else {
+    chosen <- der[c("d_mu", "d_kappa", "d_A_horizontal")]
+    analytic_fine <- l2(Map(`-`, chosen, fine))
+    coarse_fine <- l2(Map(`-`, coarse, fine))
+    err <- max(analytic_fine, coarse_fine) / max(l2(chosen), 1e-15)
+    source <- "analytic"
+  }
   list(value = base$value, labels = base$labels,
-       d_mu = fine$d_mu, d_kappa = fine$d_kappa,
-       d_A_horizontal = fine$d_A_horizontal, source = "numeric_refined",
+       d_mu = chosen$d_mu, d_kappa = chosen$d_kappa,
+       d_A_horizontal = chosen$d_A_horizontal, source = source,
+       derivative_h = coarse, derivative_h2 = fine,
        refinement_error = err,
        refinement_pass = is.finite(err) && err <= refinement_tolerance)
 }
@@ -781,8 +793,10 @@
                                derivative_refinement_factor,
                                derivative_refinement_tolerance) {
   N <- nrow(mu); p <- ncol(mu); m <- ncol(basis); dA <- ncol(horizontal)
-  values <- list(); grads <- list(); labels <- character(); sources <- character()
+  values <- list(); grads <- list(); grads_h <- list(); grads_h2 <- list()
+  labels <- character(); sources <- character()
   refinement_error <- numeric(); refinement_pass <- logical()
+  protocol_exact <- logical()
   if (length(targets)) {
     bad <- setdiff(targets, "theta")
     if (length(bad)) .scmix_dml_stop("scmix_dml(): unknown built-in target(s): ",
@@ -797,10 +811,16 @@
         gj[i, ] <- c(0, as.vector(outer(basis[i, ], dm)), numeric(dA))
       }
       grads[[length(grads) + 1L]] <- gj
+      ## The built-in mean target is exactly linear. Retain explicit h and h/2
+      ## derivative objects so v2.2 never substitutes an unchecked boolean for
+      ## the frozen refinement artifact.
+      grads_h[[length(grads_h) + 1L]] <- gj
+      grads_h2[[length(grads_h2) + 1L]] <- gj
       labels <- c(labels, paste0("theta:", attr_names[j]))
       sources <- c(sources, "analytic")
       refinement_error <- c(refinement_error, 0)
       refinement_pass <- c(refinement_pass, TRUE)
+      protocol_exact <- c(protocol_exact, TRUE)
     }
   }
   if (!is.null(plugin_targets)) {
@@ -822,13 +842,20 @@
       J <- ncol(cb$value)
       for (j in seq_len(J)) {
         values[[length(values) + 1L]] <- cb$value[, j]
-        gj <- matrix(0, N, 1L + m * p + dA)
-        for (i in seq_len(N)) {
-          gj[i, ] <- c(cb$d_kappa[i, j],
-                       as.vector(outer(basis[i, ], cb$d_mu[i, j, ])),
-                       if (dA) cb$d_A_horizontal[i, j, ] else numeric())
+        assemble <- function(component) {
+          gj <- matrix(0, N, 1L + m * p + dA)
+          for (i in seq_len(N)) {
+            gj[i, ] <- c(
+              component$d_kappa[i, j],
+              as.vector(outer(basis[i, ], component$d_mu[i, j, ])),
+              if (dA) component$d_A_horizontal[i, j, ] else numeric())
+          }
+          gj
         }
+        gj <- assemble(cb)
         grads[[length(grads) + 1L]] <- gj
+        grads_h[[length(grads_h) + 1L]] <- assemble(cb$derivative_h)
+        grads_h2[[length(grads_h2) + 1L]] <- assemble(cb$derivative_h2)
         labj <- if (J == 1L) nm else paste0(nm, ":", cb$labels[j])
         labels <- c(labels, labj)
         sources <- c(sources, cb$source)
@@ -836,14 +863,161 @@
         refinement_pass <- c(refinement_pass,
                              if (is.null(cb$refinement_pass)) TRUE else
                                cb$refinement_pass)
+        ## Callback perturbations above are in rowwise raw coordinates. They
+        ## remain a useful legacy diagnostic, but cannot certify frozen v2.2
+        ## structural-orthonormal h/h2 geometry.
+        protocol_exact <- c(protocol_exact, FALSE)
       }
     }
   }
   if (!length(values)) .scmix_dml_stop("scmix_dml(): at least one target is required.")
   list(value = do.call(cbind, values), gradient = grads,
+       gradient_h = grads_h, gradient_h2 = grads_h2,
        labels = make.unique(labels), derivative_source = sources,
        derivative_refinement_error = refinement_error,
-       derivative_refinement_pass = refinement_pass)
+       derivative_refinement_pass = refinement_pass,
+       derivative_refinement_protocol_exact = protocol_exact)
+}
+
+.scmix_dml_v22_primitive_targets <- function(tg, registry, train, evaluation) {
+  if (!is.list(registry) || !length(registry) ||
+      !all(vapply(registry, inherits, logical(1L),
+                  what = "scmix_v22_target_spec"))) {
+    .scmix_dml_stop("scmix_dml(): v22_registry must contain signed v2.2 ",
+                    "target specifications.")
+  }
+  values <- gradients <- gradients_h <- gradients_h2 <- list()
+  direct_pz_centers <- numeric()
+  labels <- sources <- character()
+  refinement_error <- numeric(); protocol_exact <- logical()
+  audits <- list()
+  add_primitive <- function(id, value, gradient, gradient_h, gradient_h2,
+                            source, error, exact,
+                            estimand_signature,
+                            direct_pz_center = NA_real_) {
+    prior <- match(id, labels)
+    if (!is.na(prior)) {
+      same <- identical(attr(values[[prior]], "estimand_signature"),
+                        estimand_signature) &&
+        isTRUE(all.equal(unname(values[[prior]]), unname(value),
+                         tolerance = 1e-12, check.attributes = FALSE)) &&
+        isTRUE(all.equal(unname(gradients[[prior]]), unname(gradient),
+                         tolerance = 1e-12, check.attributes = FALSE)) &&
+        isTRUE(all.equal(unname(gradients_h[[prior]]), unname(gradient_h),
+                         tolerance = 1e-12, check.attributes = FALSE)) &&
+        isTRUE(all.equal(unname(gradients_h2[[prior]]), unname(gradient_h2),
+                         tolerance = 1e-12, check.attributes = FALSE)) &&
+        isTRUE(all.equal(unname(direct_pz_centers[[prior]]),
+                         unname(direct_pz_center), tolerance = 1e-12,
+                         check.attributes = FALSE))
+      if (!same) {
+        .scmix_dml_stop("scmix_dml(): duplicate primitive registry ID `", id,
+                        "` has incompatible estimand metadata, values, or ",
+                        "derivatives.")
+      }
+      return(invisible(NULL))
+    }
+    attr(value, "estimand_signature") <- estimand_signature
+    values[[length(values) + 1L]] <<- value
+    gradients[[length(gradients) + 1L]] <<- gradient
+    gradients_h[[length(gradients_h) + 1L]] <<- gradient_h
+    gradients_h2[[length(gradients_h2) + 1L]] <<- gradient_h2
+    labels <<- c(labels, id)
+    sources <<- c(sources, source)
+    refinement_error <<- c(refinement_error, error)
+    protocol_exact <<- c(protocol_exact, exact)
+    direct_pz_centers <<- c(direct_pz_centers, direct_pz_center)
+    invisible(NULL)
+  }
+  for (spec in registry) {
+    idx <- match(spec$supporting_names, tg$labels)
+    if (anyNA(idx)) {
+      .scmix_dml_stop("scmix_dml(): v2.2 target `", spec$target_id,
+                      "` lacks supporting callback column(s): ",
+                      paste(spec$supporting_names[is.na(idx)], collapse = ", "),
+                      ".")
+    }
+    support_values <- tg$value[, idx, drop = FALSE]
+    colnames(support_values) <- spec$supporting_names
+    audits[[spec$target_id]] <- list(
+      supporting_names = spec$supporting_names,
+      training_mean = colMeans(support_values[train, , drop = FALSE]),
+      evaluation_mean = colMeans(support_values[evaluation, , drop = FALSE]),
+      all_row_mean = colMeans(support_values),
+      role = "supporting audit moments only; Riesz is solved on minimal primitives")
+    primitive_signature <- function(j) list(
+      primitive_estimand = spec$primitive_estimands[j],
+      primitive_orientation = spec$primitive_orientations[j],
+      primitive_units = spec$primitive_units[j],
+      primitive_reference_rule = spec$primitive_reference_rules[j],
+      primitive_influence_definition =
+        spec$primitive_influence_definitions[j])
+    if (identical(spec$target_type, "directional_heterogeneity")) {
+      mbar_train <- mean(support_values[train, 1L])
+      mbar_evaluation <- mean(support_values[evaluation, 1L])
+      centered <- numeric(nrow(support_values))
+      centered[train] <- support_values[train, 1L] - mbar_train
+      centered[evaluation] <-
+        support_values[evaluation, 1L] - mbar_evaluation
+      hz_value <- centered^2
+      hz_gradient <- tg$gradient[[idx[1L]]] * (2 * centered)
+      hz_gradient_h <- tg$gradient_h[[idx[1L]]] * (2 * centered)
+      hz_gradient_h2 <- tg$gradient_h2[[idx[1L]]] * (2 * centered)
+      hz_source <- if (identical(tg$derivative_source[idx[1L]], "analytic"))
+        "analytic_direct_HZ" else "numeric_refined_direct_HZ"
+      add_primitive(
+        spec$primitive_registry_ids[1L], hz_value, hz_gradient,
+        hz_gradient_h, hz_gradient_h2, hz_source,
+        tg$derivative_refinement_error[idx[1L]],
+        tg$derivative_refinement_protocol_exact[idx[1L]],
+        primitive_signature(1L),
+        direct_pz_center = mean(hz_value[evaluation]))
+      add_primitive(
+        spec$primitive_registry_ids[2L], support_values[, 3L],
+        tg$gradient[[idx[3L]]], tg$gradient_h[[idx[3L]]],
+        tg$gradient_h2[[idx[3L]]], tg$derivative_source[idx[3L]],
+        tg$derivative_refinement_error[idx[3L]],
+        tg$derivative_refinement_protocol_exact[idx[3L]],
+        primitive_signature(2L))
+      audits[[spec$target_id]]$outer_training_mean_direction <- mbar_train
+      audits[[spec$target_id]]$outer_evaluation_mean_direction <-
+        mbar_evaluation
+      audits[[spec$target_id]]$HZ_training_plugin <-
+        mean(hz_value[train])
+      audits[[spec$target_id]]$HZ_evaluation_plugin <-
+        mean(hz_value[evaluation])
+    } else {
+      if (length(idx) != length(spec$primitive_registry_ids)) {
+        .scmix_dml_stop("scmix_dml(): target `", spec$target_id,
+                        "` does not have one supporting column per minimal ",
+                        "primitive.")
+      }
+      for (j in seq_along(idx)) {
+        add_primitive(
+          spec$primitive_registry_ids[j], support_values[, j],
+          tg$gradient[[idx[j]]], tg$gradient_h[[idx[j]]],
+          tg$gradient_h2[[idx[j]]], tg$derivative_source[idx[j]],
+          tg$derivative_refinement_error[idx[j]],
+          tg$derivative_refinement_protocol_exact[idx[j]],
+          primitive_signature(j))
+      }
+    }
+  }
+  value <- do.call(cbind, lapply(values, function(x) {
+    attr(x, "estimand_signature") <- NULL
+    x
+  }))
+  colnames(value) <- labels
+  list(
+    value = value, gradient = gradients,
+    gradient_h = gradients_h, gradient_h2 = gradients_h2, labels = labels,
+    derivative_source = sources,
+    derivative_refinement_error = refinement_error,
+    derivative_refinement_pass = is.finite(refinement_error),
+    derivative_refinement_protocol_exact = protocol_exact,
+    direct_pz_center = stats::setNames(direct_pz_centers, labels),
+    supporting_audit = audits,
+    mode = "minimal_v22_primitives")
 }
 
 .scmix_dml_contrast <- function(x, attr_names, what) {
@@ -1096,6 +1270,31 @@ scmix_inference_target <- function(
     denominator = denominator, subgroup = subgroup, penalty = penalty,
     benefit = benefit, amount = amount, position_neutral = position_neutral,
     n_nodes = n_nodes, variance_floor = variance_floor, label = label)
+  ## This is a domain template, not a signed application registry. Stable
+  ## target/family/primitive IDs, orientation, units, and dependencies are
+  ## deliberately supplied later through scmix_v22_target_spec().
+  attr(callback, "scmix_v22_metadata_template") <- list(
+    protocol_id = "paperps-inference-2026-09-05-v2.2",
+    source_type = type,
+    recommended_target_type = switch(
+      type,
+      tau = "unrestricted_scalar",
+      choice = "probability",
+      sign = "preference_direction_share",
+      compensating = "compensating_benefit_share",
+      subgroup_tau_primitives = "subgroup_share",
+      mrs_primitives = "mean_tradeoff_mrs_ratio",
+      heterogeneity_primitives = "directional_heterogeneity",
+      covariance_primitives = "unrestricted_scalar"),
+    supporting_role = switch(
+      type,
+      subgroup_tau_primitives = c("numerator", "denominator"),
+      mrs_primitives = c("numerator", "denominator"),
+      heterogeneity_primitives = c("mean", "second_moment",
+                                   "residual_variance"),
+      covariance_primitives = "covariance_supporting_moments",
+      "scalar"),
+    requires_signed_registry = TRUE)
   class(callback) <- c("scmix_rowwise_target", "function")
   callback
 }
@@ -1329,7 +1528,7 @@ scmix_delta_transform <- function(
 
 .scmix_dml_nu_grid <- function(spec, fold, n_train, K) {
   x <- if (is.null(spec)) {
-    c(0, 1 / n_train, 1 / sqrt(n_train))
+    c(0, n_train^(-1), n_train^(-3 / 4), n_train^(-1 / 2))
   } else if (is.list(spec)) {
     if (length(spec) != K) {
       .scmix_dml_stop("scmix_dml(): a list-valued nu_grid must contain one ",
@@ -1352,12 +1551,17 @@ scmix_delta_transform <- function(
   ee$vectors %*% (inv * crossprod(ee$vectors, g))
 }
 
-.scmix_dml_riesz <- function(score, gradient, train, nu_grid, penalty,
-                             structural_gram, validation_fraction, seed,
-                             solve_tolerance) {
+.scmix_dml_riesz <- function(score, gradient, train, evaluation, nu_grid,
+                             penalty, structural_gram, validation_fraction,
+                             seed, solve_tolerance,
+                             selected_nu_override = NULL,
+                             inner_validation_override = NULL,
+                             numerical_rank_tolerance = 1e-10,
+                             N_total = nrow(score)) {
   W <- .scmix_dml_inverse_sqrt(structural_gram)
   score_w <- score %*% W
   gradient_w <- lapply(gradient, function(g) g %*% W)
+  J <- length(gradient_w)
   grad_matrix <- function(rows) {
     do.call(cbind, lapply(gradient_w, function(g)
       colMeans(g[rows, , drop = FALSE])))
@@ -1365,11 +1569,39 @@ scmix_delta_transform <- function(
   fit_alpha <- function(rows, nu) {
     I <- crossprod(score_w[rows, , drop = FALSE]) / length(rows)
     g <- grad_matrix(rows)
-    .scmix_dml_solve(I, g, nu, penalty, solve_tolerance)
+    nu <- rep_len(as.numeric(nu), J)
+    out <- vapply(seq_len(J), function(j) {
+      as.numeric(.scmix_dml_solve(I, g[, j, drop = FALSE], nu[j],
+                                  penalty, solve_tolerance))
+    }, numeric(nrow(I)))
+    if (J == 1L) out <- matrix(out, ncol = 1L)
+    out
   }
-  selected <- nu_grid[1L]
-  risk <- rep(NA_real_, length(nu_grid))
-  if (length(nu_grid) > 1L && validation_fraction > 0 && length(train) >= 20L) {
+
+  selected <- rep(nu_grid[1L], J)
+  risk <- matrix(NA_real_, length(nu_grid), J,
+                 dimnames = list(NULL, paste0("target", seq_len(J))))
+  selection_source <- "legacy_shared_nuisance_inner_split"
+  if (!is.null(selected_nu_override)) {
+    selected <- as.numeric(selected_nu_override)
+    if (length(selected) != J || any(!is.finite(selected)) ||
+        any(selected < 0) || any(!selected %in% nu_grid)) {
+      .scmix_dml_stop("scmix_dml(): signed v2.2 selected ridges must provide ",
+                      "one value per target and lie on the frozen fold grid.")
+    }
+    if (is.null(inner_validation_override)) {
+      .scmix_dml_stop("scmix_dml(): a signed v2.2 ridge override requires ",
+                      "the corresponding inner-validation risk matrix.")
+    }
+    risk <- as.matrix(inner_validation_override)
+    if (!.scmix_dml_dim_equal(risk, c(length(nu_grid), J)) ||
+        any(!is.finite(risk))) {
+      .scmix_dml_stop("scmix_dml(): signed inner-validation risks have ",
+                      "incompatible dimensions or nonfinite values.")
+    }
+    selection_source <- "signed_inner_nuisance_refit_evidence"
+  } else if (length(nu_grid) > 1L && validation_fraction > 0 &&
+             length(train) >= 20L) {
     selected_validation <- .scmix_dml_with_seed(seed, {
       n_val <- max(5L, min(length(train) - 5L,
                            floor(validation_fraction * length(train))))
@@ -1378,18 +1610,25 @@ scmix_delta_transform <- function(
       Ival <- crossprod(score_w[val, , drop = FALSE]) / length(val)
       gval <- grad_matrix(val)
       for (r in seq_along(nu_grid)) {
-        aa <- fit_alpha(subtrain, nu_grid[r])
-        risk[r] <- sum(diag(crossprod(aa, Ival %*% aa))) -
-          2 * sum(aa * gval)
+        aa <- fit_alpha(subtrain, rep(nu_grid[r], J))
+        risk[r, ] <- colSums(aa * (Ival %*% aa)) -
+          2 * colSums(aa * gval)
       }
-      list(selected = nu_grid[which.min(risk)], risk = risk)
+      chosen <- vapply(seq_len(J), function(j) {
+        mn <- min(risk[, j])
+        tied <- which(abs(risk[, j] - mn) <=
+                        1e-12 * max(1, abs(mn)))
+        max(nu_grid[tied])
+      }, numeric(1L))
+      list(selected = chosen, risk = risk)
     })
     selected <- selected_validation$selected
     risk <- selected_validation$risk
   }
+
   Iall <- crossprod(score_w[train, , drop = FALSE]) / length(train)
   alpha <- fit_alpha(train, selected)
-  alpha_zero <- fit_alpha(train, 0)
+  alpha_zero <- fit_alpha(train, rep(0, J))
   gall <- grad_matrix(train)
   eq <- Iall %*% alpha - gall
   eq_rel <- sqrt(colSums(eq^2)) / pmax(sqrt(colSums(gall^2)), 1e-12)
@@ -1397,16 +1636,85 @@ scmix_delta_transform <- function(
   corr0 <- score_w[train, , drop = FALSE] %*% alpha_zero
   ridge_rel <- sqrt(colMeans((corr - corr0)^2)) /
     pmax(sqrt(colMeans(corr0^2)), 1e-12)
-  eig <- eigen((Iall + t(Iall)) / 2, symmetric = TRUE, only.values = TRUE)$values
-  list(alpha = alpha, alpha_raw = W %*% alpha,
-       score_whitened = score_w, selected_nu = selected,
-       validation = data.frame(nu = nu_grid, risk = risk), information = Iall,
-       information_eigenvalues = eig, structural_gram = structural_gram,
-       structural_inverse_sqrt = W,
-       riesz_equation_relative_residual = eq_rel,
-       ridge_relative_sensitivity = ridge_rel,
-       grid_contains_zero = any(nu_grid == 0),
-       grid_max_positive = if (any(nu_grid > 0)) max(nu_grid) else 0)
+
+  neighborhoods <- lapply(seq_len(J), function(j) {
+    pos <- match(selected[j], nu_grid)
+    adjacent_pos <- unique(c(max(1L, pos - 1L),
+                             min(length(nu_grid), pos + 1L)))
+    sort(unique(c(0, selected[j], nu_grid[adjacent_pos])))
+  })
+  correction_neighborhood <- lapply(seq_len(J), function(j) {
+    values <- neighborhoods[[j]]
+    out <- vapply(values, function(nu) {
+      aa <- fit_alpha(train, replace(selected, j, nu))[, j]
+      as.numeric(score_w[evaluation, , drop = FALSE] %*% aa)
+    }, numeric(length(evaluation)))
+    if (length(values) == 1L) out <- matrix(out, ncol = 1L)
+    colnames(out) <- format(values, scientific = TRUE, trim = TRUE)
+    out
+  })
+
+  ## Honest certification uses only the untouched outer evaluation fold. The
+  ## target derivative and information matrix are both in the declared
+  ## structural-orthonormal coordinates. The D_R denominator is added after
+  ## the pooled cross-fit influence standard deviations are available.
+  honest_null <- honest_numerator <- rep(NA_real_, J)
+  information_eval <- matrix(NA_real_, nrow(Iall), ncol(Iall))
+  information_eval_plus <- matrix(NA_real_, nrow(Iall), ncol(Iall))
+  gradient_eval <- matrix(NA_real_, nrow(Iall), J)
+  numerical_rank <- NA_integer_
+  if (length(evaluation)) {
+    information_eval <- crossprod(score_w[evaluation, , drop = FALSE]) /
+      length(evaluation)
+    geval <- grad_matrix(evaluation)
+    ee <- eigen((information_eval + t(information_eval)) / 2,
+                symmetric = TRUE)
+    cutoff <- numerical_rank_tolerance * max(max(abs(ee$values)), 1)
+    keep <- ee$values > cutoff
+    numerical_rank <- sum(keep)
+    inv <- ifelse(keep, 1 / ee$values, 0)
+    Iplus <- ee$vectors %*% (inv * t(ee$vectors))
+    information_eval_plus <- Iplus
+    gradient_eval <- geval
+    projection <- information_eval %*% Iplus
+    for (j in seq_len(J)) {
+      gj <- geval[, j]
+      outside <- (diag(nrow(projection)) - projection) %*% gj
+      honest_null[j] <- sqrt(sum(outside^2)) /
+        max(sqrt(sum(gj^2)), 1e-15)
+      residual <- information_eval %*% alpha[, j] - gj
+      quadratic <- as.numeric(crossprod(residual, Iplus %*% residual))
+      honest_numerator[j] <- sqrt(N_total / length(train)) *
+        sqrt(max(quadratic, 0))
+    }
+  }
+
+  eig <- eigen((Iall + t(Iall)) / 2, symmetric = TRUE,
+               only.values = TRUE)$values
+  validation <- data.frame(nu = nu_grid, risk, check.names = FALSE)
+  list(
+    alpha = alpha, alpha_raw = W %*% alpha,
+    score_whitened = score_w,
+    selected_nu = if (length(unique(selected)) == 1L) selected[1L] else
+      selected,
+    selected_nu_by_target = selected,
+    selection_source = selection_source,
+    validation = validation, information = Iall,
+    information_eigenvalues = eig, structural_gram = structural_gram,
+    structural_inverse_sqrt = W,
+    riesz_equation_relative_residual = eq_rel,
+    ridge_relative_sensitivity = ridge_rel,
+    ridge_neighborhood = neighborhoods,
+    correction_neighborhood = correction_neighborhood,
+    honest_evaluation_information = information_eval,
+    honest_evaluation_information_pseudoinverse = information_eval_plus,
+    honest_evaluation_gradient = gradient_eval,
+    honest_evaluation_numerical_rank = numerical_rank,
+    honest_riesz_null_space_defect = honest_null,
+    honest_information_scaled_defect_numerator = honest_numerator,
+    numerical_rank_tolerance = numerical_rank_tolerance,
+    grid_contains_zero = any(nu_grid == 0),
+    grid_max_positive = if (any(nu_grid > 0)) max(nu_grid) else 0)
 }
 
 .scmix_dml_multiplier <- function(IF, estimate, se, R, level, seed,
@@ -1463,6 +1771,10 @@ scmix_delta_transform <- function(
   out <- list(status = "withheld", inference_available = FALSE,
               inference_claim = "not_available",
               reason = reason, rank_gate = rank_gate, estimate = NA_real_,
+              full_sample_plugin = NA_real_, crossfit_plugin = NA_real_,
+              raw_one_step = NA_real_, reported_estimate = NA_real_,
+              reported_estimate_status =
+                "requires_successful_scmix_v22_finalize",
               se = NA_real_, covariance = NA_real_, influence = NULL,
               analysis_signature = analysis_signature,
               rank_gate_scope = attr(rank_gate, "scope"),
@@ -1838,6 +2150,10 @@ scmix_inference_verification <- function(fit, mu_basis, tangent, numerical,
 #'   to the selected ridge versus zero ridge.
 #' @param verification Classed evidence record returned by
 #'   [scmix_inference_verification()]. Raw boolean lists are not accepted.
+#' @param v22_registry Optional frozen v2.2 target registry. When supplied,
+#'   Riesz tuning and fitting operate on its unique minimal scalar primitives.
+#'   In particular, directional heterogeneity is represented directly by
+#'   `(H_Z,H_R)`; mean and second-moment columns remain audit quantities.
 #' @param multiplier_draws Number of respondent multiplier draws.
 #' @param multiplier `"normal"` or `"rademacher"`.
 #' @param level Confidence level.
@@ -1855,12 +2171,15 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                       active_eigenvalue_min = NULL,
                       rank_tolerance = 1e-8,
                       information_eigenvalue_min = NULL,
-                      derivative_eps = 1e-5,
+                      derivative_eps = .Machine$double.eps^(1 / 3),
                       allow_numeric_derivatives = FALSE,
                       derivative_refinement_factor = 2,
                       derivative_refinement_tolerance = 1e-3,
                       riesz_equation_tolerance = 5e-2,
                       ridge_sensitivity_tolerance = 1e-1,
+                      v22_riesz_evidence = NULL,
+                      riesz_numerical_rank_tolerance = 1e-10,
+                      v22_registry = NULL,
                       verification = NULL,
                       multiplier_draws = 999L,
                       multiplier = c("normal", "rademacher"),
@@ -1892,6 +2211,8 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                   "derivative_refinement_tolerance")
   positive_scalar(riesz_equation_tolerance, "riesz_equation_tolerance")
   positive_scalar(ridge_sensitivity_tolerance, "ridge_sensitivity_tolerance")
+  positive_scalar(riesz_numerical_rank_tolerance,
+                  "riesz_numerical_rank_tolerance")
   if (!is.null(active_eigenvalue_min) &&
       (!is.numeric(active_eigenvalue_min) ||
        length(active_eigenvalue_min) != 1L ||
@@ -1928,6 +2249,21 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
   }
   seed <- as.integer(seed)
   layout <- .scmix_dml_layout(fit)
+  if (!is.null(v22_registry) &&
+      (!is.list(v22_registry) || !length(v22_registry) ||
+       !all(vapply(v22_registry, inherits, logical(1L),
+                   what = "scmix_v22_target_spec")))) {
+    .scmix_dml_stop("scmix_dml(): v22_registry must be NULL or a nonempty ",
+                    "list of scmix_v22_target_spec objects.")
+  }
+  if (!is.null(v22_registry) &&
+      (!isTRUE(all.equal(derivative_eps, .Machine$double.eps^(1 / 3),
+                         tolerance = 0)) ||
+       !isTRUE(all.equal(derivative_refinement_factor, 2,
+                         tolerance = 0)))) {
+    .scmix_dml_stop("scmix_dml(): v2.2 requires the frozen centered-difference ",
+                    "steps h = machine_epsilon^(1/3) and h/2.")
+  }
   attr_names <- fit$attr_names
   if (is.null(attr_names)) attr_names <- colnames(layout$deltaX)
   if (is.null(attr_names)) attr_names <- paste0("beta", seq_len(layout$p))
@@ -1983,6 +2319,13 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                              allow_numeric_derivatives,
                              derivative_refinement_factor,
                              derivative_refinement_tolerance)
+    supporting_audit <- NULL
+    if (!is.null(v22_registry)) {
+      primitive_tg <- .scmix_dml_v22_primitive_targets(
+        tg, v22_registry, train, held)
+      supporting_audit <- primitive_tg$supporting_audit
+      tg <- primitive_tg
+    }
     if (is.null(labels)) {
       labels <- tg$labels
       plugin <- correction <- matrix(NA_real_, N, length(labels),
@@ -1999,15 +2342,151 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     deriv_sources[k, ] <- tg$derivative_source
     deriv_refinement[k, ] <- tg$derivative_refinement_error
     training_plugin_mean <- colMeans(tg$value[train, , drop = FALSE])
+    direct_pz_center <- training_plugin_mean
+    if (!is.null(tg$direct_pz_center)) {
+      registered <- tg$direct_pz_center
+      if (!is.null(names(registered))) registered <- registered[labels]
+      use <- is.finite(registered)
+      direct_pz_center[use] <- registered[use]
+    }
     direct_pz[held, ] <- sweep(tg$value[held, , drop = FALSE], 2L,
-                               training_plugin_mean, `-`)
+                               direct_pz_center, `-`)
     G <- .scmix_dml_structural_gram(B, train, p, ncol(H))
+    ## Verify the h and h/2 derivative objects after transforming them to the
+    ## declared structural-orthonormal coordinates. The v2.2 gate consumes
+    ## this numerical value, never the callback's derivative declaration.
+    W_derivative <- .scmix_dml_inverse_sqrt(G)
+    derivative_metric <- vapply(seq_along(tg$labels), function(j) {
+      g <- as.numeric(colMeans(tg$gradient[[j]][train, , drop = FALSE]) %*%
+                        W_derivative)
+      gh <- as.numeric(colMeans(tg$gradient_h[[j]][train, , drop = FALSE]) %*%
+                         W_derivative)
+      gh2 <- as.numeric(colMeans(tg$gradient_h2[[j]][train, , drop = FALSE]) %*%
+                          W_derivative)
+      if (grepl("analytic", tg$derivative_source[j], fixed = TRUE)) {
+        max(sqrt(sum((g - gh2)^2)), sqrt(sum((gh - gh2)^2))) /
+          max(sqrt(sum(g^2)), 1e-15)
+      } else {
+        sqrt(sum((gh - gh2)^2)) / max(sqrt(sum(gh2^2)), 1e-15)
+      }
+    }, numeric(1L))
+    names(derivative_metric) <- tg$labels
+    tg$derivative_refinement_error <- derivative_metric
+    tg$derivative_refinement_pass <- is.finite(derivative_metric) &
+      derivative_metric <= derivative_refinement_tolerance
     P <- .scmix_dml_penalty(riesz_penalty, ncol(seq_score$score))
     nu_k <- .scmix_dml_nu_grid(nu_grid, k, length(train), K)
+    selected_override <- validation_override <- NULL
+    if (!is.null(v22_riesz_evidence)) {
+      evidence_payload <- unclass(v22_riesz_evidence)
+      recorded_fingerprint <- evidence_payload$fingerprint
+      evidence_payload$fingerprint <- NULL
+      fingerprint_ok <- is.character(recorded_fingerprint) &&
+        length(recorded_fingerprint) == 1L &&
+        !is.na(recorded_fingerprint) &&
+        identical(recorded_fingerprint,
+                  .scmix_v22_fingerprint(evidence_payload))
+      trace <- v22_riesz_evidence$inner_refit_trace
+      trace_payload <- if (inherits(trace,
+                                    "scmix_v22_inner_refit_trace")) {
+        unclass(trace)
+      } else NULL
+      trace_fingerprint <- if (is.list(trace_payload))
+        trace_payload$fingerprint else NULL
+      if (is.list(trace_payload)) trace_payload$fingerprint <- NULL
+      trace_ok <- is.character(trace_fingerprint) &&
+        length(trace_fingerprint) == 1L && !is.na(trace_fingerprint) &&
+        identical(trace_fingerprint,
+                  .scmix_v22_fingerprint(trace_payload)) &&
+        identical(v22_riesz_evidence$inner_refit_trace_fingerprint,
+                  trace_fingerprint) &&
+        identical(trace$analysis_signature, .scmix_dml_signature(fit)) &&
+        identical(trace$selected_nu, v22_riesz_evidence$selected_nu) &&
+        identical(trace$training_n, v22_riesz_evidence$training_n) &&
+        identical(trace$inner_validation,
+                  v22_riesz_evidence$inner_validation) &&
+        is.data.frame(trace$trace) && nrow(trace$trace) > 0L &&
+        all(trace$trace$success)
+      frozen_nu_k <- sort(unique(c(
+        0, length(train)^(-1), length(train)^(-3 / 4),
+        length(train)^(-1 / 2))))
+      signed_trace_ok <- !is.null(fit$v22_analysis_contract) &&
+        .scmix_v22_validate_riesz_evidence(
+          v22_riesz_evidence, fit, fit$v22_analysis_contract,
+          required_primitive_ids = labels)
+      valid_evidence <-
+        inherits(v22_riesz_evidence, "scmix_v22_riesz_evidence") &&
+        signed_trace_ok &&
+        fingerprint_ok &&
+        trace_ok &&
+        identical(v22_riesz_evidence$protocol_id,
+                  "paperps-inference-2026-09-05-v2.2") &&
+        identical(v22_riesz_evidence$analysis_signature,
+                  .scmix_dml_signature(fit)) &&
+        is.character(v22_riesz_evidence$analysis_contract_fingerprint) &&
+        length(v22_riesz_evidence$analysis_contract_fingerprint) == 1L &&
+        !is.na(v22_riesz_evidence$analysis_contract_fingerprint) &&
+        nzchar(v22_riesz_evidence$analysis_contract_fingerprint) &&
+        isTRUE(v22_riesz_evidence$inner_nuisance_refit) &&
+        .scmix_dml_nonempty_text(
+          v22_riesz_evidence$inner_nuisance_provenance) &&
+        .scmix_dml_nonempty_text(
+          v22_riesz_evidence$ridge_sequence_provenance) &&
+        is.matrix(v22_riesz_evidence$selected_nu) &&
+        identical(dim(v22_riesz_evidence$selected_nu),
+                  c(K, length(labels))) &&
+        identical(colnames(v22_riesz_evidence$selected_nu), labels) &&
+        is.numeric(v22_riesz_evidence$training_n) &&
+        length(v22_riesz_evidence$training_n) == K &&
+        identical(as.integer(v22_riesz_evidence$training_n),
+                  vapply(seq_len(K), function(kk)
+                    sum(layout$fold_resp != kk), integer(1L))) &&
+        identical(as.integer(v22_riesz_evidence$training_n[k]),
+                  as.integer(length(train))) &&
+        is.list(v22_riesz_evidence$inner_validation) &&
+        length(v22_riesz_evidence$inner_validation) == K &&
+        isTRUE(all.equal(nu_k, frozen_nu_k, tolerance = 0,
+                         check.attributes = FALSE))
+      if (!valid_evidence) {
+        .scmix_dml_stop("scmix_dml(): v22_riesz_evidence is malformed, ",
+                        "does not match this fit/target order, or lacks signed ",
+                        "inner-nuisance-refit and ridge-sequence provenance.")
+      }
+      selected_override <- v22_riesz_evidence$selected_nu[k, ]
+      validation_override <- v22_riesz_evidence$inner_validation[[k]]
+      if (nrow(as.matrix(validation_override)) != length(nu_k)) {
+        .scmix_dml_stop("scmix_dml(): signed inner-validation ridge grid ",
+                        "does not match fold ", k, ".")
+      }
+      risk_check <- as.matrix(validation_override)
+      if (!identical(dim(risk_check), c(length(nu_k), length(labels))) ||
+          any(!is.finite(risk_check)) ||
+          !identical(colnames(risk_check), labels)) {
+        .scmix_dml_stop("scmix_dml(): signed inner-validation risks are ",
+                        "malformed in fold ", k, ".")
+      }
+      selected_check <- vapply(seq_len(ncol(risk_check)), function(j) {
+        mn <- min(risk_check[, j])
+        tied <- which(abs(risk_check[, j] - mn) <=
+                        1e-12 * max(1, abs(mn)))
+        max(nu_k[tied])
+      }, numeric(1L))
+      if (!isTRUE(all.equal(as.numeric(selected_override), selected_check,
+                            tolerance = 1e-14,
+                            check.attributes = FALSE))) {
+        .scmix_dml_stop("scmix_dml(): signed selected ridges violate the ",
+                        "frozen minimum-risk and largest-ridge tie rule in ",
+                        "fold ", k, ".")
+      }
+    }
     fold_seed <- .scmix_dml_offset_seed(seed, 1000 * k)
-    rz <- .scmix_dml_riesz(seq_score$score, tg$gradient, train, nu_k, P, G,
-                           riesz_validation_fraction, fold_seed,
-                           solve_tolerance = 1e-10)
+    rz <- .scmix_dml_riesz(
+      seq_score$score, tg$gradient, train, held, nu_k, P, G,
+      riesz_validation_fraction, fold_seed, solve_tolerance = 1e-10,
+      selected_nu_override = selected_override,
+      inner_validation_override = validation_override,
+      numerical_rank_tolerance = riesz_numerical_rank_tolerance,
+      N_total = N)
     ev <- rz$information_eigenvalues
     generalized_min <- min(ev)
     if (!is.null(information_eigenvalue_min) &&
@@ -2024,7 +2503,11 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
       training_n = length(train), heldout_n = length(held),
       basis_names = colnames(B), tangent_dimension = ncol(seq_score$score),
       loading_horizontal_dimension = ncol(H), selected_nu = rz$selected_nu,
+      selected_nu_by_target = stats::setNames(
+        rz$selected_nu_by_target, labels),
+      ridge_selection_source = rz$selection_source,
       training_plugin_mean = training_plugin_mean,
+      direct_pz_center = direct_pz_center,
       nu_validation = rz$validation,
       information_eigenvalues = ev,
       information_structural_min = generalized_min,
@@ -2036,10 +2519,34 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
       riesz_equation_relative_residual =
         rz$riesz_equation_relative_residual,
       ridge_relative_sensitivity = rz$ridge_relative_sensitivity,
+      ridge_neighborhood = stats::setNames(rz$ridge_neighborhood, labels),
+      ridge_correction_heldout = stats::setNames(
+        rz$correction_neighborhood, labels),
+      honest_evaluation_information = rz$honest_evaluation_information,
+      honest_evaluation_information_pseudoinverse =
+        rz$honest_evaluation_information_pseudoinverse,
+      honest_evaluation_gradient = stats::setNames(
+        as.data.frame(rz$honest_evaluation_gradient), labels),
+      honest_evaluation_numerical_rank =
+        rz$honest_evaluation_numerical_rank,
+      honest_riesz_null_space_defect = stats::setNames(
+        rz$honest_riesz_null_space_defect, labels),
+      honest_information_scaled_defect_numerator = stats::setNames(
+        rz$honest_information_scaled_defect_numerator, labels),
+      riesz_numerical_rank_tolerance = rz$numerical_rank_tolerance,
       grid_contains_zero = rz$grid_contains_zero,
       derivative_refinement_error = tg$derivative_refinement_error,
+      derivative_refinement_protocol_exact = stats::setNames(
+        tg$derivative_refinement_protocol_exact, labels),
+      derivative_refinement_step = derivative_eps,
+      derivative_refinement_factor = derivative_refinement_factor,
+      derivative_refinement_coordinates =
+        "raw_callback_coordinates_mapped_to_structural_orthonormal_metric",
+      derivative_refinement_metric =
+        "relative_l2_h_vs_h2_with_analytic_cross_check",
       mean_training_loglik = mean(seq_score$loglik[train]),
-      mean_heldout_loglik = mean(seq_score$loglik[held])
+      mean_heldout_loglik = mean(seq_score$loglik[held]),
+      v22_supporting_audit = supporting_audit
     )
   }
 
@@ -2060,10 +2567,11 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
   psi <- plugin + correction
   estimate <- colMeans(psi)
   plugin_estimate <- colMeans(plugin)
-  ## The empirical-P_Z derivative is fold-specific: the same training
-  ## empirical distribution used to estimate the fold's Riesz gradient
-  ## centers the held-out plug-in contribution. Only the sum is centered
-  ## globally for covariance and multiplier calculations.
+  ## The empirical-P_Z derivative is fold-specific. Ordinary row targets use
+  ## the outer-training center. A transformed variance primitive can register
+  ## its exact outer-evaluation center so its held-out contribution and honest
+  ## derivative use the evaluation-fold empirical P_Z. Only the assembled sum
+  ## is centered globally for covariance and multiplier calculations.
   uncentered_IF <- direct_pz + correction
   IF <- sweep(uncentered_IF, 2L, colMeans(uncentered_IF), `-`)
   colnames(IF) <- labels
@@ -2073,6 +2581,41 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
   names(estimate) <- names(plugin_estimate) <- names(se_computed) <- labels
   dimnames(covariance_computed) <- list(labels, labels)
   z <- stats::qnorm(1 - (1 - level) / 2)
+
+  influence_sd <- sqrt(pmax(diag(variance_of_influence), 0))
+  names(influence_sd) <- labels
+  for (k in seq_len(K)) {
+    fd <- fold_details[[k]]
+    fd$honest_information_scaled_riesz_defect <-
+      fd$honest_information_scaled_defect_numerator /
+      pmax(influence_sd, .Machine$double.xmin)
+    names(fd$honest_information_scaled_riesz_defect) <- labels
+    held <- match(fd$heldout_respondents, layout$resp)
+    fd$ridge_neighborhood_artifact <- vector("list", length(labels))
+    names(fd$ridge_neighborhood_artifact) <- labels
+    for (j in seq_along(labels)) {
+      alt_correction <- fd$ridge_correction_heldout[[j]]
+      values <- fd$ridge_neighborhood[[j]]
+      alt_if <- matrix(NA_real_, N, length(values),
+                       dimnames = list(layout$resp, colnames(alt_correction)))
+      alt_estimate <- alt_se <- numeric(length(values))
+      for (r in seq_along(values)) {
+        corr_j <- correction[, j]
+        corr_j[held] <- alt_correction[, r]
+        uncentered_j <- direct_pz[, j] + corr_j
+        alt_if[, r] <- uncentered_j - mean(uncentered_j)
+        alt_estimate[r] <- mean(plugin[, j] + corr_j)
+        alt_se[r] <- sqrt(mean(alt_if[, r]^2) / N)
+      }
+      fd$ridge_neighborhood_artifact[[j]] <- list(
+        nu = values, raw_one_step = alt_estimate,
+        standard_error = alt_se,
+        raw_wald_lower = alt_estimate - z * alt_se,
+        raw_wald_upper = alt_estimate + z * alt_se,
+        influence = alt_if)
+    }
+    fold_details[[k]] <- fd
+  }
 
   evidence <- .scmix_dml_verification(fit, verification, mu_basis)
   verification_issues <- character()
@@ -2120,7 +2663,8 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                              "Riesz correction is ridge-sensitive")
   }
   custom_positive_ridge <- !is.null(nu_grid) &&
-    any(vapply(fold_details, function(x) x$selected_nu > 0, logical(1L)))
+    any(vapply(fold_details, function(x)
+      any(x$selected_nu_by_target > 0), logical(1L)))
   ridge_evidence <- attr(evidence, "ridge")
   ridge_provenance <- if (is.list(ridge_evidence) &&
                            length(ridge_evidence$provenance) == 1L) {
@@ -2174,7 +2718,17 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     reason = if (conditional_ready) NULL else
       paste(verification_issues, collapse = "; "),
     analysis_signature = .scmix_dml_signature(fit),
+    ## Legacy aliases are retained. Protocol-v2.2 consumers must use the four
+    ## explicit fields and must call scmix_v22_finalize() before treating a
+    ## range-respecting point as reportable.
     estimate = estimate, plugin_estimate = plugin_estimate,
+    full_sample_plugin = stats::setNames(
+      rep(NA_real_, length(labels)), labels),
+    crossfit_plugin = plugin_estimate,
+    raw_one_step = estimate,
+    reported_estimate = stats::setNames(
+      rep(NA_real_, length(labels)), labels),
+    reported_estimate_status = "requires_scmix_v22_finalize",
     one_step_adjustment = estimate - plugin_estimate,
     se = se, covariance = formal_covariance,
     diagnostic_se = se_computed, diagnostic_covariance = covariance_computed,
@@ -2190,9 +2744,39 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     computational_loading_source = ag$A_source,
     fold_details = fold_details, derivative_source = deriv_sources,
     derivative_refinement_error = deriv_refinement,
+    v22_riesz_status = if (is.null(v22_riesz_evidence)) {
+      "inner_nuisance_refit_evidence_absent"
+    } else "signed_inner_nuisance_refit_evidence_used",
+    v22_riesz_evidence_fingerprint = if (is.null(v22_riesz_evidence)) {
+      NA_character_
+    } else v22_riesz_evidence$fingerprint,
+    v22_riesz_evidence = v22_riesz_evidence,
+    v22_riesz_analysis_contract_fingerprint = if (
+      is.null(v22_riesz_evidence)) {
+      NA_character_
+    } else v22_riesz_evidence$analysis_contract_fingerprint,
+    v22_ridge_sequence_provenance = if (is.null(v22_riesz_evidence)) {
+      NA_character_
+    } else v22_riesz_evidence$ridge_sequence_provenance,
+    honest_riesz_null_space_defect_max = apply(do.call(rbind, lapply(
+      fold_details, `[[`, "honest_riesz_null_space_defect")), 2L, max),
+    honest_information_scaled_riesz_defect_max = apply(do.call(rbind, lapply(
+      fold_details, `[[`, "honest_information_scaled_riesz_defect")),
+      2L, max),
     verification_evidence = evidence,
     riesz_equation_max_relative_residual = riesz_resid,
     ridge_max_relative_sensitivity = ridge_sens,
+    respondent_id = layout$resp,
+    fold_id = layout$fold_resp,
+    target_metadata_templates = c(
+      if ("theta" %in% targets) list(theta = list(
+        protocol_id = "paperps-inference-2026-09-05-v2.2",
+        recommended_target_type = "unrestricted_scalar",
+        requires_signed_registry = TRUE)) else list(),
+      if (!is.null(plugin_targets)) lapply(plugin_targets, function(fun)
+        attr(fun, "scmix_v22_metadata_template")) else list()),
+    v22_primitive_mode = !is.null(v22_registry),
+    v22_registry = v22_registry,
     n_respondents = N, outer_folds = K, q = ag$q,
     call = call,
     theory_scope = paste(

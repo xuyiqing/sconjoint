@@ -68,10 +68,17 @@ tq1_hidden_features <- function(state, Z_raw) {
   }
   if (identical(family, "linear")) return(Z_fit)
   net <- scmix_restore_network(state)
+  live_state <- net$state_dict()
+  if (!is.list(live_state) || !length(live_state)) {
+    stop("Restored network has no tensor state from which to infer dtype.")
+  }
+  reference_tensor <- live_state[[1L]]
   torch::with_no_grad({
-    dtype <- net$parameters[[1L]]$dtype
-    device <- net$parameters[[1L]]$device
-    h <- torch::torch_tensor(Z_fit, dtype = dtype, device = device)
+    ## Match the live restored network. Legacy states remain float32 while
+    ## protocol-v2.2 states can be evaluated end to end in float64.
+    h <- torch::torch_tensor(
+      Z_fit, dtype = reference_tensor$dtype,
+      device = reference_tensor$device)
     for (j in seq_along(net$hidden)) {
       h <- torch::nnf_relu(net$hidden[[j]](h))
     }
@@ -367,4 +374,103 @@ tq1_transform_summary <- function(x, family, target, level = 0.95) {
     withholding_reason = if (is.null(x$reason)) "" else x$reason,
     stringsAsFactors = FALSE
   )
+}
+
+## Protocol-v2.2 application helpers. These are intentionally separate from
+## tq1_run_family(), which reproduces the v2.1 application artifacts and lets
+## each call create its own multiplier draws. A v2.2 application creates one
+## bank before any target is finalized and reuses it for every substantive
+## family and every separately tuned primitive object.
+tq1_v22_multiplier_bank <- function(fit, inf_cfg, seed,
+                                    analysis_contract =
+                                      fit$v22_analysis_contract) {
+  respondent_id <- unique(as.character(fit$respondent_id))
+  ## Do not inherit the legacy v2.1 multiplier_draws field, which is commonly
+  ## 1,999. A separate explicitly named v2.2 override remains fail-closed in
+  ## scmix_v22_finalize() unless it is exactly the frozen 9,999.
+  draws <- if (!is.null(inf_cfg$v22_multiplier_draws)) {
+    as.integer(inf_cfg$v22_multiplier_draws)
+  } else 9999L
+  scmix_v22_multiplier_bank(
+    respondent_id = respondent_id, draws = draws,
+    seed = as.integer(seed), distribution = "normal",
+    analysis_contract = analysis_contract)
+}
+
+tq1_v22_finalize_family <- function(
+    dml, registry, full_sample_plugin, multiplier_bank,
+    analysis_contract = dml$v22_analysis_contract,
+    derivative_audit = dml$v22_derivative_audit,
+    calibration = NULL, external_gates = NULL,
+    complete_external_record = FALSE, level = 0.95) {
+  scmix_v22_finalize(
+    inference = dml, registry = registry,
+    full_sample_plugin = full_sample_plugin,
+    analysis_contract = analysis_contract,
+    derivative_audit = derivative_audit,
+    multiplier_bank = multiplier_bank, calibration = calibration,
+    external_gates = external_gates,
+    complete_external_record = complete_external_record,
+    level = level)
+}
+
+tq1_v22_collect_job <- function(
+    dml, registry, full_sample_plugin = NULL,
+    analysis_contract = dml$v22_analysis_contract,
+    derivative_audit = dml$v22_derivative_audit) {
+  scmix_v22_collect(
+    inference = dml, registry = registry,
+    full_sample_plugin = full_sample_plugin,
+    analysis_contract = analysis_contract,
+    derivative_audit = derivative_audit)
+}
+
+tq1_v22_finalize_jobs <- function(
+    collections, multiplier_bank, calibration = NULL,
+    external_gates = NULL, complete_external_record = FALSE,
+    level = 0.95) {
+  scmix_v22_finalize_collections(
+    collections = collections, multiplier_bank = multiplier_bank,
+    calibration = calibration, external_gates = external_gates,
+    complete_external_record = complete_external_record,
+    level = level)
+}
+
+tq1_v22_summary <- function(x) {
+  if (!inherits(x, "scmix_v22_inference")) {
+    stop("x must be a scmix_v22_inference object.")
+  }
+  rows <- lapply(x$targets, function(z) {
+    interval <- if (z$status$multiplicity_status %in%
+                    c("simultaneous_complete", "bonferroni_incomplete")) {
+      z$simultaneous_interval
+    } else z$pointwise_interval
+    data.frame(
+      target_id = z$spec$target_id,
+      target_type = z$spec$target_type,
+      family_id = z$spec$target_family_id,
+      full_sample_plugin = z$full_sample_plugin,
+      crossfit_plugin = z$crossfit_plugin,
+      raw_one_step = z$raw_one_step,
+      reported_estimate = z$reported_estimate,
+      correction_se_ratio = z$correction_se_ratio,
+      chart_discrepancy_se_ratio = z$chart_discrepancy_se_ratio,
+      raw_domain_distance = z$raw_domain_distance,
+      plugin_boundary_distance = z$plugin_boundary_distance,
+      lower = interval[["lower"]], upper = interval[["upper"]],
+      calculation_status = z$status$calculation_status,
+      fit_status = z$status$fit_status,
+      target_status = z$status$target_status,
+      release_class = z$status$release_class,
+      interval_method = z$status$interval_method,
+      multiplicity_status = z$status$multiplicity_status,
+      interpretation_status = z$status$interpretation_status,
+      hard_failure_codes = paste(z$status$hard_failure_codes, collapse = ";"),
+      warning_codes = paste(z$status$warning_codes, collapse = ";"),
+      first_failed_gate = z$status$first_failed_gate,
+      stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
 }
