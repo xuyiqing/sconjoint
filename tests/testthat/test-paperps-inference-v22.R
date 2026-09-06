@@ -12,7 +12,13 @@
 
 .v22_contract <- function(signature = "v22-synthetic",
                           code_commit = "test-code",
-                          riesz_inner_seed = 17L) {
+                          riesz_inner_seed = 17L,
+                          coordinate_registry = c("u1", "u2"), q = 1L,
+                          coordinate_subset = coordinate_registry,
+                          derivative_subset_rule =
+                            "all registered structural coordinates",
+                          fit_uses_numerical_integration = TRUE,
+                          exact_nested_pair_registered = TRUE) {
   scmix_v22_analysis_contract(
     analysis_signature = signature, application_id = "synthetic-app",
     specification_id = "synthetic-q1", specification_role = "primary",
@@ -26,7 +32,13 @@
     code_commit = code_commit,
     data_hash = "test-data", design_hash = "test-design",
     calibration_hash = scmix_v22_calibration_hash(
-      .v22_calibration_values, .v22_calibration_source_hash))
+      .v22_calibration_values, .v22_calibration_source_hash),
+    q = q,
+    fit_uses_numerical_integration = fit_uses_numerical_integration,
+    exact_nested_pair_registered = exact_nested_pair_registered,
+    derivative_coordinate_registry = coordinate_registry,
+    derivative_coordinate_subset = coordinate_subset,
+    derivative_subset_rule = derivative_subset_rule)
 }
 
 .v22_fake_dml <- function(crossfit, raw, influence,
@@ -131,19 +143,35 @@
 .v22_derivative <- function(dml, registry) {
   primitive_ids <- sort(unique(unlist(lapply(
     registry, `[[`, "primitive_registry_ids"))), method = "radix")
-  coordinates <- stats::setNames(rep(0, length(primitive_ids)),
-                                 paste0("u", seq_along(primitive_ids)))
+  coordinates <- stats::setNames(
+    rep(0, length(dml$v22_analysis_contract$derivative_coordinate_registry)),
+    dml$v22_analysis_contract$derivative_coordinate_registry)
   folds <- list(fold1 = coordinates, fold2 = coordinates)
-  analytic <- diag(length(primitive_ids))
+  analytic <- matrix(0, length(coordinates), length(primitive_ids))
+  analytic[cbind(seq_along(primitive_ids), seq_along(primitive_ids))] <- 1
   dimnames(analytic) <- list(names(coordinates), primitive_ids)
   scmix_v22_derivative_audit(
     dml, folds, primitive_ids,
     evaluate = function(fold_id, coordinates, primitive_registry_ids) {
-      stats::setNames(as.numeric(coordinates), primitive_registry_ids)
+      stats::setNames(
+        as.numeric(coordinates[seq_along(primitive_registry_ids)]),
+        primitive_registry_ids)
     },
     analytic_gradient = list(fold1 = analytic, fold2 = analytic),
     code_hash = "test-code", provenance = "synthetic exact derivative audit")
 }
+
+.v22_approved_calibration <- list(
+  protocol_id = sconjoint:::.scmix_v22_protocol_id,
+  status = "frozen_for_production",
+  calibration_hash = scmix_v22_calibration_hash(
+    .v22_calibration_values, .v22_calibration_source_hash),
+  source_hash = .v22_calibration_source_hash,
+  manifest_fingerprint = "synthetic-package-manifest-fingerprint")
+testthat::local_mocked_bindings(
+  .scmix_v22_approved_calibration_manifest = function()
+    .v22_approved_calibration,
+  .package = "sconjoint", .env = testthat:::teardown_env())
 
 .v22_external_gates <- function(registry, contract) {
   local_ids <- sconjoint:::.scmix_v22_local_gate_ids
@@ -286,7 +314,8 @@ test_that("honest outer-fold Riesz defects and ridge neighborhoods are stored", 
   fit <- list(K = 2L, analysis_signature = "signed-fit",
               respondent_id = rid, fold_id = rep(1:2, each = 30L))
   fit$v22_analysis_contract <- .v22_contract(
-    "signed-fit", code_commit = "code-hash", riesz_inner_seed = 17L)
+    "signed-fit", code_commit = "code-hash", riesz_inner_seed = 17L,
+    coordinate_registry = c("u1", "u2"))
   callback <- function(fit, outer_fold, inner_fold,
                        training_respondent_id, validation_respondent_id,
                        ridge_grid, primitive_registry_ids) {
@@ -598,9 +627,11 @@ test_that("common multiplier banks are order and job-partition invariant", {
   expect_equal(incomplete$family_resampling$joint_family$critical,
                stats::qnorm(1 - 0.05 / (2 * length(family_ids))))
   expect_identical(incomplete$targets$target_a$status$multiplicity_status,
-                   "bonferroni_incomplete")
-  expect_true(all(is.finite(
+                   "none")
+  expect_true(all(is.na(
     incomplete$targets$target_a$simultaneous_interval)))
+  expect_true("P001" %in%
+                incomplete$targets$target_a$status$hard_failure_codes)
 })
 
 test_that("duplicate primitive IDs cannot hide different influence values", {
@@ -964,6 +995,9 @@ test_that("a supplied bank never changes a single-primitive family to max-t", {
 
 test_that("exact derivative audit uses signed structural h and h/2 geometry", {
   fit <- list(analysis_signature = "derivative-fit")
+  fit$v22_analysis_contract <- .v22_contract(
+    "derivative-fit", coordinate_registry = c("u1", "u2"),
+    derivative_subset_rule = "all coordinates")
   u <- c(u1 = 2, u2 = 0.25)
   folds <- list(fold1 = u, fold2 = u + c(0.1, -0.05))
   evaluator <- function(fold_id, coordinates, primitive_registry_ids) {
@@ -1010,6 +1044,7 @@ test_that("exact derivative audit uses signed structural h and h/2 geometry", {
   }
   expect_error(scmix_v22_derivative_audit(
     fit, folds, c("p1", "p2"), wrong_order,
+    subset_rule = "all coordinates",
     code_hash = "test-code", provenance = "test"),
     "exact signed registry order")
 })
@@ -1104,4 +1139,165 @@ test_that("R004 requires zero and every adjacent selected-ridge value", {
   r4 <- r4[r4$gate_id == "R004", , drop = FALSE]
   expect_identical(r4$state, "not_run")
   expect_true("R004" %in% out$targets$p$status$hard_failure_codes)
+})
+
+test_that("unconditional gates and derived applicability cannot be waived", {
+  contract <- .v22_contract(q = 0L,
+                            fit_uses_numerical_integration = FALSE)
+  spec <- scmix_v22_target_spec(
+    "p", "single", "probability", "p", "primitive:p", "positive",
+    "probability", "mean", uses_numerical_integration = FALSE)
+  unconditional <- scmix_v22_gate_record(
+    "F001", "fit_computation", "fit", "hard_fit", "not_applicable",
+    FALSE, TRUE, "equal", "boolean", "audit",
+    "Not applicable by unsupported assertion", contract$specification_id)
+  expect_error(scmix_v22_validate_gate_record(
+    unconditional, require_all_ids = FALSE), "default-always")
+
+  wrong_conditional <- scmix_v22_gate_record(
+    "I001", "numerical_integration", "target", "hard_target", "pass",
+    TRUE, TRUE, "equal", "boolean", "audit", "unsupported pass", "p")
+  expect_error(scmix_v22_gate_artifact(
+    wrong_conditional, list(spec), contract, "audit"),
+    "contract-derived applicability")
+  right_conditional <- wrong_conditional
+  right_conditional$state <- "not_applicable"
+  right_conditional$message <- "Not applicable because this target uses no numerical integration."
+  expect_s3_class(scmix_v22_gate_artifact(
+    right_conditional, list(spec), contract, "audit"),
+    "scmix_v22_gate_artifact")
+})
+
+test_that("calibration cannot certify without the package-shipped Step-3 manifest", {
+  contract <- .v22_contract()
+  expect_error(testthat::with_mocked_bindings(
+    scmix_v22_calibration_artifact(
+      .v22_calibration_values, contract, .v22_calibration_source_hash,
+      "audit"),
+    .scmix_v22_approved_calibration_manifest = function() NULL,
+    .package = "sconjoint"), "package-shipped Step-3")
+
+  changed <- .v22_calibration_values
+  changed$chart_discrepancy_cutoff <- 1e99
+  changed_source <- "posthoc-source"
+  changed_contract <- .v22_contract()
+  changed_contract$calibration_hash <- scmix_v22_calibration_hash(
+    changed, changed_source)
+  payload <- unclass(changed_contract); payload$fingerprint <- NULL
+  changed_contract$fingerprint <- sconjoint:::.scmix_v22_fingerprint(payload)
+  expect_error(scmix_v22_calibration_artifact(
+    changed, changed_contract, changed_source, "posthoc"),
+    "package-shipped Step-3")
+})
+
+test_that("the derivative subset and rule are frozen in the analysis contract", {
+  fit <- list(analysis_signature = "derivative-prefit")
+  fit$v22_analysis_contract <- .v22_contract(
+    "derivative-prefit", coordinate_registry = c("u1", "u2"),
+    coordinate_subset = "u1", derivative_subset_rule = "first coordinate")
+  folds <- list(fold1 = c(u1 = 0, u2 = 0),
+                fold2 = c(u1 = 0, u2 = 0))
+  evaluator <- function(fold_id, coordinates, primitive_registry_ids) {
+    stats::setNames(coordinates[["u1"]], primitive_registry_ids)
+  }
+  expect_s3_class(scmix_v22_derivative_audit(
+    fit, folds, "p", evaluator, coordinate_subset = "u1",
+    subset_rule = "first coordinate", code_hash = "test-code",
+    provenance = "prefit subset"), "scmix_v22_derivative_audit")
+  expect_error(scmix_v22_derivative_audit(
+    fit, folds, "p", evaluator, coordinate_subset = c("u1", "u2"),
+    subset_rule = "all coordinates", code_hash = "test-code",
+    provenance = "posthoc expansion"), "must pre-freeze")
+})
+
+test_that("every signed target must be collected even when primitives overlap", {
+  N <- 50L; ids <- sprintf("r%03d", seq_len(N))
+  IF <- cbind(HZ = seq(-1, 1, length.out = N),
+              HR = sin(seq_len(N)))
+  rownames(IF) <- ids
+  dml <- .v22_fake_dml(c(HZ = .1, HR = .2), c(HZ = .11, HR = .19),
+                       IF, primitive_mode = TRUE)
+  common <- list(
+    family_primitive_registry_ids = c("HZ", "HR"),
+    family_target_ids = c("a", "b"),
+    primitive_estimands = c("explained variance", "residual variance"),
+    primitive_orientations = c("direction", "direction"),
+    primitive_units = c("variance", "variance"),
+    primitive_reference_rules = c("none", "none"),
+    primitive_influence_definitions = rep(
+      "centered_raw_one_step_respondent_sequence", 2L))
+  make <- function(id) do.call(scmix_v22_target_spec, c(list(
+    target_id = id, family_id = "f",
+    target_type = "directional_heterogeneity",
+    supporting_names = c("m", "second", "hr"),
+    primitive_registry_ids = c("HZ", "HR"), orientation = "direction",
+    units = "share", parameter_dependencies = c("mean", "loading")),
+    common))
+  a <- make("a"); b <- make("b")
+  out <- scmix_v22_finalize(
+    dml, list(a),
+    full_sample_plugin = .v22_full_plugin(dml, c(HZ = .1, HR = .2)),
+    derivative_audit = .v22_derivative(dml, list(a)),
+    multiplier_bank = scmix_v22_multiplier_bank(
+      ids, 9999L, 73L, analysis_contract = dml$v22_analysis_contract),
+    calibration = .v22_calibration,
+    external_gates = .v22_external_gates(
+      list(a, b), dml$v22_analysis_contract),
+    complete_external_record = TRUE)
+  expect_identical(names(out$targets), "a")
+  expect_identical(out$targets$a$status$fit_status, "withheld")
+  expect_true("P001" %in% out$targets$a$status$hard_failure_codes)
+  expect_identical(out$targets$a$status$multiplicity_status, "none")
+})
+
+test_that("ridge-neighborhood max-t endpoints reuse draws but recompute critical values", {
+  N <- 80L; ids <- sprintf("r%03d", seq_len(N))
+  a_if <- seq(-1, 1, length.out = N)
+  b_if <- a_if + .01 * sin(seq_len(N))
+  alt_if <- a_if + .1 * rep(c(-1, 1), length.out = N)
+  IF <- cbind(a = a_if, b = b_if); rownames(IF) <- ids
+  dml <- .v22_fake_dml(c(a = .4, b = .6), c(a = .41, b = .61), IF)
+  for (k in seq_along(dml$fold_details)) {
+    fd <- dml$fold_details[[k]]
+    grid <- c(0, fd$training_n^(-1))
+    art <- fd$ridge_neighborhood_artifact$a
+    art$nu <- grid
+    art$raw_one_step <- c(.41, .41)
+    art$standard_error <- c(stats::sd(a_if), stats::sd(alt_if)) / sqrt(N)
+    art$influence <- cbind(a_if, alt_if)
+    rownames(art$influence) <- ids
+    fd$ridge_neighborhood_artifact$a <- art
+    dml$fold_details[[k]] <- fd
+  }
+  family_ids <- c("pa", "pb")
+  make <- function(id, supporting, primitive) scmix_v22_target_spec(
+    id, "f", "probability", supporting, primitive, "positive",
+    "probability", "mean", family_primitive_registry_ids = family_ids,
+    family_target_ids = c("a", "b"))
+  a <- make("a", "a", "pa"); b <- make("b", "b", "pb")
+  bank <- scmix_v22_multiplier_bank(
+    ids, 9999L, 73L, analysis_contract = dml$v22_analysis_contract)
+  out <- scmix_v22_finalize(
+    dml, list(a, b),
+    full_sample_plugin = .v22_full_plugin(dml, c(a = .4, b = .6)),
+    derivative_audit = .v22_derivative(dml, list(a, b)),
+    multiplier_bank = bank, calibration = .v22_calibration,
+    external_gates = .v22_external_gates(
+      list(a, b), dml$v22_analysis_contract),
+    complete_external_record = TRUE)
+  zeta <- sconjoint:::.scmix_v22_validate_bank(
+    bank, ids, dml$v22_analysis_contract)
+  alt_family <- cbind(pa = alt_if, pb = dml$influence[, "b"])
+  se <- apply(alt_family, 2L, stats::sd) / sqrt(N)
+  manual <- unname(stats::quantile(apply(abs(sweep(
+    crossprod(zeta, alt_family) / N, 2L, se, `/`)), 1L, max),
+    .95, names = FALSE, type = 8))
+  ev <- out$targets$a$ridge_neighborhood$evaluations
+  perturbed <- ev[ev$nu > 0, , drop = FALSE]
+  expect_true(nrow(perturbed) > 0L)
+  expect_equal(unique(perturbed$critical_value), manual)
+  baseline <- if (!is.null(out$family_resampling$f$diagnostic_critical)) {
+    out$family_resampling$f$diagnostic_critical
+  } else out$family_resampling$f$critical
+  expect_false(isTRUE(all.equal(manual, baseline)))
 })

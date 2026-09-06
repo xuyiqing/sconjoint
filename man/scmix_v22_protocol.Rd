@@ -36,6 +36,7 @@ scmix_v22_target_spec(
   family_primitive_registry_ids = primitive_registry_ids,
   family_target_ids = target_id,
   confirmatory_status = c("confirmatory", "sensitivity", "outcome_informed"),
+  uses_numerical_integration = TRUE,
   domain = NULL, reference_rule = "none",
   influence_definition = "centered_raw_one_step_respondent_sequence",
   primitive_estimands = NULL, primitive_orientations = NULL,
@@ -48,7 +49,10 @@ scmix_v22_analysis_contract(
   respondent_sample_rule, completion_rule, missing_data_rule,
   outer_folds, inner_folds, preprocessing_rule, integration_rule,
   optimizer_starts, learner_grid, ridge_grid, seeds,
-  code_commit, data_hash, design_hash, calibration_hash
+  code_commit, data_hash, design_hash, calibration_hash,
+  q, fit_uses_numerical_integration, exact_nested_pair_registered,
+  derivative_coordinate_registry, derivative_coordinate_subset,
+  derivative_subset_rule
 )
 
 scmix_v22_calibration_hash(values, source_hash)
@@ -82,7 +86,8 @@ scmix_v22_derivative_audit(
   analytic_gradient = NULL,
   coordinate_subset = names(fold_coordinates[[1L]]),
   subset_rule = "all registered structural coordinates",
-  code_hash, provenance
+  code_hash, provenance,
+  analysis_contract = fit$v22_analysis_contract
 )
 
 scmix_v22_gate_record(
@@ -136,6 +141,8 @@ units, and structural-block dependencies.}
 \item{family_primitive_registry_ids, family_target_ids}{The complete frozen
 primitive and target membership of the family.}
 \item{confirmatory_status}{The target's prespecified reporting role.}
+\item{uses_numerical_integration}{Whether the target requires the frozen
+numerical-integration refinement checks.}
 \item{reference_rule, influence_definition, primitive_estimands,
 primitive_orientations, primitive_units, primitive_reference_rules,
 primitive_influence_definitions}{Target and primitive metadata used to reject
@@ -148,10 +155,18 @@ preprocessing_rule, integration_rule}{Frozen analysis rules.}
 seeds}{Frozen folds, grids, starts, and named seeds.}
 \item{code_commit, data_hash, design_hash}{Immutable analysis hashes.}
 \item{calibration_hash}{Hash of the exact calibrated constants and source.}
+\item{q}{The frozen nonnegative latent-factor dimension.}
+\item{fit_uses_numerical_integration, exact_nested_pair_registered}{Frozen
+logical declarations governing fit-level integration and nested-fit evidence.}
+\item{derivative_coordinate_registry, derivative_coordinate_subset,
+derivative_subset_rule}{The pre-fit structural-coordinate registry, audited
+subset in registry order, and deterministic selection rule.}
 \item{values}{Named numeric calibration constants or plug-in values.}
 \item{source_hash}{Immutable hash of the calibration source file.}
 \item{inference}{A computed \code{scmix_dml} object.}
-\item{analysis_contract}{An intact \code{scmix_v22_analysis_contract}.}
+\item{analysis_contract}{An intact \code{scmix_v22_analysis_contract}. For a
+derivative audit it freezes the coordinate registry, subset, rule, folds, and
+code hash.}
 \item{final_fit_hash, code_hash}{Immutable final-fit and code identifiers.}
 \item{respondent_id}{Unique respondent identifiers.}
 \item{draws, seed, distribution}{Multiplier count, signed seed, and Normal

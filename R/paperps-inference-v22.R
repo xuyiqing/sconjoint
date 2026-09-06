@@ -41,6 +41,10 @@
 .scmix_v22_local_gate_ids <- c(
   "P001", "P002", "N002", "G006", sprintf("R%03d", 1:5),
   sprintf("C%03d", 1:4), sprintf("M%03d", 1:3))
+.scmix_v22_conditional_gate_ids <- c(
+  "F007", "F008", sprintf("I%03d", 1:5), sprintf("L%03d", 1:2),
+  "G002", "G003", "G004", "G006", sprintf("R%03d", 1:5),
+  sprintf("C%03d", 1:4), "M002", "M003")
 
 .scmix_v22_gate_dictionary <- local({
   make <- function(ids, category, scope, severity) data.frame(
@@ -186,6 +190,8 @@ scmix_v22_domain_amendment <- function(target_type, domain, reason,
 #'   targets split across jobs still use the full family for max-t inference.
 #' @param confirmatory_status `"confirmatory"`, `"sensitivity"`, or
 #'   `"outcome_informed"`.
+#' @param uses_numerical_integration Whether this target requires the frozen
+#'   target-level numerical-integration refinement checks.
 #' @param domain Optional signed [scmix_v22_domain_amendment()]. Ordinary
 #'   caller overrides are prohibited. The frozen protocol default is used when
 #'   omitted.
@@ -204,6 +210,7 @@ scmix_v22_target_spec <- function(
     family_target_ids = target_id,
     confirmatory_status = c("confirmatory", "sensitivity",
                            "outcome_informed"),
+    uses_numerical_integration = TRUE,
     domain = NULL, reference_rule = "none",
     influence_definition = "centered_raw_one_step_respondent_sequence",
     primitive_estimands = NULL, primitive_orientations = NULL,
@@ -211,6 +218,12 @@ scmix_v22_target_spec <- function(
     primitive_influence_definitions = NULL) {
   target_type <- match.arg(target_type)
   confirmatory_status <- match.arg(confirmatory_status)
+  if (!is.logical(uses_numerical_integration) ||
+      length(uses_numerical_integration) != 1L ||
+      is.na(uses_numerical_integration)) {
+    stop("uses_numerical_integration must be one nonmissing logical value.",
+         call. = FALSE)
+  }
   target_id <- .scmix_v22_text(target_id, "target_id")
   family_id <- .scmix_v22_text(family_id, "family_id")
   orientation <- .scmix_v22_text(orientation, "orientation")
@@ -322,6 +335,7 @@ scmix_v22_target_spec <- function(
         "explained_variance / (explained_variance + residual_variance)",
       mean_tradeoff_mrs_ratio = "-numerator / denominator",
       "identity"),
+    uses_numerical_integration = uses_numerical_integration,
     confirmatory_status = confirmatory_status
   )
   out$fingerprint <- .scmix_v22_fingerprint(out)
@@ -410,6 +424,39 @@ scmix_v22_calibration_hash <- function(values, source_hash) {
     source_hash = source_hash, constants = constants))
 }
 
+.scmix_v22_approved_calibration_manifest <- function() {
+  path <- system.file(
+    "protocol", "inference-v2.2-calibration.dcf", package = "sconjoint")
+  if (!nzchar(path) || !file.exists(path)) return(NULL)
+  manifest <- try(utils::read.dcf(path), silent = TRUE)
+  required <- c("Protocol-ID", "Status", "Calibration-Hash", "Source-Hash")
+  if (inherits(manifest, "try-error") || nrow(manifest) != 1L ||
+      !all(required %in% colnames(manifest))) return(NULL)
+  values <- as.character(manifest[1L, required])
+  names(values) <- required
+  if (anyNA(values) || any(!nzchar(trimws(values)))) return(NULL)
+  list(
+    protocol_id = unname(values[["Protocol-ID"]]),
+    status = unname(values[["Status"]]),
+    calibration_hash = unname(values[["Calibration-Hash"]]),
+    source_hash = unname(values[["Source-Hash"]]),
+    manifest_fingerprint = .scmix_v22_fingerprint(readLines(
+      path, warn = FALSE, encoding = "UTF-8")))
+}
+
+.scmix_v22_calibration_approval_matches <- function(
+    approval, calibration_hash, source_hash) {
+  is.list(approval) &&
+    identical(approval$protocol_id, .scmix_v22_protocol_id) &&
+    identical(approval$status, "frozen_for_production") &&
+    identical(approval$calibration_hash, calibration_hash) &&
+    identical(approval$source_hash, source_hash) &&
+    is.character(approval$manifest_fingerprint) &&
+    length(approval$manifest_fingerprint) == 1L &&
+    !is.na(approval$manifest_fingerprint) &&
+    nzchar(approval$manifest_fingerprint)
+}
+
 #' Link Step-3 constants to a signed v2.2 analysis contract
 #'
 #' A plain list of cutoffs is never production evidence. This constructor
@@ -437,12 +484,19 @@ scmix_v22_calibration_artifact <- function(
     stop("Exact calibration values and source hash do not match the signed analysis contract.",
          call. = FALSE)
   }
+  approval <- .scmix_v22_approved_calibration_manifest()
+  if (!.scmix_v22_calibration_approval_matches(
+      approval, calibration_hash, source_hash)) {
+    stop("No package-shipped Step-3 calibration manifest approves these constants and source hash for production.",
+         call. = FALSE)
+  }
   payload <- list(
     protocol_id = .scmix_v22_protocol_id,
     analysis_signature = analysis_contract$analysis_signature,
     analysis_contract_fingerprint = analysis_contract$fingerprint,
     calibration_hash = calibration_hash, source_hash = source_hash,
     constants = constants, complete = TRUE,
+    approval_manifest = approval,
     provenance = .scmix_v22_text(provenance, "provenance"))
   payload$fingerprint <- .scmix_v22_fingerprint(payload)
   class(payload) <- c("scmix_v22_calibration_artifact", "list")
@@ -458,6 +512,7 @@ scmix_v22_calibration_artifact <- function(
   constants <- try(.scmix_v22_normalize_calibration(
     calibration$constants, require_complete = require_complete), silent = TRUE)
   if (inherits(constants, "try-error")) return(FALSE)
+  approval <- .scmix_v22_approved_calibration_manifest()
   identical(calibration$protocol_id, .scmix_v22_protocol_id) &&
     identical(calibration$analysis_signature,
               analysis_contract$analysis_signature) &&
@@ -468,6 +523,9 @@ scmix_v22_calibration_artifact <- function(
     identical(calibration$calibration_hash,
               scmix_v22_calibration_hash(constants,
                                          calibration$source_hash)) &&
+    identical(calibration$approval_manifest, approval) &&
+    .scmix_v22_calibration_approval_matches(
+      approval, calibration$calibration_hash, calibration$source_hash) &&
     (!isTRUE(require_complete) || isTRUE(calibration$complete))
 }
 
@@ -513,6 +571,13 @@ scmix_v22_calibration_artifact <- function(
 #' @param outer_folds,inner_folds,optimizer_starts,learner_grid,ridge_grid,
 #'   seeds Nonempty frozen design objects.
 #' @param code_commit,data_hash,design_hash,calibration_hash Immutable hashes.
+#' @param q Frozen nonnegative latent-factor dimension.
+#' @param fit_uses_numerical_integration,exact_nested_pair_registered Frozen
+#'   logical declarations governing fit-level integration and nested-fit
+#'   evidence.
+#' @param derivative_coordinate_registry,derivative_coordinate_subset,
+#'   derivative_subset_rule Pre-fit structural-coordinate registry, audited
+#'   subset in registry order, and deterministic selection rule.
 #' @return A fingerprinted `scmix_v22_analysis_contract`.
 #' @export
 scmix_v22_analysis_contract <- function(
@@ -520,7 +585,10 @@ scmix_v22_analysis_contract <- function(
     respondent_sample_rule, completion_rule, missing_data_rule,
     outer_folds, inner_folds, preprocessing_rule, integration_rule,
     optimizer_starts, learner_grid, ridge_grid, seeds,
-    code_commit, data_hash, design_hash, calibration_hash) {
+    code_commit, data_hash, design_hash, calibration_hash,
+    q, fit_uses_numerical_integration, exact_nested_pair_registered,
+    derivative_coordinate_registry, derivative_coordinate_subset,
+    derivative_subset_rule) {
   text_fields <- c(
     analysis_signature = analysis_signature, application_id = application_id,
     specification_id = specification_id,
@@ -547,8 +615,44 @@ scmix_v22_analysis_contract <- function(
     stop("ridge_grid must equal the frozen v2.2 fold-size grid.",
          call. = FALSE)
   }
+  if (!is.numeric(q) || length(q) != 1L || !is.finite(q) || q < 0 ||
+      q != as.integer(q)) {
+    stop("q must be one nonnegative integer.", call. = FALSE)
+  }
+  logical_fields <- c(
+    fit_uses_numerical_integration = fit_uses_numerical_integration,
+    exact_nested_pair_registered = exact_nested_pair_registered)
+  if (!is.logical(logical_fields) || anyNA(logical_fields)) {
+    stop("fit_uses_numerical_integration and exact_nested_pair_registered must be nonmissing logical values.",
+         call. = FALSE)
+  }
+  derivative_coordinate_registry <- .scmix_v22_names(
+    derivative_coordinate_registry, "derivative_coordinate_registry")
+  derivative_coordinate_subset <- .scmix_v22_names(
+    derivative_coordinate_subset, "derivative_coordinate_subset")
+  if (!all(derivative_coordinate_subset %in%
+             derivative_coordinate_registry) ||
+      !identical(derivative_coordinate_subset,
+                 derivative_coordinate_registry[
+                   derivative_coordinate_registry %in%
+                     derivative_coordinate_subset])) {
+    stop("derivative_coordinate_subset must be a subset in the frozen coordinate-registry order.",
+         call. = FALSE)
+  }
+  derivative_subset_rule <- .scmix_v22_text(
+    derivative_subset_rule, "derivative_subset_rule")
   payload <- c(as.list(text_fields), objects,
-                list(protocol_id = .scmix_v22_protocol_id))
+                list(
+                  q = as.integer(q),
+                  fit_uses_numerical_integration =
+                    fit_uses_numerical_integration,
+                  exact_nested_pair_registered =
+                    exact_nested_pair_registered,
+                  derivative_coordinate_registry =
+                    derivative_coordinate_registry,
+                  derivative_coordinate_subset = derivative_coordinate_subset,
+                  derivative_subset_rule = derivative_subset_rule,
+                  protocol_id = .scmix_v22_protocol_id))
   payload$fingerprint <- .scmix_v22_fingerprint(payload)
   class(payload) <- c("scmix_v22_analysis_contract", "list")
   payload
@@ -1165,6 +1269,8 @@ scmix_v22_riesz_evidence <- function(
 #'   equal to the signed coordinate subset and columns equal to primitive IDs.
 #' @param coordinate_subset Deterministic coordinate subset in registry order.
 #' @param subset_rule,code_hash,provenance Nonempty signed documentation.
+#' @param analysis_contract Signed pre-fit contract that freezes the coordinate
+#'   registry, audited subset, subset rule, folds, and code hash.
 #' @return A fingerprinted `scmix_v22_derivative_audit`.
 #' @export
 scmix_v22_derivative_audit <- function(
@@ -1172,7 +1278,8 @@ scmix_v22_derivative_audit <- function(
     analytic_gradient = NULL,
     coordinate_subset = names(fold_coordinates[[1L]]),
     subset_rule = "all registered structural coordinates",
-    code_hash, provenance) {
+    code_hash, provenance,
+    analysis_contract = fit$v22_analysis_contract) {
   signature <- if (is.list(fit)) fit$analysis_signature else NULL
   signature <- .scmix_v22_text(signature, "fit$analysis_signature")
   primitive_registry_ids <- .scmix_v22_names(
@@ -1205,6 +1312,21 @@ scmix_v22_derivative_audit <- function(
   subset_rule <- .scmix_v22_text(subset_rule, "subset_rule")
   code_hash <- .scmix_v22_text(code_hash, "code_hash")
   provenance <- .scmix_v22_text(provenance, "provenance")
+  contract_ok <- .scmix_v22_intact(
+    analysis_contract, "scmix_v22_analysis_contract") &&
+    identical(analysis_contract$analysis_signature, signature) &&
+    identical(analysis_contract$code_commit, code_hash) &&
+    identical(analysis_contract$derivative_coordinate_registry,
+              coordinate_names) &&
+    identical(analysis_contract$derivative_coordinate_subset,
+              coordinate_subset) &&
+    identical(analysis_contract$derivative_subset_rule, subset_rule) &&
+    identical(.scmix_v22_contract_fold_ids(analysis_contract),
+              names(fold_coordinates))
+  if (!contract_ok) {
+    stop("analysis_contract must pre-freeze the exact derivative coordinates, subset, subset rule, folds, and code hash.",
+         call. = FALSE)
+  }
   if (!is.null(analytic_gradient)) {
     if (!is.list(analytic_gradient) ||
         !identical(names(analytic_gradient), names(fold_coordinates))) {
@@ -1290,6 +1412,7 @@ scmix_v22_derivative_audit <- function(
   payload <- list(
     protocol_id = .scmix_v22_protocol_id,
     analysis_signature = signature,
+    analysis_contract_fingerprint = analysis_contract$fingerprint,
     primitive_registry_ids = primitive_registry_ids,
     coordinate_names = coordinate_names,
     coordinate_subset = coordinate_subset, subset_rule = subset_rule,
@@ -1742,6 +1865,13 @@ scmix_v22_validate_gate_record <- function(gates, require_all_ids = TRUE) {
   if (any(bad_na)) {
     stop("Every not_applicable gate must record a reason.", call. = FALSE)
   }
+  unconditional_na <- gates$state == "not_applicable" &
+    !gates$gate_id %in% .scmix_v22_conditional_gate_ids
+  if (any(unconditional_na)) {
+    stop("A default-always v2.2 gate cannot be marked not_applicable: ",
+         paste(unique(gates$gate_id[unconditional_na]), collapse = ", "),
+         ".", call. = FALSE)
+  }
   invisible(gates)
 }
 
@@ -1763,6 +1893,41 @@ scmix_v22_validate_gate_record <- function(gates, require_all_ids = TRUE) {
                   "centered_mean_deviation", "horizontal_loadings",
                   "all_structural_coordinates"),
     character())
+}
+
+.scmix_v22_external_gate_applicable <- function(
+    gate_id, scope_id, registry, contract) {
+  if (!gate_id %in% .scmix_v22_conditional_gate_ids) return(TRUE)
+  if (gate_id == "F007") {
+    return(isTRUE(contract$exact_nested_pair_registered))
+  }
+  if (gate_id == "F008") {
+    return(length(unique(unlist(contract$optimizer_starts,
+                                recursive = TRUE))) > 1L)
+  }
+  if (gate_id %in% c("I001", "I002")) {
+    target_ids <- vapply(registry, `[[`, character(1L), "target_id")
+    at <- match(scope_id, target_ids)
+    if (is.na(at)) return(NA)
+    return(isTRUE(registry[[at]]$uses_numerical_integration))
+  }
+  if (gate_id %in% c("I003", "I004")) {
+    return(isTRUE(contract$fit_uses_numerical_integration))
+  }
+  if (gate_id == "I005") {
+    return(contract$q > 0L &&
+             isTRUE(contract$fit_uses_numerical_integration))
+  }
+  if (gate_id %in% c("L001", "L002", "G002", "G004")) {
+    return(contract$q > 0L)
+  }
+  if (gate_id == "G003") {
+    return(scope_id %in% unique(unlist(lapply(
+      registry, `[[`, "target_parameter_dependencies"))))
+  }
+  ## The remaining conditional gates are local and cannot enter an external
+  ## artifact. Their applicability is derived by the finalizer itself.
+  NA
 }
 
 #' Sign nonlocal v2.2 gate evidence against the frozen registry
@@ -1805,6 +1970,23 @@ scmix_v22_gate_artifact <- function(gates, registry, analysis_contract,
              "` scope.", call. = FALSE)
       }
     }
+  }
+  applicable <- mapply(
+    .scmix_v22_external_gate_applicable,
+    gates$gate_id, gates$scope_id,
+    MoreArgs = list(registry = registry, contract = analysis_contract),
+    USE.NAMES = FALSE)
+  if (anyNA(applicable)) {
+    stop("Gate applicability could not be derived from the signed registry and analysis contract.",
+         call. = FALSE)
+  }
+  wrong_applicability <- (applicable & gates$state == "not_applicable") |
+    (!applicable & gates$state != "not_applicable")
+  if (any(wrong_applicability)) {
+    bad <- paste0(gates$gate_id[wrong_applicability], "@",
+                  gates$scope_id[wrong_applicability])
+    stop("Gate state disagrees with frozen, contract-derived applicability: ",
+         paste(bad, collapse = ", "), ".", call. = FALSE)
   }
   payload <- list(
     protocol_id = .scmix_v22_protocol_id,
@@ -2154,11 +2336,14 @@ scmix_v22_status <- function(
     columns[[id]] <- ref
   }
   IF <- do.call(cbind, columns)
+  rownames(IF) <- respondent_id
   se <- apply(IF, 2L, stats::sd) / sqrt(nrow(IF))
   usable <- is.finite(se) & se > 0
   base <- list(ids = ids, registered_ids = registered_ids,
                membership_complete = membership_complete,
-               declaration_consistent = declaration_consistent)
+               declaration_consistent = declaration_consistent,
+               respondent_id = respondent_id,
+               influence_matrix = IF)
   if (!declaration_consistent || any(!registered_ids %in% ids)) {
     return(c(list(method = "none", critical = NA_real_, usable = usable,
                   conflict = character(),
@@ -2310,8 +2495,9 @@ scmix_v22_status <- function(
          }, logical(1L))))
 }
 
-.scmix_v22_ridge_neighborhood <- function(x, inference, family_result,
-                                           level) {
+.scmix_v22_ridge_neighborhood <- function(
+    x, inference, family_result, level, multiplier_bank = NULL,
+    analysis_contract = NULL) {
   primitive_ids <- x$spec$primitive_registry_ids
   support <- x$riesz_names
   J <- x$riesz_jacobian
@@ -2329,6 +2515,37 @@ scmix_v22_status <- function(
   base_hi <- x$reported_primitive + crit * x$primitive_se
   base_map <- .scmix_v22_map_rectangle(x$spec$target_type,
                                         base_lo, base_hi)
+  recompute_critical <- function(primitive_if, affected) {
+    if (!identical(family_result$method, "common_draw_max_t")) return(crit)
+    family_if <- family_result$influence_matrix
+    family_id <- family_result$ids
+    family_respondent <- family_result$respondent_id
+    if (!is.matrix(family_if) ||
+        !identical(colnames(family_if), family_id) ||
+        !identical(rownames(family_if), family_respondent) ||
+        is.null(rownames(primitive_if))) return(NA_real_)
+    for (id in affected) {
+      at <- match(id, colnames(primitive_if))
+      if (is.na(at) || !id %in% colnames(family_if)) return(NA_real_)
+      aligned <- primitive_if[match(family_respondent,
+                                    rownames(primitive_if)), at]
+      if (length(aligned) != length(family_respondent) ||
+          any(!is.finite(aligned))) return(NA_real_)
+      family_if[, id] <- aligned
+    }
+    se_family <- apply(family_if, 2L, stats::sd) / sqrt(nrow(family_if))
+    if (any(!is.finite(se_family)) || any(se_family <= 0)) return(NA_real_)
+    zeta <- try(.scmix_v22_validate_bank(
+      multiplier_bank, family_respondent, analysis_contract), silent = TRUE)
+    if (inherits(zeta, "try-error") ||
+        !isTRUE(attr(zeta, "analysis_contract_linked")) ||
+        !identical(ncol(zeta), 9999L)) return(NA_real_)
+    errors <- crossprod(zeta, family_if) / nrow(family_if)
+    studentized <- sweep(errors, 2L, se_family, `/`)
+    unname(stats::quantile(
+      apply(abs(studentized), 1L, max), probs = level,
+      names = FALSE, type = 8))
+  }
   rows <- list()
   for (k in seq_along(inference$fold_details)) {
     fold_detail <- inference$fold_details[[k]]
@@ -2380,8 +2597,12 @@ scmix_v22_status <- function(
         support_if <- as.matrix(inference$influence[, support, drop = FALSE])
         support_if[, s] <- alt_if[, r]
         primitive_if <- support_if %*% t(J)
+        colnames(primitive_if) <- primitive_ids
+        rownames(primitive_if) <- rownames(support_if)
         primitive_se <- apply(primitive_if, 2L, stats::sd) /
           sqrt(nrow(primitive_if))
+        alt_crit <- recompute_critical(
+          primitive_if, primitive_ids[affected])
         rr <- if (length(primitive_ids) == 1L) {
           .scmix_v22_chart_update(
             as.numeric(x$crossfit_primitive), alt_primitive,
@@ -2394,12 +2615,13 @@ scmix_v22_status <- function(
           stats::setNames(rr$value, primitive_ids)
         } else stats::setNames(rr$primitive, primitive_ids)
         alt_target <- if (!is.null(rr$value)) rr$value else rr$target
-        alt_map <- if (all(is.finite(reported_primitive)) &&
+        alt_map <- if (is.finite(alt_crit) &&
+                           all(is.finite(reported_primitive)) &&
                            all(is.finite(primitive_se))) {
           .scmix_v22_map_rectangle(
             x$spec$target_type,
-            reported_primitive - crit * primitive_se,
-            reported_primitive + crit * primitive_se)
+            reported_primitive - alt_crit * primitive_se,
+            reported_primitive + alt_crit * primitive_se)
         } else list(nonempty = FALSE, lower = NA_real_, upper = NA_real_)
         point_change <- if (is.finite(alt_target) &&
                             is.finite(x$reported_estimate)) {
@@ -2417,6 +2639,7 @@ scmix_v22_status <- function(
           affected_primitive_ids = paste(primitive_ids[affected],
                                          collapse = ","),
           reported_estimate = as.numeric(alt_target),
+          critical_value = alt_crit,
           lower = alt_map$lower, upper = alt_map$upper,
           point_change_over_se = point_change,
           endpoint_change_over_se = endpoint_change,
@@ -2439,8 +2662,9 @@ scmix_v22_status <- function(
          "one or more primitive lacks a finite full-neighborhood diagnostic")
 }
 
-.scmix_v22_riesz_gates <- function(x, inference, calibration, family_result,
-                                    level) {
+.scmix_v22_riesz_gates <- function(
+    x, inference, calibration, family_result, level,
+    multiplier_bank = NULL, analysis_contract = NULL) {
   evidence_ok <- identical(
     inference$v22_riesz_status,
     "signed_inner_nuisance_refit_evidence_used") &&
@@ -2463,7 +2687,8 @@ scmix_v22_status <- function(
   derivative_cut <- if (!is.null(calibration$derivative_cutoff)) {
     calibration$derivative_cutoff
   } else "CALIBRATE_IN_STEP_3"
-  ridge <- .scmix_v22_ridge_neighborhood(x, inference, family_result, level)
+  ridge <- .scmix_v22_ridge_neighborhood(
+    x, inference, family_result, level, multiplier_bank, analysis_contract)
   rows <- list(scmix_v22_gate_record(
     "N002", "nuisance_verification", "analysis", "hard_fit",
     if (evidence_ok) "pass" else "fail", evidence_ok, TRUE, "equal",
@@ -2722,7 +2947,15 @@ scmix_v22_collect <- function(inference, registry, full_sample_plugin = NULL,
     contract_linked &&
     identical(derivative_audit$analysis_signature,
               inference$analysis_signature) &&
+    identical(derivative_audit$analysis_contract_fingerprint,
+              analysis_contract$fingerprint) &&
     identical(derivative_audit$code_hash, analysis_contract$code_commit) &&
+    identical(derivative_audit$coordinate_names,
+              analysis_contract$derivative_coordinate_registry) &&
+    identical(derivative_audit$coordinate_subset,
+              analysis_contract$derivative_coordinate_subset) &&
+    identical(derivative_audit$subset_rule,
+              analysis_contract$derivative_subset_rule) &&
     identical(names(derivative_audit$fold_artifacts),
               .scmix_v22_contract_fold_ids(analysis_contract)) &&
     all(unique(unlist(lapply(registry, `[[`, "primitive_registry_ids"))) %in%
@@ -2979,7 +3212,14 @@ scmix_v22_finalize_collections <- function(
     signed_registry <- collected_registry
   }
   if (gate_artifact_ok) {
-    collected_match <- all(vapply(collected_registry, function(spec) {
+    collected_ids <- sort(unname(vapply(
+      collected_registry, `[[`, character(1L), "target_id")),
+      method = "radix")
+    signed_ids <- sort(unname(vapply(
+      signed_registry, `[[`, character(1L), "target_id")),
+      method = "radix")
+    collected_match <- identical(collected_ids, signed_ids) &&
+      all(vapply(collected_registry, function(spec) {
       j <- match(spec$target_id, vapply(
         signed_registry, `[[`, character(1L), "target_id"))
       !is.na(j) && identical(spec$fingerprint,
@@ -3072,7 +3312,8 @@ scmix_v22_finalize_collections <- function(
     local <- .scmix_v22_local_gates(
       x, mapped, fam, calibration_values)
     riesz <- .scmix_v22_riesz_gates(
-      x, x$source_inference, calibration_values, fam, level)$gates
+      x, x$source_inference, calibration_values, fam, level,
+      multiplier_bank, common_contract)$gates
     .scmix_v22_bind_gates(local, riesz)
   })
   for (family_id in names(family_results)) {
@@ -3128,7 +3369,8 @@ scmix_v22_finalize_collections <- function(
     local <- .scmix_v22_local_gates(
       x, formal_map, fam, calibration_values)
     riesz <- .scmix_v22_riesz_gates(
-      x, x$source_inference, calibration_values, fam, level)
+      x, x$source_inference, calibration_values, fam, level,
+      multiplier_bank, common_contract)
     all_gates <- .scmix_v22_bind_gates(
       external_gate_rows, integrity_gates, local, riesz$gates)
     all_gates <- .scmix_v22_deduplicate_identical_gates(all_gates)
