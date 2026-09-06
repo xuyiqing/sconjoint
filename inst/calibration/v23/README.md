@@ -38,6 +38,11 @@ respondent-equal subgroup probability. Its maintained coordinates obey
 diagnostic is `min(a, 1 - b, b - a)`, minimized again over the two variants.
 It is measured on the raw probability scale without standard-error
 standardization before division by its independently calibrated cutoff.
+The directional primitive margin is the raw `min(H_Z, H_R)` in
+normalized-direction variance units. It is separate from the standardized
+residual-variance and total-heterogeneity cutoffs. The MRS primitive margin is
+raw `abs(b)` in the denominator's declared scientific units. It is separate
+from the standardized denominator cutoff.
 
 Every adverse severity row is labeled `safe`, `transition`, or `unsafe`.
 Only unsafe rows enter the false-certification denominator. Selection and

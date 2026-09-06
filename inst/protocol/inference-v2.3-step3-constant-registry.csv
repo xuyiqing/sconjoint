@@ -1,7 +1,7 @@
 constant,comparator,primary_layer,targeted_failure_regime,metric_definition
 subgroup_interior_margin,greater_than_or_equal,oracle,probability_near_boundary,minimum of a 1-b and b-a over both subgroup variants on the raw probability scale with no standard-error standardization
-directional_heterogeneity_regularity_margin,greater_than_or_equal,oracle,directional_variance_near_zero,total directional heterogeneity distance from the origin in standard-error units
-mean_tradeoff_denominator_margin,greater_than_or_equal,oracle,weak_inverse_problem,absolute mean-tradeoff denominator in standard-error units
+directional_heterogeneity_regularity_margin,greater_than_or_equal,oracle,directional_variance_near_zero,raw minimum of explained and residual directional variance in normalized-direction variance units with no standard-error standardization
+mean_tradeoff_denominator_margin,greater_than_or_equal,oracle,weak_inverse_problem,raw absolute mean-tradeoff denominator in its declared scientific units with no standard-error standardization
 chart_discrepancy_cutoff,less_than_or_equal,oracle,probability_near_boundary,absolute chart-stabilized minus raw one-step estimate in standard-error units
 nonlinear_remainder_cutoff,less_than_or_equal,oracle,probability_near_boundary,absolute nonlinear mapping remainder in transformed standard-error units
 interior_distance_cutoff,greater_than_or_equal,oracle,probability_near_boundary,plugin distance from the relevant boundary in standard-error units

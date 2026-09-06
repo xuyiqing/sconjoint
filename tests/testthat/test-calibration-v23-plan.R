@@ -81,6 +81,28 @@ test_that("subgroup target retains the frozen a-over-b composite contract", {
                fixed = TRUE)
 })
 
+test_that("raw and standardized G006 primitives remain distinct", {
+  plan <- scmix_v23_calibration_plan()
+  definition <- setNames(plan$constants$metric_definition,
+                         plan$constants$constant)
+  expect_match(definition[["subgroup_interior_margin"]],
+               "raw probability scale", fixed = TRUE)
+  expect_match(
+    definition[["directional_heterogeneity_regularity_margin"]],
+    "raw minimum of explained and residual directional variance",
+    fixed = TRUE)
+  expect_match(definition[["directional_heterogeneity_regularity_margin"]],
+               "no standard-error standardization", fixed = TRUE)
+  expect_match(definition[["mean_tradeoff_denominator_margin"]],
+               "raw absolute mean-tradeoff denominator", fixed = TRUE)
+  expect_match(definition[["mean_tradeoff_denominator_margin"]],
+               "no standard-error standardization", fixed = TRUE)
+  expect_match(plan$raw[["G006-Directional-Primitive-Rule"]],
+               "raw_min(H_Z;H_R)", fixed = TRUE)
+  expect_match(plan$raw[["G006-MRS-Raw-Denominator-Rule"]],
+               "raw_abs(b)", fixed = TRUE)
+})
+
 test_that("committed design wrappers are hashed response-free templates", {
   plan <- scmix_v23_calibration_plan()
   for (i in seq_len(nrow(plan$designs))) {
