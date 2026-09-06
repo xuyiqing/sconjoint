@@ -110,6 +110,58 @@ bound <- tq1_bind_rows(list(data.frame(a = 1), data.frame(b = 2)))
 check("row binder retains the union of diagnostic columns",
       identical(names(bound), c("a", "b")) && nrow(bound) == 2L)
 
+c_raw <- c(low = -1 / 7, high = 1 / 7)
+c_norm <- tq1_normalize_contrast(c_raw)
+check("contrast-ray normalization preserves orientation and scale",
+      max(abs(c_norm$analysis)) == 1 &&
+        identical(base::sign(c_norm$analysis), base::sign(c_raw)) &&
+        abs(c_norm$raw_scale - 1 / 7) < 1e-15)
+
+c_ray <- c(penalty = -1 / 7, benefit = 1 / 7, other = 0)
+c_ray_norm <- tq1_normalize_contrast(c_ray)
+raw_target <- scmix_inference_target(
+  type = "sign", contrast = c_ray, variance_floor = 1e-12)
+normalized_target <- scmix_inference_target(
+  type = "sign", contrast = c_ray_norm$analysis, variance_floor = 1e-12)
+raw_eval <- do.call(raw_target, args)
+normalized_eval <- do.call(normalized_target, args)
+check("sign target and derivatives are invariant along a contrast ray",
+      max(abs(raw_eval$value - normalized_eval$value)) < 1e-13 &&
+        max(abs(raw_eval$d_mu - normalized_eval$d_mu)) < 1e-13 &&
+        max(abs(raw_eval$d_Sigma - normalized_eval$d_Sigma)) < 1e-12)
+
+H_analysis <- c(H_Z = 0.4, H_R = 0.6, H_T = 1, share_Z = 0.4)
+H_raw <- H_analysis
+H_raw[c("H_Z", "H_R", "H_T")] <-
+  H_raw[c("H_Z", "H_R", "H_T")] * c_ray_norm$raw_scale^2
+check("variance rescaling leaves the heterogeneity share unchanged",
+      H_raw[["share_Z"]] == H_analysis[["share_Z"]] &&
+        abs(H_raw[["H_T"]] / c_ray_norm$raw_scale^2 - 1) < 1e-15)
+
+scale_fixture <- data.frame(
+  component = c("H_Z", "H_R", "H_T", "share_Z"),
+  plugin = c(0.4, 0.6, 1, 0.4),
+  one_step = c(0.3, 0.7, 1, 0.3),
+  diagnostic_se = c(0.04, 0.05, 0.06, 0.07))
+scale_multiplier <- ifelse(scale_fixture$component == "share_Z", 1,
+                           c_ray_norm$raw_scale^2)
+scaled_fixture <- tq1_rescale_summary_rows(scale_fixture, scale_multiplier)
+check("directional rescaling returns dimensional estimates and SEs to raw units",
+      abs(scaled_fixture$plugin[scale_fixture$component == "H_T"] -
+            c_ray_norm$raw_scale^2) < 1e-15 &&
+        abs(scaled_fixture$diagnostic_se[
+          scale_fixture$component == "H_T"] -
+            0.06 * c_ray_norm$raw_scale^2) < 1e-15 &&
+        scaled_fixture$plugin[scale_fixture$component == "share_Z"] == 0.4)
+space_ok <- function(v) all(v[c("H_Z", "H_R", "H_T")] >= 0) &&
+  v[["H_T"]] > 0 && v[["share_Z"]] >= 0 && v[["share_Z"]] <= 1
+raw_values <- stats::setNames(scaled_fixture$one_step,
+                              scaled_fixture$component)
+analysis_values <- stats::setNames(scale_fixture$one_step,
+                                   scale_fixture$component)
+check("positive ray rescaling preserves heterogeneity parameter-space flags",
+      identical(space_ok(raw_values), space_ok(analysis_values)))
+
 fit_path <- file.path(root,
   "applications/gs2020/results/mixed_logit/v21_corrected/fit_primary_assembled.rds")
 if (file.exists(fit_path)) {

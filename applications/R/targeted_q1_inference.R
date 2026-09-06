@@ -133,6 +133,42 @@ tq1_unit_contrast <- function(attr_names, coordinate, sign = 1) {
   out
 }
 
+## Canonical representative of an oriented contrast ray. Threshold shares and
+## directional heterogeneity shares are unchanged by positive rescaling, but
+## absolute numerical margin checks are not. Using max(abs(c)) = 1 prevents a
+## target from passing or failing solely because an equivalent contrast was
+## written in different units. The returned scale converts means and standard
+## deviations back by `scale` and variance components back by `scale^2`.
+tq1_normalize_contrast <- function(contrast) {
+  original_names <- names(contrast)
+  contrast <- as.numeric(contrast)
+  names(contrast) <- original_names
+  scale <- max(abs(contrast))
+  if (!length(contrast) || is.null(original_names) || any(!is.finite(contrast)) ||
+      !is.finite(scale) || scale <= 0) {
+    stop("contrast must be a finite, nonzero named numeric vector.")
+  }
+  list(analysis = contrast / scale, raw_scale = scale,
+       normalization = "max_abs_coordinate_equals_one")
+}
+
+## Rescale estimand rows after inference on a canonical contrast ray. This is
+## used to return dimensional means, variances, standard errors, and endpoints
+## to the declared raw contrast units. Dimensionless shares receive row_scale
+## one. Scaling is positive, so parameter-space membership is unchanged.
+tq1_rescale_summary_rows <- function(x, row_scale) {
+  if (!is.data.frame(x) || length(row_scale) != nrow(x) ||
+      any(!is.finite(row_scale)) || any(row_scale <= 0)) {
+    stop("x must be a data frame with one finite positive scale per row.")
+  }
+  columns <- intersect(
+    c("plugin", "one_step", "adjustment", "diagnostic_se",
+      "diagnostic_lower", "diagnostic_upper", "formal_se",
+      "formal_lower", "formal_upper"), names(x))
+  for (column in columns) x[[column]] <- x[[column]] * row_scale
+  x
+}
+
 ## Convert a one-column typed target into E[g f] and E[g]. The subsequent
 ## subgroup_ratio transform targets E[f | g = 1] and carries the joint
 ## primitive covariance through the delta method.
