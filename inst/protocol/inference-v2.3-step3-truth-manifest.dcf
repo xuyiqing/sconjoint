@@ -1,6 +1,6 @@
 Plan-Id: paperps-step3-calibration-2026-09-06-v2.3-v1
 Protocol-Id: paperps-inference-2026-09-06-v2.3
-Status: frozen_before_synthetic_outcomes
+Status: frozen_before_frozen_design_synthetic_outcomes
 Frozen-On: 2026-09-06
 R-Version: R_4.5.3_2026-03-11
 Target-Truth-File: inference-v2.3-step3-target-truths.csv
@@ -11,7 +11,7 @@ Design-Manifest-SHA256: 8eb921fb4d7c20adef7f65e08be416396ae3a202a4725b7784444e22
 DGP-Registry-SHA256: 36f9e59c696010416e9f034ea6f573fcc84656dfa5678626fc75701a5dc82762
 Severity-Registry-SHA256: 46a7478153f4fccb0e9b4947905bf30ed391bdc892dd31a8d86bfd1495c527d6
 Target-Registry-SHA256: 6995e214b3a3fe15b99bf2f66c2e7e815eb9cece35e24a03a26a301fdbd975ed
-Plan-DCF-SHA256: f99de2236a77f7ecfc34dc2eb7f814ed016b0251877bcec8233e0acf1fcc413e
+Plan-DCF-SHA256: 3736a5ad37267048304b8ff49118ff566730ad87f372ae4d78dd3c7d9517ae96
 Truth-Generation-Function: scmix_v23_oracle_truths
 Truth-Conditioning: exact_signed_response_free_empirical_design
 Target-Truth-Rows: 600

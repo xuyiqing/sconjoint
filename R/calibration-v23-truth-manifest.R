@@ -129,7 +129,9 @@
 #' Load the frozen response-free Step-3 truth manifest
 #'
 #' This artifact binds the exact design-derived target truths and diagnostics
-#' that were written before any synthetic outcome was generated. It is not a
+#' that were written before a synthetic outcome was generated from any of the
+#' three frozen design payloads. Tiny unit-test fixtures are outside this
+#' design-matched study. This is not a
 #' calibration-values file and cannot approve a production analysis.
 #'
 #' @param plan Intact prospective protocol-v2.3 plan.
@@ -141,7 +143,8 @@ scmix_v23_truth_manifest <- function(plan = scmix_v23_calibration_plan()) {
   raw <- as.list(base::read.dcf(manifest_path)[1L, , drop = TRUE])
   if (!identical(raw[["Plan-Id"]], plan$plan_id) ||
       !identical(raw[["Protocol-Id"]], plan$protocol_id) ||
-      !identical(raw[["Status"]], "frozen_before_synthetic_outcomes") ||
+      !identical(raw[["Status"]],
+                 "frozen_before_frozen_design_synthetic_outcomes") ||
       !identical(raw[["Application-Outcomes-Used"]], "false") ||
       !identical(raw[[paste0(
         "Synthetic-Outcomes-From-Frozen-Design-Payloads-Generated-",

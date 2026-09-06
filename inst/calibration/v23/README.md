@@ -78,9 +78,11 @@ fail closed.
 
 The no-outcome truth builder writes the seven target truths for all design,
 regime, and severity cells and records the whole-file SHA-256 before the first
-synthetic choice is generated. The truth manifest is therefore a prerequisite
-for either calibration runner, not an output that can be revised after seeing
-operating characteristics.
+synthetic choice is generated from any of the three frozen design payloads.
+Tiny synthetic unit-test fixtures do not use those payloads and sit outside the
+design-matched study. The truth manifest is therefore a prerequisite for either
+calibration runner, not an output that can be revised after seeing operating
+characteristics.
 
 The frozen output registry covers unconditional and release-conditional
 coverage, unsafe false certification, natural- and standard-error-scale
