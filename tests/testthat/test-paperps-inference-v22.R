@@ -184,7 +184,8 @@ testthat::local_mocked_bindings(
 
 .v22_external_gates <- function(registry, contract) {
   local_ids <- c(sconjoint:::.scmix_v22_local_gate_ids,
-                 sconjoint:::.scmix_v22_computation_gate_ids)
+                 sconjoint:::.scmix_v22_computation_gate_ids,
+                 sconjoint:::.scmix_v22_fit_loading_gate_ids)
   out <- scmix_v22_gate_template()
   out <- out[!out$gate_id %in% local_ids, , drop = FALSE]
   out <- do.call(rbind, lapply(seq_len(nrow(out)), function(i) {
@@ -404,10 +405,9 @@ test_that("bounded targets retain four estimates and chart the raw update", {
   expect_lt(z$reported_estimate, 1)
   expect_true(all(c("full_sample_plugin", "crossfit_plugin", "raw_one_step",
                     "reported_estimate") %in% out$retained_estimates))
-  expect_gte(z$pointwise_interval[["lower"]], 0)
-  expect_lte(z$pointwise_interval[["upper"]], 1)
+  expect_true(all(is.na(z$pointwise_interval)))
   expect_true("C004" %in% z$status$warning_codes)
-  expect_identical(z$status$target_status, "conditional_available")
+  expect_identical(z$status$target_status, "withheld")
   expect_identical(z$confidence_center, z$reported_estimate)
   expect_true(z$honest_riesz$available)
   honest_gates <- z$status$gate_record[
@@ -459,6 +459,13 @@ test_that("typed computation gates cannot be supplied through external_gates", {
   expect_error(scmix_v22_gate_artifact(
     forbidden, list(spec), contract, "generic artifact"),
     "may not supply typed computation")
+  forbidden_fit <- scmix_v22_gate_record(
+    "F001", "fit_computation", "fit", "hard_fit", "pass",
+    TRUE, TRUE, "equal", "boolean", "generic synthetic artifact",
+    "Synthetic passing F001 evidence.", contract$specification_id)
+  expect_error(scmix_v22_gate_artifact(
+    forbidden_fit, list(spec), contract, "generic artifact"),
+    "may not supply typed fit/loading")
 
   N <- 30L
   influence <- matrix(seq(-1, 1, length.out = N), ncol = 1L,
@@ -476,6 +483,29 @@ test_that("typed computation gates cannot be supplied through external_gates", {
     derivative_audit = .v22_derivative(dml, list(spec)),
     calibration = .v22_calibration, external_gates = legacy_payload,
     complete_external_record = TRUE), "may not supply typed computation")
+})
+
+test_that("missing typed fit/loading evidence is explicit and fail closed", {
+  N <- 30L
+  influence <- matrix(seq(-1, 1, length.out = N), ncol = 1L,
+                      dimnames = list(sprintf("r%03d", seq_len(N)), "p"))
+  dml <- .v22_fake_dml(c(p = .5), c(p = .52), influence)
+  spec <- scmix_v22_target_spec(
+    "vote", "single", "probability", "p", "primitive:p",
+    "A rather than B", "probability", "mean")
+  out <- scmix_v22_finalize(
+    dml, list(spec),
+    full_sample_plugin = .v22_full_plugin(dml, c(p = .51)),
+    derivative_audit = .v22_derivative(dml, list(spec)),
+    calibration = .v22_calibration,
+    external_gates = .v22_external_gates(
+      list(spec), dml$v22_analysis_contract),
+    complete_external_record = TRUE)
+  expect_true(all(out$fit_loading_gates$state %in%
+                    c("not_run", "not_applicable")))
+  expect_true(all(paste0("F00", 1:6) %in%
+                    out$targets$vote$status$hard_failure_codes))
+  expect_identical(out$fit_loading_gate_artifact_fingerprint, NA_character_)
 })
 
 test_that("missing applicable typed computation evidence remains not_run", {
@@ -777,7 +807,7 @@ test_that("common multiplier banks are order and job-partition invariant", {
   expect_equal(out_ab$targets$target_a$diagnostic_family_interval,
                out_split$targets$target_a$diagnostic_family_interval)
   expect_identical(out_split$targets$target_a$status$multiplicity_status,
-                   "simultaneous_complete")
+                   "none")
 
   incomplete <- scmix_v22_finalize_collections(
     list(job_a), multiplier_bank = bank_a,
@@ -842,10 +872,8 @@ test_that("an exactly shared primitive is deduplicated without losing status", {
       list(a, b), dml$v22_analysis_contract),
     complete_external_record = TRUE)
   expect_identical(out$family_resampling$f$method, "pointwise")
-  expect_identical(out$targets$a$status$target_status,
-                   "conditional_available")
-  expect_identical(out$targets$b$status$target_status,
-                   "conditional_available")
+  expect_identical(out$targets$a$status$target_status, "withheld")
+  expect_identical(out$targets$b$status$target_status, "withheld")
 })
 
 test_that("split jobs require one signed analysis and full-fit provenance", {
@@ -934,9 +962,8 @@ test_that("diagnostic multiplier counts cannot certify final simultaneity", {
   expect_identical(out$family_resampling$family$diagnostic_method,
                    "common_draw_max_t")
   expect_false(out$family_resampling$family$final_draw_count)
-  expect_identical(out$targets$a$status$multiplicity_status,
-                   "bonferroni_incomplete")
-  expect_true(all(is.finite(out$targets$a$simultaneous_interval)))
+  expect_identical(out$targets$a$status$multiplicity_status, "none")
+  expect_true(all(is.na(out$targets$a$simultaneous_interval)))
   m3 <- out$targets$a$status$gate_record
   m3 <- m3[m3$gate_id == "M003", , drop = FALSE]
   expect_identical(m3$state, "fail")
@@ -1035,10 +1062,8 @@ test_that("a failed family primitive prevents simultaneous-complete status", {
   expect_identical(fam$method, "fixed_family_bonferroni")
   expect_identical(fam$diagnostic_method, "common_draw_max_t")
   expect_false(fam$primitive_gate_pass[["primitive:b"]])
-  expect_identical(out$targets$a$status$target_status,
-                   "conditional_available")
-  expect_identical(out$targets$a$status$multiplicity_status,
-                   "bonferroni_incomplete")
+  expect_identical(out$targets$a$status$target_status, "withheld")
+  expect_identical(out$targets$a$status$multiplicity_status, "none")
   expect_identical(out$targets$b$status$target_status, "withheld")
 })
 
@@ -1151,7 +1176,7 @@ test_that("a supplied bank never changes a single-primitive family to max-t", {
       list(spec), dml$v22_analysis_contract),
     complete_external_record = TRUE)
   expect_identical(out$family_resampling$single$method, "pointwise")
-  expect_identical(out$targets$p$status$multiplicity_status, "pointwise_only")
+  expect_identical(out$targets$p$status$multiplicity_status, "none")
 })
 
 test_that("exact derivative audit uses signed structural h and h/2 geometry", {

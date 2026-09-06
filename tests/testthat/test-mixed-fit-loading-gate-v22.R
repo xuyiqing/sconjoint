@@ -50,6 +50,11 @@
         state = "pass", pass = TRUE,
         threshold = if (k == 5L) values$kkt_cutoff else TRUE)),
         paste0("F00", 1:6))
+      f$F005$observed_by_block <- data.frame(
+        block = c("position_effect", "unpenalized_mean_reference",
+                  "centered_mean_deviation", "horizontal_loadings",
+                  "all_structural_coordinates"),
+        applicable = TRUE, projected_kkt_rms = rep(0.01, 5L))
       list(start_id = sprintf("start_%03d", s),
            seed = starts$seed[starts$fit_scope_id == scope_ids[j] &
                                 starts$start_id == sprintf("start_%03d", s)],
@@ -141,6 +146,30 @@ test_that("fit/loading artifact covers full and every outer-fold fit", {
   expect_error(scmix_v22_fit_loading_gate_artifact(
     missing, fixture$registry, fixture$contract, fixture$calibration, "missing"),
     "every outer-fold")
+})
+
+test_that("finalizer adapter binds only authenticated fit/loading rows", {
+  fixture <- .fit_gate_fixture()
+  testthat::local_mocked_bindings(
+    .scmix_v22_approved_calibration_manifest = function() fixture$approval,
+    .scmix_validate_multistart_artifacts = function(x) invisible(x),
+    .scmix_validate_loading_contract = function(x) invisible(x$loading_contract),
+    .package = "sconjoint")
+  artifact <- scmix_v22_fit_loading_gate_artifact(
+    fixture$fit, fixture$registry, fixture$contract, fixture$calibration,
+    "adapter fixture")
+  rows <- sconjoint:::.scmix_v22_fit_loading_gate_rows(
+    artifact, fixture$contract, fixture$registry, fixture$calibration)
+  expect_identical(sort(unique(rows$gate_id)),
+                   sort(c(paste0("F00", 1:6), "L001", "L002")))
+  expect_true(all(rows$state == "pass"))
+  expect_true(all(grepl(artifact$fingerprint, rows$message, fixed = TRUE) |
+                    rows$gate_id == "F005"))
+  tampered <- artifact
+  tampered$fit_scopes[[1L]]$selected_state_hash <- "tampered"
+  expect_error(sconjoint:::.scmix_v22_fit_loading_gate_rows(
+    tampered, fixture$contract, fixture$registry, fixture$calibration),
+    "tampered")
 })
 
 test_that("fit/loading artifact rejects start and live-L002 tampering", {
