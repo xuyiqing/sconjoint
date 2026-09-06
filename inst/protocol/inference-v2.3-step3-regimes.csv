@@ -1,0 +1,10 @@
+regime_index,regime_id,role,targeted_failure,perturbation,primary_diagnostic_family
+1,well_informed_interior,benign_reference,false,interior rank-one normal mixed logit with moderate signal,all
+2,probability_near_boundary,targeted_failure,true,intercept shifted toward a choice-probability boundary,constraint_and_linearization
+3,directional_variance_near_zero,targeted_failure,true,rank-one directional residual variance approaches zero,identification_regularity
+4,weak_inverse_problem,targeted_failure,true,target direction aligned with a weak response-free design direction,inverse_problem
+5,optimization_error,targeted_failure,true,controlled optimizer truncation or parameter perturbation,fit_computation
+6,integration_error,targeted_failure,true,coarse integration relative to a higher-resolution reference,numerical_integration
+7,residual_shape_misspecification,interpretation_sensitivity,false,centered nonnormal persistent heterogeneity,specification_assessment
+8,serial_dependence,interpretation_sensitivity,false,Gaussian-copula task choices have frozen AR(1) dependence while preserving every marginal logit probability,specification_assessment
+9,informative_completion,interpretation_sensitivity,false,duplicated finite-population PPS respondent selection depends on latent preferences and choice difficulty within exact Ti strata,specification_assessment

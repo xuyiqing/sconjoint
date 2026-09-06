@@ -1,0 +1,12 @@
+Design-Id: br2017
+Protocol-Id: paperps-inference-2026-09-06-v2.3
+Source-Schema: br2017-prep-2026-08-26-v1
+Source-SHA256: 32964d49653a2cba335077f3f6170e5eb0aa7a2bb1c789343b91588f6a9cb24e
+Allowed-Source-Fields: deltaX,Z_primary,respondent_id,task
+Forbidden-Output-Fields: y,choice,chosen,outcome,response,selected,vote,candidate_vote,c_win
+DeltaX-Field: deltaX
+Z-Field: Z_primary
+Respondent-Field: respondent_id
+Task-Field: task
+Position-Field: none
+Response-Free-Payload-SHA256: 07bd96248265c51b9ff65bfed9c0d27c726cfcdf8c06cbc79798150c1b4a30ef

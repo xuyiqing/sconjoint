@@ -1,0 +1,12 @@
+Design-Id: sw2022
+Protocol-Id: paperps-inference-2026-09-06-v2.3
+Source-Schema: sw2022-prep-v1
+Source-SHA256: 647b524f259d9c7850fa4b71480651c179002d80735fbe54f3065670b582a589
+Allowed-Source-Fields: deltaX,Z_primary,respondent_id,task
+Forbidden-Output-Fields: y,choice,chosen,outcome,response,selected,vote,candidate_vote,c_win
+DeltaX-Field: deltaX
+Z-Field: Z_primary
+Respondent-Field: respondent_id
+Task-Field: task
+Position-Field: none
+Response-Free-Payload-SHA256: 893f1d70b49e781964839059add8f839ab1405f7f561a90f7dacd6e891204533

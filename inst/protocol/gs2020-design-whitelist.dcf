@@ -1,0 +1,12 @@
+Design-Id: gs2020
+Protocol-Id: paperps-inference-2026-09-06-v2.3
+Source-Schema: gs2020-prep-2026-08-26-v1
+Source-SHA256: debd4a077330fb47b1c073cbc8a17e701d1c3f497fb10e188951b26110516878
+Allowed-Source-Fields: deltaX,Z_primary,respondent_id,task
+Forbidden-Output-Fields: y,choice,chosen,outcome,response,selected,vote,candidate_vote,c_win
+DeltaX-Field: deltaX
+Z-Field: Z_primary
+Respondent-Field: respondent_id
+Task-Field: task
+Position-Field: none
+Response-Free-Payload-SHA256: 207905c40c16e2cab4a741a9e71fcade6ff0654db46b6bfe8bee8b9d8b21fa91
