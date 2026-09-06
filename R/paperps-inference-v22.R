@@ -49,42 +49,74 @@
   "F007", "F008", sprintf("I%03d", 1:5))
 
 .scmix_v22_gate_dictionary <- local({
-  make <- function(ids, category, scope, severity) data.frame(
+  make <- function(ids, category, scope, severity, comparator, units) data.frame(
     gate_id = ids, category = category, scope = scope,
-    severity = severity, stringsAsFactors = FALSE)
+    severity = severity, comparator = comparator, units = units,
+    stringsAsFactors = FALSE)
   rbind(
-    make(c("P001", "P002"), "protocol_integrity", "analysis", "hard_fit"),
-    make("D001", "design_data", "target", "interpretation"),
-    make("D002", "design_data", "sample", "interpretation"),
-    make(sprintf("F%03d", 1:4), "fit_computation", "fit", "hard_fit"),
-    make("F005", "fit_computation", "fit_block", "hard_fit"),
-    make("F006", "fit_computation", "fit", "hard_fit"),
-    make("F007", "fit_computation", "nested_fit", "hard_fit"),
-    make("F008", "fit_computation", "target", "hard_target"),
+    make(c("P001", "P002"), "protocol_integrity", "analysis", "hard_fit",
+         "equal", "boolean"),
+    make("D001", "design_data", "target", "interpretation",
+         "contains", "support_cells"),
+    make("D002", "design_data", "sample", "interpretation",
+         "consistent_with", "audit_record"),
+    make(sprintf("F%03d", 1:4), "fit_computation", "fit", "hard_fit",
+         "equal", "boolean"),
+    make("F005", "fit_computation", "fit_block", "hard_fit",
+         "less_than_or_equal", "dimensionless"),
+    make("F006", "fit_computation", "fit", "hard_fit", "equal", "boolean"),
+    make("F007", "fit_computation", "nested_fit", "hard_fit",
+         "less_than_or_equal", "relative_mean_objective"),
+    make("F008", "fit_computation", "target", "hard_target",
+         "less_than_or_equal", "standard_errors"),
     make(c("I001", "I002"), "numerical_integration", "target",
-         "hard_target"),
-    make(sprintf("I%03d", 3:5), "numerical_integration", "fit", "hard_fit"),
-    make(c("L001", "L002"), "loading_contract", "fit", "hard_fit"),
+         "hard_target", "less_than_or_equal",
+         c("standard_errors", "influence_standard_deviations")),
+    make(sprintf("I%03d", 3:5), "numerical_integration", "fit", "hard_fit",
+         "less_than_or_equal",
+         c("relative_mean_objective", "relative_normalized_gradient",
+           "relative_frobenius_norm")),
+    make("L001", "loading_contract", "fit", "hard_fit", "equal", "boolean"),
+    make("L002", "loading_contract", "fit", "hard_fit",
+         "less_than_or_equal", "maximum_absolute_probability_difference"),
     make(c("N001", "N002"), "nuisance_verification", "analysis",
-         "hard_fit"),
-    make("N003", "nuisance_verification", "fit", "hard_fit"),
-    make("G001", "identification_regularity", "specification", "hard_fit"),
-    make(c("G002", "G004"), "identification_regularity", "fit",
-         "hard_fit"),
+         "hard_fit", "equal", "boolean"),
+    make("N003", "nuisance_verification", "fit", "hard_fit",
+         "equal", "boolean"),
+    make("G001", "identification_regularity", "specification", "hard_fit",
+         "equal", "boolean"),
+    make("G002", "identification_regularity", "fit", "hard_fit",
+         "equal", "boolean"),
     make("G003", "identification_regularity",
-         "target_parameter_dependencies", "hard_target"),
-    make(c("G005", "G006"), "identification_regularity", "target",
-         "hard_target"),
-    make(sprintf("R%03d", 1:5), "inverse_problem", "primitive",
-         "hard_target"),
-    make(sprintf("C%03d", 1:3), "target_constraint", "target",
-         "hard_target"),
-    make("C004", "target_constraint", "target", "warning"),
-    make("M001", "resampling_multiplicity", "primitive", "hard_target"),
+         "target_parameter_dependencies", "hard_target", "equal", "boolean"),
+    make("G004", "identification_regularity", "fit", "hard_fit",
+         "greater_than_or_equal", "standard_errors"),
+    make("G005", "identification_regularity", "target", "hard_target",
+         "greater_than_or_equal", "declared_structural_norm"),
+    make("G006", "identification_regularity", "target", "hard_target",
+         "greater_than_or_equal", "standard_errors"),
+    make("R001", "inverse_problem", "primitive", "hard_target",
+         "equal", "boolean"),
+    make("R002", "inverse_problem", "primitive", "hard_target",
+         "less_than_or_equal", "relative_gradient_norm"),
+    make("R003", "inverse_problem", "primitive", "hard_target",
+         "less_than_or_equal", "influence_standard_deviations"),
+    make("R004", "inverse_problem", "primitive", "hard_target",
+         "less_than_or_equal", "standard_errors"),
+    make("R005", "inverse_problem", "primitive", "hard_target",
+         "equal", "boolean"),
+    make(c("C001", "C002"), "target_constraint", "target",
+         "hard_target", "equal", "boolean"),
+    make("C003", "target_constraint", "target", "hard_target",
+         "less_than_or_equal", "standard_errors"),
+    make("C004", "target_constraint", "target", "warning",
+         "equal", "boolean"),
+    make("M001", "resampling_multiplicity", "primitive", "hard_target",
+         "equal", "boolean"),
     make(c("M002", "M003"), "resampling_multiplicity", "family",
-         "hard_family"),
+         "hard_family", "equal", "boolean"),
     make("S001", "specification_assessment", "application",
-         "interpretation")
+         "interpretation", "equal", "boolean")
   )
 })
 
@@ -144,33 +176,6 @@
   )
 }
 
-#' Sign an amendment to a frozen target domain
-#'
-#' Domain overrides are not accepted as ordinary caller input. This small
-#' artifact makes a protocol amendment explicit and auditable.
-#'
-#' @param target_type Frozen v2.2 target type.
-#' @param domain Replacement domain list containing `kind` and `chart`.
-#' @param reason,provenance Nonempty amendment documentation.
-#' @return A fingerprinted `scmix_v22_domain_amendment`.
-#' @export
-scmix_v22_domain_amendment <- function(target_type, domain, reason,
-                                       provenance) {
-  target_type <- .scmix_v22_text(target_type, "target_type")
-  if (!is.list(domain) || is.null(domain$kind) || is.null(domain$chart)) {
-    stop("domain must be a list containing `kind` and `chart`.",
-         call. = FALSE)
-  }
-  payload <- list(
-    protocol_id = .scmix_v22_protocol_id,
-    target_type = target_type, domain = domain,
-    reason = .scmix_v22_text(reason, "reason"),
-    provenance = .scmix_v22_text(provenance, "provenance"))
-  payload$fingerprint <- .scmix_v22_fingerprint(payload)
-  class(payload) <- c("scmix_v22_domain_amendment", "list")
-  payload
-}
-
 #' Register one protocol-v2.2 target
 #'
 #' The registry separates the supporting moment columns stored by
@@ -194,9 +199,8 @@ scmix_v22_domain_amendment <- function(target_type, domain, reason,
 #'   `"outcome_informed"`.
 #' @param uses_numerical_integration Whether this target requires the frozen
 #'   target-level numerical-integration refinement checks.
-#' @param domain Optional signed [scmix_v22_domain_amendment()]. Ordinary
-#'   caller overrides are prohibited. The frozen protocol default is used when
-#'   omitted.
+#' @param domain Must be `NULL`. The v2.2 target domains are frozen. Changing
+#'   one requires a new protocol ID rather than an in-protocol amendment.
 #' @return A validated `scmix_v22_target_spec`.
 #' @export
 scmix_v22_target_spec <- function(
@@ -287,28 +291,11 @@ scmix_v22_target_spec <- function(
   }
   parameter_dependencies <- .scmix_v22_names(
     parameter_dependencies, "parameter_dependencies")
-  domain_amendment <- NULL
-  if (is.null(domain)) {
-    domain <- .scmix_v22_default_domain(target_type)
-  } else {
-    if (!inherits(domain, "scmix_v22_domain_amendment") ||
-        !identical(domain$protocol_id, .scmix_v22_protocol_id) ||
-        !identical(domain$target_type, target_type)) {
-      stop("A nondefault domain requires a signed v2.2 domain amendment.",
-           call. = FALSE)
-    }
-    tmp <- unclass(domain); recorded <- tmp$fingerprint; tmp$fingerprint <- NULL
-    if (!identical(recorded, .scmix_v22_fingerprint(tmp))) {
-      stop("The signed domain amendment fingerprint does not validate.",
-           call. = FALSE)
-    }
-    domain_amendment <- domain
-    domain <- domain$domain
-  }
-  if (!is.list(domain) || is.null(domain$kind) || is.null(domain$chart)) {
-    stop("domain must be a list containing `kind` and `chart`.",
+  if (!is.null(domain)) {
+    stop("The v2.2 target domain is frozen; changing it requires a new protocol ID.",
          call. = FALSE)
   }
+  domain <- .scmix_v22_default_domain(target_type)
   out <- list(
     protocol_id = .scmix_v22_protocol_id,
     target_id = target_id,
@@ -318,7 +305,7 @@ scmix_v22_target_spec <- function(
     target_reference_rule = reference_rule,
     target_influence_definition = influence_definition,
     target_domain = domain,
-    target_domain_amendment = domain_amendment,
+    target_domain_amendment = NULL,
     target_family_id = family_id,
     target_parameter_dependencies = parameter_dependencies,
     supporting_names = supporting_names,
@@ -1742,6 +1729,10 @@ scmix_v22_gate_record <- function(
     gate_id, category, scope, severity, state, statistic, threshold,
     comparator, units, provenance, message, scope_id = NA_character_) {
   gate_id <- .scmix_v22_text(gate_id, "gate_id")
+  dictionary_at <- match(gate_id, .scmix_v22_gate_dictionary$gate_id)
+  if (is.na(dictionary_at)) {
+    stop("gate_id is outside the frozen v2.2 registry.", call. = FALSE)
+  }
   category <- .scmix_v22_choice(category, c(
     "protocol_integrity", "design_data", "fit_computation",
     "numerical_integration", "loading_contract", "nuisance_verification",
@@ -1755,6 +1746,14 @@ scmix_v22_gate_record <- function(
     "pass", "warn", "fail", "not_run", "not_applicable"), "state")
   comparator <- .scmix_v22_text(comparator, "comparator")
   units <- .scmix_v22_text(units, "units")
+  expected_comparator <- .scmix_v22_gate_dictionary$comparator[dictionary_at]
+  expected_units <- .scmix_v22_gate_dictionary$units[dictionary_at]
+  if (!identical(comparator, expected_comparator) ||
+      !identical(units, expected_units)) {
+    stop("Gate ", gate_id, " must use frozen comparator `",
+         expected_comparator, "` and units `", expected_units, "`.",
+         call. = FALSE)
+  }
   provenance <- .scmix_v22_text(provenance, "provenance")
   message <- .scmix_v22_text(message, "message")
   if (state == "not_applicable" && !grepl("not applicable|does not apply|q=0|single",
@@ -1772,6 +1771,29 @@ scmix_v22_gate_record <- function(
   )
 }
 
+.scmix_v22_mechanical_gate_state <- function(
+    statistic, threshold, comparator, severity) {
+  scalar <- function(x) length(x) == 1L && !is.list(x) && !is.na(x)
+  passed <- if (comparator == "equal") {
+    if (!scalar(statistic) || !scalar(threshold)) return(NA_character_)
+    identical(statistic, threshold)
+  } else if (comparator %in% c(
+    "less_than_or_equal", "greater_than_or_equal")) {
+    if (!scalar(statistic) || !scalar(threshold) ||
+        !is.numeric(statistic) || !is.numeric(threshold) ||
+        !is.finite(statistic) || !is.finite(threshold)) {
+      return(NA_character_)
+    }
+    if (comparator == "less_than_or_equal") {
+      statistic <= threshold
+    } else statistic >= threshold
+  } else {
+    return(NA_character_)
+  }
+  if (isTRUE(passed)) "pass" else if (severity == "warning") "warn" else
+    "fail"
+}
+
 #' Start a fail-closed protocol-v2.2 gate table
 #'
 #' Every frozen gate appears once in state `not_run`. The application pipeline
@@ -1786,7 +1808,7 @@ scmix_v22_gate_template <- function() {
     x <- .scmix_v22_gate_dictionary[i, ]
     scmix_v22_gate_record(
       x$gate_id, x$category, x$scope, x$severity, "not_run",
-      NA, "FROM_FROZEN_PROTOCOL", "equal", "protocol_specific",
+      NA, "FROM_FROZEN_PROTOCOL", x$comparator, x$units,
       "inst/protocol/inference-v2.2.yaml",
       paste0("Gate ", x$gate_id,
              " has not yet been populated from signed evidence."),
@@ -1829,15 +1851,31 @@ scmix_v22_validate_gate_record <- function(gates, require_all_ids = TRUE) {
   }
   dictionary_row <- match(gates$gate_id,
                           .scmix_v22_gate_dictionary$gate_id)
-  expected <- .scmix_v22_gate_dictionary[dictionary_row,
-                                          c("category", "scope", "severity"),
-                                          drop = FALSE]
+  expected <- .scmix_v22_gate_dictionary[
+    dictionary_row,
+    c("category", "scope", "severity", "comparator", "units"),
+    drop = FALSE]
   mismatch <- gates$category != expected$category |
-    gates$scope != expected$scope | gates$severity != expected$severity
+    gates$scope != expected$scope | gates$severity != expected$severity |
+    gates$comparator != expected$comparator | gates$units != expected$units
   mismatch[is.na(mismatch)] <- TRUE
   if (any(mismatch)) {
     bad <- unique(gates$gate_id[mismatch])
-    stop("Gate record changes frozen category, scope, or severity for: ",
+    stop("Gate record changes frozen category, scope, severity, comparator, or units for: ",
+         paste(bad, collapse = ", "), ".", call. = FALSE)
+  }
+  mechanically_expected <- vapply(seq_len(nrow(gates)), function(i) {
+    if (gates$state[i] == "not_applicable") return(NA_character_)
+    .scmix_v22_mechanical_gate_state(
+      gates$statistic[[i]], gates$threshold[[i]], gates$comparator[i],
+      gates$severity[i])
+  }, character(1L))
+  inconsistent_state <- !is.na(mechanically_expected) &
+    gates$state != mechanically_expected
+  if (any(inconsistent_state)) {
+    bad <- paste0(gates$gate_id[inconsistent_state], "@",
+                  gates$scope_id[inconsistent_state])
+    stop("Gate state disagrees with its frozen comparator and recorded statistic/threshold: ",
          paste(bad, collapse = ", "), ".", call. = FALSE)
   }
   if (isTRUE(require_all_ids)) {
@@ -2925,14 +2963,18 @@ scmix_v22_status <- function(
       values <- audit$metric[, id]
       if (all(is.finite(values))) max(values) else NA_real_
     } else NA_real_
-    derivative_state <- if (!derivative_exact) "not_run" else
-      .scmix_v22_gate_state(derivative_value, derivative_cut,
-                            "less_than_or_equal")
+    derivative_verified <- if (
+      derivative_exact && is.numeric(derivative_cut) &&
+      length(derivative_cut) == 1L && is.finite(derivative_cut) &&
+      is.finite(derivative_value)) {
+      derivative_value <= derivative_cut
+    } else NA
+    derivative_state <- .scmix_v22_gate_state(
+      derivative_verified, TRUE, "equal")
     rows[[length(rows) + 1L]] <- scmix_v22_gate_record(
       "R001", "inverse_problem", "primitive", "hard_target",
       derivative_state,
-      derivative_value, derivative_cut, "less_than_or_equal",
-      "relative_l2_structural_orthonormal",
+      derivative_verified, TRUE, "equal", "boolean",
       if (derivative_exact) audit$provenance else
         "frozen centered h and h/2 derivative artifact absent",
       if (derivative_exact) {

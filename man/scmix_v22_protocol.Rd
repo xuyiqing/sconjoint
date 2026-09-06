@@ -1,6 +1,5 @@
 \name{scmix_v22_protocol}
 \alias{scmix_v22_protocol}
-\alias{scmix_v22_domain_amendment}
 \alias{scmix_v22_target_spec}
 \alias{scmix_v22_analysis_contract}
 \alias{scmix_v22_calibration_hash}
@@ -21,8 +20,6 @@
 \alias{print.scmix_v22_inference}
 \title{Frozen protocol-v2.2 inference artifacts and finalization}
 \usage{
-scmix_v22_domain_amendment(target_type, domain, reason, provenance)
-
 scmix_v22_target_spec(
   target_id, family_id,
   target_type = c(
@@ -133,8 +130,9 @@ scmix_v22_finalize(
 }
 \arguments{
 \item{target_type}{A frozen target type.}
-\item{domain}{A replacement domain carried by a signed amendment.}
-\item{reason, provenance}{Nonempty audit documentation.}
+\item{domain}{Must be \code{NULL}. The v2.2 domains are frozen, and a change
+requires a new protocol ID.}
+\item{provenance}{Nonempty audit documentation.}
 \item{target_id, family_id}{Stable target and substantive-family IDs.}
 \item{supporting_names}{Source columns used to construct the target.}
 \item{primitive_registry_ids}{IDs for the minimal scalar primitives.}
@@ -186,7 +184,9 @@ fold.}
 \item{coordinate_subset, subset_rule}{A deterministic signed coordinate
 subset and its rule.}
 \item{gate_id, category, scope, severity, state, statistic, threshold,
-comparator, message}{Fields of one frozen gate record.}
+comparator, message}{Fields of one frozen gate record. Comparator and units
+must match the protocol dictionary. Mechanically evaluable states must agree
+with the recorded statistic and threshold.}
 \item{scope_id}{The explicit analysis, fit, target, primitive, family, or block
 identifier to which a gate row applies.}
 \item{gates}{A v2.2 gate data frame.}

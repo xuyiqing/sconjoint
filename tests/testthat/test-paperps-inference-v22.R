@@ -196,11 +196,16 @@ testthat::local_mocked_bindings(
       z <- row; z$scope_id <- scope_id; z
     }))
   }))
+  values <- lapply(out$comparator, function(comparator) switch(
+    comparator,
+    equal = list(statistic = TRUE, threshold = TRUE),
+    less_than_or_equal = list(statistic = 0, threshold = 1),
+    greater_than_or_equal = list(statistic = 1, threshold = 0),
+    contains = list(statistic = "supported", threshold = "supported"),
+    consistent_with = list(statistic = "consistent", threshold = "consistent")))
   out$state <- "pass"
-  out$statistic <- I(rep(list(TRUE), nrow(out)))
-  out$threshold <- I(rep(list(TRUE), nrow(out)))
-  out$comparator <- "equal"
-  out$units <- "boolean"
+  out$statistic <- I(lapply(values, `[[`, "statistic"))
+  out$threshold <- I(lapply(values, `[[`, "threshold"))
   out$provenance <- "signed synthetic test artifact"
   out$message <- paste("Synthetic passing evidence for", out$gate_id)
   applicable <- mapply(
@@ -246,16 +251,10 @@ test_that("target specs carry explicit domains and minimal primitive IDs", {
     "positive", "probability", "mean",
     domain = list(kind = "bounded", lower = -1, upper = 1,
                   chart = "scaled_logit")),
-    "requires a signed v2.2 domain amendment")
-  amendment <- scmix_v22_domain_amendment(
-    "probability",
-    list(kind = "bounded", lower = 0, upper = 1, chart = "scaled_logit"),
-    "document an otherwise identical frozen domain", "test amendment")
-  amended <- scmix_v22_target_spec(
-    "amended", "headline", "probability", "p", "primitive:p",
-    "positive", "probability", "mean", domain = amendment)
-  expect_s3_class(amended$target_domain_amendment,
-                  "scmix_v22_domain_amendment")
+    "requires a new protocol ID")
+  expect_false(exists(
+    "scmix_v22_domain_amendment", envir = asNamespace("sconjoint"),
+    inherits = FALSE))
 })
 
 test_that("heterogeneity Riesz targets are direct minimal HZ and HR primitives", {
@@ -955,11 +954,11 @@ test_that("the gate template is exhaustive and malformed records are rejected", 
   weakened <- g
   weakened$severity[weakened$gate_id == "R003"] <- "warning"
   expect_error(scmix_v22_validate_gate_record(weakened),
-               "changes frozen category, scope, or severity")
+               "changes frozen")
   relabeled <- g
   relabeled$scope[relabeled$gate_id == "F005"] <- "fit"
   expect_error(scmix_v22_validate_gate_record(relabeled),
-               "changes frozen category, scope, or severity")
+               "changes frozen")
   unscoped <- g
   unscoped$scope_id[unscoped$gate_id == "R001"] <- NA_character_
   expect_error(scmix_v22_validate_gate_record(unscoped),
@@ -1318,10 +1317,49 @@ test_that("unconditional gates and derived applicability cannot be waived", {
 
   wrong_conditional <- scmix_v22_gate_record(
     "I001", "numerical_integration", "target", "hard_target", "pass",
-    TRUE, TRUE, "equal", "boolean", "audit", "unsupported pass", "p")
+    0, 1, "less_than_or_equal", "standard_errors", "audit",
+    "unsupported pass", "p")
   expect_error(scmix_v22_gate_artifact(
     wrong_conditional, list(spec), contract, "audit"),
     "may not supply typed computation")
+})
+
+test_that("gate comparator, units, and mechanically evaluable state are frozen", {
+  valid <- scmix_v22_gate_record(
+    "F005", "fit_computation", "fit_block", "hard_fit", "pass",
+    .1, .2, "less_than_or_equal", "dimensionless", "audit",
+    "valid synthetic KKT row", "position_effect")
+  expect_silent(scmix_v22_validate_gate_record(
+    valid, require_all_ids = FALSE))
+
+  wrong_comparator <- valid
+  wrong_comparator$comparator <- "greater_than_or_equal"
+  expect_error(scmix_v22_validate_gate_record(
+    wrong_comparator, require_all_ids = FALSE), "comparator, or units")
+  wrong_units <- valid
+  wrong_units$units <- "boolean"
+  expect_error(scmix_v22_validate_gate_record(
+    wrong_units, require_all_ids = FALSE), "comparator, or units")
+
+  inconsistent <- valid
+  inconsistent$statistic[[1L]] <- .3
+  expect_error(scmix_v22_validate_gate_record(
+    inconsistent, require_all_ids = FALSE), "state disagrees")
+  silently_skipped <- valid
+  silently_skipped$state <- "not_run"
+  expect_error(scmix_v22_validate_gate_record(
+    silently_skipped, require_all_ids = FALSE), "state disagrees")
+
+  warning_row <- scmix_v22_gate_record(
+    "C004", "target_constraint", "target", "warning", "warn",
+    TRUE, FALSE, "equal", "boolean", "audit",
+    "raw point outside support", "p")
+  expect_silent(scmix_v22_validate_gate_record(
+    warning_row, require_all_ids = FALSE))
+  expect_error(scmix_v22_gate_record(
+    "F005", "fit_computation", "fit_block", "hard_fit", "pass",
+    TRUE, TRUE, "equal", "boolean", "audit", "wrong schema",
+    "position_effect"), "frozen comparator")
 })
 
 test_that("calibration cannot certify without the package-shipped Step-3 manifest", {
