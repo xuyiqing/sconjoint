@@ -1,0 +1,14 @@
+Approval-Id: br2017-paperps-rapid-2026-09-07-v2.6-v1-author-approval
+Protocol-Id: br2017-paperps-rapid-2026-09-07-v2.6-v1
+Method-Protocol-Id: paperps-inference-2026-09-07-v2.6
+Approved-On: 2026-09-07
+Status: approved_for_ballard_rosa_q0_q1_q2_rapid_rerun
+Author-Authorization: explicit_user_message_ok_if_this_means_we_can_now_rerun_Ballard_Rosa_using_this_new_fast_pipeline_for_q_0_1_2_then_lets_go_ahead_and_do_that
+Frozen-Implementation-Commit: 040986c
+Application-Outcomes-Before-Approval: 0
+Source-Artifacts: read_only
+External-Push: prohibited
+Inference-Qualification: q1_draft_conditional_pending_confirmatory_validation_q0_q2_predictive_and_plugin_sensitivities
+Protocol-Test: 68_passed
+Helper-Test: 13_passed
+Method-Protocol-Test: 72_passed
