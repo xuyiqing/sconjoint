@@ -1,0 +1,14 @@
+stage_index,stage_id,depends_on,outcome_generating,immutable_output
+1,binding,v27_q1_assembly_and_preflight,false,binding.rds
+2,basis,binding,false,basis.rds
+3,average_preferences,basis,true,families/average_preferences.rds
+4,progressivity_means,basis,true,families/progressivity_means.rds
+5,structural_ame,basis,false,families/structural_ame.rds
+6,choice_probabilities,basis,true,families/choice_probabilities.rds
+7,subgroup_choice_probabilities,basis,true,families/subgroup_choice_probabilities.rds
+8,directional_shares,basis,true,families/directional_shares.rds
+9,compensating_benefit_shares,basis,true,families/compensating_benefit_shares.rds
+10,directional_heterogeneity_progressivity,basis,true,families/directional_heterogeneity_progressivity.rds
+11,directional_heterogeneity_coordinates,basis,true,families/directional_heterogeneity_coordinates.rds
+12,mean_tradeoff_mrs,basis,true,families/mean_tradeoff_mrs.rds
+13,export,all_family_checkpoints,false,export.rds

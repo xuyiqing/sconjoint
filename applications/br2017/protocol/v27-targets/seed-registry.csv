@@ -1,0 +1,11 @@
+family_index,family_id,dml_seed,multiplier_seed,multiplier_draws
+1,average_preferences,202609310,202619310,9999
+2,progressivity_means,202609320,202619320,9999
+3,structural_ame,202609330,202619330,9999
+4,choice_probabilities,202609340,202619340,9999
+5,subgroup_choice_probabilities,202609350,202619350,9999
+6,directional_shares,202609360,202619360,9999
+7,compensating_benefit_shares,202609370,202619370,9999
+8,directional_heterogeneity_progressivity,202609380,202619380,9999
+9,directional_heterogeneity_coordinates,202609390,202619390,9999
+10,mean_tradeoff_mrs,202609400,202619400,9999
