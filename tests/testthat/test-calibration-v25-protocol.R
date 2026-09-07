@@ -59,6 +59,18 @@ test_that("v2.5 is a new outcome-locked prospective protocol", {
                    "inference-v2.5-family-approval.dcf")
   expect_identical(freeze[["Required-Family-Approval-File"]],
                    plan[["Family-Approval-File"]])
+  expect_identical(plan[["Canonical-State-Directory"]], "inst/protocol")
+  expect_identical(
+    plan[["Canonical-Run-Directory"]],
+    "runs/v25/step5c_integrity_and_evidence_2026-09-07")
+  expect_identical(settings[["Canonical-State-Directory"]],
+                   plan[["Canonical-State-Directory"]])
+  expect_identical(settings[["Canonical-Run-Directory"]],
+                   plan[["Canonical-Run-Directory"]])
+  expect_identical(freeze[["Required-Canonical-State-Directory"]],
+                   plan[["Canonical-State-Directory"]])
+  expect_identical(freeze[["Required-Canonical-Run-Directory"]],
+                   plan[["Canonical-Run-Directory"]])
 
   # These are historical facts in the signed freeze.  Later state files may
   # exist without changing what was absent when the protocol was frozen.

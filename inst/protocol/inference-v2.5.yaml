@@ -7,6 +7,9 @@ prior_protocol: paperps-inference-2026-09-06-v2.4_stopped_on_runtime
 threshold_selection: none
 calibration_stream: none
 application_outcomes_permitted: false
+canonical_state_directory: inst/protocol
+canonical_run_directory: runs/v25/step5c_integrity_and_evidence_2026-09-07
+canonical_path_rule: single_source_root_relative_state_and_run_directories_no_alternates
 outcome_count: 0
 outcome_count_definition: completed_or_persisted_v2.5_synthetic_outcomes
 carried_forward_exactly:

@@ -4,6 +4,8 @@ Plan-Id: paperps-lean-validation-2026-09-07-v2.5-v1
 Status: prospective_evaluator_settings_frozen_outcomes_locked_implementation_absent
 Evaluator-Source-Prefix: calibration-v25
 Evaluator-Function-Prefix: scmix_v25
+Canonical-State-Directory: inst/protocol
+Canonical-Run-Directory: runs/v25/step5c_integrity_and_evidence_2026-09-07
 Fit-Rank: 1
 Mean-Candidates: constant,linear
 Deviation-Penalty: 0.01

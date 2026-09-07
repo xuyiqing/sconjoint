@@ -7,6 +7,9 @@ Carried-Forward-From-V2.4: exact_response_free_templates_selection_salts_subset_
 Threshold-Selection: none
 Calibration-Stream: none
 Application-Outcomes-Permitted: false
+Canonical-State-Directory: inst/protocol
+Canonical-Run-Directory: runs/v25/step5c_integrity_and_evidence_2026-09-07
+Canonical-Path-Rule: pilot_and_evidence_state_and_artifacts_must_use_these_single_source_root_relative_directories_no_alternate_state_or_run_directory_is_permitted
 Respondents-Per-Template: 400
 Subset-Algorithm: exact_Ti_x_first_varying_Z_above_mean_min1_hamilton_then_salted_hash_v1
 Integrity-Pilot-Reps-Per-Cell: 2

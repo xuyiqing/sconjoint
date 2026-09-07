@@ -128,6 +128,14 @@ For cell index `c` and replication `r`, the seed is
 `master + (c - 1) * 1000000 + r`. The resampling, latent, choice, and
 multiplier substreams use offsets 0, 200000, 400000, and 600000.
 
+All production state records have one frozen location relative to the approved
+source root, `inst/protocol`. The pilot and all five evidence batches likewise
+share one frozen run directory,
+`runs/v25/step5c_integrity_and_evidence_2026-09-07`. No alternate state or run
+directory is permitted. This makes the first valid pilot ledger unique and
+prevents selecting among otherwise valid pilot waves created in different
+directories.
+
 ## 6. Pilot firewall and runtime decision
 
 The pilot is excluded from evidence. Public inspection is limited to execution
