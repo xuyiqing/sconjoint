@@ -1,0 +1,7 @@
+scope,container,selector,state_hash,training_ids_sha256,n_respondents,mean_family,hidden,weight_decay,source_analysis_signature,timing_sentinel
+full,v21_primary_full,refit,scmix-state-v1-474dc90241fd17dd,2f4a911abe949a2c05abf44aa3777de83171a8bbf8e895fc0fe1cbd29c51e6d2,2000,relu,8,0.1,scmix-v1-37fc4e326511c974,false
+outer_1,v21_primary_nested,tuning_1_refit,scmix-state-v1-18b9de872ad20a05,f093632426c470d55b633d878be3afe08025d44c4eefb7047256e2f6965d1fb3,1600,relu,4,0.1,scmix-v1-2f3d3728684653a4,false
+outer_2,v21_primary_nested,tuning_2_refit,scmix-state-v1-1db56b99011de3cc,08bdb13e9a884d39e8579aa3bef9c7e8f94fdd7ceb99682f9aef701fdffe5c4e,1600,relu,8,0.1,scmix-v1-676ae89c5ded94a6,true
+outer_3,v21_primary_nested,tuning_3_refit,scmix-state-v1-0142daf02da59cb8,cc795bdf38e72a07bd9a395bc559dabb01549bf53e0dfde891e7d74c211bdb1b,1600,relu,8,0.1,scmix-v1-4415054a187e6852,false
+outer_4,v21_primary_nested,tuning_4_refit,scmix-state-v1-614c6f1f321bbe3c,5b69831ec2ecbb9551ac885d956320c67467b754ba3095192f02b9c5e0205f44,1600,relu,8,0.1,scmix-v1-4a7a65556c0db256,false
+outer_5,v21_primary_nested,tuning_5_refit,scmix-state-v1-1ef4786f6fb46a64,2552e5733ad336f6b35829f3fdd996e6913d9bbea77e19de6109d19f89564ae2,1600,relu,8,0.1,scmix-v1-18abc99f260bd95c,false
