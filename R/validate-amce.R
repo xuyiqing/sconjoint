@@ -1,17 +1,16 @@
-## sc_validate_amce(): pooled (and optionally subgroup) homogeneous-logit
-## comparison against the DML theta_hat.  Mirrors paper sectionAppendix D /
-## prototype code/70_validation_amce.R.
+## Legacy pooled (and optionally subgroup) homogeneous-logit coefficient
+## comparison against theta_hat. This is not an AMCE comparison.
 
-#' Validate the structural model against reduced-form AMCE benchmarks
+#' Legacy descriptive comparison with homogeneous-logit coefficients
 #'
 #' Compares the structural DML point estimates `coef(object)` against
 #' the coefficients of a *pooled homogeneous logit* fit on the same
-#' (deltaX, y) -- i.e. an ordinary `glm(family = binomial)` that
-#' assumes no heterogeneity in \eqn{\beta}.  Under correct logit
-#' specification, \eqn{\theta_k = \mathbb{E}[\beta_k(Z)]} equals the
-#' pooled coefficient on attribute \eqn{k}.  In practice the paper
-#' shows \eqn{r \approx 0.998} across 28 attribute levels on its main
-#' application (Bansak, Hainmueller & Hangartner 2023).
+#' (deltaX, y). Despite its legacy name, this function does not validate an
+#' AMCE. Mean latent utility coefficients and pooled-logit coefficients are
+#' generally different under preference heterogeneity because the logit link is
+#' nonlinear. The paper's specification assessment instead compares a
+#' probability-scale structural AME with a randomized-design AMCE under the
+#' same contrast, orientation, and standardization rule.
 #'
 #' Optionally, supply `subgroup` (a column name in the original data,
 #' or a vector of values) to repeat the comparison within each level
@@ -66,6 +65,14 @@
 #' @export
 sc_validate_amce <- function(object, subgroup = NULL) {
   stopifnot(inherits(object, "sc_fit"))
+  warning(
+    paste(
+      "`sc_validate_amce()` is deprecated because it is a coefficient",
+      "comparison, not an AMCE validation. Use a matched probability-scale",
+      "structural AME and randomized-design AMCE for specification assessment."
+    ),
+    call. = FALSE
+  )
   if (is.null(object$deltaX) || is.null(object$y)) {
     stop("sc_validate_amce(): object must have `deltaX` and `y` stored.")
   }
@@ -105,7 +112,7 @@ sc_validate_amce <- function(object, subgroup = NULL) {
   )
 
   out <- .sc_quantity(
-    name     = "validate_amce",
+    name     = "legacy_coefficient_comparison",
     estimate = estimate,
     se       = NA_real_,
     details  = list(
@@ -113,7 +120,8 @@ sc_validate_amce <- function(object, subgroup = NULL) {
       n_respondents      = length(unique(object$respondent_id)),
       n_attributes       = length(attr_names),
       pooled_correlation = pooled_cor,
-      stage2_method      = object$stage2_method
+      stage2_method      = object$stage2_method,
+      interpretation_status = "descriptive_only_not_amce_validation"
     ),
     call = match.call()
   )
@@ -201,7 +209,8 @@ sc_validate_amce <- function(object, subgroup = NULL) {
 #' @return `x`, invisibly.
 #' @export
 print.sc_quantity_validate_amce <- function(x, digits = 3L, ...) {
-  cat("sc_validate_amce -- pooled and (optionally) subgroup comparison\n")
+  cat("sc_validate_amce -- deprecated descriptive coefficient comparison\n")
+  cat("This output is not an AMCE validation.\n")
   cat(sprintf("Stage 2: %s\n",
               if (is.null(x$details$stage2_method)) "(unknown)"
               else x$details$stage2_method))

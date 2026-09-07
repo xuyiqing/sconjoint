@@ -77,7 +77,7 @@ scmix_profile_sequence_likelihood(grid, loglik, respondent_id = NULL,
   direction = "structural direction", nuisance_reoptimized = FALSE,
   rank_boundary = FALSE, sieve_tuning_fixed = FALSE, provenance = NULL)
 
-scmix_discrepancy_multiplier(discrepancies, R = 999L, level = 0.95,
+scmix_discrepancy_multiplier(discrepancies, R = 9999L, level = 0.95,
   seed = NULL, multipliers = NULL)
 
 scmix_structural_sensitivity(results = list(), q_values = NULL,

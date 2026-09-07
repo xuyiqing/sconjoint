@@ -55,13 +55,17 @@
   stats::setNames(as.numeric(x), ids)
 }
 
-#' Protocol-weighted design benchmark for an on-support ordered contrast
+#' Protocol-weighted design benchmark for an on-support contrast cell
 #'
 #' Implements the respondent Horvitz--Thompson contribution in the paper.
 #' Respondents with no realized matching task are retained with a zero
 #' numerator. `protocol_probability` is the known conditional expectation of
 #' the respondent's matching-task fraction, including all assignment and
-#' completion strata used by the protocol.
+#' completion strata used by the protocol. The estimand gives respondents equal
+#' weight and averages task positions and full profile pairs within the coded
+#' difference cell according to the fielded protocol. It is design based and
+#' need not equal the structural ordered-contrast probability unless the
+#' structural choice model is correct.
 #'
 #' @param deltaX Task-row contrast matrix.
 #' @param y Task-row binary choices for alternative 1.
@@ -114,11 +118,16 @@ scmix_design_benchmark <- function(deltaX, y, respondent_id, contrast,
   out <- list(estimate = estimate, se = se, contrast = d,
               respondent = respondent, n_respondents = N,
               n_matching_tasks = sum(hit), on_support = TRUE,
-              estimand = "on-support ordered-contrast choice probability",
+              estimand = paste(
+                "respondent-standardized protocol-weighted on-support",
+                "difference-cell choice probability"
+              ),
               disclaimer = paste(
                 "This is respondent-superpopulation inference.",
                 "Its validity depends on the supplied protocol probabilities",
-                "and the randomized-assignment/noninformative-completion conditions."
+                "and the randomized-assignment/noninformative-completion conditions.",
+                "It need not equal a structural ordered-contrast probability",
+                "unless the structural choice model is correct."
               ))
   class(out) <- c("scmix_design_benchmark", "list")
   out
@@ -128,6 +137,10 @@ scmix_design_benchmark <- function(deltaX, y, respondent_id, contrast,
 #'
 #' Combines separately estimated benchmarks for `d` and `-d` as
 #' `0.5 * {V(d) + 1 - V(-d)}` while retaining their respondent covariance.
+#' The helper verifies the sign reversal of the coded contrasts. The caller
+#' must separately verify and record matching full-profile composition and
+#' protocol weights before interpreting the result as reversal of the same two
+#' profiles.
 #'
 #' @param positive,negative Benchmark objects for `d` and `-d`.
 #' @return An internal `scmix_design_benchmark` object.
@@ -169,7 +182,12 @@ scmix_design_benchmark_neutral <- function(positive, negative) {
                 negative$n_matching_tasks,
               on_support = TRUE,
               estimand = "position-neutral on-support choice probability",
-              disclaimer = positive$disclaimer)
+              reversal_symmetry_verified = FALSE,
+              disclaimer = paste(
+                positive$disclaimer,
+                "The helper verifies only d versus -d; full-profile",
+                "composition and weight symmetry require a separate audit."
+              ))
   class(out) <- c("scmix_design_benchmark", "list")
   out
 }
@@ -1195,14 +1213,16 @@ scmix_profile_sequence_likelihood <- function(grid, loglik,
 #' respondent influence contributions.
 #'
 #' @param discrepancies One discrepancy object or a named list of them.
-#' @param R Number of multiplier replications.
+#' @param R Number of multiplier replications. The paper's final convention is
+#'   exactly 9,999.
 #' @param level Simultaneous confidence level.
 #' @param seed Optional seed.
-#' @param multipliers Optional precomputed `R`-by-`N` mean-zero multiplier
-#'   matrix; useful for deterministic tests.
+#' @param multipliers Optional precomputed `R`-by-`N` multiplier matrix, useful
+#'   for deterministic tests. A caller-supplied matrix is not itself evidence
+#'   that the paper's standard-normal generation rule was followed.
 #' @return Multiplier draws, simultaneous critical value, and intervals.
 #' @export
-scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
+scmix_discrepancy_multiplier <- function(discrepancies, R = 9999L,
                                          level = 0.95, seed = NULL,
                                          multipliers = NULL) {
   if (inherits(discrepancies, "scmix_structural_design_discrepancy")) {
@@ -1240,8 +1260,9 @@ scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
     stop("`level` must lie strictly between zero and one.", call. = FALSE)
   }
   if (is.null(multipliers)) {
-    if (!is.numeric(R) || length(R) != 1L || R < 100L) {
-      stop("`R` must be at least 100.", call. = FALSE)
+    if (!is.numeric(R) || length(R) != 1L || R != 9999L) {
+      stop("The final discrepancy multiplier uses exactly 9,999 draws.",
+           call. = FALSE)
     }
     if (!is.null(seed)) {
       old <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
@@ -1254,14 +1275,16 @@ scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
       }, add = TRUE)
       set.seed(seed)
     }
-    multipliers <- matrix(sample(c(-1, 1), as.integer(R) * N, replace = TRUE),
+    multipliers <- matrix(stats::rnorm(as.integer(R) * N),
                           nrow = as.integer(R), ncol = N)
+    multiplier_source <- "generated_independent_standard_normal"
   } else {
     multipliers <- as.matrix(multipliers)
     if (!is.numeric(multipliers) || ncol(multipliers) != N ||
-        any(!is.finite(multipliers)) || nrow(multipliers) < 2L) {
+        any(!is.finite(multipliers)) || nrow(multipliers) != 9999L) {
       stop("`multipliers` must be a finite R by N matrix.", call. = FALSE)
     }
+    multiplier_source <- "caller_supplied_not_distribution_verified"
   }
   G <- multipliers %*% IF / sqrt(N)
   colnames(G) <- names(discrepancies)
@@ -1270,7 +1293,7 @@ scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
          "variance.", call. = FALSE)
   }
   max_t <- apply(abs(sweep(G, 2L, root_sd, `/`)), 1L, max)
-  critical <- unname(stats::quantile(max_t, probs = level, type = 8))
+  critical <- unname(stats::quantile(max_t, probs = level, type = 1))
   intervals <- data.frame(
     contrast = names(discrepancies), estimate = estimates, se = se,
     lower = estimates - critical * se,
@@ -1280,6 +1303,10 @@ scmix_discrepancy_multiplier <- function(discrepancies, R = 999L,
   out <- list(intervals = intervals, critical_value = critical,
               level = level, draws = G, multipliers = multipliers,
               respondent_id = ids,
+              multiplier_source = multiplier_source,
+              quantile_type = 1L,
+              protocol_conformant_generation = identical(
+                multiplier_source, "generated_independent_standard_normal"),
               unit = "one common multiplier per respondent across contrasts")
   class(out) <- c("scmix_discrepancy_multiplier", "list")
   out

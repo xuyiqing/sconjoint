@@ -125,9 +125,12 @@
   manifest_path <- .scmix_v24_freeze_manifest_file()
   manifest <- as.list(read.dcf(manifest_path)[1L, , drop = TRUE])
   if (!identical(manifest[["Manifest-Id"]],
-                 "paperps-v2.4-freeze-2026-09-06-v1") ||
+                 "paperps-v2.4-freeze-2026-09-06-v2") ||
       !identical(manifest[["Protocol-Id"]], .scmix_v24_protocol_id) ||
       !identical(manifest[["Plan-Id"]], .scmix_v24_plan_id) ||
+      !identical(manifest[["Pre-Outcome-Amended-On"]], "2026-09-07") ||
+      !grepl("directional_heterogeneity_primitive_metadata",
+             manifest[["Pre-Outcome-Amendment"]], fixed = TRUE) ||
       !identical(manifest[["Outcome-Count"]], "0") ||
       !identical(manifest[["Approval-Status"]], "absent")) {
     stop("The v2.4 freeze manifest has an invalid identity or status.",
@@ -329,6 +332,9 @@ scmix_v24_validation_plan <- function() {
                  "prospective_validation_design_frozen_outcomes_locked") ||
       !identical(raw[["Threshold-Selection"]], "none") ||
       !identical(raw[["Calibration-Stream"]], "none") ||
+      !identical(raw[["Pre-Outcome-Amended-On"]], "2026-09-07") ||
+      !grepl("directional_heterogeneity_primitive_metadata",
+             raw[["Pre-Outcome-Amendment"]], fixed = TRUE) ||
       .scmix_v24_bool(raw[["Application-Outcomes-Permitted"]],
                        "Application-Outcomes-Permitted")) {
     stop("The installed v2.4 plan is not the frozen outcome-locked plan.",
@@ -416,7 +422,11 @@ scmix_v24_validation_plan <- function() {
            names(tables$targets)) ||
       any(!nzchar(tables$targets$target_definition)) ||
       any(!grepl("frozen_original_template",
-                 tables$targets$reference_weight_rule, fixed = TRUE))) {
+                 tables$targets$reference_weight_rule, fixed = TRUE)) ||
+      !identical(tables$targets$primitive_rule[
+        tables$targets$family_id == "directional_heterogeneity"],
+        paste0("joint_H_Z_and_H_R_with_directional_mean_and_second_moment_",
+               "retained_as_supporting_audit_columns"))) {
     stop("The frozen v2.4 target-family registry changed.", call. = FALSE)
   }
   if (!identical(

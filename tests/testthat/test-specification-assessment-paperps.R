@@ -13,6 +13,10 @@ test_that("protocol benchmark retains respondents with no realized match", {
   expect_equal(out$respondent$U, c(1, 0))
   expect_equal(out$se, 0.5)
   expect_equal(out$n_respondents, 2L)
+  expect_match(out$estimand,
+               "respondent-standardized protocol-weighted")
+  expect_match(out$disclaimer,
+               "need not equal a structural ordered-contrast probability")
 })
 
 test_that("position-neutral benchmark preserves respondent covariance", {
@@ -29,6 +33,8 @@ test_that("position-neutral benchmark preserves respondent covariance", {
   expect_equal(out$estimate,
                0.5 * (pos$estimate + 1 - neg$estimate), tolerance = 1e-12)
   expect_equal(out$se, sd(out$respondent$U) / sqrt(2), tolerance = 1e-12)
+  expect_false(out$reversal_symmetry_verified)
+  expect_match(out$disclaimer, "full-profile composition")
   wrong <- neg
   wrong$contrast <- -2
   expect_error(
@@ -338,13 +344,29 @@ test_that("common multipliers preserve respondent and contrast dependence", {
     d1 = make_discrepancy(0.1, c(a = -1, b = 1, c = -2, d = 2)),
     d2 = make_discrepancy(-0.2, c(a = -2, b = 2, c = -4, d = 4))
   )
-  zeta <- rbind(c(1, -1, 1, -1), c(-1, 1, -1, 1),
-                c(1, 1, -1, -1), c(-1, -1, 1, 1))
+  zeta <- matrix(stats::rnorm(9999L * 4L), nrow = 9999L, ncol = 4L)
   out <- sconjoint:::scmix_discrepancy_multiplier(ds, multipliers = zeta)
   expect_equal(out$draws[, "d2"], 2 * out$draws[, "d1"], tolerance = 1e-12)
   expect_identical(out$unit,
                    "one common multiplier per respondent across contrasts")
+  expect_identical(out$quantile_type, 1L)
+  expect_false(out$protocol_conformant_generation)
   expect_equal(nrow(out$intervals), 2L)
+})
+
+test_that("discrepancy multiplier generates the frozen final convention", {
+  make_discrepancy <- function(estimate, influence) {
+    x <- list(estimate = estimate, influence = influence)
+    class(x) <- c("scmix_structural_design_discrepancy", "list")
+    x
+  }
+  d <- make_discrepancy(0.1, c(a = -1, b = 1, c = -2, d = 2))
+  out <- sconjoint:::scmix_discrepancy_multiplier(d, seed = 1701)
+  expect_equal(nrow(out$multipliers), 9999L)
+  expect_identical(out$multiplier_source,
+                   "generated_independent_standard_normal")
+  expect_true(out$protocol_conformant_generation)
+  expect_identical(out$quantile_type, 1L)
 })
 
 test_that("sensitivity collector exposes every omission and claims no identification", {

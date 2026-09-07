@@ -5,6 +5,13 @@ fixed rules. It has no calibration stream. Its two integrity replications per
 cell are excluded from evidence. Its 100 evidence replications per cell remain
 locked in this commit.
 
+The September 7 pre-outcome amendment corrects one target-registry label. For
+directional heterogeneity, the inferential primitives are `H_Z` and `H_R`.
+The directional mean and second moment are retained as supporting audit
+columns used to construct `H_Z`; they are not extra familywise multiplier
+coordinates. This matches the paper and the existing minimal-primitive code.
+No pilot or evidence outcome existed when the label and hashes were corrected.
+
 The three 400-respondent templates are deterministic response-free subsets of
 the immutable v2.3 design wrappers. The v2.4 manifest pins each source wrapper,
 selected respondent vector, and derived response-free payload. No observed

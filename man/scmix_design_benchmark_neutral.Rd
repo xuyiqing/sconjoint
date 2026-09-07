@@ -15,4 +15,7 @@ An internal \code{scmix_design_benchmark} object.
 \description{
 Combines separately estimated benchmarks for \code{d} and \code{-d} as
 \code{0.5 * {V(d) + 1 - V(-d)}} while retaining their respondent covariance.
+The helper verifies the sign reversal of the coded contrasts. The caller must
+separately verify and record matching full-profile composition and protocol
+weights before interpreting the result as reversal of the same two profiles.
 }

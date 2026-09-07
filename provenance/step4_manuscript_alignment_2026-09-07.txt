@@ -1,0 +1,95 @@
+Step 4 manuscript and implementation-alignment record
+Date: 2026-09-07
+Branch: codex/step4-manuscript-alignment
+Base commit: 66726994f7ae16e17cee65d74b97f23ead6fcb25
+Protocol: paperps-inference-2026-09-06-v2.4
+
+Scope
+-----
+Step 4 reconciles Sections 2--4 and the mathematical appendix with the
+prospectively frozen version 2.4 design and with the code contracts that are
+already implemented. It does not run applications, generate frozen-design
+outcomes, select thresholds, or claim that version 2.4 has been validated.
+
+Identification correction
+-------------------------
+The paper now distinguishes the design-based, equal-respondent,
+protocol-weighted choice probability for a supported coded-difference cell,
+V_des(d), from the structural ordered-contrast probability V(d). The design
+target is identified by potential choices, consistency, the known assignment
+law, and overlap. It does not require a utility model. Under the paper's
+additive conditional-logit model and completion condition, V_des(d)=V(d).
+That equality is the null behind the structural--design assessment.
+
+Position-neutral interpretation additionally requires matching full-profile
+composition and protocol weights across the two orientations. A d versus -d
+code check alone is insufficient. The benchmark helper and documentation now
+make this limitation explicit.
+
+Inference and protocol alignment
+--------------------------------
+- The fixed 1.96 pointwise eligibility screen is distinct from the subsequent
+  common-multiplier familywise confidence set.
+- The minimal primitive vector for directional heterogeneity is (H_Z,H_R).
+  The directional mean and second moment are retained as supporting audit
+  columns.
+- The manuscript enumerates the twelve validation targets and the separate
+  active-q1-eigenvalue fit primitive. It also records the frozen template
+  allocation, subgroup rule, principal directions, 257-node truth integration,
+  and completed-replication denominator for false-release rates.
+- Version 2.4 is described prospectively. Its evaluator is not yet hash-bound,
+  and no validation result is claimed.
+- The restricted q=1 mean model remains conditional on a prespecified,
+  implemented mask. Comparable q=0, q=1, and q=2 fits remain a requirement,
+  not a completed result.
+
+Pre-outcome registry amendment
+------------------------------
+The initial version 2.4 target registry used incorrect metadata for the
+directional-heterogeneity primitive vector. Before any pilot or evidence
+outcome was generated, that metadata was corrected to (H_Z,H_R), matching the
+paper and existing minimal-primitive implementation. The freeze manifest was
+advanced from version 1 to version 2 and records the amendment. Target
+definitions, target truths, decision rules, and the outcome lock did not
+change. The original record remains in Git history.
+
+Specification-assessment code corrections
+-----------------------------------------
+- sc_validate_amce() is deprecated as AMCE validation. It compares mean latent
+  utility coefficients with pooled homogeneous-logit coefficients, which need
+  not agree under mixed-logit heterogeneity. The output is labeled descriptive.
+- A valid Section 4 comparison requires a probability-scale structural AME and
+  a randomized respondent-clustered AMCE for the same target.
+- The discrepancy multiplier now uses exactly 9,999 independent standard-normal
+  respondent multipliers and the frozen type-1 empirical quantile. Supplied
+  multiplier matrices are marked as distribution-unverified.
+
+Verification
+------------
+- The version 2.4 checksum manifest passes in full.
+- The calibration source and installed-source mirror are byte-identical.
+- All 75 R source files parse.
+- All 113 Rd files pass tools::checkRd().
+- The focused version 2.4, specification-assessment, and legacy-AMCE tests pass.
+- A clean source package built under R 4.5.3. R CMD check completed its
+  installed-package suite with 516 passing expectations, no failure, and two
+  pre-existing documentation warnings about duplicate aliases and legacy Rd
+  usage.
+- The broader source-tree run covered 80 files, 433 tests, and 2,383
+  expectations. It passed 2,366. Its ten failed expectations are the previously
+  recorded bit-level interaction golden comparisons at about 1e-9 to 1e-8.
+  Its three errors are the two previously recorded sandbox PSOCK-startup errors
+  and the absent archived Saha--Weeks pilot manifest. None involves a Step 4
+  file or test. The four skipped tests require unavailable optional fixtures or
+  software.
+- paperps0903.tex compiles to 60 pages and running_method_code_changes.tex
+  compiles to 12 pages. Every rendered page was visually inspected. No clipping,
+  overlap, or broken mathematical layout was found.
+
+Remaining work
+--------------
+The version 2.4 evaluator and finalizer, restricted-q1 masks, shared q0/q1/q2
+analysis contract, final application injectivity certificates, matched
+probability-scale AME--AMCE comparisons, orientation-symmetry audits, and the
+full Section 4 batteries remain for later steps. Step 4 changes no application
+result and makes no external push.

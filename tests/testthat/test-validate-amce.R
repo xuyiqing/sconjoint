@@ -13,7 +13,7 @@ test_that("sc_validate_amce returns a structured result on sw2022 subset", {
                data = d,
                respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 40L, seed = 1)
-  v <- sc_validate_amce(fit)
+  v <- suppressWarnings(sc_validate_amce(fit))
   expect_s3_class(v, "sc_quantity_validate_amce")
   expect_s3_class(v, "sc_quantity")
   expect_true(is.data.frame(v$estimate$pooled))
@@ -22,6 +22,8 @@ test_that("sc_validate_amce returns a structured result on sw2022 subset", {
                     "diff", "abs_diff") %in% names(v$estimate$pooled)))
   expect_equal(nrow(v$estimate$pooled), length(fit$theta))
   expect_true(is.numeric(v$estimate$pooled_correlation))
+  expect_identical(v$details$interpretation_status,
+                   "descriptive_only_not_amce_validation")
   ## Note: on this 60-respondent / K=2 / 40-epoch toy fit, the DML
   ## inverse-Lambda step is poorly conditioned and theta can blow up,
   ## so the pooled correlation is not a stable smoke-test target.
@@ -43,7 +45,7 @@ test_that("sc_validate_amce DML column is exactly object$theta", {
                data = d,
                respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 40L, seed = 2)
-  v <- sc_validate_amce(fit)
+  v <- suppressWarnings(sc_validate_amce(fit))
   expect_equal(unname(v$estimate$pooled$dml_theta), unname(as.numeric(fit$theta)))
 })
 
@@ -59,7 +61,7 @@ test_that("sc_validate_amce print method runs without error", {
                data = d,
                respondent = "respondent", task = "task", profile = "profile",
                K = 2L, n_epochs = 40L, seed = 3)
-  v <- sc_validate_amce(fit)
+  v <- suppressWarnings(sc_validate_amce(fit))
   expect_output(print(v), "sc_validate_amce")
   expect_output(print(v), "Pooled correlation")
 })
@@ -69,5 +71,5 @@ test_that("sc_validate_amce errors informatively if deltaX/y are missing", {
                    attr_names = "a", respondent_id = 1:3,
                    deltaX = NULL, y = NULL)
   class(fake_fit) <- c("sc_fit", "list")
-  expect_error(sc_validate_amce(fake_fit), "deltaX")
+  expect_error(suppressWarnings(sc_validate_amce(fake_fit)), "deltaX")
 })

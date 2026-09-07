@@ -9,6 +9,15 @@
 **Status:** validation design, truths, and fixed rules frozen; evaluator and
 all design-matched outcomes locked
 
+**Pre-outcome amendment on 2026-09-07:** The first freeze mislabeled the
+directional mean and second-moment columns as inferential primitives. They are
+supporting audit columns. The minimal inferential vector is `(H_Z, H_R)`, as
+defined in the paper and implemented by the existing target-specific
+inference code. The target registry and its hashes were corrected before any
+pilot or evidence outcome was generated. The target definitions, target
+truths, and numerical decision rules did not change. The original freeze
+remains available in Git history.
+
 Protocol v2.4 supersedes v2.3 prospectively. It does not alter or delete any
 v2.3 file. The v2.3 calibration attempt is retained as audit history. It did
 not produce an approved production calibration.

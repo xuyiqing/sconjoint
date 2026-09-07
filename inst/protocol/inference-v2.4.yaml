@@ -1,6 +1,8 @@
 protocol_id: paperps-inference-2026-09-06-v2.4
 plan_id: paperps-lean-validation-2026-09-06-v2.4-v1
 frozen_on: 2026-09-06
+pre_outcome_amended_on: 2026-09-07
+pre_outcome_amendment: corrected_directional_heterogeneity_primitive_metadata_to_H_Z_and_H_R_matching_the_paper_and_existing_minimal_primitive_implementation_no_outcomes_generated
 status: prospective_validation_design_frozen_outcomes_locked
 threshold_selection: none
 calibration_stream: none

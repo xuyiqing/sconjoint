@@ -10,9 +10,9 @@
 #' debiased (orthogonal-score) estimand of the paper's Appendix C: it is
 #' computed on the Stage-1 first stage with a respondent-clustered standard
 #' error that propagates first-stage estimation uncertainty.  Under correct
-#' specification it agrees with the nonparametric AMCE (see
-#' [sc_validate_amce()]), so a discrepancy beyond the combined uncertainty is
-#' a misspecification signal.
+#' specification it agrees with a randomized-design AMCE that uses the same
+#' contrast, orientation, and standardization rule. That comparison requires a
+#' separate design-based estimator with respondent-clustered uncertainty.
 #'
 #' @param object An `sc_fit`.
 #' @param attr Attribute level, specified as in [sc_mrs()] (an
@@ -28,7 +28,6 @@
 #' cross-fitted nuisances.
 #' @return An `sc_quantity` with a scalar `estimate`, respondent-clustered
 #'   `se`, and a normal-approximation confidence interval.
-#' @seealso [sc_validate_amce()] for the structural-vs-reduced-form check.
 #' @examples
 #' \donttest{
 #' if (requireNamespace("torch", quietly = TRUE) &&

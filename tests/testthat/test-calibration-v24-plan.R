@@ -12,6 +12,9 @@ test_that("v2.4 freezes one lean validation design without calibration", {
   expect_identical(plan$threshold_selection, "none")
   expect_identical(plan$calibration_stream, "none")
   expect_false(plan$application_outcomes_permitted)
+  expect_identical(plan$raw[["Pre-Outcome-Amended-On"]], "2026-09-07")
+  expect_match(plan$raw[["Pre-Outcome-Amendment"]],
+               "directional_heterogeneity_primitive_metadata", fixed = TRUE)
   expect_identical(unname(unlist(plan$counts)),
                    c(400L, 2L, 100L, 10L, 2L, 2L, 2L, 15L, 31L, 9999L,
                      6L, 8L))
@@ -125,6 +128,11 @@ test_that("v2.4 freezes exact target definitions and reference weights", {
     plan$targets$target_definition[
       plan$targets$family_id == "directional_heterogeneity"],
     "denominator_N", fixed = TRUE)
+  expect_identical(
+    plan$targets$primitive_rule[
+      plan$targets$family_id == "directional_heterogeneity"],
+    paste0("joint_H_Z_and_H_R_with_directional_mean_and_second_moment_",
+           "retained_as_supporting_audit_columns"))
   expect_match(
     plan$targets$contrast_rule[plan$targets$family_id == "subgroup_ratios"],
     "z_i_greater_than_0", fixed = TRUE)

@@ -6,7 +6,7 @@
 \usage{
 scmix_discrepancy_multiplier(
   discrepancies,
-  R = 999L,
+  R = 9999L,
   level = 0.95,
   seed = NULL,
   multipliers = NULL
@@ -15,14 +15,16 @@ scmix_discrepancy_multiplier(
 \arguments{
 \item{discrepancies}{One discrepancy object or a named list of them.}
 
-\item{R}{Number of multiplier replications.}
+\item{R}{Number of multiplier replications. The paper's final convention is
+exactly 9,999.}
 
 \item{level}{Simultaneous confidence level.}
 
 \item{seed}{Optional seed.}
 
-\item{multipliers}{Optional precomputed \code{R}-by-\code{N} mean-zero multiplier
-matrix; useful for deterministic tests.}
+\item{multipliers}{Optional precomputed \code{R}-by-\code{N} multiplier matrix,
+useful for deterministic tests. A caller-supplied matrix is not itself evidence
+that the paper's standard-normal generation rule was followed.}
 }
 \value{
 Multiplier draws, simultaneous critical value, and intervals.

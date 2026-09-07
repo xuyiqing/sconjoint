@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate-amce.R
 \name{sc_validate_amce}
 \alias{sc_validate_amce}
-\title{Validate the structural model against reduced-form AMCE benchmarks}
+\title{Legacy descriptive comparison with homogeneous-logit coefficients}
 \usage{
 sc_validate_amce(object, subgroup = NULL)
 }
@@ -30,12 +30,12 @@ columns \code{attribute}, \code{dml_theta}, \code{dml_se}, \code{homog_logit_coe
 \description{
 Compares the structural DML point estimates \code{coef(object)} against
 the coefficients of a \emph{pooled homogeneous logit} fit on the same
-(deltaX, y) -- i.e. an ordinary \code{glm(family = binomial)} that
-assumes no heterogeneity in \eqn{\beta}.  Under correct logit
-specification, \eqn{\theta_k = \mathbb{E}[\beta_k(Z)]} equals the
-pooled coefficient on attribute \eqn{k}.  In practice the paper
-shows \eqn{r \approx 0.998} across 28 attribute levels on its main
-application (Bansak, Hainmueller & Hangartner 2023).
+(deltaX, y). Despite its legacy name, this function does not validate an
+AMCE. Mean latent utility coefficients and pooled-logit coefficients are
+generally different under preference heterogeneity because the logit link is
+nonlinear. The paper's specification assessment instead compares a
+probability-scale structural AME with a randomized-design AMCE under the same
+contrast, orientation, and standardization rule.
 }
 \details{
 Optionally, supply \code{subgroup} (a column name in the original data,

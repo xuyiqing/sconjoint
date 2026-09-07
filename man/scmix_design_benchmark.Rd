@@ -2,7 +2,7 @@
 % Please edit documentation in R/specification-assessment.R
 \name{scmix_design_benchmark}
 \alias{scmix_design_benchmark}
-\title{Protocol-weighted design benchmark for an on-support ordered contrast}
+\title{Protocol-weighted design benchmark for an on-support contrast cell}
 \usage{
 scmix_design_benchmark(
   deltaX,
@@ -38,4 +38,8 @@ Respondents with no realized matching task are retained with a zero
 numerator. \code{protocol_probability} is the known conditional expectation of
 the respondent's matching-task fraction, including all assignment and
 completion strata used by the protocol.
+The estimand gives respondents equal weight and averages task positions and
+full profile pairs within the coded difference cell according to the fielded
+protocol. It is design based and need not equal the structural ordered-contrast
+probability unless the structural choice model is correct.
 }

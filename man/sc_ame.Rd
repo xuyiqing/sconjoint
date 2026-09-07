@@ -27,10 +27,10 @@ where the inner \eqn{\mathrm{E}_X} is taken over a pool of single profiles drawn
 from the design (stored on the fit as \code{object$profile_pool}).  This is the
 debiased (orthogonal-score) estimand of the paper's Appendix C: it is
 computed on the Stage-1 first stage with a respondent-clustered standard
-error that propagates first-stage estimation uncertainty.  Under correct
-specification it agrees with the nonparametric AMCE (see
-\code{\link[=sc_validate_amce]{sc_validate_amce()}}), so a discrepancy beyond the combined uncertainty is
-a misspecification signal.
+error that propagates first-stage estimation uncertainty. Under correct
+specification it agrees with a randomized-design AMCE that uses the same
+contrast, orientation, and standardization rule. That comparison requires a
+separate design-based estimator with respondent-clustered uncertainty.
 }
 \details{
 When the fit carries an attribute-interaction term
@@ -70,7 +70,4 @@ if (requireNamespace("torch", quietly = TRUE) &&
   sc_ame(fit, "a1")
 }
 }
-}
-\seealso{
-\code{\link[=sc_validate_amce]{sc_validate_amce()}} for the structural-vs-reduced-form check.
 }
