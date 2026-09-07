@@ -1,0 +1,7 @@
+cell_index,cell_id,design_id,role,fit_rank,dgp_rank,geometry,direction_pc,numerator_pc,denominator_pc,kappa,direction_intercept,direction_moderator,loading_sd,numerator_intercept,numerator_moderator,denominator_intercept,denominator_moderator,replications,exact_boundary_families,weak_or_bounded_families
+1,br_regular,br2017,regular,1,1,regular_unit_rms,1,2,3,0,0.15,0.20,0.55,0.50,0.08,0.60,0.08,50,none,none
+2,gs_regular,gs2020,regular,1,1,regular_unit_rms,1,2,3,0,0.15,0.20,0.55,0.50,0.08,0.60,0.08,50,none,none
+3,sw_regular,sw2022,regular,1,1,regular_unit_rms,1,2,3,0,0.15,0.20,0.55,0.50,0.08,0.60,0.08,50,none,none
+4,br_probability_zero_denominator_boundary,br2017,mixed_boundary,1,1,regular_unit_rms,1,2,3,-4,0.15,0.20,0.55,0.50,0.08,0,0,50,mrs,choice_probabilities|subgroup_ratios
+5,br_q0_rank_boundary,br2017,exact_boundary,1,0,regular_unit_rms,1,2,3,0,0.20,0.15,0,0.50,0.08,0.60,0.08,50,all,none
+6,gs_weak_inverse,gs2020,weak_or_bounded,1,1,weak_unstandardized_last_pc,last,1,2,0,0.25,0.10,0.55,0.50,0.08,0.60,0.08,50,none,smooth_means|directional_shares|directional_heterogeneity

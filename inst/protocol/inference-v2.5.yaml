@@ -1,0 +1,100 @@
+protocol_id: paperps-inference-2026-09-07-v2.5
+plan_id: paperps-lean-validation-2026-09-07-v2.5-v1
+frozen_on: 2026-09-07
+status: prospective_validation_design_and_settings_frozen_outcomes_locked
+change_scope: computation_and_Monte_Carlo_replication_count_only
+prior_protocol: paperps-inference-2026-09-06-v2.4_stopped_on_runtime
+threshold_selection: none
+calibration_stream: none
+application_outcomes_permitted: false
+outcome_count: 0
+outcome_count_definition: completed_or_persisted_v2.5_synthetic_outcomes
+carried_forward_exactly:
+  - response_free_templates
+  - design_selection_salts_and_hashes
+  - six_DGP_geometries
+  - target_registry
+  - target_truths
+  - approval_matrix
+  - fit_regularity_primitive
+  - per_replication_gates
+rank_scope: q1_fit
+designs: [br2017, gs2020, sw2022]
+respondents_per_template: 400
+cells:
+  - br_regular
+  - gs_regular
+  - sw_regular
+  - br_probability_zero_denominator_boundary
+  - br_q0_rank_boundary
+  - gs_weak_inverse
+target_families: [smooth_means, choice_probabilities, directional_shares, subgroup_ratios, directional_heterogeneity, mrs]
+target_truth_count: 78
+integrity_pilot:
+  reps_per_cell: 2
+  jobs: 12
+  evidence_eligible: false
+  valid_waves: 1
+  selection: chronologically_first_complete_integrity_valid_wave_only
+  rerun_after_valid_wave: prohibited_regardless_of_runtime
+  invalid_attempts: signed_and_retained_retry_only_before_any_valid_wave_after_documented_firewall_based_integrity_or_infrastructure_correction
+  inspection: [execution_integrity, elapsed_time, resource_use]
+  prohibited_inspection: [synthetic_choices, fits, targets, gates, intervals, coverage, operating_characteristics]
+  complete_wall_clock: monotonic_from_before_cluster_creation_through_worker_shutdown_and_verification_of_all_artifact_hashes_and_signed_manifests
+  runtime_projection: 1.25_times_25_times_complete_first_valid_pilot_wall
+  runtime_safety_factor: 1.25
+  cutoff_seconds: 921.6
+  maximum_projected_evidence_wall_hours: 8
+parallel:
+  backend: base_R_PSOCK_spawn_twelve_processes
+  maximum_workers: 12
+  torch_threads_per_worker: 1
+  lanes_per_cell: 2
+  worker_id_formula: "2 * (cell_index - 1) + lane_index"
+  pilot_lane_1: replication_1
+  pilot_lane_2: replication_2
+  evidence_lane_1: odd_within_batch_positions
+  evidence_lane_2: even_within_batch_positions
+evidence:
+  reps_per_cell: 50
+  total_reps: 300
+  batch_size_per_cell: 10
+  batches: 5
+  lane_depth: 25
+  early_success: false
+  early_stop: none_all_300_attempts_required
+outer_folds: 2
+inner_folds: 2
+optimizer_starts: 2
+reference_gh_nodes: 15
+refined_gh_nodes: 31
+common_respondent_multipliers: 9999
+familywise_confidence_level: 0.95
+ridge_rule: Ntrain^(-3/4)
+ridge_sensitivity: [Ntrain^(-1), Ntrain^(-1/2)]
+ridge_selection: none
+seeds:
+  pilot_master: 1910000000
+  evidence_master: 2010000000
+  formula: master_plus_cell_index_minus_1_times_1000000_plus_replication
+  substream_offsets: [0, 200000, 400000, 600000]
+translated_count_rules:
+  cell_completion_minimum: 48
+  regular_release_minimum: 38
+  regular_conditional_coverage_minimum: 0.90
+  exact_boundary_invalid_release_maximum: 1
+  exact_boundary_rule: point_at_most_0.05_and_one_sided_CP95_upper_at_most_0.10
+  weak_withholding_release_maximum: 2
+  weak_informative_release_minimum: 15
+  weak_inconclusive_release_count: 3_to_14
+approval:
+  matrix: inference-v2.5-approval-matrix.csv
+  required_rows: 30
+  descriptive_only_rows: 6
+  evaluator_approval_id: paperps-v2.5-evaluator-approval-v1
+  evaluator_approval_status: absent
+  pilot_approval_id: paperps-v2.5-pilot-approval-v1
+  pilot_approval_status: absent
+  family_approval_status: absent
+  discretionary_override: prohibited
+outcome_generation: locked_pending_hash_bound_v2.5_evaluator_implementation_and_approval
