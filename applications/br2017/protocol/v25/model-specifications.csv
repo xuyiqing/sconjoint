@@ -1,0 +1,5 @@
+spec_index,spec_id,role,q,mean_grid,moderator_inputs,output_mask,outer_folds,inner_folds,starts,adam_epochs,adam_lr,precision,gh_reference,gh_refined,polish,formal_release
+0,flexible_q1,primary,1,flexible_grid_v1,all_23,all_7,5,2,3,6000,0.01,float64,15,31,LBFGS_strong_wolfe_50,true
+1,restricted_q1,theory_guided_sensitivity,1,restricted_grid_v1,restricted_5,restricted_mean_mask_v1,5,2,3,6000,0.01,float64,15,31,LBFGS_strong_wolfe_50,false
+2,flexible_q0,rank_sensitivity,0,flexible_grid_v1,all_23,all_7,5,2,3,6000,0.01,float64,none,none,LBFGS_strong_wolfe_50,false
+3,flexible_q2,rank_sensitivity,2,flexible_grid_v1,all_23,all_7,5,2,3,6000,0.01,float64,15,31,LBFGS_strong_wolfe_50,false

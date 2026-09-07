@@ -1,0 +1,15 @@
+grid_id,candidate_index,candidate_id,mean_family,hidden_units,weight_decay,constant_unpenalized,deviation_centered,eligible
+flexible_grid_v1,1,constant,constant,0,0,true,true,true
+flexible_grid_v1,2,linear_wd1e-1,linear,0,0.1,true,true,true
+flexible_grid_v1,3,linear_wd1e-2,linear,0,0.01,true,true,true
+flexible_grid_v1,4,linear_wd1e-3,linear,0,0.001,true,true,true
+flexible_grid_v1,5,relu4_wd1e-1,relu,4,0.1,true,true,true
+flexible_grid_v1,6,relu4_wd1e-2,relu,4,0.01,true,true,true
+flexible_grid_v1,7,relu4_wd1e-3,relu,4,0.001,true,true,true
+flexible_grid_v1,8,relu8_wd1e-1,relu,8,0.1,true,true,true
+flexible_grid_v1,9,relu8_wd1e-2,relu,8,0.01,true,true,true
+flexible_grid_v1,10,relu8_wd1e-3,relu,8,0.001,true,true,true
+restricted_grid_v1,1,constant,constant,0,0,true,true,true
+restricted_grid_v1,2,restricted_linear_wd1e-1,restricted_linear,0,0.1,true,true,true
+restricted_grid_v1,3,restricted_linear_wd1e-2,restricted_linear,0,0.01,true,true,true
+restricted_grid_v1,4,restricted_linear_wd1e-3,restricted_linear,0,0.001,true,true,true
