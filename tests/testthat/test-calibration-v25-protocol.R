@@ -51,6 +51,14 @@ test_that("v2.5 is a new outcome-locked prospective protocol", {
                    "inference-v2.5-integrity-pilot-approval.dcf")
   expect_identical(freeze[["Required-Pilot-Approval-File"]],
                    plan[["Pilot-Approval-File"]])
+  expect_identical(plan[["Evaluator-Implementation-Manifest-File"]],
+                   "inference-v2.5-evaluator-implementation.csv")
+  expect_identical(freeze[["Required-Evaluator-Implementation-Manifest-File"]],
+                   plan[["Evaluator-Implementation-Manifest-File"]])
+  expect_identical(plan[["Family-Approval-File"]],
+                   "inference-v2.5-family-approval.dcf")
+  expect_identical(freeze[["Required-Family-Approval-File"]],
+                   plan[["Family-Approval-File"]])
 
   absent <- c("inference-v2.5-evaluator-implementation.csv",
               "inference-v2.5-evaluator-approval.dcf",

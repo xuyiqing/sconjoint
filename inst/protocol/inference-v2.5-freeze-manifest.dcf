@@ -7,8 +7,8 @@ Change-Reason: v2.4_failed_its_prospective_runtime_rule_using_only_firewall_perm
 Change-Scope: 50_reps_per_cell_12_one_thread_PSOCK_workers_two_deterministic_lanes_per_cell_one_first_valid_12_job_pilot_1.25_times_25_runtime_projection_five_evidence_batches_and_new_nonoverlapping_seeds
 Carried-Forward-Exactly: v2.4_response_free_templates_selection_salts_subset_hashes_six_DGP_geometries_target_registry_target_truths_approval_matrix_fit_regularity_primitive_and_per_replication_gates
 Protocol-Markdown-SHA256: 74287c3b96adf4db85d2ab3357b4b0ea6da5290e424052ae4043255959c4ee3e
-Protocol-YAML-SHA256: 9ad9dfe81d4b33b60606cc4e2ec8fbce7332a2a2a0f641e28805040faf28c7cd
-Plan-SHA256: 9e002b15e2e4415763e4a1124e7483a306ef6c157233430111317b1becd431e7
+Protocol-YAML-SHA256: 91fbd3c29d8fd580b052bf0c486a466a141de21931ea0c050650cacb487f3916
+Plan-SHA256: f6b4ee3384ec8d5237c23dd8ccbb8168c6ae78b99fddbda46e59ce44edabbad8
 Design-Manifest-SHA256: 4addbde59880f8f75dacc6e9867b4f1a2a95575f1e0b302fea9842a5f865f5c7
 Cell-Registry-SHA256: 52c352bd55c69e64b917f5ac6e4070a4641dc1e10d15ea0970a522283ecca1b9
 Target-Registry-SHA256: 1120de1f06441d0f45bf6af48a622caa2ce9048565506b39a7528330a33810f0
@@ -40,6 +40,7 @@ Required-Evidence-Batch-Size-Per-Cell: 10
 Required-Evaluator-Source-Prefix: calibration-v25
 Required-Evaluator-Function-Prefix: scmix_v25
 Required-Evaluator-Settings-Id: paperps-v2.5-end-to-end-evaluator-settings-v1
+Required-Evaluator-Implementation-Manifest-File: inference-v2.5-evaluator-implementation.csv
 Required-Evaluator-Approval-File: inference-v2.5-evaluator-approval.dcf
 Required-Evaluator-Approval-Id: paperps-v2.5-evaluator-approval-v1
 Evaluator-Implementation-Status: absent
@@ -47,6 +48,8 @@ Evaluator-Approval-Status: absent
 Required-Pilot-Approval-File: inference-v2.5-integrity-pilot-approval.dcf
 Required-Pilot-Approval-Id: paperps-v2.5-pilot-approval-v1
 Pilot-Approval-Status: absent
+Required-Family-Approval-File: inference-v2.5-family-approval.dcf
+Required-Family-Approval-Id: paperps-v2.5-family-approval-v1
 Family-Approval-Status: absent
 Outcome-Generation: locked
 Prior-Protocol: paperps-inference-2026-09-06-v2.4

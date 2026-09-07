@@ -67,6 +67,7 @@ Ridge-Selection: none
 Residual-Distribution: standard_normal_persistent_respondent_draw
 Truth-Normal-Nodes: 257
 Target-Truths-File: inference-v2.5-target-truths.csv
+Target-Truths-SHA256: f97dfca2a47e6b1d8f2b4c232ce61c5417776a7684bd70d819ceb92c522800a8
 Contrast-Scale: respondent_weighted_RMS_no_centering
 Regular-Coefficient-Basis: S_inverse_v_lambda_inverse_half
 Regular-Target-Dual: S_v_lambda_half
@@ -79,12 +80,17 @@ Fit-Regularity-Primitive: active_q1_covariance_eigenvalue_equals_trace_Sigma_for
 Fit-Regularity-Registry: inference-v2.5-fit-regularity-registry.csv
 Evaluator-Interface: one_hash_bound_calibration-v25_end_to_end_fit_and_infer_evaluator
 Evaluator-Binding: source_interface_all_settings_and_release_algorithm_hash_bound_before_any_outcome
+Evaluator-Settings-File: inference-v2.5-evaluator-settings.dcf
+Evaluator-Implementation-Manifest-File: inference-v2.5-evaluator-implementation.csv
+Evaluator-Implementation-Status: absent
 Evaluator-Approval-File: inference-v2.5-evaluator-approval.dcf
 Evaluator-Approval-Status: absent
 Outcome-Generation: locked
 Pilot-Approval-File: inference-v2.5-integrity-pilot-approval.dcf
 Pilot-Approval-Status: absent
 Family-Approval: mechanical_after_complete_evidence_and_absent_now
+Family-Approval-File: inference-v2.5-family-approval.dcf
+Family-Approval-Status: absent
 Approval-Matrix: inference-v2.5-approval-matrix.csv
 Family-Approval-Rule: pass_every_required_approval_matrix_row_with_no_discretionary_override_manual_file_only_records_the_mechanical_result
 Descriptive-Only-Rows: six_unaffected_special_cell_pairs_are_reported_but_do_not_determine_approval

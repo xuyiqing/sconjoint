@@ -1,6 +1,6 @@
 74287c3b96adf4db85d2ab3357b4b0ea6da5290e424052ae4043255959c4ee3e  INFERENCE_PROTOCOL_V25.md
-9ad9dfe81d4b33b60606cc4e2ec8fbce7332a2a2a0f641e28805040faf28c7cd  inst/protocol/inference-v2.5.yaml
-9e002b15e2e4415763e4a1124e7483a306ef6c157233430111317b1becd431e7  inst/protocol/inference-v2.5-validation-plan.dcf
+91fbd3c29d8fd580b052bf0c486a466a141de21931ea0c050650cacb487f3916  inst/protocol/inference-v2.5.yaml
+f6b4ee3384ec8d5237c23dd8ccbb8168c6ae78b99fddbda46e59ce44edabbad8  inst/protocol/inference-v2.5-validation-plan.dcf
 4addbde59880f8f75dacc6e9867b4f1a2a95575f1e0b302fea9842a5f865f5c7  inst/protocol/inference-v2.5-design-manifest.csv
 52c352bd55c69e64b917f5ac6e4070a4641dc1e10d15ea0970a522283ecca1b9  inst/protocol/inference-v2.5-validation-cells.csv
 1120de1f06441d0f45bf6af48a622caa2ce9048565506b39a7528330a33810f0  inst/protocol/inference-v2.5-target-registry.csv
@@ -9,5 +9,5 @@ bf4de9c7f3d3cddeb38d2680e56ea17ca073fd7a57c8d4f65bffaf0fb4b8d7f2  inst/protocol/
 b83f9b1edb27b50fc00a40965b806bc65cda417ee79977e953b4f4b4379dd965  inst/protocol/inference-v2.5-fit-regularity-registry.csv
 f97dfca2a47e6b1d8f2b4c232ce61c5417776a7684bd70d819ceb92c522800a8  inst/protocol/inference-v2.5-target-truths.csv
 8555536e8461e4320f7ed40386c0dc9fc8c248469f536ba676f1cee685a6efaa  inst/protocol/inference-v2.5-evaluator-settings.dcf
-dc31a5d8886a2ca91d727cede26162b87a412dac53c94e064eec8e7118c1870a  inst/protocol/inference-v2.5-freeze-manifest.dcf
-4ff3251dcefcef9bb92b2894d514f09bde0757a58d87cff344944c39c1087726  tests/testthat/test-calibration-v25-protocol.R
+c1a45666440ab529fa9e9e1897786861d8fe857b024c69ee318f580a5a46d85c  inst/protocol/inference-v2.5-freeze-manifest.dcf
+10737ceac6fca35088d7ace9180547854e3920075b3b36fb901fd29b122d19f4  tests/testthat/test-calibration-v25-protocol.R

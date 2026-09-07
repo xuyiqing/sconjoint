@@ -92,9 +92,14 @@ approval:
   required_rows: 30
   descriptive_only_rows: 6
   evaluator_approval_id: paperps-v2.5-evaluator-approval-v1
+  evaluator_implementation_manifest: inference-v2.5-evaluator-implementation.csv
+  evaluator_approval_file: inference-v2.5-evaluator-approval.dcf
   evaluator_approval_status: absent
   pilot_approval_id: paperps-v2.5-pilot-approval-v1
+  pilot_approval_file: inference-v2.5-integrity-pilot-approval.dcf
   pilot_approval_status: absent
+  family_approval_id: paperps-v2.5-family-approval-v1
+  family_approval_file: inference-v2.5-family-approval.dcf
   family_approval_status: absent
   discretionary_override: prohibited
 outcome_generation: locked_pending_hash_bound_v2.5_evaluator_implementation_and_approval
