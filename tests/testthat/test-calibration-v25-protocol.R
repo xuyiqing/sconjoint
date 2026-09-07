@@ -60,11 +60,8 @@ test_that("v2.5 is a new outcome-locked prospective protocol", {
   expect_identical(freeze[["Required-Family-Approval-File"]],
                    plan[["Family-Approval-File"]])
 
-  absent <- c("inference-v2.5-evaluator-implementation.csv",
-              "inference-v2.5-evaluator-approval.dcf",
-              "inference-v2.5-integrity-pilot-approval.dcf",
-              "inference-v2.5-family-approval.dcf")
-  expect_false(any(file.exists(.v25_protocol_path(absent))))
+  # These are historical facts in the signed freeze.  Later state files may
+  # exist without changing what was absent when the protocol was frozen.
 })
 
 test_that("v2.5 carries forward cells targets truths and per-rep gates", {

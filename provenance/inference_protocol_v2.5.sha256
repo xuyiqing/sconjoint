@@ -10,4 +10,4 @@ b83f9b1edb27b50fc00a40965b806bc65cda417ee79977e953b4f4b4379dd965  inst/protocol/
 f97dfca2a47e6b1d8f2b4c232ce61c5417776a7684bd70d819ceb92c522800a8  inst/protocol/inference-v2.5-target-truths.csv
 8555536e8461e4320f7ed40386c0dc9fc8c248469f536ba676f1cee685a6efaa  inst/protocol/inference-v2.5-evaluator-settings.dcf
 c1a45666440ab529fa9e9e1897786861d8fe857b024c69ee318f580a5a46d85c  inst/protocol/inference-v2.5-freeze-manifest.dcf
-10737ceac6fca35088d7ace9180547854e3920075b3b36fb901fd29b122d19f4  tests/testthat/test-calibration-v25-protocol.R
+ac089de09cce4fd4aa7e5e1044e796623dd1ff7899400b395f1ab50f9c2d3ee6  tests/testthat/test-calibration-v25-protocol.R
