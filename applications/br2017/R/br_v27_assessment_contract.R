@@ -487,6 +487,23 @@
   registry
 }
 
+## Reconstruct the immutable fit-runner binding locally.  The upstream CLI
+## defines its own convenience helper, but the assessment deliberately loads
+## only the upstream contract so it has no hidden dependency on executable
+## command code.
+.br_v27a_upstream_binding <- function(protocol, q) {
+  list(
+    protocol_id = protocol$protocol_id,
+    protocol_hash = protocol$protocol_hash,
+    git_commit = protocol$git$commit,
+    application = "br2017",
+    kind = "assembled",
+    q = as.integer(q),
+    scope = "all",
+    input_hashes = stats::setNames(protocol$inputs$sha256,
+                                   protocol$inputs$input_id))
+}
+
 .br_v27a_extract_upstream <- function(repo_root) {
   if (!exists(".br_v27_validate_protocol", mode = "function") ||
       !exists(".br_v27_read_checkpoint", mode = "function")) {
@@ -501,7 +518,7 @@
   run_dir <- .br_v27_run_dir(repo_root)
   entries <- lapply(.br_v27a_ranks, function(q) {
     path <- .br_v27_checkpoint_path(run_dir, "assembled", q)
-    binding <- .br_v27_binding(upstream_protocol, "assembled", q, "all")
+    binding <- .br_v27a_upstream_binding(upstream_protocol, q)
     envelope <- .br_v27_read_checkpoint(path, binding = binding)
     expected_schema <- "br2017-v2.7-assembled-v1"
     if (!is.list(envelope$payload) ||

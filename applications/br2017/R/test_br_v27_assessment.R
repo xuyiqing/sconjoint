@@ -39,6 +39,15 @@ testthat::test_that("assessment paths and protocol are disjoint from fit v2.7", 
   testthat::expect_identical(
     protocol$contract[["Structural-AME-Versus-Design-AMCE"]],
     "unavailable_without_new_target_construction")
+  upstream <- .br_v27_validate_protocol(
+    .v27a_root, require_external = FALSE, require_clean = FALSE)
+  binding <- .br_v27a_upstream_binding(upstream, 1L)
+  testthat::expect_identical(binding$kind, "assembled")
+  testthat::expect_identical(binding$q, 1L)
+  testthat::expect_identical(binding$scope, "all")
+  testthat::expect_identical(binding$input_hashes,
+                             stats::setNames(upstream$inputs$sha256,
+                                             upstream$inputs$input_id))
 })
 
 testthat::test_that("dimension-times-epsilon numerical rank is exact", {
