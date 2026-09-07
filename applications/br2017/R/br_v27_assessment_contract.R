@@ -491,17 +491,49 @@
 ## defines its own convenience helper, but the assessment deliberately loads
 ## only the upstream contract so it has no hidden dependency on executable
 ## command code.
-.br_v27a_upstream_binding <- function(protocol, q) {
+.br_v27a_upstream_binding <- function(protocol, q, git_commit = NULL) {
+  if (is.null(git_commit)) git_commit <- protocol$git$commit
   list(
     protocol_id = protocol$protocol_id,
     protocol_hash = protocol$protocol_hash,
-    git_commit = protocol$git$commit,
+    git_commit = as.character(git_commit),
     application = "br2017",
     kind = "assembled",
     q = as.integer(q),
     scope = "all",
     input_hashes = stats::setNames(protocol$inputs$sha256,
                                    protocol$inputs$input_id))
+}
+
+.br_v27a_verify_upstream_envelope <- function(envelope, protocol, q,
+                                               repo_root) {
+  if (!is.list(envelope) || !is.list(envelope$binding)) {
+    .br_v27a_stop("Malformed upstream checkpoint envelope for q=", q, ".")
+  }
+  observed <- envelope$binding
+  generating_commit <- observed$git_commit
+  if (!is.character(generating_commit) || length(generating_commit) != 1L ||
+      is.na(generating_commit) ||
+      !grepl("^[0-9a-f]{40}$", generating_commit)) {
+    .br_v27a_stop("The upstream q=", q,
+                  " checkpoint lacks a valid generating commit.")
+  }
+  expected <- .br_v27a_upstream_binding(protocol, q, generating_commit)
+  required <- names(expected)
+  if (!all(required %in% names(observed)) ||
+      !identical(observed[required], expected[required])) {
+    .br_v27a_stop("Checkpoint binding mismatch for upstream q=", q, ".")
+  }
+  git <- Sys.which("git")
+  is_ancestor <- system2(
+    git, c("-C", shQuote(repo_root), "merge-base", "--is-ancestor",
+           shQuote(generating_commit), "HEAD"),
+    stdout = FALSE, stderr = FALSE)
+  if (!identical(as.integer(is_ancestor), 0L)) {
+    .br_v27a_stop("The upstream q=", q,
+                  " generating commit is not an ancestor of current HEAD.")
+  }
+  invisible(expected)
 }
 
 .br_v27a_extract_upstream <- function(repo_root) {
@@ -518,8 +550,12 @@
   run_dir <- .br_v27_run_dir(repo_root)
   entries <- lapply(.br_v27a_ranks, function(q) {
     path <- .br_v27_checkpoint_path(run_dir, "assembled", q)
-    binding <- .br_v27a_upstream_binding(upstream_protocol, q)
-    envelope <- .br_v27_read_checkpoint(path, binding = binding)
+    ## The immutable checkpoint records the commit that generated it.  Later
+    ## descendant commits may add disjoint assessment code, so current HEAD is
+    ## not itself part of the expected upstream binding.
+    envelope <- .br_v27_read_checkpoint(path, binding = NULL)
+    .br_v27a_verify_upstream_envelope(
+      envelope, upstream_protocol, q, repo_root)
     expected_schema <- "br2017-v2.7-assembled-v1"
     if (!is.list(envelope$payload) ||
         !identical(envelope$payload$schema_version, expected_schema) ||

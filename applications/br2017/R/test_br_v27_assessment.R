@@ -48,6 +48,15 @@ testthat::test_that("assessment paths and protocol are disjoint from fit v2.7", 
   testthat::expect_identical(binding$input_hashes,
                              stats::setNames(upstream$inputs$sha256,
                                              upstream$inputs$input_id))
+  historical <- .br_v27a_upstream_binding(
+    upstream, 1L, git_commit = upstream$git$commit)
+  envelope <- list(binding = historical)
+  testthat::expect_invisible(.br_v27a_verify_upstream_envelope(
+    envelope, upstream, 1L, .v27a_root))
+  bad <- envelope
+  bad$binding$kind <- "fit"
+  testthat::expect_error(.br_v27a_verify_upstream_envelope(
+    bad, upstream, 1L, .v27a_root), "Checkpoint binding mismatch")
 })
 
 testthat::test_that("dimension-times-epsilon numerical rank is exact", {
