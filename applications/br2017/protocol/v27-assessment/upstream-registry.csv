@@ -1,0 +1,4 @@
+q,relative_path,required_schema,required_upstream_protocol_id
+0,runs/br2017/v27/rapid-2026-09-07-v1/q0/assembled.rds,br2017-v2.7-assembled-v1,br2017-paperps-rapid-2026-09-07-v2.7-v1
+1,runs/br2017/v27/rapid-2026-09-07-v1/q1/assembled.rds,br2017-v2.7-assembled-v1,br2017-paperps-rapid-2026-09-07-v2.7-v1
+2,runs/br2017/v27/rapid-2026-09-07-v1/q2/assembled.rds,br2017-v2.7-assembled-v1,br2017-paperps-rapid-2026-09-07-v2.7-v1
