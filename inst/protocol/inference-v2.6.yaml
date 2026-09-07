@@ -1,0 +1,110 @@
+protocol_id: paperps-inference-2026-09-07-v2.6
+plan_id: paperps-rapid-validation-2026-09-07-v2.6-v1
+frozen_on: 2026-09-07
+status: prospective_validation_design_and_settings_frozen_outcomes_locked
+change_scope: execution_schedule_replication_endpoints_seed_namespace_and_interpretation_only
+prior_protocol: paperps-inference-2026-09-07-v2.5_retired_after_runtime_stop
+threshold_selection: none
+calibration_stream: none
+application_outcomes_permitted: false
+canonical_state_directory: inst/protocol
+canonical_run_directory: runs/v26/rapid_validation_2026-09-07
+outcome_count: 0
+carried_forward_exactly:
+  - response_free_templates_and_subset_hashes
+  - six_DGP_geometries
+  - all_78_target_truths
+  - target_and_family_registries
+  - approval_matrix
+  - fit_tuning_DML_and_family_interval_evaluator
+  - all_14_per_replication_gates
+rank_scope: q1_fit
+designs: [br2017, gs2020, sw2022]
+respondents_per_template: 400
+cells:
+  - br_regular
+  - gs_regular
+  - sw_regular
+  - br_probability_zero_denominator_boundary
+  - br_q0_rank_boundary
+  - gs_weak_inverse
+target_families: [smooth_means, choice_probabilities, directional_shares, subgroup_ratios, directional_heterogeneity, mrs]
+target_truth_count: 78
+preliminary:
+  reps_per_cell: 8
+  total_reps: 48
+  waves: 4
+  reps_per_cell_per_wave: 2
+  jobs_per_wave: 12
+  family_approval: prohibited
+  reporting_label: provisional_end_to_end_design_matched_evidence_not_coverage_validation
+  intermediate_statistical_inspection: prohibited
+wave_one:
+  evidence_eligible: true
+  role: sole_sealed_integrity_and_runtime_checkpoint_and_first_fixed_evidence_prefix
+  inspection: [execution_integrity, elapsed_time, resource_use, hashes]
+  prohibited_inspection: [synthetic_choices, fits, targets, gates, intervals, release_decisions, coverage]
+  runtime_projection: 1.25_times_4_times_complete_integrity_valid_wave_one_wall
+  runtime_safety_factor: 1.25
+  cutoff_seconds: 3600
+  maximum_projected_preliminary_wall_hours: 5
+  rerun_after_integrity_valid_wave: prohibited_regardless_of_runtime
+parallel:
+  backend: base_R_PSOCK_spawn_twelve_processes
+  maximum_workers: 12
+  torch_threads_per_worker: 1
+  lanes_per_cell: 2
+  worker_id_formula: "2 * (cell_index - 1) + lane_index"
+  lane_1_in_wave_w: replication_2w_minus_1
+  lane_2_in_wave_w: replication_2w
+confirmatory:
+  minimum_reps_per_cell: 50
+  minimum_total_reps: 300
+  preferred_reps_per_cell: 100
+  preferred_total_reps: 600
+  stream: contiguous_after_preliminary_replications_1_through_8
+  continuation: unconditional_on_preliminary_results_if_evaluator_bytes_are_unchanged
+  family_approval_endpoint: 50_per_cell_only
+  precision_extension: 100_per_cell_reported_regardless_of_direction
+outer_folds: 2
+inner_folds: 2
+optimizer_starts: 2
+reference_gh_nodes: 15
+refined_gh_nodes: 31
+common_respondent_multipliers: 9999
+familywise_confidence_level: 0.95
+ridge_rule: Ntrain^(-3/4)
+ridge_sensitivity: [Ntrain^(-1), Ntrain^(-1/2)]
+ridge_selection: none
+seeds:
+  validation_master: 2020000000
+  formula: master_plus_cell_index_minus_1_times_1000000_plus_replication
+  substream_offsets: [0, 200000, 400000, 500000, 600000]
+translated_count_rules_at_50:
+  cell_completion_minimum: 48
+  regular_release_minimum: 38
+  regular_conditional_coverage_minimum: 0.90
+  exact_boundary_invalid_release_maximum: 1
+  weak_withholding_release_maximum: 2
+  weak_informative_release_minimum: 15
+  weak_inconclusive_release_count: 3_to_14
+application_rerun:
+  mean_architecture: q0_and_q2_condition_on_same_training_q1_selection
+  optimizer_start_selection: declared_penalized_training_criterion
+  heldout_rank_and_specification_comparison: unpenalized_respondent_sequence_score
+  q0: exact_predictive_and_plugin_sensitivity_only
+  q1: GH31_primary_GH45_fixed_state_check_formal_DML
+  q2: GH9_primary_GH15_fixed_state_check_predictive_and_plugin_sensitivity_only
+  q2_initialization: deterministic_small_second_loading_orthogonal_to_same_training_q1_loading
+  scheduling: one_prespecified_outer_fold_timing_sentinel_then_parallel_remaining_states
+  q0_directional_share_inference: prohibited_as_regular_inference
+approval:
+  evaluator_approval_id: paperps-v2.6-evaluator-approval-v1
+  evaluator_approval_status: absent
+  wave_one_approval_id: paperps-v2.6-wave-one-approval-v1
+  wave_one_approval_status: absent
+  preliminary_completion_status: absent
+  confirmatory_50_completion_status: absent
+  confirmatory_100_completion_status: absent
+  family_50_approval_status: absent
+outcome_generation: locked_pending_hash_bound_v2.6_evaluator_implementation_and_approval
