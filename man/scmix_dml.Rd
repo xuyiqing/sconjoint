@@ -32,7 +32,9 @@ scmix_dml(
   multiplier_draws = 999L,
   multiplier = c("normal", "rademacher"),
   level = 0.95,
-  seed = 1L
+  seed = 1L,
+  riesz_rule = c("select", "fixed_n_train_minus_three_quarters"),
+  riesz_numerical_rank_rule = c("relative_floor_one", "dimension_epsilon")
 )
 
 scmix_inference_verification(
@@ -109,9 +111,15 @@ terms. This default is diagnostic. A verification record must instead be tied
 to an explicit growing or outer-fold-fitted sieve, and the current constructor
 does not treat prose rate arguments as machine verification.}
 
-\item{nu_grid}{\code{NULL} for the fold-size-dependent grid
-\code{c(0, 1/N_train, 1/sqrt(N_train))}; a common finite nonnegative vector;
-or a list with one grid per outer fold.}
+\item{nu_grid}{Under \code{riesz_rule = "select"}, \code{NULL} for the
+fold-size-dependent grid containing zero, N_train^-1, N_train^-3/4, and
+N_train^-1/2; a common finite nonnegative vector; or a list with one grid per
+outer fold. It must be \code{NULL} under the fixed rule.}
+
+\item{riesz_rule}{Riesz ridge rule. The legacy default \code{"select"} retains
+validation selection. \code{"fixed_n_train_minus_three_quarters"} fixes each
+target-specific solve at N_train^-3/4 without validation and records
+N_train^-1 and N_train^-1/2 sensitivity solves.}
 
 \item{riesz_penalty}{A positive-semidefinite penalty in the declared
 structural-orthonormal coordinates: \code{"identity"}, a diagonal vector, or a
@@ -156,6 +164,11 @@ separately selected ridge for every minimal scalar primitive.}
 the honest untouched-outer-fold information-range and information-scaled
 Riesz diagnostics. Protocol-v2.2 finalization checks it against the exact
 linked calibration artifact.}
+
+\item{riesz_numerical_rank_rule}{Rule for the held-out information rank
+audit. The legacy rule uses the recorded relative tolerance with a unit
+floor. The v2.4 \code{"dimension_epsilon"} rule uses matrix dimension times
+machine epsilon times the leading held-out information eigenvalue.}
 
 \item{v22_registry}{Optional list of signed
 \code{scmix_v22_target_spec()} objects. When supplied, Riesz fitting uses the

@@ -901,7 +901,8 @@
                                 verbose = FALSE,
                                 warm_state = NULL,
                                 warm_start_mode = c("mean_only", "pooled_nested",
-                                                    "pooled_structural"),
+                                                    "pooled_structural",
+                                                    "exact_state"),
                                 early_stop = FALSE,
                                 val_frac = 0.1,
                                 check_every = 20L,
@@ -929,8 +930,19 @@
   warm_start_mode <- match.arg(warm_start_mode)
   protocol_mode <- .sc_v22_protocol_mode(protocol_mode)
   n_epochs <- as.integer(n_epochs)
-  if (is.na(n_epochs) || n_epochs < 1L) {
-    stop(".sc_train_mixed_one(): `n_epochs` must be positive.")
+  if (is.na(n_epochs) || n_epochs < 0L) {
+    stop(".sc_train_mixed_one(): `n_epochs` must be nonnegative.")
+  }
+  if (n_epochs == 0L && (is.null(warm_state) ||
+      !identical(warm_start_mode, "exact_state"))) {
+    stop(paste0(
+      ".sc_train_mixed_one(): zero Adam epochs are reserved for an exact ",
+      "warm-state L-BFGS repolish."))
+  }
+  if (identical(warm_start_mode, "exact_state") && n_epochs != 0L) {
+    stop(paste0(
+      ".sc_train_mixed_one(): `exact_state` is reserved for a zero-Adam ",
+      "L-BFGS repolish."), call. = FALSE)
   }
   if (!is.numeric(check_every) || length(check_every) != 1L ||
       is.na(check_every) || check_every < 1L ||
@@ -981,15 +993,19 @@
   dev <- torch::torch_device(device)
   mk_tensors <- function(rows) {
     rf <- factor(respondent_id[rows], levels = unique(respondent_id[rows]))
+    ## Own the backing storage. These tensors survive optimizer construction
+    ## and garbage collection; retaining storage borrowed from a temporary
+    ## indexed R object can otherwise corrupt a row before the polish stage on
+    ## some torch builds.
+    owned_tensor <- function(x, dtype) {
+      torch::torch_tensor(x, dtype = dtype, device = dev)$clone()
+    }
     list(
-      dx = torch::torch_tensor(deltaX[rows, , drop = FALSE],
-                               dtype = torch::torch_float64(), device = dev),
-      zt = torch::torch_tensor(Z[rows, , drop = FALSE],
-                               dtype = torch::torch_float64(), device = dev),
-      yt = torch::torch_tensor(as.numeric(y[rows]),
-                               dtype = torch::torch_float64(), device = dev),
-      idx1 = torch::torch_tensor(as.integer(rf), dtype = torch::torch_long(),
-                                 device = dev),
+      dx = owned_tensor(deltaX[rows, , drop = FALSE],
+                        torch::torch_float64()),
+      zt = owned_tensor(Z[rows, , drop = FALSE], torch::torch_float64()),
+      yt = owned_tensor(as.numeric(y[rows]), torch::torch_float64()),
+      idx1 = owned_tensor(as.integer(rf), torch::torch_long()),
       N = nlevels(rf)
     )
   }
@@ -1002,10 +1018,11 @@
   U_t <- if (q == 0L) {
     torch::torch_zeros(1L, 1L, dtype = torch::torch_float64(), device = dev)
   } else {
-    torch::torch_tensor(gh$U, dtype = torch::torch_float64(), device = dev)
+    torch::torch_tensor(
+      gh$U, dtype = torch::torch_float64(), device = dev)$clone()
   }
-  logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float64(),
-                                device = dev)
+  logw_t <- torch::torch_tensor(
+    log(gh$w), dtype = torch::torch_float64(), device = dev)$clone()
 
   net <- .sc_build_mixed_network(
     p = ncol(deltaX), p_Z = ncol(Z), q = q, hidden = hidden,
@@ -1015,14 +1032,36 @@
     a_bound = compact$a_bound, weight_bound = compact$weight_bound,
     coefficient_scale = compact$coefficient_scale
   )
+  exact_warm_load_difference <- NA_real_
   if (!is.null(warm_state)) {
     ## Warm starts are permitted only when the caller has established that
     ## the state contains no held-out outcomes. `scmix()` therefore uses this
     ## path for its full-sample fit, never for an outer-fold nuisance fit.
+    load_error <- NULL
     ok <- tryCatch({
       own <- net$state_dict()
+      if (identical(warm_start_mode, "exact_state")) {
+        if (!is.list(warm_state) ||
+            !identical(names(warm_state), names(own))) {
+          stop("the exact warm state has different fields")
+        }
+        compatible <- vapply(names(own), function(nm) {
+          inherits(warm_state[[nm]], "torch_tensor") &&
+            identical(as.integer(warm_state[[nm]]$shape),
+                      as.integer(own[[nm]]$shape)) &&
+            identical(as.character(warm_state[[nm]]$dtype),
+                      as.character(own[[nm]]$dtype)) &&
+            all(is.finite(torch::as_array(
+              warm_state[[nm]]$detach()$cpu())))
+        }, logical(1L))
+        if (!all(compatible)) {
+          stop("the exact warm state has incompatible tensors")
+        }
+      }
       for (nm in intersect(names(warm_state), names(own))) {
-        use <- if (warm_start_mode == "pooled_structural") {
+        use <- if (warm_start_mode == "exact_state") {
+          TRUE
+        } else if (warm_start_mode == "pooled_structural") {
           nm %in% c("A", "kappa_raw", "alpha_raw")
         } else {
           warm_start_mode == "pooled_nested" ||
@@ -1031,6 +1070,18 @@
         if (use) own[[nm]] <- warm_state[[nm]]
       }
       net$load_state_dict(own)
+      if (identical(warm_start_mode, "exact_state")) {
+        loaded <- net$state_dict()
+        exact_warm_load_difference <- max(vapply(names(loaded), function(nm) {
+          max(abs(
+            torch::as_array(loaded[[nm]]$detach()$cpu()) -
+              torch::as_array(warm_state[[nm]]$detach()$cpu())), 0)
+        }, numeric(1L)))
+        if (!is.finite(exact_warm_load_difference) ||
+            exact_warm_load_difference != 0) {
+          stop("the exact warm state was not copied without change")
+        }
+      }
       if (warm_start_mode == "pooled_nested") {
         torch::with_no_grad({
           deviation <- setdiff(names(net$parameters),
@@ -1048,7 +1099,14 @@
         })
       }
       TRUE
-    }, error = function(e) FALSE)
+    }, error = function(e) {
+      load_error <<- conditionMessage(e)
+      FALSE
+    })
+    if (!ok && identical(warm_start_mode, "exact_state")) {
+      stop("The exact warm state could not be loaded: ", load_error, ".",
+           call. = FALSE)
+    }
     if (!ok && isTRUE(verbose)) {
       message(".sc_train_mixed_one(): warm start skipped (state mismatch).")
     }
@@ -1056,11 +1114,29 @@
   net$to(device = dev)
   ## Warm states and device transfers are followed by the same compact-set
   ## projection used after every optimizer update.
+  exact_state_before_projection <- if (
+      identical(warm_start_mode, "exact_state")) {
+    .scmix_clone_network_state(net)
+  } else NULL
   .sc_mixed_project_parameters(
     net, coefficient_scale = compact$coefficient_scale,
     alpha_bound = compact$alpha_bound,
     a_bound = compact$a_bound, weight_bound = compact$weight_bound
   )
+  if (!is.null(exact_state_before_projection)) {
+    exact_state_after_projection <- .scmix_clone_network_state(net)
+    unchanged <- vapply(names(exact_state_before_projection), function(nm) {
+      isTRUE(all.equal(exact_state_before_projection[[nm]],
+                       exact_state_after_projection[[nm]], tolerance = 0,
+                       check.attributes = FALSE))
+    }, logical(1L))
+    if (!all(unchanged)) {
+      stop(paste0(
+        "The exact warm state is outside the declared compact parameter ",
+        "set and would require projection before repolishing."),
+        call. = FALSE)
+    }
+  }
   optimizer <- torch::optim_adam(net$parameters, lr = learning_rate,
                                  weight_decay = 0)
 
@@ -1073,7 +1149,9 @@
   stable_checks <- 0L
   previous_check <- Inf
   stopped_at <- n_epochs
-  stop_reason <- "maximum_epochs"
+  stop_reason <- if (n_epochs == 0L) {
+    "zero_adam_exact_state"
+  } else "maximum_epochs"
   last_finite_checkpoint <- .scmix_clone_network_state(net)
   checkpoint_epoch <- 0L
 
@@ -1192,10 +1270,11 @@
   U_t <- if (q == 0L) {
     torch::torch_zeros(1L, 1L, dtype = torch::torch_float64(), device = dev)
   } else {
-    torch::torch_tensor(gh$U, dtype = torch::torch_float64(), device = dev)
+    torch::torch_tensor(
+      gh$U, dtype = torch::torch_float64(), device = dev)$clone()
   }
-  logw_t <- torch::torch_tensor(log(gh$w), dtype = torch::torch_float64(),
-                                device = dev)
+  logw_t <- torch::torch_tensor(
+    log(gh$w), dtype = torch::torch_float64(), device = dev)$clone()
 
   ## Audit the settled module after the R torch optimizer and closure have
   ## left scope. The binding may finalize strong-Wolfe trial storage only at
@@ -1351,6 +1430,7 @@
     } else "+lbfgs_polish_rejected"),
     early_stop = early_stop,
     warm_start_mode = warm_start_mode,
+    exact_warm_load_difference = exact_warm_load_difference,
     mean_family = mean_family,
     alpha_bound = compact$alpha_bound,
     deviation_from_origin_max = deviation_from_origin_max,
@@ -1384,13 +1464,19 @@
                                        warm_state = NULL,
                                        warm_start_mode = c(
                                          "mean_only", "pooled_nested",
-                                         "pooled_structural")) {
+                                         "pooled_structural",
+                                         "exact_state")) {
   if (!is.numeric(n_starts) || length(n_starts) != 1L || is.na(n_starts) ||
       n_starts < 1L || n_starts != as.integer(n_starts)) {
     stop(".sc_train_mixed_multistart(): `n_starts` must be positive.")
   }
   n_starts <- as.integer(n_starts)
   warm_start_mode <- match.arg(warm_start_mode)
+  if (identical(warm_start_mode, "exact_state") && n_starts != 1L) {
+    stop(paste0(
+      ".sc_train_mixed_multistart(): an exact-state repolish requires ",
+      "`n_starts = 1`."), call. = FALSE)
+  }
   fits <- vector("list", n_starts)
   for (s in seq_len(n_starts)) {
     seed_s <- if (is.null(seed)) NULL else {
@@ -1468,6 +1554,9 @@
     epochs = vapply(fits, `[[`, integer(1L), "stopped_at"),
     stop_reason = vapply(fits, `[[`, character(1L), "stop_reason"),
     warm_start_mode = vapply(fits, `[[`, character(1L), "warm_start_mode"),
+    exact_warm_load_difference = vapply(fits, function(x) {
+      as.numeric(x$exact_warm_load_difference %||% NA_real_)
+    }, numeric(1L)),
     deviation_from_origin_max = vapply(
       fits, `[[`, numeric(1L), "deviation_from_origin_max"),
     mean_variation_max = vapply(fits, `[[`, numeric(1L),

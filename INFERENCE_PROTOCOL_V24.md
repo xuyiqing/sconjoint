@@ -6,8 +6,9 @@
 
 **Frozen on:** 2026-09-06
 
-**Status:** validation design, truths, and fixed rules frozen; evaluator and
-all design-matched outcomes locked
+**Status:** validation design, truths, fixed rules, and the end-to-end
+evaluator frozen; all design-matched outcomes locked until the separate
+evaluator approval is recorded
 
 **Pre-outcome amendment on 2026-09-07:** The first freeze mislabeled the
 directional mean and second-moment columns as inferential primitives. They are
@@ -17,6 +18,18 @@ inference code. The target registry and its hashes were corrected before any
 pilot or evidence outcome was generated. The target definitions, target
 truths, and numerical decision rules did not change. The original freeze
 remains available in Git history.
+
+The final pre-outcome amendment on the same date completes the concrete
+end-to-end evaluator and its hash contract. It also makes explicit details
+already required by the decision registry. These include the
+dimension-adjusted machine-epsilon rank rule, both GH31 checks, the fixed ridge
+neighborhood, target constraint maps, and the pilot information firewall. The
+implementation adds literal zero-Adam exact-state GH31 polishing. It also
+repairs a general R/Torch storage problem found during toy testing by cloning
+fit tensors into owned storage before optimization. No v2.4 outcome existed
+when these changes were made. The immutable design, DGP, truth, target, seed,
+and decision values did not change. The target registry now states the
+zero-variance tie conventions already used by the paper's estimands.
 
 Protocol v2.4 supersedes v2.3 prospectively. It does not alter or delete any
 v2.3 file. The v2.3 calibration attempt is retained as audit history. It did
@@ -54,6 +67,25 @@ budgets of 0.05 standard deviations, probability-scale loading invariance of
 `1e-8`, derivative error of `1e-4`, null-space relative materiality of `1e-6`,
 and a dimension-adjusted machine-epsilon SVD tolerance.
 
+The KKT, loading, and nesting gates apply to the selected full-sample state
+and the two selected outer-fold states. Every state within `1e-6` of the best
+objective in its scope must also be finite, double precision, and successfully
+polished. Its target movement enters the near-optimum stability gate. A
+discarded start outside that set is retained as a diagnostic but does not
+invalidate the selected estimator merely because its own KKT residual is
+large. The three exact-state GH31 repolishes must independently be finite,
+double precision, nonworsening, successfully polished, and pass the same KKT
+and loading checks.
+
+Directional shares are evaluated by the exact normal-CDF formula at positive
+directional variance and by its declared tie rule at zero variance. Preference
+direction excludes a tie, while compensating benefit includes it. No positive
+numerical floor changes the target. Each share nevertheless requires
+its own directional variance to have a studentized distance of at least 1.96
+from zero. Derivative, Riesz, and null-space diagnostics include that auxiliary
+variance primitive. Thus the limit keeps evaluation stable while the
+regularity gate prevents ordinary inference at the boundary.
+
 All 78 response-free truths for the six cells, twelve target variants, and
 the fit-regularity primitive are
 frozen in `inst/protocol/inference-v2.4-target-truths.csv`. Choice probabilities
@@ -86,9 +118,8 @@ near-boundary probability with an exactly zero MRS denominator, one generates
 rank zero while fitting rank one, and one puts the target mean and loading in
 the weakest design direction. Two integrity replications per cell do not
 enter evidence. The evidence study requires exactly 100 replications per
-cell. It runs in batches of ten. It cannot declare success before all 100.
-Early stopping is allowed only when arithmetic proves that a frozen criterion
-can no longer be met.
+cell. It runs in batches of ten. All 600 attempts are required. There is no
+early success or futility stop.
 
 The twelve integrity pilots are also a fixed runtime gate. They may be
 inspected only for execution integrity, elapsed time, and resource use. At most
@@ -96,6 +127,13 @@ six workers may be used. Evidence proceeds only if the complete six-cell study
 is projected to finish within eight wall-clock hours on those workers. If it
 does not, work stops and any redesign receives a new protocol ID. Pilot target
 results and operating characteristics cannot alter this protocol.
+The result firewall is a procedural and hash-audited restriction rather than
+an encryption claim. Pilot artifacts exist so failures can be audited, but
+the checkpoint interface exposes only the prespecified integrity and runtime
+metadata before the go or no-go decision. A signed private ledger binds every
+sealed pilot artifact by path and file hash. An interrupted wave may resume
+only by revalidating an exact on-contract artifact, and the runtime projection
+retains the original wave start so interruption time cannot make it optimistic.
 
 Every fit uses rank one, two respondent outer folds, two inner folds, two
 starts, GH15 integration checked against GH31, and 9,999 common respondent
@@ -174,18 +212,20 @@ cells.
 
 ## 5. Outcome lock
 
-No v2.4 design-matched synthetic outcome has been generated. The response-free
-design, truths, target definitions, seeds, and decision rules are frozen now.
-The estimator implementation is not yet frozen. The package requires one
-concrete end-to-end `fit_and_infer` evaluator. It must execute
-the respondent-sequence likelihood, nested respondent splitting,
-target-specific Riesz correction, one-step inference, fixed reporting rules,
-and common respondent multipliers. Before any outcome is generated, a future
-approval DCF must bind that one implementation, its complete settings, and its
-interface by hash. The former collection of generic adapters is not accepted.
+No v2.4 design-matched synthetic outcome had been generated at this final
+pre-outcome amendment. The response-free design, truths, target definitions,
+seeds, decision rules, and one concrete end-to-end evaluator are frozen. That
+evaluator executes the respondent-sequence likelihood, nested respondent
+splitting, target-specific Riesz correction, one-step inference, fixed
+reporting rules, and common respondent multipliers. Before any outcome can be
+generated, its implementation manifest, settings, and interface must be bound
+by SHA-256 in `inst/protocol/inference-v2.4-evaluator-approval.dcf`.
 
-`scmix_v24_generate_study_outcome()` fails closed in this commit. There is no
-production values file and no family approval file.
+At the instant of this amendment, that approval file was absent and
+`scmix_v24_generate_study_outcome()` failed closed. The live state machine,
+rather than this historical statement, determines whether pilot or evidence
+generation is currently permitted. There is no calibration-values file, and a
+family approval can exist only after all 600 evidence attempts are recorded.
 
 Even a successful study supplies implementation evidence only for these fixed
 rules on the three finite empirical design templates. It does not certify an

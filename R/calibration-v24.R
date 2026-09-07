@@ -125,13 +125,16 @@
   manifest_path <- .scmix_v24_freeze_manifest_file()
   manifest <- as.list(read.dcf(manifest_path)[1L, , drop = TRUE])
   if (!identical(manifest[["Manifest-Id"]],
-                 "paperps-v2.4-freeze-2026-09-06-v2") ||
+                 "paperps-v2.4-freeze-2026-09-06-v3") ||
       !identical(manifest[["Protocol-Id"]], .scmix_v24_protocol_id) ||
       !identical(manifest[["Plan-Id"]], .scmix_v24_plan_id) ||
       !identical(manifest[["Pre-Outcome-Amended-On"]], "2026-09-07") ||
-      !grepl("directional_heterogeneity_primitive_metadata",
+      !grepl("evaluator_implementation_completed_and_hash_contract_added",
              manifest[["Pre-Outcome-Amendment"]], fixed = TRUE) ||
       !identical(manifest[["Outcome-Count"]], "0") ||
+      !identical(manifest[["Integrity-Pilot-Status"]], "not_run") ||
+      !identical(manifest[["Evidence-Status"]], "not_run") ||
+      !identical(manifest[["Evaluator-Approval-Status"]], "absent") ||
       !identical(manifest[["Approval-Status"]], "absent")) {
     stop("The v2.4 freeze manifest has an invalid identity or status.",
          call. = FALSE)
@@ -537,11 +540,10 @@ scmix_v24_validation_plan <- function() {
   }
   forbidden <- c(
     "inference-v2.4-calibration-values.dcf",
-    "inference-v2.4-calibration.dcf",
-    "inference-v2.4-family-approval.dcf")
+    "inference-v2.4-calibration.dcf")
   protocol_dir <- dirname(paths[["plan"]])
   if (any(file.exists(file.path(protocol_dir, forbidden)))) {
-    stop("A v2.4 calibration-values or family-approval file exists before validation.",
+    stop("A prohibited v2.4 calibration-values file exists.",
          call. = FALSE)
   }
   freeze <- .scmix_v24_verify_freeze(paths)
@@ -798,7 +800,7 @@ scmix_v24_target_truths <- function(plan = scmix_v24_validation_plan(),
     compensating_mean <- direction_mean + 0.5 * denominator_mean
     compensating_share_i <- if (loading_sd > 0) {
       stats::pnorm(compensating_mean / loading_sd)
-    } else as.numeric(compensating_mean > 0)
+    } else as.numeric(compensating_mean >= 0)
     explained <- mean((cell$direction_moderator[[1L]] * z_i -
                          mean(cell$direction_moderator[[1L]] * z_i))^2)
     residual <- loading_sd^2
@@ -849,37 +851,12 @@ scmix_v24_target_truths <- function(plan = scmix_v24_validation_plan(),
 }
 
 scmix_v24_readiness <- function(plan = scmix_v24_validation_plan()) {
-  if (!.scmix_v24_intact(plan, "scmix_v24_validation_plan")) {
-    stop("An intact frozen v2.4 plan is required.", call. = FALSE)
-  }
-  approval <- .scmix_v24_evaluator_approval_path(plan)
-  evaluator_approved <- file.exists(approval)
-  .scmix_v24_sign(list(
-    plan_id = plan$plan_id, protocol_id = plan$protocol_id,
-    prospective_plan_frozen = TRUE, threshold_selection_absent = TRUE,
-    calibration_stream_absent = TRUE, response_free_designs_frozen = TRUE,
-    respondent_superpopulation_resampling_frozen = TRUE,
-    deterministic_family_cell_approval_frozen = TRUE,
-    exact_uncentered_rms_dgp_frozen = TRUE,
-    single_end_to_end_evaluator_required = TRUE,
-    evaluator_approval_present = evaluator_approved,
-    outcome_generation_permitted = FALSE,
-    integrity_pilot_completed = FALSE, evidence_study_completed = FALSE,
-    family_approval_present = FALSE,
-    status = if (evaluator_approved)
-      "evaluator_file_present_but_not_yet_validated" else
-        "not_ready_single_evaluator_approval_absent"),
-    "scmix_v24_readiness")
+  .scmix_v24_evaluator_readiness(plan = plan)
 }
 
-## Frozen-design outcome generation remains unavailable in this commit.  A
-## future implementation must replace this lock only after one evaluator and
-## its exact interface are hash-bound in the approval DCF.
+## The generator is implemented in the evaluator state machine.  It remains
+## fail-closed until one complete evaluator and its exact interface are
+## hash-bound in the pre-outcome approval DCF.
 scmix_v24_generate_study_outcome <- function(...) {
-  stop(
-    "Protocol v2.4 is outcome locked. No frozen-design synthetic outcome may ",
-    "be generated until one hash-bound end-to-end fit-and-infer evaluator is ",
-    "implemented, approved, and integrity-tested. There is no calibration ",
-    "stream and no threshold-selection step.",
-    call. = FALSE)
+  .scmix_v24_evaluator_generate_study_outcome(...)
 }

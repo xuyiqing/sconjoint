@@ -1557,7 +1557,13 @@ scmix_delta_transform <- function(
                              selected_nu_override = NULL,
                              inner_validation_override = NULL,
                              numerical_rank_tolerance = 1e-10,
-                             N_total = nrow(score)) {
+                             numerical_rank_rule = c(
+                               "relative_floor_one",
+                               "dimension_epsilon"),
+                             N_total = nrow(score),
+                             fixed_nu_override = NULL,
+                             sensitivity_nu_override = NULL) {
+  numerical_rank_rule <- match.arg(numerical_rank_rule)
   W <- .scmix_dml_inverse_sqrt(structural_gram)
   score_w <- score %*% W
   gradient_w <- lapply(gradient, function(g) g %*% W)
@@ -1582,7 +1588,25 @@ scmix_delta_transform <- function(
   risk <- matrix(NA_real_, length(nu_grid), J,
                  dimnames = list(NULL, paste0("target", seq_len(J))))
   selection_source <- "legacy_shared_nuisance_inner_split"
-  if (!is.null(selected_nu_override)) {
+  selection_data_dependent <- FALSE
+  if (!is.null(selected_nu_override) && !is.null(fixed_nu_override)) {
+    .scmix_dml_stop("scmix_dml(): signed and prespecified fixed Riesz ridge ",
+                    "overrides cannot be combined.")
+  }
+  if (!is.null(fixed_nu_override)) {
+    selected <- rep_len(as.numeric(fixed_nu_override), J)
+    if (length(selected) != J || any(!is.finite(selected)) ||
+        any(selected < 0) || any(!selected %in% nu_grid)) {
+      .scmix_dml_stop("scmix_dml(): a prespecified fixed Riesz ridge must ",
+                      "provide one value per target and lie on the fold grid.")
+    }
+    if (!is.null(inner_validation_override)) {
+      .scmix_dml_stop("scmix_dml(): a prespecified fixed Riesz ridge cannot ",
+                      "use inner-validation risks.")
+    }
+    selection_source <-
+      "prespecified_fixed_n_train_minus_three_quarters"
+  } else if (!is.null(selected_nu_override)) {
     selected <- as.numeric(selected_nu_override)
     if (length(selected) != J || any(!is.finite(selected)) ||
         any(selected < 0) || any(!selected %in% nu_grid)) {
@@ -1600,6 +1624,7 @@ scmix_delta_transform <- function(
                       "incompatible dimensions or nonfinite values.")
     }
     selection_source <- "signed_inner_nuisance_refit_evidence"
+    selection_data_dependent <- TRUE
   } else if (length(nu_grid) > 1L && validation_fraction > 0 &&
              length(train) >= 20L) {
     selected_validation <- .scmix_dml_with_seed(seed, {
@@ -1624,6 +1649,7 @@ scmix_delta_transform <- function(
     })
     selected <- selected_validation$selected
     risk <- selected_validation$risk
+    selection_data_dependent <- TRUE
   }
 
   Iall <- crossprod(score_w[train, , drop = FALSE]) / length(train)
@@ -1637,7 +1663,21 @@ scmix_delta_transform <- function(
   ridge_rel <- sqrt(colMeans((corr - corr0)^2)) /
     pmax(sqrt(colMeans(corr0^2)), 1e-12)
 
+  sensitivity_nu <- if (is.null(sensitivity_nu_override)) {
+    NULL
+  } else {
+    values <- sort(unique(as.numeric(sensitivity_nu_override)))
+    if (!length(values) || any(!is.finite(values)) || any(values < 0) ||
+        any(!values %in% nu_grid)) {
+      .scmix_dml_stop("scmix_dml(): prespecified Riesz sensitivity ridges ",
+                      "must be finite nonnegative values on the fold grid.")
+    }
+    values
+  }
   neighborhoods <- lapply(seq_len(J), function(j) {
+    if (!is.null(sensitivity_nu)) {
+      return(sort(unique(c(selected[j], sensitivity_nu))))
+    }
     pos <- match(selected[j], nu_grid)
     adjacent_pos <- unique(c(max(1L, pos - 1L),
                              min(length(nu_grid), pos + 1L)))
@@ -1669,7 +1709,12 @@ scmix_delta_transform <- function(
     geval <- grad_matrix(evaluation)
     ee <- eigen((information_eval + t(information_eval)) / 2,
                 symmetric = TRUE)
-    cutoff <- numerical_rank_tolerance * max(max(abs(ee$values)), 1)
+    cutoff <- if (identical(numerical_rank_rule, "dimension_epsilon")) {
+      nrow(information_eval) * .Machine$double.eps *
+        max(abs(ee$values))
+    } else {
+      numerical_rank_tolerance * max(max(abs(ee$values)), 1)
+    }
     keep <- ee$values > cutoff
     numerical_rank <- sum(keep)
     inv <- ifelse(keep, 1 / ee$values, 0)
@@ -1699,11 +1744,13 @@ scmix_delta_transform <- function(
       selected,
     selected_nu_by_target = selected,
     selection_source = selection_source,
+    selection_data_dependent = selection_data_dependent,
     validation = validation, information = Iall,
     information_eigenvalues = eig, structural_gram = structural_gram,
     structural_inverse_sqrt = W,
     riesz_equation_relative_residual = eq_rel,
     ridge_relative_sensitivity = ridge_rel,
+    sensitivity_nu = sensitivity_nu,
     ridge_neighborhood = neighborhoods,
     correction_neighborhood = correction_neighborhood,
     honest_evaluation_information = information_eval,
@@ -1713,6 +1760,8 @@ scmix_delta_transform <- function(
     honest_riesz_null_space_defect = honest_null,
     honest_information_scaled_defect_numerator = honest_numerator,
     numerical_rank_tolerance = numerical_rank_tolerance,
+    numerical_rank_rule = numerical_rank_rule,
+    numerical_rank_cutoff = if (length(evaluation)) cutoff else NA_real_,
     grid_contains_zero = any(nu_grid == 0),
     grid_max_positive = if (any(nu_grid > 0)) max(nu_grid) else 0)
 }
@@ -2124,9 +2173,18 @@ scmix_inference_verification <- function(fit, mu_basis, tangent, numerical,
 #' @param kappa_folds Optional fold-specific kappa estimates.
 #' @param mu_basis Optional fixed matrix, K-list, or basis callback. NULL uses
 #'   the documented intercept-plus-linear-moderator basis.
-#' @param nu_grid NULL for the fold-size-dependent grid containing zero,
-#'   N_train^-1, and N_train^-1/2; a common finite nonnegative grid; or a
-#'   K-list of fold-specific grids.
+#' @param nu_grid Under `riesz_rule = "select"`, `NULL` for the
+#'   fold-size-dependent grid containing zero, N_train^-1, N_train^-3/4, and
+#'   N_train^-1/2; a common finite nonnegative grid; or a K-list of
+#'   fold-specific grids. It must be `NULL` under the fixed rule.
+#' @param riesz_rule Riesz ridge rule. The legacy default `"select"` retains
+#'   validation selection. `"fixed_n_train_minus_three_quarters"` fixes each
+#'   target-specific solve at N_train^-3/4 without validation and records
+#'   N_train^-1 and N_train^-1/2 sensitivity solves.
+#' @param riesz_numerical_rank_rule Numerical-rank rule for the held-out
+#'   information audit. The legacy default retains its relative tolerance with
+#'   a unit floor. `"dimension_epsilon"` uses dimension times machine epsilon
+#'   times the leading held-out information eigenvalue, as fixed by v2.4.
 #' @param riesz_penalty Positive-semidefinite penalty in the declared
 #'   structural-orthonormal coordinates.
 #' @param riesz_validation_fraction Training-respondent validation fraction.
@@ -2183,9 +2241,26 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                       verification = NULL,
                       multiplier_draws = 999L,
                       multiplier = c("normal", "rademacher"),
-                      level = 0.95, seed = 1L) {
+                      level = 0.95, seed = 1L,
+                      riesz_rule = c(
+                        "select",
+                        "fixed_n_train_minus_three_quarters"),
+                      riesz_numerical_rank_rule = c(
+                        "relative_floor_one", "dimension_epsilon")) {
   call <- match.call()
   multiplier <- match.arg(multiplier)
+  riesz_rule <- match.arg(riesz_rule)
+  riesz_numerical_rank_rule <- match.arg(riesz_numerical_rank_rule)
+  if (identical(riesz_rule, "fixed_n_train_minus_three_quarters") &&
+      !is.null(nu_grid)) {
+    .scmix_dml_stop("scmix_dml(): nu_grid must be NULL when riesz_rule is ",
+                    "'fixed_n_train_minus_three_quarters'.")
+  }
+  if (identical(riesz_rule, "fixed_n_train_minus_three_quarters") &&
+      !is.null(v22_riesz_evidence)) {
+    .scmix_dml_stop("scmix_dml(): prespecified fixed Riesz ridge selection ",
+                    "cannot be combined with v22_riesz_evidence.")
+  }
   if (!is.numeric(level) || length(level) != 1L || !is.finite(level) ||
       level <= 0 || level >= 1) {
     .scmix_dml_stop("scmix_dml(): level must lie strictly between zero and one.")
@@ -2375,7 +2450,16 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     tg$derivative_refinement_pass <- is.finite(derivative_metric) &
       derivative_metric <= derivative_refinement_tolerance
     P <- .scmix_dml_penalty(riesz_penalty, ncol(seq_score$score))
-    nu_k <- .scmix_dml_nu_grid(nu_grid, k, length(train), K)
+    fixed_nu_k <- sensitivity_nu_k <- NULL
+    if (identical(riesz_rule,
+                  "fixed_n_train_minus_three_quarters")) {
+      fixed_nu_k <- length(train)^(-3 / 4)
+      sensitivity_nu_k <- c(length(train)^(-1),
+                            length(train)^(-1 / 2))
+      nu_k <- sort(unique(c(fixed_nu_k, sensitivity_nu_k)))
+    } else {
+      nu_k <- .scmix_dml_nu_grid(nu_grid, k, length(train), K)
+    }
     selected_override <- validation_override <- NULL
     if (!is.null(v22_riesz_evidence)) {
       evidence_payload <- unclass(v22_riesz_evidence)
@@ -2485,7 +2569,10 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
       riesz_validation_fraction, fold_seed, solve_tolerance = 1e-10,
       selected_nu_override = selected_override,
       inner_validation_override = validation_override,
+      fixed_nu_override = fixed_nu_k,
+      sensitivity_nu_override = sensitivity_nu_k,
       numerical_rank_tolerance = riesz_numerical_rank_tolerance,
+      numerical_rank_rule = riesz_numerical_rank_rule,
       N_total = N)
     ev <- rz$information_eigenvalues
     generalized_min <- min(ev)
@@ -2506,6 +2593,8 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
       selected_nu_by_target = stats::setNames(
         rz$selected_nu_by_target, labels),
       ridge_selection_source = rz$selection_source,
+      ridge_selection_data_dependent = rz$selection_data_dependent,
+      ridge_sensitivity_nu = rz$sensitivity_nu,
       training_plugin_mean = training_plugin_mean,
       direct_pz_center = direct_pz_center,
       nu_validation = rz$validation,
@@ -2534,6 +2623,8 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
       honest_information_scaled_defect_numerator = stats::setNames(
         rz$honest_information_scaled_defect_numerator, labels),
       riesz_numerical_rank_tolerance = rz$numerical_rank_tolerance,
+      riesz_numerical_rank_rule = rz$numerical_rank_rule,
+      riesz_numerical_rank_cutoff = rz$numerical_rank_cutoff,
       grid_contains_zero = rz$grid_contains_zero,
       derivative_refinement_error = tg$derivative_refinement_error,
       derivative_refinement_protocol_exact = stats::setNames(
@@ -2718,6 +2809,8 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     reason = if (conditional_ready) NULL else
       paste(verification_issues, collapse = "; "),
     analysis_signature = .scmix_dml_signature(fit),
+    riesz_rule = riesz_rule,
+    riesz_numerical_rank_rule = riesz_numerical_rank_rule,
     ## Legacy aliases are retained. Protocol-v2.2 consumers must use the four
     ## explicit fields and must call scmix_v22_finalize() before treating a
     ## range-respecting point as reportable.

@@ -2,7 +2,7 @@ Plan-Id: paperps-lean-validation-2026-09-06-v2.4-v1
 Protocol-Id: paperps-inference-2026-09-06-v2.4
 Frozen-On: 2026-09-06
 Pre-Outcome-Amended-On: 2026-09-07
-Pre-Outcome-Amendment: corrected_directional_heterogeneity_primitive_metadata_to_H_Z_and_H_R_matching_the_paper_and_existing_minimal_primitive_implementation_no_outcomes_generated
+Pre-Outcome-Amendment: corrected_directional_heterogeneity_primitive_metadata_to_H_Z_and_H_R_and_clarified_the_papers_existing_threshold_tie_rules_at_zero_variance_no_outcomes_generated
 Status: prospective_validation_design_frozen_outcomes_locked
 Threshold-Selection: none
 Calibration-Stream: none

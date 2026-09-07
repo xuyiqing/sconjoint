@@ -12,6 +12,25 @@ columns used to construct `H_Z`; they are not extra familywise multiplier
 coordinates. This matches the paper and the existing minimal-primitive code.
 No pilot or evidence outcome existed when the label and hashes were corrected.
 
+A final pre-outcome amendment on September 7 freezes the complete evaluator
+and its implementation-manifest contract. It explicitly binds the fixed-ridge
+and dimension-adjusted SVD rules, the two GH31 branches, exact-state zero-Adam
+polishing, target mappings, and the pilot information firewall. Toy tests also
+revealed that this R/Torch build could retain unsafe backing storage when a
+tensor was made from a temporary indexed R slice. Fit tensors now own cloned
+storage. This is a general correctness repair, not an application-specific
+adjustment. No v2.4 outcome existed when it was made.
+
+The selected full and outer-fold states carry the KKT, loading, and nesting
+gates. Near-optimum states carry polish, precision, finiteness, and target-
+stability checks. Discarded far starts remain descriptive. All three GH31
+repolishes must satisfy the selected-state numerical checks. Directional-share
+evaluation uses each estimand's declared tie rule at zero variance with no
+positive floor. Preference direction excludes exact ties and compensating
+benefit includes them. An auxiliary directional-variance primitive prevents a
+regular release unless it is at least 1.96 standard errors from zero. This is
+a pre-outcome clarification of the estimands already defined in the paper.
+
 The three 400-respondent templates are deterministic response-free subsets of
 the immutable v2.3 design wrappers. The v2.4 manifest pins each source wrapper,
 selected respondent vector, and derived response-free payload. No observed
@@ -54,14 +73,21 @@ centered before the multiplier statistic is formed.
 The twelve excluded pilots may reveal only integrity, elapsed time, and
 resource use. At most six workers are allowed. The evidence study proceeds
 only if its projected wall time is no more than eight hours. Otherwise it stops
-and any redesign receives a new protocol ID.
+and any redesign receives a new protocol ID. This firewall is a procedural,
+hash-audited rule rather than encryption. The public pilot interface exposes
+only the prespecified metadata. A signed private ledger records each sealed
+artifact's path and file hash. Interrupted pilot work may be reused only after
+exact read-back validation, and elapsed wall time always begins at the original
+wave start. All 600 evidence attempts are required, with no early success or
+futility stop.
 
-The response-free design, truths, target definitions, seeds, and decision rules
-are frozen. The estimator implementation is not yet frozen. Before any
-design-matched outcome can be generated, one concrete end-to-end evaluator and
-all of its settings must be implemented, integrity-tested, and bound by SHA-256 in
-`inst/protocol/inference-v2.4-evaluator-approval.dcf`. That file is absent.
-`scmix_v24_generate_study_outcome()` therefore fails closed.
+The response-free design, truths, target definitions, seeds, decision rules,
+and one end-to-end evaluator are frozen. Its complete implementation manifest,
+settings, and interface must be bound by SHA-256 in
+`inst/protocol/inference-v2.4-evaluator-approval.dcf` before any outcome is
+generated. At the instant of the final pre-outcome amendment that approval was
+absent and `scmix_v24_generate_study_outcome()` failed closed. The live state
+machine records subsequent pilot, evidence, and family-approval state.
 
 A successful study would validate the implementation of these fixed rules on
 the three finite empirical templates. It would not certify an application.

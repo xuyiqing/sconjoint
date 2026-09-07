@@ -198,6 +198,61 @@ test_that("scmix_dml returns foldwise direct-PZ and respondent inference", {
   }
 })
 
+test_that("fixed N_train^-3/4 Riesz rule is prespecified and records sensitivities", {
+  fit <- .paperps_dml_mock(N = 60L, K = 3L)
+  B <- .paperps_dml_basis(fit)
+  rule <- "fixed_n_train_minus_three_quarters"
+  out <- sconjoint:::scmix_dml(
+    fit, mu_basis = B, riesz_rule = rule,
+    riesz_validation_fraction = 0.49,
+    multiplier_draws = 0L, seed = 17L)
+  rerun <- sconjoint:::scmix_dml(
+    fit, mu_basis = B, riesz_rule = rule,
+    riesz_validation_fraction = 0.11,
+    multiplier_draws = 0L, seed = 918L)
+
+  expect_identical(out$riesz_rule, rule)
+  expect_equal(out$estimate, rerun$estimate, tolerance = 0)
+  expect_equal(out$score_correction, rerun$score_correction, tolerance = 0)
+  for (fd in out$fold_details) {
+    n_train <- fd$training_n
+    selected <- n_train^(-3 / 4)
+    sensitivities <- sort(c(n_train^(-1), n_train^(-1 / 2)))
+    neighborhood <- sort(c(sensitivities, selected))
+    expect_equal(unname(fd$selected_nu_by_target),
+                 rep(selected, length(fd$selected_nu_by_target)),
+                 tolerance = 0)
+    expect_identical(
+      fd$ridge_selection_source,
+      "prespecified_fixed_n_train_minus_three_quarters")
+    expect_false(fd$ridge_selection_data_dependent)
+    expect_equal(fd$ridge_sensitivity_nu, sensitivities, tolerance = 0)
+    expect_equal(fd$nu_validation$nu, neighborhood, tolerance = 0)
+    expect_true(all(is.na(as.matrix(fd$nu_validation[, -1L,
+                                                       drop = FALSE]))))
+    for (j in seq_along(fd$ridge_neighborhood)) {
+      expect_equal(fd$ridge_neighborhood[[j]], neighborhood, tolerance = 0)
+      expect_equal(ncol(fd$ridge_correction_heldout[[j]]), 3L)
+    }
+  }
+
+  legacy <- sconjoint:::scmix_dml(
+    fit, mu_basis = B, nu_grid = 0, multiplier_draws = 0L)
+  expect_identical(legacy$riesz_rule, "select")
+  expect_true(all(vapply(legacy$fold_details, function(fd)
+    identical(fd$selected_nu, 0), logical(1L))))
+  expect_error(
+    sconjoint:::scmix_dml(
+      fit, mu_basis = B, nu_grid = 0, riesz_rule = rule,
+      multiplier_draws = 0L),
+    "nu_grid must be NULL")
+  expect_error(
+    sconjoint:::scmix_dml(
+      fit, mu_basis = B, riesz_rule = rule,
+      v22_riesz_evidence = list(), multiplier_draws = 0L),
+    "cannot be combined with v22_riesz_evidence")
+})
+
 test_that("numeric derivatives require opt-in and refinement", {
   fit <- .paperps_dml_mock(N = 60L)
   B <- .paperps_dml_basis(fit)

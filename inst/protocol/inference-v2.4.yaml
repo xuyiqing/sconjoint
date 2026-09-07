@@ -2,13 +2,13 @@ protocol_id: paperps-inference-2026-09-06-v2.4
 plan_id: paperps-lean-validation-2026-09-06-v2.4-v1
 frozen_on: 2026-09-06
 pre_outcome_amended_on: 2026-09-07
-pre_outcome_amendment: corrected_directional_heterogeneity_primitive_metadata_to_H_Z_and_H_R_matching_the_paper_and_existing_minimal_primitive_implementation_no_outcomes_generated
-status: prospective_validation_design_frozen_outcomes_locked
+pre_outcome_amendment: corrected_directional_heterogeneity_primitive_metadata_clarified_existing_threshold_tie_rules_at_zero_variance_and_completed_evaluator_hash_contract_no_outcomes_generated
+status: prospective_validation_design_truths_rules_and_evaluator_frozen_outcomes_locked_pending_separate_approval
 threshold_selection: none
 calibration_stream: none
 application_outcomes_permitted: false
-frozen_now: [response_free_designs, empirical_truths, target_definitions, seeds, decision_rules]
-not_yet_frozen: [end_to_end_evaluator, evaluator_settings]
+frozen_now: [response_free_designs, empirical_truths, target_definitions, seeds, decision_rules, end_to_end_evaluator, evaluator_settings]
+not_yet_frozen: []
 rank_scope: q1_fit
 designs: [br2017, gs2020, sw2022]
 respondents_per_template: 400
@@ -35,7 +35,7 @@ pilot_go_no_go: proceed_only_if_projected_evidence_wall_hours_at_most_8_else_sto
 evidence_reps_per_cell: 100
 evidence_batch_size: 10
 early_success_permitted: false
-early_stop: mathematical_futility_only
+early_stop: none_all_600_attempts_required
 outer_folds: 2
 inner_folds: 2
 optimizer_starts: 2
@@ -77,4 +77,4 @@ approval:
   discretionary_override: prohibited
 family_release_definition: complete_family_simultaneous_interval_for_all_registered_members_with_all_fit_and_target_rules_passed_and_common_multipliers_no_incomplete_or_bonferroni_fallback
 validation_scope: implementation_evidence_on_three_finite_empirical_templates_not_application_certification
-outcome_generation: locked_pending_one_hash_bound_end_to_end_evaluator
+outcome_generation: locked_pending_separate_hash_bound_evaluator_approval
