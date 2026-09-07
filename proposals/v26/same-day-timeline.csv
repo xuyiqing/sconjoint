@@ -1,0 +1,9 @@
+checkpoint,target_hour,hard_hour,required_output,decision_if_incomplete
+freeze_and_approval,1,1.5,"committed protocol; implementation manifest; evaluator approval; BR and GS contracts; input hashes","do not generate v2.6 outcomes"
+sealed_wave_one,2,2.5,"12 complete hashed artifacts; integrity ledger; complete-wave wall time at most 3600 seconds","stop the development study; preserve ledger; application work may proceed only if software integrity is intact"
+development_evidence,4,5,"48 attempted replication artifacts and four wave manifests; no intermediate statistical inspection","label unavailable or incomplete; never call a family validated"
+application_primary_fits,6,8,"BR and GS final q1 selected states or explicit incomplete status; fresh q0 benchmarks","continue completed application; do not relax fit gates"
+application_inference,8,10,"all registered central target jobs; family multipliers; gate tables; local-rank records","report incomplete target or family as withheld"
+core_assessment,10,12,"design support; held-out scores and calibration; response counts and transitions; position and task order; AME versus AMCE; information diagnostics","downgrade interpretation status and list unavailable checks"
+contingency_freeze,14,14,"freeze all complete outputs and stop optional jobs","deliver complete subset with exact status labels"
+delivery,16,16,"hash manifest; tables; figures; coauthor note; paper-ready draft text","deliver audit record even if one application remains diagnostic"
