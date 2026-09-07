@@ -125,16 +125,43 @@
   manifest_path <- .scmix_v24_freeze_manifest_file()
   manifest <- as.list(read.dcf(manifest_path)[1L, , drop = TRUE])
   if (!identical(manifest[["Manifest-Id"]],
-                 "paperps-v2.4-freeze-2026-09-06-v3") ||
+                 "paperps-v2.4-freeze-2026-09-06-v4") ||
       !identical(manifest[["Protocol-Id"]], .scmix_v24_protocol_id) ||
       !identical(manifest[["Plan-Id"]], .scmix_v24_plan_id) ||
       !identical(manifest[["Pre-Outcome-Amended-On"]], "2026-09-07") ||
-      !grepl("evaluator_implementation_completed_and_hash_contract_added",
+      !grepl(paste0("macOS_fork_startup_attempt_failed_with_zero_completed_",
+                    "or_persisted_outcomes_and_no_target_or_gate_result_",
+                    "available_or_inspected_launcher_backend_amended_to_",
+                    "base_R_PSOCK_spawn_six_processes"),
              manifest[["Pre-Outcome-Amendment"]], fixed = TRUE) ||
+      !identical(
+        manifest[["Status"]],
+        paste0("prospective_design_truth_rules_evaluator_and_launcher_",
+               "contract_v2_frozen_v1_approval_superseded_v2_approval_",
+               "absent")) ||
       !identical(manifest[["Outcome-Count"]], "0") ||
-      !identical(manifest[["Integrity-Pilot-Status"]], "not_run") ||
+      !identical(manifest[["Integrity-Pilot-Status"]],
+                 "startup_failed_zero_completed_or_persisted_outcomes") ||
+      !identical(manifest[["Outcome-Count-Definition"]],
+                 "completed_or_persisted_synthetic_outcomes") ||
+      !identical(manifest[["Pilot-Result-Inspection-Status"]],
+                 "none_available_or_inspected") ||
+      !identical(
+        manifest[["Failed-Attempt-Private-Ledger-SHA256"]],
+        "56da001b11e3e2036b3db5a6be54a97bca4d87ad8d952f6fc7271ed384b9a77e") ||
       !identical(manifest[["Evidence-Status"]], "not_run") ||
-      !identical(manifest[["Evaluator-Approval-Status"]], "absent") ||
+      !identical(manifest[["Evaluator-Approval-Status"]],
+                 "v1_superseded_v2_absent") ||
+      !identical(manifest[["Evaluator-Approval-V1-Status"]], "superseded") ||
+      !identical(manifest[["Evaluator-Approval-V2-Status"]], "absent") ||
+      !identical(manifest[["Required-Evaluator-Approval-Id"]],
+                 "paperps-v2.4-evaluator-approval-v2") ||
+      !identical(manifest[["Required-Evaluator-Settings-Id"]],
+                 "paperps-v2.4-end-to-end-evaluator-settings-v2") ||
+      !identical(manifest[["Attempted-Parallel-Backend"]],
+                 "base_R_mclapply_fork_six_processes") ||
+      !identical(manifest[["Required-Parallel-Backend"]],
+                 "base_R_PSOCK_spawn_six_processes") ||
       !identical(manifest[["Approval-Status"]], "absent")) {
     stop("The v2.4 freeze manifest has an invalid identity or status.",
          call. = FALSE)
@@ -159,6 +186,39 @@
     stop("The hash-bound v2.4 source code changed.", call. = FALSE)
   }
   source_root <- Sys.getenv("SCONJOINT_SOURCE_ROOT", unset = "")
+  evaluator_candidates <- c(
+    file.path(getwd(), "R", "calibration-v24-evaluator.R"),
+    file.path(source_root, "R", "calibration-v24-evaluator.R"),
+    system.file("calibration", "v24", "source",
+                "calibration-v24-evaluator.R", package = "sconjoint"))
+  evaluator_candidates <- unique(
+    evaluator_candidates[nzchar(evaluator_candidates)])
+  evaluator_source <- evaluator_candidates[file.exists(evaluator_candidates)]
+  settings_candidates <- c(
+    system.file("protocol", "inference-v2.4-evaluator-settings.dcf",
+                package = "sconjoint"),
+    file.path(getwd(), "inst", "protocol",
+              "inference-v2.4-evaluator-settings.dcf"),
+    file.path(source_root, "inst", "protocol",
+              "inference-v2.4-evaluator-settings.dcf"))
+  settings_candidates <- unique(settings_candidates[nzchar(settings_candidates)])
+  settings_file <- settings_candidates[file.exists(settings_candidates)]
+  if (!length(evaluator_source) || !length(settings_file)) {
+    stop("Cannot locate the hash-bound v2.4 evaluator amendment files.",
+         call. = FALSE)
+  }
+  evaluator_files <- c(
+    source = normalizePath(evaluator_source[[1L]], mustWork = TRUE),
+    settings = normalizePath(settings_file[[1L]], mustWork = TRUE))
+  evaluator_hash <- vapply(evaluator_files, function(path)
+    unname(as.character(tools::sha256sum(path))), character(1L))
+  evaluator_expected <- c(
+    source = manifest[["Evaluator-Source-Code-SHA256"]],
+    settings = manifest[["Evaluator-Settings-SHA256"]])
+  if (!identical(unname(evaluator_hash), unname(evaluator_expected))) {
+    stop("A hash-bound v2.4 evaluator amendment file changed.",
+         call. = FALSE)
+  }
   locate <- function(candidates, label, required = TRUE) {
     candidates <- unique(candidates[nzchar(candidates)])
     found <- candidates[file.exists(candidates)]
@@ -192,11 +252,19 @@
       file.path(getwd(), "inst", "calibration", "v24", "source",
                 "calibration-v24.R"),
       file.path(source_root, "inst", "calibration", "v24", "source",
-                "calibration-v24.R")), "source mirror"))
+                "calibration-v24.R")), "source mirror"),
+    evaluator_source_mirror = locate(c(
+      system.file("calibration", "v24", "source",
+                  "calibration-v24-evaluator.R", package = "sconjoint"),
+      file.path(getwd(), "inst", "calibration", "v24", "source",
+                "calibration-v24-evaluator.R"),
+      file.path(source_root, "inst", "calibration", "v24", "source",
+                "calibration-v24-evaluator.R")), "evaluator source mirror"))
   companion_field <- c(
     protocol_markdown = "Protocol-Markdown-SHA256",
     yaml = "Protocol-YAML-SHA256", readme = "Readme-SHA256",
-    source_mirror = "Source-Mirror-SHA256")
+    source_mirror = "Source-Mirror-SHA256",
+    evaluator_source_mirror = "Evaluator-Source-Mirror-SHA256")
   available <- !is.na(companion)
   companion_hash <- vapply(companion[available], function(path)
     unname(as.character(tools::sha256sum(path))), character(1L))
@@ -210,6 +278,7 @@
     path = manifest_path,
     sha256 = unname(as.character(tools::sha256sum(manifest_path))),
     fields = manifest, source_sha256 = source_hash,
+    evaluator_sha256 = evaluator_hash,
     companion_sha256 = companion_hash)
 }
 

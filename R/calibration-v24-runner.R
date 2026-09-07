@@ -1426,32 +1426,117 @@ scmix_v24_fit_and_infer <- function(
   answer
 }
 
+.scmix_v24_psock_bootstrap <- function(source_root) {
+  source_root <- normalizePath(source_root, winslash = "/", mustWork = TRUE)
+  Sys.setenv(
+    SCONJOINT_SOURCE_ROOT = source_root,
+    OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1",
+    NUMEXPR_NUM_THREADS = "1")
+  if (!requireNamespace("pkgload", quietly = TRUE)) {
+    stop("A v2.4 PSOCK worker requires the pkgload package.",
+         call. = FALSE)
+  }
+  pkgload::load_all(source_root, quiet = TRUE)
+  namespace <- asNamespace("sconjoint")
+  loaded_source_root <- normalizePath(
+    getNamespaceInfo(namespace, "path"), winslash = "/", mustWork = TRUE)
+  worker_source_root <- normalizePath(
+    Sys.getenv("SCONJOINT_SOURCE_ROOT", unset = ""),
+    winslash = "/", mustWork = TRUE)
+  one_thread <- get(".scmix_v24_one_thread", envir = namespace,
+                    inherits = FALSE)
+  one_thread()
+  torch_threads <- as.integer(torch::torch_get_num_threads())
+  if (!identical(worker_source_root, source_root) ||
+      !identical(loaded_source_root, source_root) ||
+      !identical(torch_threads, 1L)) {
+    stop("A v2.4 PSOCK worker did not load the exact one-thread source tree.",
+         call. = FALSE)
+  }
+  list(source_root = loaded_source_root, pid = as.integer(Sys.getpid()),
+       torch_threads = torch_threads)
+}
+
 .scmix_v24_run_worker_schedule <- function(
-    jobs, workers, job_fun, parallel = TRUE) {
-  if (!is.data.frame(jobs) ||
-      !all(c("cell_id", "replication") %in% names(jobs)) ||
-      nrow(jobs) %% workers != 0L || workers != 6L) {
+    jobs, workers, job_fun, parallel = TRUE,
+    .cluster_factory = parallel::makePSOCKcluster,
+    .cluster_call = parallel::clusterCall,
+    .cluster_apply = parallel::clusterApply,
+    .cluster_stop = parallel::stopCluster) {
+  ## PSOCK serializes this call frame with `work`.  Force every formal now so
+  ## no worker receives a lazy promise whose expression names an object that
+  ## exists only in the caller's process.
+  jobs_local <- force(jobs)
+  workers_local <- force(workers)
+  job_fun_local <- force(job_fun)
+  parallel_local <- force(parallel)
+  cluster_factory_local <- force(.cluster_factory)
+  cluster_call_local <- force(.cluster_call)
+  cluster_apply_local <- force(.cluster_apply)
+  cluster_stop_local <- force(.cluster_stop)
+  if (!is.data.frame(jobs_local) ||
+      !all(c("cell_id", "replication") %in% names(jobs_local)) ||
+      nrow(jobs_local) %% workers_local != 0L || workers_local != 6L ||
+      !is.function(job_fun_local)) {
     stop("A v2.4 wave must partition evenly over exactly six workers.",
          call. = FALSE)
   }
-  assignments <- split(seq_len(nrow(jobs)),
-                       rep(seq_len(workers), length.out = nrow(jobs)))
+  assignments <- split(
+    seq_len(nrow(jobs_local)),
+    rep(seq_len(workers_local), length.out = nrow(jobs_local)))
   work <- function(worker_id) {
     lapply(assignments[[worker_id]], function(i)
-      job_fun(jobs$cell_id[[i]], jobs$replication[[i]], worker_id))
+      job_fun_local(jobs_local$cell_id[[i]],
+                    jobs_local$replication[[i]], worker_id))
   }
-  if (isTRUE(parallel)) {
-    if (.Platform$OS.type == "windows") {
-      stop("The exact v2.4 fork schedule is unavailable on Windows.",
+  if (isTRUE(parallel_local)) {
+    source_root <- Sys.getenv("SCONJOINT_SOURCE_ROOT", unset = "")
+    if (!nzchar(source_root)) {
+      stop("SCONJOINT_SOURCE_ROOT must name the exact v2.4 source tree.",
            call. = FALSE)
     }
-    result <- parallel::mclapply(
-      seq_len(workers), work, mc.cores = workers,
-      mc.preschedule = TRUE, mc.set.seed = FALSE)
+    source_root <- normalizePath(source_root, winslash = "/",
+                                 mustWork = TRUE)
+    cluster <- cluster_factory_local(workers_local, methods = FALSE)
+    on.exit(cluster_stop_local(cluster), add = TRUE)
+    if (length(cluster) != workers_local) {
+      stop("The v2.4 PSOCK backend did not create exactly six workers.",
+           call. = FALSE)
+    }
+    bootstrap <- .scmix_v24_psock_bootstrap
+    environment(bootstrap) <- baseenv()
+    initialized <- tryCatch(
+      cluster_call_local(cluster, bootstrap, source_root),
+      error = function(e) NULL)
+    valid_worker <- function(x) {
+      is.list(x) && is.character(x$source_root) &&
+        length(x$source_root) == 1L &&
+        is.numeric(x$pid) && length(x$pid) == 1L &&
+        is.finite(x$pid) && x$pid > 0 &&
+        identical(as.integer(x$torch_threads), 1L)
+    }
+    if (length(initialized) != workers_local ||
+        !all(vapply(initialized, valid_worker, logical(1L))) ||
+        !identical(
+          vapply(initialized, `[[`, character(1L), "source_root"),
+          rep(source_root, workers_local)) ||
+        length(unique(vapply(
+          initialized, `[[`, integer(1L), "pid"))) != workers_local) {
+      stop(paste(
+        "The v2.4 PSOCK workers did not load the exact source tree",
+        "with one Torch thread."), call. = FALSE)
+    }
+    result <- tryCatch(
+      cluster_apply_local(cluster, seq_len(workers_local), work),
+      error = function(e) stop(
+        "One or more v2.4 worker processes failed outside a job guard.",
+        call. = FALSE))
   } else {
-    result <- lapply(seq_len(workers), work)
+    result <- lapply(seq_len(workers_local), work)
   }
-  if (any(vapply(result, inherits, logical(1L), what = "try-error"))) {
+  if (length(result) != workers_local ||
+      any(vapply(result, inherits, logical(1L), what = "try-error"))) {
     stop("One or more v2.4 worker processes failed outside a job guard.",
          call. = FALSE)
   }
@@ -1463,8 +1548,28 @@ scmix_v24_fit_and_infer <- function(
 ## Target, gate, coverage, interval, and artifact fields remain sealed.
 scmix_v24_run_pilot_wave <- function(
     run_dir, plan = scmix_v24_validation_plan(), state_dir = NULL,
-    source_root = .scmix_v24_source_root(plan), verbose = FALSE,
-    .parallel = TRUE, .job_fun = NULL) {
+    source_root = .scmix_v24_source_root(plan), verbose = FALSE) {
+  .scmix_v24_pilot_wave_core(
+    run_dir = run_dir, plan = plan, state_dir = state_dir,
+    source_root = source_root, verbose = verbose)
+}
+
+.scmix_v24_fixed_psock_dispatch <- function(jobs, job_fun) {
+  .scmix_v24_run_worker_schedule(
+    jobs, 6L, job_fun, parallel = TRUE)
+}
+
+.scmix_v24_pilot_wave_core <- function(
+    run_dir, plan, state_dir, source_root, verbose,
+    .test_dispatch = NULL) {
+  if (!is.null(.test_dispatch) &&
+      !identical(Sys.getenv("TESTTHAT", unset = ""), "true")) {
+    stop("An injected v2.4 pilot dispatch is available only to unit tests.",
+         call. = FALSE)
+  }
+  dispatch <- if (is.null(.test_dispatch)) {
+    .scmix_v24_fixed_psock_dispatch
+  } else .test_dispatch
   readiness <- .scmix_v24_evaluator_readiness(
     plan, state_dir = state_dir, source_root = source_root)
   if (!isTRUE(readiness$pilot_outcome_generation_permitted)) {
@@ -1475,7 +1580,7 @@ scmix_v24_run_pilot_wave <- function(
   private <- .scmix_v24_open_pilot_private_manifest(
     run_dir, jobs, plan, readiness$evaluator)
   started <- private$manifest$wave_started_unix
-  if (is.null(.job_fun)) .job_fun <- function(cell, replication, worker) {
+  job_fun <- function(cell, replication, worker) {
     previous <- private$manifest$records
     prior <- if (is.data.frame(previous) && nrow(previous)) {
       previous[
@@ -1495,8 +1600,7 @@ scmix_v24_run_pilot_wave <- function(
       expected_artifact_sha256 = prior_sha256,
       reuse_existing = reuse_existing)
   }
-  result <- .scmix_v24_run_worker_schedule(
-    jobs, 6L, .job_fun, parallel = .parallel)
+  result <- dispatch(jobs, job_fun)
   attempted_finished <- as.numeric(Sys.time())
   records <- .scmix_v24_verify_pilot_results(
     result, jobs, plan, readiness$evaluator, run_dir,
@@ -1543,6 +1647,27 @@ scmix_v24_run_pilot_wave <- function(
     application_outcomes_used = FALSE)
 }
 
+## Unit-test harness only.  Production callers cannot select a serial backend
+## or replace the signed job implementation.
+.scmix_v24_test_run_pilot_wave <- function(
+    run_dir, plan = scmix_v24_validation_plan(), state_dir = NULL,
+    source_root = .scmix_v24_source_root(plan), verbose = FALSE,
+    .parallel = FALSE, .job_fun = NULL) {
+  if (!identical(Sys.getenv("TESTTHAT", unset = ""), "true")) {
+    stop("The injected v2.4 pilot runner is available only to unit tests.",
+         call. = FALSE)
+  }
+  dispatch <- function(jobs, production_job_fun) {
+    job_fun <- if (is.null(.job_fun)) production_job_fun else .job_fun
+    .scmix_v24_run_worker_schedule(
+      jobs, 6L, job_fun, parallel = .parallel)
+  }
+  .scmix_v24_pilot_wave_core(
+    run_dir = run_dir, plan = plan, state_dir = state_dir,
+    source_root = source_root, verbose = verbose,
+    .test_dispatch = dispatch)
+}
+
 .scmix_v24_evidence_jobs <- function(plan, batch_index) {
   batch_index <- as.integer(batch_index)
   number_batches <- plan$counts$evidence_reps %/% plan$counts$batch_size
@@ -1564,7 +1689,23 @@ scmix_v24_run_pilot_wave <- function(
 scmix_v24_run_evidence_batch <- function(
     batch_index, run_dir, plan = scmix_v24_validation_plan(),
     state_dir = NULL, source_root = .scmix_v24_source_root(plan),
-    verbose = FALSE, .parallel = TRUE, .job_fun = NULL) {
+    verbose = FALSE) {
+  .scmix_v24_evidence_batch_core(
+    batch_index = batch_index, run_dir = run_dir, plan = plan,
+    state_dir = state_dir, source_root = source_root, verbose = verbose)
+}
+
+.scmix_v24_evidence_batch_core <- function(
+    batch_index, run_dir, plan, state_dir, source_root, verbose,
+    .test_dispatch = NULL) {
+  if (!is.null(.test_dispatch) &&
+      !identical(Sys.getenv("TESTTHAT", unset = ""), "true")) {
+    stop("An injected v2.4 evidence dispatch is available only to unit tests.",
+         call. = FALSE)
+  }
+  dispatch <- if (is.null(.test_dispatch)) {
+    .scmix_v24_fixed_psock_dispatch
+  } else .test_dispatch
   readiness <- .scmix_v24_evaluator_readiness(
     plan, state_dir = state_dir, source_root = source_root)
   if (!isTRUE(readiness$evidence_outcome_generation_permitted)) {
@@ -1572,14 +1713,13 @@ scmix_v24_run_evidence_batch <- function(
   }
   run_dir <- .scmix_v24_require_run_dir(run_dir, source_root)
   jobs <- .scmix_v24_evidence_jobs(plan, batch_index)
-  if (is.null(.job_fun)) .job_fun <- function(cell, replication, worker) {
+  job_fun <- function(cell, replication, worker) {
     .scmix_v24_run_job(
       cell, replication, "evidence", worker, run_dir,
       plan, state_dir, source_root, verbose)
   }
   started <- as.numeric(Sys.time())
-  result <- .scmix_v24_run_worker_schedule(
-    jobs, 6L, .job_fun, parallel = .parallel)
+  result <- dispatch(jobs, job_fun)
   finished <- as.numeric(Sys.time())
   manifest <- do.call(rbind, lapply(result, function(x) data.frame(
     cell_id = x$cell_id, replication = as.integer(x$replication),
@@ -1603,6 +1743,27 @@ scmix_v24_run_evidence_batch <- function(
     attempted_jobs = nrow(manifest), completed_jobs = sum(manifest$completed),
     workers = 6L, started_unix = started, finished_unix = finished,
     application_outcomes_used = FALSE)
+}
+
+## Unit-test harness only.  It mirrors the evidence wrapper without exposing
+## either execution override through the production API.
+.scmix_v24_test_run_evidence_batch <- function(
+    batch_index, run_dir, plan = scmix_v24_validation_plan(),
+    state_dir = NULL, source_root = .scmix_v24_source_root(plan),
+    verbose = FALSE, .parallel = FALSE, .job_fun = NULL) {
+  if (!identical(Sys.getenv("TESTTHAT", unset = ""), "true")) {
+    stop("The injected v2.4 evidence runner is available only to unit tests.",
+         call. = FALSE)
+  }
+  dispatch <- function(jobs, production_job_fun) {
+    job_fun <- if (is.null(.job_fun)) production_job_fun else .job_fun
+    .scmix_v24_run_worker_schedule(
+      jobs, 6L, job_fun, parallel = .parallel)
+  }
+  .scmix_v24_evidence_batch_core(
+    batch_index = batch_index, run_dir = run_dir, plan = plan,
+    state_dir = state_dir, source_root = source_root, verbose = verbose,
+    .test_dispatch = dispatch)
 }
 
 ## Bind all ten evidence-batch manifests without opening any result artifact.

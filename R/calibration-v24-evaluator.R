@@ -40,7 +40,7 @@
 
 .scmix_v24_settings_expected <- function() {
   c(
-    `Settings-Id` = "paperps-v2.4-end-to-end-evaluator-settings-v1",
+    `Settings-Id` = "paperps-v2.4-end-to-end-evaluator-settings-v2",
     `Protocol-Id` = "paperps-inference-2026-09-06-v2.4",
     `Plan-Id` = "paperps-lean-validation-2026-09-06-v2.4-v1",
     Status = "prospective_evaluator_settings_frozen_outcomes_locked",
@@ -55,6 +55,7 @@
     `Mean-Selection-Score` = "respondent_level_complete_sequence_log_score",
     `Mean-Selection-Tie-Break` = "least_complex_then_registry_order",
     `Numeric-Precision` = "float64", `Compute-Device` = "cpu",
+    `Parallel-Backend` = "base_R_PSOCK_spawn_six_processes",
     `Torch-Threads-Per-Worker` = "1",
     `Polish-Method` = "full_batch_LBFGS_strong_wolfe",
     `Polish-Max-Iterations` = "50", `Polish-History-Size` = "50",
@@ -167,7 +168,9 @@ scmix_v24_evaluator_settings <- function(
     plan_id = raw[["Plan-Id"]], status = raw[["Status"]], raw = raw,
     values = values, mean_candidates = c("constant", "linear"),
     batch_mode = "full_batch", numeric_precision = "float64",
-    compute_device = "cpu", ridge_primary = "Ntrain^(-3/4)",
+    compute_device = "cpu",
+    parallel_backend = raw[["Parallel-Backend"]],
+    ridge_primary = "Ntrain^(-3/4)",
     ridge_sensitivities = c("Ntrain^(-1)", "Ntrain^(-1/2)"),
     ridge_selection = "none",
     riesz_numerical_rank_rule = "dimension_epsilon",
@@ -422,7 +425,7 @@ scmix_v24_evaluator_settings <- function(
   raw <- .scmix_v24_read_one_dcf(path, "evaluator approval")
   if (!identical(names(raw), fields) ||
       !identical(raw[["Approval-Id"]],
-                 "paperps-v2.4-evaluator-approval-v1") ||
+                 "paperps-v2.4-evaluator-approval-v2") ||
       !identical(raw[["Protocol-Id"]], plan$protocol_id) ||
       !identical(raw[["Plan-Id"]], plan$plan_id) ||
       !identical(raw[["Status"]], "approved_for_integrity_pilot") ||

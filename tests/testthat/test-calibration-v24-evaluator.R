@@ -68,7 +68,7 @@
   settings <- scmix_v24_evaluator_settings(
     plan, file.path(root, settings_rel))
   approval <- c(
-    `Approval-Id` = "paperps-v2.4-evaluator-approval-v1",
+    `Approval-Id` = "paperps-v2.4-evaluator-approval-v2",
     `Protocol-Id` = plan$protocol_id, `Plan-Id` = plan$plan_id,
     Status = "approved_for_integrity_pilot", `Approved-On` = "2026-09-07",
     `Outcome-Count` = "0", `Application-Outcomes-Used` = "false",
@@ -161,7 +161,7 @@
 .v24_family_evidence_fixture <- function(root, plan) {
   implementation_hash <- paste(rep("f", 64L), collapse = "")
   evaluator <- sconjoint:::.scmix_v24_sign(list(
-    approval_id = "paperps-v2.4-evaluator-approval-v1",
+    approval_id = "paperps-v2.4-evaluator-approval-v2",
     protocol_id = plan$protocol_id, plan_id = plan$plan_id,
     raw = list(`Implementation-Manifest-SHA256` = implementation_hash),
     sha256 = paste(rep("d", 64L), collapse = "")),
@@ -226,6 +226,10 @@
 test_that("v2.4 evaluator settings encode the exact lean contract", {
   settings <- scmix_v24_evaluator_settings(path = .v24_settings_source())
   expect_s3_class(settings, "scmix_v24_evaluator_settings")
+  expect_identical(settings$settings_id,
+                   "paperps-v2.4-end-to-end-evaluator-settings-v2")
+  expect_identical(settings$parallel_backend,
+                   "base_R_PSOCK_spawn_six_processes")
   expect_identical(settings$mean_candidates, c("constant", "linear"))
   expect_identical(settings$values$fit_rank, 1L)
   expect_identical(settings$values$adam_epochs, 400L)
@@ -297,6 +301,12 @@ test_that("test-only noncanonical approval binds its declared sources", {
   expect_identical(approved$outcome_count, 0L)
   expect_true(sconjoint:::.scmix_v24_intact(
     approved, "scmix_v24_evaluator_approval"))
+  superseded <- fixture$approval
+  superseded[["Approval-Id"]] <- "paperps-v2.4-evaluator-approval-v1"
+  .v24_write_dcf(superseded, fixture$path)
+  expect_error(sconjoint:::.scmix_v24_validate_evaluator_approval(
+    fixture$path, plan, root), "malformed or not pre-outcome")
+  .v24_write_dcf(fixture$approval, fixture$path)
   writeLines("tampered", file.path(root, fixture$implementation$path[[2L]]))
   expect_error(sconjoint:::.scmix_v24_validate_evaluator_approval(
     fixture$path, plan, root), "implementation file changed")

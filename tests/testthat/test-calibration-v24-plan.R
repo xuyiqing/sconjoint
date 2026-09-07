@@ -15,6 +15,11 @@ test_that("v2.4 freezes one lean validation design without calibration", {
   expect_identical(plan$raw[["Pre-Outcome-Amended-On"]], "2026-09-07")
   expect_match(plan$raw[["Pre-Outcome-Amendment"]],
                "directional_heterogeneity_primitive_metadata", fixed = TRUE)
+  expect_identical(plan$freeze$fields[["Integrity-Pilot-Status"]],
+                   "startup_failed_zero_completed_or_persisted_outcomes")
+  expect_identical(plan$freeze$fields[["Evaluator-Approval-Status"]],
+                   "v1_superseded_v2_absent")
+  expect_identical(plan$freeze$fields[["Outcome-Count"]], "0")
   expect_identical(unname(unlist(plan$counts)),
                    c(400L, 2L, 100L, 10L, 2L, 2L, 2L, 15L, 31L, 9999L,
                      6L, 8L))
@@ -56,13 +61,16 @@ test_that("v2.4 freezes one lean validation design without calibration", {
   expect_true(all(plan$truths$application_outcomes_used == FALSE))
   expect_identical(plan$fit_regularity$primitive_id,
                    "active_q1_covariance_eigenvalue")
-  expect_true(all(c("yaml", "readme", "source_mirror") %in%
+  expect_true(all(c("yaml", "readme", "source_mirror",
+                    "evaluator_source_mirror") %in%
                     names(plan$freeze$companion_sha256)))
-  expect_true(setequal(names(plan$freeze$companion_sha256),
-                       c("yaml", "readme", "source_mirror")) ||
-                setequal(names(plan$freeze$companion_sha256),
-                         c("protocol_markdown", "yaml", "readme",
-                           "source_mirror")))
+  expect_true(setequal(
+    names(plan$freeze$companion_sha256),
+    c("yaml", "readme", "source_mirror", "evaluator_source_mirror")) ||
+      setequal(
+        names(plan$freeze$companion_sha256),
+        c("protocol_markdown", "yaml", "readme", "source_mirror",
+          "evaluator_source_mirror")))
   expect_identical(plan$raw[["Target-Truths-SHA256"]],
                    "f97dfca2a47e6b1d8f2b4c232ce61c5417776a7684bd70d819ceb92c522800a8")
 })
@@ -230,22 +238,30 @@ test_that("v2.4 response-free truths reproduce their frozen table", {
                      "active_q1_covariance_eigenvalue"], 0)
 })
 
-test_that("v2.4 is fail closed before the one evaluator is approved", {
+test_that("v2.4 is fail closed after the v1 launcher is superseded", {
   plan <- scmix_v24_validation_plan()
   readiness <- scmix_v24_readiness(plan)
   expect_s3_class(readiness, "scmix_v24_readiness")
   expect_true(readiness$single_end_to_end_evaluator_required)
   expect_true(readiness$respondent_superpopulation_resampling_frozen)
   expect_true(readiness$deterministic_family_cell_approval_frozen)
-  expect_false(readiness$evaluator_approval_present)
+  expect_true(readiness$evaluator_approval_present)
+  expect_false(readiness$evaluator_approval_valid)
+  expect_identical(readiness$status, "invalid_evaluator_state")
+  expect_match(readiness$state_errors[["evaluator"]],
+               "malformed or not pre-outcome", fixed = TRUE)
   expect_false(readiness$outcome_generation_permitted)
   expect_false(readiness$integrity_pilot_completed)
   expect_false(readiness$evidence_study_completed)
   expect_false(readiness$family_approval_present)
   expect_error(scmix_v24_generate_study_outcome(), "outcome locked")
   protocol_dir <- dirname(plan$files[["plan"]])
-  expect_false(file.exists(file.path(
-    protocol_dir, "inference-v2.4-evaluator-approval.dcf")))
+  superseded <- file.path(
+    protocol_dir, "inference-v2.4-evaluator-approval.dcf")
+  expect_true(file.exists(superseded))
+  expect_identical(
+    unname(read.dcf(superseded)[1L, "Approval-Id"]),
+    "paperps-v2.4-evaluator-approval-v1")
   expect_false(file.exists(file.path(
     protocol_dir, "inference-v2.4-calibration-values.dcf")))
   expect_false(file.exists(file.path(

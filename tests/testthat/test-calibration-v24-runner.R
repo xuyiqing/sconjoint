@@ -381,6 +381,214 @@ test_that("v2.4 worker allocation is deterministic by cell", {
   expect_identical(sort(unique(evidence$replication)), 21:30)
 })
 
+test_that("v2.4 PSOCK backend maps six workers and always stops them", {
+  plan <- .v24_runner_plan()
+  pilot <- expand.grid(
+    cell_id = plan$cells$cell_id, replication = 1:2,
+    KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  source_root <- normalizePath(testthat::test_path("..", ".."),
+                               winslash = "/", mustWork = TRUE)
+  withr::local_envvar(SCONJOINT_SOURCE_ROOT = source_root)
+
+  factory_calls <- 0L
+  methods_seen <- NULL
+  bootstrap_calls <- 0L
+  stop_calls <- 0L
+  fake_cluster <- structure(as.list(seq_len(6L)),
+                            class = "v24_fake_cluster")
+  factory <- function(workers, methods) {
+    factory_calls <<- factory_calls + 1L
+    methods_seen <<- methods
+    expect_identical(workers, 6L)
+    fake_cluster
+  }
+  initialize <- function(cluster, bootstrap, root) {
+    bootstrap_calls <<- bootstrap_calls + 1L
+    expect_identical(cluster, fake_cluster)
+    expect_true(is.function(bootstrap))
+    expect_identical(environment(bootstrap), baseenv())
+    expect_identical(root, source_root)
+    lapply(seq_len(6L), function(worker) list(
+      source_root = root, pid = as.integer(1000L + worker),
+      torch_threads = 1L))
+  }
+  apply <- function(cluster, worker_ids, work) {
+    expect_identical(cluster, fake_cluster)
+    expect_identical(worker_ids, seq_len(6L))
+    lapply(worker_ids, work)
+  }
+  stop <- function(cluster) {
+    expect_identical(cluster, fake_cluster)
+    stop_calls <<- stop_calls + 1L
+    invisible(NULL)
+  }
+  result <- sconjoint:::.scmix_v24_run_worker_schedule(
+    pilot, 6L, function(cell, replication, worker) list(
+      cell_id = cell, replication = replication, worker_id = worker),
+    parallel = TRUE, .cluster_factory = factory,
+    .cluster_call = initialize, .cluster_apply = apply,
+    .cluster_stop = stop)
+
+  expect_identical(factory_calls, 1L)
+  expect_identical(methods_seen, FALSE)
+  expect_identical(bootstrap_calls, 1L)
+  expect_identical(stop_calls, 1L)
+  expect_length(result, 12L)
+  expect_true(all(vapply(result, function(x)
+    identical(x$worker_id, match(x$cell_id, plan$cells$cell_id)),
+    logical(1L))))
+  expect_false(any(c("source_root", "pid", "torch_threads") %in%
+                     unique(unlist(lapply(result, names)))))
+
+  failing_apply <- function(cluster, worker_ids, work) {
+    stop("private worker detail", call. = FALSE)
+  }
+  expect_error(sconjoint:::.scmix_v24_run_worker_schedule(
+    pilot, 6L, function(...) NULL, parallel = TRUE,
+    .cluster_factory = factory, .cluster_call = initialize,
+    .cluster_apply = failing_apply, .cluster_stop = stop),
+    "One or more v2.4 worker processes failed outside a job guard",
+    fixed = TRUE)
+  expect_identical(factory_calls, 2L)
+  expect_identical(bootstrap_calls, 2L)
+  expect_identical(stop_calls, 2L)
+})
+
+test_that("v2.4 PSOCK dispatch forces an outer job-function promise", {
+  plan <- .v24_runner_plan()
+  jobs <- expand.grid(
+    cell_id = plan$cells$cell_id, replication = 1:2,
+    KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  source_root <- normalizePath(testthat::test_path("..", ".."),
+                               winslash = "/", mustWork = TRUE)
+  withr::local_envvar(SCONJOINT_SOURCE_ROOT = source_root)
+  fake_cluster <- structure(as.list(seq_len(6L)),
+                            class = "v24_fake_cluster")
+  factory <- function(workers, methods) fake_cluster
+  initialize <- function(cluster, bootstrap, root) {
+    lapply(seq_len(6L), function(worker) list(
+      source_root = root, pid = as.integer(2000L + worker),
+      torch_threads = 1L))
+  }
+  stopped <- FALSE
+  stop <- function(cluster) {
+    stopped <<- TRUE
+    invisible(NULL)
+  }
+
+  caller <- new.env(parent = environment())
+  caller$fun <- function(cell, replication, worker) list(
+    cell_id = cell, replication = replication, worker_id = worker)
+  caller$invoke <- function(jobs, factory, initialize, apply, stop) {
+    sconjoint:::.scmix_v24_run_worker_schedule(
+      jobs, 6L, job_fun = fun, parallel = TRUE,
+      .cluster_factory = factory, .cluster_call = initialize,
+      .cluster_apply = apply, .cluster_stop = stop)
+  }
+  environment(caller$invoke) <- caller
+  apply <- function(cluster, worker_ids, work) {
+    rm("fun", envir = caller)
+    remote_work <- unserialize(serialize(work, NULL))
+    lapply(worker_ids, remote_work)
+  }
+  result <- caller$invoke(jobs, factory, initialize, apply, stop)
+  expect_true(stopped)
+  expect_length(result, 12L)
+  expect_true(all(vapply(result, function(x)
+    identical(x$worker_id, match(x$cell_id, plan$cells$cell_id)),
+    logical(1L))))
+})
+
+test_that("v2.4 production waves expose and use only fixed dispatch", {
+  expect_identical(names(formals(scmix_v24_run_pilot_wave)), c(
+    "run_dir", "plan", "state_dir", "source_root", "verbose"))
+  expect_identical(names(formals(scmix_v24_run_evidence_batch)), c(
+    "batch_index", "run_dir", "plan", "state_dir", "source_root",
+    "verbose"))
+  expect_false(any(c(".parallel", ".job_fun") %in%
+                     names(formals(scmix_v24_run_pilot_wave))))
+  expect_false(any(c(".parallel", ".job_fun") %in%
+                     names(formals(scmix_v24_run_evidence_batch))))
+
+  pilot_test_dispatch <- "not called"
+  evidence_test_dispatch <- "not called"
+  scheduled <- NULL
+  local_mocked_bindings(
+    .scmix_v24_pilot_wave_core = function(..., .test_dispatch = NULL) {
+      pilot_test_dispatch <<- .test_dispatch
+      "pilot"
+    },
+    .scmix_v24_evidence_batch_core = function(..., .test_dispatch = NULL) {
+      evidence_test_dispatch <<- .test_dispatch
+      "evidence"
+    },
+    .scmix_v24_run_worker_schedule = function(
+        jobs, workers, job_fun, parallel, ...) {
+      scheduled <<- list(jobs = jobs, workers = workers,
+                         job_fun = job_fun, parallel = parallel)
+      "scheduled"
+    },
+    .package = "sconjoint")
+  plan <- .v24_runner_plan()
+  expect_identical(scmix_v24_run_pilot_wave(
+    "unused", plan = plan, source_root = "unused"), "pilot")
+  expect_identical(scmix_v24_run_evidence_batch(
+    1L, "unused", plan = plan, source_root = "unused"), "evidence")
+  fixed_dispatch <- sconjoint:::.scmix_v24_fixed_psock_dispatch
+  expect_null(pilot_test_dispatch)
+  expect_null(evidence_test_dispatch)
+
+  jobs <- data.frame(cell_id = paste0("cell", seq_len(6L)),
+                     replication = 1L)
+  job_fun <- function(...) NULL
+  expect_identical(fixed_dispatch(jobs, job_fun), "scheduled")
+  expect_identical(scheduled$jobs, jobs)
+  expect_identical(scheduled$workers, 6L)
+  expect_identical(scheduled$job_fun, job_fun)
+  expect_identical(scheduled$parallel, TRUE)
+})
+
+test_that("v2.4 internal wave cores reject non-test dispatch injection", {
+  withr::local_envvar(TESTTHAT = NA_character_)
+  expect_error(sconjoint:::.scmix_v24_pilot_wave_core(
+    "unused", .v24_runner_plan(), NULL, "unused", FALSE,
+    .test_dispatch = identity), "available only to unit tests",
+    fixed = TRUE)
+  expect_error(sconjoint:::.scmix_v24_evidence_batch_core(
+    1L, "unused", .v24_runner_plan(), NULL, "unused", FALSE,
+    .test_dispatch = identity), "available only to unit tests",
+    fixed = TRUE)
+})
+
+test_that("v2.4 evidence injection is confined to its test-only harness", {
+  root <- tempfile("v24-evidence-test-")
+  dir.create(root)
+  run_dir <- file.path(root, "run")
+  plan <- .v24_runner_plan()
+  local_mocked_bindings(
+    .scmix_v24_evaluator_readiness = function(...)
+      list(evidence_outcome_generation_permitted = TRUE),
+    .package = "sconjoint")
+  job <- function(cell, replication, worker) list(
+    cell_id = cell, replication = replication, completed = TRUE,
+    artifact_file = file.path(run_dir, paste0(cell, "-", replication)),
+    artifact_sha256 = .v24_runner_hash("a"), worker_id = worker,
+    elapsed_seconds = 1, resumed = FALSE, error = "")
+  result <- sconjoint:::.scmix_v24_test_run_evidence_batch(
+    1L, run_dir, plan = plan, source_root = root,
+    .parallel = FALSE, .job_fun = job)
+  manifest <- utils::read.csv(result$manifest_file,
+                              stringsAsFactors = FALSE,
+                              check.names = FALSE)
+  expect_identical(result$attempted_jobs, 60L)
+  expect_identical(result$completed_jobs, 60L)
+  expect_identical(result$workers, 6L)
+  expect_equal(nrow(manifest), 60L)
+  expect_identical(
+    manifest$worker_id,
+    as.integer(match(manifest$cell_id, plan$cells$cell_id)))
+})
+
 test_that("v2.4 pilot public manifest contains metadata only", {
   root <- tempfile("v24-pilot-")
   dir.create(root)
@@ -404,7 +612,7 @@ test_that("v2.4 pilot public manifest contains metadata only", {
       cell_id = cell, replication = replication, worker_id = worker,
       completed = TRUE, resumed = FALSE, error = ""), written)
   }
-  result <- scmix_v24_run_pilot_wave(
+  result <- sconjoint:::.scmix_v24_test_run_pilot_wave(
     run_dir, plan = plan, source_root = root,
     .parallel = FALSE, .job_fun = job)
   manifest <- utils::read.csv(result$pilot_run_manifest,
@@ -434,7 +642,7 @@ test_that("v2.4 pilot public manifest contains metadata only", {
 
   first_started <- result$wave_started_unix
   first_finished <- result$wave_finished_unix
-  resumed <- scmix_v24_run_pilot_wave(
+  resumed <- sconjoint:::.scmix_v24_test_run_pilot_wave(
     run_dir, plan = plan, source_root = root, .parallel = FALSE)
   expect_identical(resumed$wave_started_unix, first_started)
   expect_identical(resumed$wave_finished_unix, first_finished)

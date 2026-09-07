@@ -43,6 +43,7 @@ Suggests:
     gridExtra,
     lme4,
     patchwork,
+    pkgload,
     qrng,
     quarto,
     randtoolbox,

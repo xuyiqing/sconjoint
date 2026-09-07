@@ -6,9 +6,9 @@
 
 **Frozen on:** 2026-09-06
 
-**Status:** validation design, truths, fixed rules, and the end-to-end
-evaluator frozen; all design-matched outcomes locked until the separate
-evaluator approval is recorded
+**Status:** validation design, truths, fixed rules, evaluator, and PSOCK
+launcher requirement frozen; evaluator approval v1 superseded after an
+outcome-free startup failure; all outcomes locked pending approval v2
 
 **Pre-outcome amendment on 2026-09-07:** The first freeze mislabeled the
 directional mean and second-moment columns as inferential primitives. They are
@@ -30,6 +30,22 @@ fit tensors into owned storage before optimization. No v2.4 outcome existed
 when these changes were made. The immutable design, DGP, truth, target, seed,
 and decision values did not change. The target registry now states the
 zero-variance tie conventions already used by the paper's estimands.
+
+**Pre-outcome launcher amendment on 2026-09-07:** The first integrity-pilot
+launch under evaluator approval v1 used the frozen six-worker fork schedule.
+The macOS fork workers failed during process startup. The signed private ledger
+has attempt count zero and no records. There is no public manifest, persisted
+replication artifact, or target or gate result available for inspection. Thus
+the recorded count of completed or persisted outcomes is zero. A doomed child
+could in principle have instantiated an ephemeral in-memory outcome before its
+abort, so the record makes no stronger claim. The response-free plan, DGP,
+truths, targets, thresholds, seeds, statistical evaluator, and family decision
+rules are unchanged. The fixed seeds also make the retry outcome-independent.
+Evaluator settings v2 replace only the parallel launcher contract with six
+spawned base R PSOCK processes. Fork workers are no longer permitted. Approval
+v1 remains in the repository as superseded audit history. Approval v2 is
+absent, so the state machine remains fail closed until the amended
+implementation is separately committed, hash-bound, and approved.
 
 Protocol v2.4 supersedes v2.3 prospectively. It does not alter or delete any
 v2.3 file. The v2.3 calibration attempt is retained as audit history. It did
@@ -122,8 +138,9 @@ cell. It runs in batches of ten. All 600 attempts are required. There is no
 early success or futility stop.
 
 The twelve integrity pilots are also a fixed runtime gate. They may be
-inspected only for execution integrity, elapsed time, and resource use. At most
-six workers may be used. Evidence proceeds only if the complete six-cell study
+inspected only for execution integrity, elapsed time, and resource use. The
+parallel backend is exactly six spawned base R PSOCK processes. A fork backend
+is not permitted. Evidence proceeds only if the complete six-cell study
 is projected to finish within eight wall-clock hours on those workers. If it
 does not, work stops and any redesign receives a new protocol ID. Pilot target
 results and operating characteristics cannot alter this protocol.
@@ -221,11 +238,18 @@ reporting rules, and common respondent multipliers. Before any outcome can be
 generated, its implementation manifest, settings, and interface must be bound
 by SHA-256 in `inst/protocol/inference-v2.4-evaluator-approval.dcf`.
 
-At the instant of this amendment, that approval file was absent and
+At the instant of the evaluator amendment, that approval file was absent and
 `scmix_v24_generate_study_outcome()` failed closed. The live state machine,
 rather than this historical statement, determines whether pilot or evidence
 generation is currently permitted. There is no calibration-values file, and a
 family approval can exist only after all 600 evidence attempts are recorded.
+
+Evaluator approval v1 was later recorded, but its macOS fork launch produced no
+completed or persisted replication and exposed no target or gate result. The
+launcher amendment supersedes that approval and requires settings and approval
+v2 with the six-process base R PSOCK backend. Approval v2 is absent. The
+recorded outcome count therefore remains zero and both pilot and evidence
+generation are locked.
 
 Even a successful study supplies implementation evidence only for these fixed
 rules on the three finite empirical design templates. It does not certify an

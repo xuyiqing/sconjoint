@@ -1,4 +1,4 @@
-Settings-Id: paperps-v2.4-end-to-end-evaluator-settings-v1
+Settings-Id: paperps-v2.4-end-to-end-evaluator-settings-v2
 Protocol-Id: paperps-inference-2026-09-06-v2.4
 Plan-Id: paperps-lean-validation-2026-09-06-v2.4-v1
 Status: prospective_evaluator_settings_frozen_outcomes_locked
@@ -22,6 +22,7 @@ Mean-Selection-Score: respondent_level_complete_sequence_log_score
 Mean-Selection-Tie-Break: least_complex_then_registry_order
 Numeric-Precision: float64
 Compute-Device: cpu
+Parallel-Backend: base_R_PSOCK_spawn_six_processes
 Torch-Threads-Per-Worker: 1
 Polish-Method: full_batch_LBFGS_strong_wolfe
 Polish-Max-Iterations: 50

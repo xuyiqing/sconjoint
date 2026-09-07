@@ -21,6 +21,20 @@ tensor was made from a temporary indexed R slice. Fit tensors now own cloned
 storage. This is a general correctness repair, not an application-specific
 adjustment. No v2.4 outcome existed when it was made.
 
+The first integrity-pilot launch under evaluator approval v1 then exposed a
+macOS fork-startup failure. The signed private ledger has attempt count zero and
+no records. There is no public manifest, persisted replication artifact, or
+target or gate result available for inspection. The recorded count of completed
+or persisted outcomes is therefore zero. This does not claim that a doomed
+child could not have instantiated an ephemeral in-memory object before aborting.
+The pre-outcome launcher amendment leaves the plan, DGP, truths, targets,
+thresholds, seeds, evaluator, and decision rules unchanged. The fixed seeds
+also make the retry outcome-independent. Evaluator settings v2 require exactly
+six spawned base R PSOCK processes and prohibit the failed fork backend.
+Approval v1 remains as superseded audit history. Approval v2 is absent, and
+outcome generation remains locked until the amended implementation is
+separately committed, hash-bound, and approved.
+
 The selected full and outer-fold states carry the KKT, loading, and nesting
 gates. Near-optimum states carry polish, precision, finiteness, and target-
 stability checks. Discarded far starts remain descriptive. All three GH31
@@ -71,7 +85,8 @@ maximum absolute studentized statistic over all unique family primitives from
 centered before the multiplier statistic is formed.
 
 The twelve excluded pilots may reveal only integrity, elapsed time, and
-resource use. At most six workers are allowed. The evidence study proceeds
+resource use. The launcher must use exactly six spawned base R PSOCK processes.
+Fork workers are not allowed. The evidence study proceeds
 only if its projected wall time is no more than eight hours. Otherwise it stops
 and any redesign receives a new protocol ID. This firewall is a procedural,
 hash-audited rule rather than encryption. The public pilot interface exposes
@@ -88,6 +103,10 @@ settings, and interface must be bound by SHA-256 in
 generated. At the instant of the final pre-outcome amendment that approval was
 absent and `scmix_v24_generate_study_outcome()` failed closed. The live state
 machine records subsequent pilot, evidence, and family-approval state.
+
+Approval v1 was subsequently recorded and is retained, but the outcome-free
+fork-startup failure superseded it. The required approval v2 is not yet
+present. The state machine therefore fails closed before a pilot outcome.
 
 A successful study would validate the implementation of these fixed rules on
 the three finite empirical templates. It would not certify an application.
