@@ -9,6 +9,7 @@ Private-Ledger-File: runs/v25/step5c_integrity_and_evidence_2026-09-07/sealed/pi
 Private-Ledger-SHA256: 4e6d5fa174a5c42820bb952cd6ecb18a40e3499c917293600ffed6763248ecae
 Private-Ledger-Wave-Started-Unix: 1788811304.1687689
 First-Explicit-Timing-Audit-Elapsed-Seconds: 1067.752
+Projected-Evidence-Wall-Lower-Bound-Hours-At-First-Audit: 9.268681
 Post-Termination-Audit-Elapsed-Seconds: 1083.7071602344513
 Pilot-Wall-Clock-Cutoff-Seconds: 921.6
 Completed-Replication-Artifacts-At-First-Timing-Audit: 0
