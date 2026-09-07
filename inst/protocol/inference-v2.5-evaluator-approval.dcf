@@ -1,0 +1,16 @@
+Approval-Id: paperps-v2.5-evaluator-approval-v1
+Protocol-Id: paperps-inference-2026-09-07-v2.5
+Plan-Id: paperps-lean-validation-2026-09-07-v2.5-v1
+Status: approved_for_integrity_pilot
+Approved-On: 2026-09-07
+Outcome-Count: 0
+Application-Outcomes-Used: false
+Implementation-Commit: d3cbc7cf4517e7af080245e39370bafc4c33b23a
+Evaluator-Interface-Id: paperps_v25_one_fit_all_targets_end_to_end_v1
+Release-Algorithm-Id: paperps_v25_type1_common_multiplier_mechanical_family_release_v1
+Evaluator-Settings-File: inst/protocol/inference-v2.5-evaluator-settings.dcf
+Evaluator-Settings-SHA256: f73a30de4494725fe835db16abaad64cb31efba3b508cd623d2ad796e0bd3443
+Evaluator-Settings-Payload-SHA256: e6b54fa2245f9f24d9d792d228a75ea96373015f78d4b4cd37a252243da967f7
+Implementation-Manifest-File: inst/protocol/inference-v2.5-evaluator-implementation.csv
+Implementation-Manifest-SHA256: e5ddd16fac40fe5439693d21e5091e83dcd396cf132e3689e12c7f8097ae7412
+Runtime-Projection-Id: 1.25_times_25_times_exact_observed_wall_time_of_the_complete_first_valid_12_job_12_worker_pilot_wave
