@@ -21,6 +21,8 @@ applications/config.local.R
 applications/output/
 .runtime/
 .R-library/
+.runtime
+.R-library
 inputs/
 runs/
 applications/*/results/

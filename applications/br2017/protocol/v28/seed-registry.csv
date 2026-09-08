@@ -1,0 +1,12 @@
+component,value,rule
+rng_kind,L'Ecuyer-CMRG,all_random_components
+normal_kind,Inversion,all_normal_draws
+sample_kind,Rejection,all_sampling
+fit_master,202609076,seed_is_master_plus_100000_times_q_plus_1000_times_scope_plus_start
+scope_index,full=0;outer_1=1;outer_2=2;outer_3=3;outer_4=4;outer_5=5,fixed
+start_index,exact=0;perturbed=1;constant_nested=2,fixed
+perturbation_scale,0.02,deterministic_optimizer_coordinate_scale
+q2_second_column_rule,deterministic_trigonometric,no_rng_seed_consumed
+dml_master,202609078,reserved_not_consumed_by_v28_fit_runner
+multiplier_master,202609079,reserved_not_consumed_by_v28_fit_runner
+assessment_master,202609080,reserved_not_consumed_by_v28_fit_runner

@@ -305,18 +305,17 @@ test_that("heterogeneity Riesz targets are direct minimal HZ and HR primitives",
     tg, list(spec), train, held)
   mbar_train <- mean(m[train])
   mbar_held <- mean(m[held])
-  expected_hz <- numeric(N)
-  expected_hz[train] <- (m[train] - mbar_train)^2
-  expected_hz[held] <- (m[held] - mbar_held)^2
-  expected_gradient <- gm
-  expected_gradient[train, ] <-
-    2 * (m[train] - mbar_train) * gm[train, ]
-  expected_gradient[held, ] <-
-    2 * (m[held] - mbar_held) * gm[held, ]
+  expected_hz <- (m - mbar_train)^2
+  expected_gradient <- 2 * (m - mbar_train) * gm
   expect_identical(out$labels, c("HZ", "HR"))
   expect_equal(out$value[, "HZ"], expected_hz)
   expect_equal(out$gradient[[1L]], expected_gradient)
   expect_equal(out$direct_pz_center[["HZ"]], mean(expected_hz[held]))
+  expect_equal(out$hz_assembly$HZ$mean, m)
+  expect_equal(out$hz_assembly$HZ$second_moment, second)
+  expect_equal(out$hz_assembly$HZ$training_center, mbar_train)
+  expect_identical(out$hz_assembly$HZ$gradient_center_rule,
+                   "outer_training_only")
   expect_equal(
     out$supporting_audit$heterogeneity$outer_training_mean_direction,
     mbar_train)
@@ -325,6 +324,20 @@ test_that("heterogeneity Riesz targets are direct minimal HZ and HR primitives",
     mbar_held)
   expect_equal(out$supporting_audit$heterogeneity$training_mean,
                colMeans(tg$value[train, , drop = FALSE]))
+})
+
+test_that("global HZ assembly retains between-fold heterogeneity", {
+  mean_direction <- c(0, 0, 10, 10)
+  second_moment <- mean_direction^2
+  out <- sconjoint:::.scmix_dml_global_hz_assembly(
+    mean_direction, second_moment)
+  expect_equal(out$center, 5)
+  expect_equal(out$estimate, 25)
+  expect_equal(out$row_contribution, rep(25, 4))
+  expect_equal(mean(out$direct_empirical_pz), 0)
+  ## Centering independently within the two illustrative folds would return
+  ## zero and therefore target a different object.
+  expect_false(isTRUE(all.equal(out$estimate, mean(c(0, 0)))))
 })
 
 test_that("honest outer-fold Riesz defects and ridge neighborhoods are stored", {

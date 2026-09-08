@@ -891,6 +891,7 @@
   labels <- sources <- character()
   refinement_error <- numeric(); protocol_exact <- logical()
   audits <- list()
+  hz_assembly <- list()
   add_primitive <- function(id, value, gradient, gradient_h, gradient_h2,
                             source, error, exact,
                             estimand_signature,
@@ -955,10 +956,14 @@
     if (identical(spec$target_type, "directional_heterogeneity")) {
       mbar_train <- mean(support_values[train, 1L])
       mbar_evaluation <- mean(support_values[evaluation, 1L])
-      centered <- numeric(nrow(support_values))
-      centered[train] <- support_values[train, 1L] - mbar_train
-      centered[evaluation] <-
-        support_values[evaluation, 1L] - mbar_evaluation
+      ## The Riesz derivative must use a center computed only from the outer
+      ## training respondents. The held rows retain raw mean and second-moment
+      ## values below so the global cross-fit H_Z plug-in and direct P_Z term
+      ## can be assembled after every fold's nuisance and correction are
+      ## frozen. A pooled cross-fit center must never feed back into this fold
+      ## solve because it depends on nuisance fits trained on this fold's
+      ## responses.
+      centered <- support_values[, 1L] - mbar_train
       hz_value <- centered^2
       hz_gradient <- tg$gradient[[idx[1L]]] * (2 * centered)
       hz_gradient_h <- tg$gradient_h[[idx[1L]]] * (2 * centered)
@@ -986,6 +991,14 @@
         mean(hz_value[train])
       audits[[spec$target_id]]$HZ_evaluation_plugin <-
         mean(hz_value[evaluation])
+      hz_id <- spec$primitive_registry_ids[1L]
+      hz_assembly[[hz_id]] <- list(
+        target_id = spec$target_id,
+        mean = support_values[, 1L],
+        second_moment = support_values[, 2L],
+        training_center = mbar_train,
+        evaluation_center = mbar_evaluation,
+        gradient_center_rule = "outer_training_only")
     } else {
       if (length(idx) != length(spec$primitive_registry_ids)) {
         .scmix_dml_stop("scmix_dml(): target `", spec$target_id,
@@ -1017,7 +1030,27 @@
     derivative_refinement_protocol_exact = protocol_exact,
     direct_pz_center = stats::setNames(direct_pz_centers, labels),
     supporting_audit = audits,
+    hz_assembly = hz_assembly,
     mode = "minimal_v22_primitives")
+}
+
+.scmix_dml_global_hz_assembly <- function(mean_direction, second_moment) {
+  mean_direction <- as.numeric(mean_direction)
+  second_moment <- as.numeric(second_moment)
+  if (!length(mean_direction) || length(second_moment) != length(mean_direction) ||
+      any(!is.finite(mean_direction)) || any(!is.finite(second_moment))) {
+    .scmix_dml_stop("scmix_dml(): global H_Z assembly requires finite, ",
+                    "equal-length cross-fit mean and second-moment vectors.")
+  }
+  center <- mean(mean_direction)
+  estimate <- mean(second_moment) - center^2
+  row_contribution <- second_moment - 2 * center * mean_direction + center^2
+  list(
+    center = center,
+    estimate = estimate,
+    row_contribution = row_contribution,
+    direct_empirical_pz = row_contribution - estimate,
+    rule = "global_crossfit_second_moment_minus_squared_global_crossfit_mean")
 }
 
 .scmix_dml_contrast <- function(x, attr_names, what) {
@@ -1543,12 +1576,134 @@ scmix_delta_transform <- function(
   x
 }
 
-.scmix_dml_solve <- function(I, g, nu, P, tolerance = 1e-10) {
+.scmix_dml_solve_v28_engine <- function(I, g, nu, P, tolerance = 1e-10) {
   M <- (I + t(I)) / 2 + nu * P
-  ee <- eigen(M, symmetric = TRUE)
-  cutoff <- tolerance * max(abs(ee$values), 1)
-  inv <- ifelse(ee$values > cutoff, 1 / ee$values, 0)
-  ee$vectors %*% (inv * crossprod(ee$vectors, g))
+  original <- eigen(M, symmetric = TRUE)
+  original_cutoff <- tolerance * max(abs(original$values), 1)
+  original_inverse <- ifelse(
+    original$values > original_cutoff, 1 / original$values, 0)
+  reference <- original$vectors %*%
+    (original_inverse * crossprod(original$vectors, as.matrix(g)))
+  ## Version 2.8 numerical equilibration.  This is a congruence transform of
+  ## the complete penalized system, including P.  It therefore changes only
+  ## numerical coordinates, not the ridge problem.  Rank must be assessed
+  ## after this scale-free re-expression.  An eigenvalue cutoff in the
+  ## original coordinates can otherwise mistake a strictly positive-definite
+  ## but badly scaled ridge system for a singular one and truncate a valid
+  ## coordinate. Congruence does not preserve the numerical pseudoinverse
+  ## representative defined by the frozen eigenvalue cutoff for a genuinely
+  ## rank-deficient system. Such a system therefore retains the pre-v2.8
+  ## reference solution.
+  diagonal_scale <- sqrt(pmax(abs(diag(M)), .Machine$double.xmin))
+  D <- 1 / diagonal_scale
+  M_equilibrated <- D * sweep(M, 2L, D, `*`)
+  g_equilibrated <- D * as.matrix(g)
+  equilibrated <- eigen(
+    (M_equilibrated + t(M_equilibrated)) / 2, symmetric = TRUE,
+    only.values = TRUE)$values
+  equilibrated_cutoff <- tolerance * max(abs(equilibrated), 1)
+  scale_free_full_rank <- all(equilibrated > equilibrated_cutoff)
+  ## Positive definiteness is a property of the declared penalty, not of its
+  ## magnitude after scaling by M.  A tolerance with a unit floor can wrongly
+  ## classify P = I as singular when M is extremely ill-scaled.  Use an
+  ## unpivoted Cholesky factorization of the finite symmetrized P itself.
+  P_symmetric <- (P + t(P)) / 2
+  penalty_pd <- isTRUE(tryCatch({
+    if (any(!is.finite(P_symmetric))) FALSE else {
+      chol(P_symmetric)
+      TRUE
+    }
+  }, error = function(e) FALSE))
+  positive_ridge_pd_penalty <- nu > 0 && penalty_pd
+  if (!scale_free_full_rank) {
+    if (positive_ridge_pd_penalty) {
+      stop(paste(
+        "The positive-ridge Riesz system is scale-free ill-conditioned in",
+        "double precision. A truncated representative is prohibited and",
+        "the ridge coefficient cannot be certified; inference is withheld."),
+        call. = FALSE)
+    }
+    return(list(
+      alpha = reference,
+      original_coordinate_numerical_full_rank =
+        all(original$values > original_cutoff),
+      scale_free_full_rank = FALSE,
+      positive_ridge_pd_penalty = FALSE,
+      congruent_equilibration_used = FALSE,
+      componentwise_backward_error = NA_real_,
+      normwise_backward_error = NA_real_,
+      fallback_reason = paste0(
+        "scale_free_singular_system_uses_frozen_cutoff_numerical_",
+        "pseudoinverse_representative")))
+  }
+  solved_equilibrated <- tryCatch({
+    factor <- chol((M_equilibrated + t(M_equilibrated)) / 2)
+    backsolve(factor, forwardsolve(t(factor), g_equilibrated))
+  }, error = function(e) NULL)
+  if (is.null(solved_equilibrated)) {
+    stop(paste(
+      "The scale-free v2.8 Riesz system should be nonsingular, but its",
+      "equilibrated Cholesky factorization failed; inference is withheld."),
+      call. = FALSE)
+  }
+  candidate <- D * solved_equilibrated
+  residual <- M %*% candidate - as.matrix(g)
+  component_denominator <- abs(M) %*% abs(candidate) + abs(as.matrix(g))
+  componentwise_backward_error <- max(
+    abs(residual) / pmax(component_denominator, .Machine$double.xmin))
+  normwise_backward_error <- max(vapply(seq_len(ncol(candidate)), function(j) {
+    max(abs(residual[, j])) /
+      max(max(abs(M)) * max(abs(candidate[, j])) +
+            max(abs(as.matrix(g)[, j])), .Machine$double.xmin)
+  }, numeric(1L)))
+  backward_cutoff <- max(tolerance,
+                         100 * nrow(M) * .Machine$double.eps)
+  if (any(!is.finite(candidate)) ||
+      !is.finite(componentwise_backward_error) ||
+      !is.finite(normwise_backward_error) ||
+      componentwise_backward_error > backward_cutoff ||
+      normwise_backward_error > backward_cutoff) {
+    stop(paste(
+      "The scale-free v2.8 Riesz solve failed its backward-error gate;",
+      "inference is withheld."), call. = FALSE)
+  }
+  list(
+    alpha = candidate,
+    original_coordinate_numerical_full_rank =
+      all(original$values > original_cutoff),
+    scale_free_full_rank = scale_free_full_rank,
+    positive_ridge_pd_penalty = positive_ridge_pd_penalty,
+    congruent_equilibration_used = TRUE,
+    componentwise_backward_error = componentwise_backward_error,
+    normwise_backward_error = normwise_backward_error,
+    fallback_reason = NA_character_)
+}
+
+.scmix_dml_solve <- function(I, g, nu, P, tolerance = 1e-10) {
+  .scmix_dml_solve_v28_engine(I, g, nu, P, tolerance)$alpha
+}
+
+.scmix_dml_solve_v28_audit <- function(I, g, nu, P, tolerance = 1e-10) {
+  M <- (I + t(I)) / 2 + nu * P
+  solved <- .scmix_dml_solve_v28_engine(I, g, nu, P, tolerance)
+  alpha <- solved$alpha
+  residual <- M %*% alpha - as.matrix(g)
+  list(
+    alpha = alpha,
+    original_coordinate_relative_residual =
+      sqrt(colSums(residual^2)) /
+      pmax(sqrt(colSums(as.matrix(g)^2)), .Machine$double.xmin),
+    system = M,
+    protocol = "diagonal_congruence_equilibration_v2.8",
+    changes_statistical_ridge_problem = FALSE,
+    original_coordinate_numerical_full_rank =
+      solved$original_coordinate_numerical_full_rank,
+    scale_free_full_rank = solved$scale_free_full_rank,
+    positive_ridge_pd_penalty = solved$positive_ridge_pd_penalty,
+    congruent_equilibration_used = solved$congruent_equilibration_used,
+    componentwise_backward_error = solved$componentwise_backward_error,
+    normwise_backward_error = solved$normwise_backward_error,
+    fallback_reason = solved$fallback_reason)
 }
 
 .scmix_dml_riesz <- function(score, gradient, train, evaluation, nu_grid,
@@ -1572,22 +1727,47 @@ scmix_delta_transform <- function(
     do.call(cbind, lapply(gradient_w, function(g)
       colMeans(g[rows, , drop = FALSE])))
   }
-  fit_alpha <- function(rows, nu) {
+  solver_trace <- list()
+  fit_alpha <- function(rows, nu, purpose = "unspecified") {
     I <- crossprod(score_w[rows, , drop = FALSE]) / length(rows)
     g <- grad_matrix(rows)
     nu <- rep_len(as.numeric(nu), J)
-    out <- vapply(seq_len(J), function(j) {
-      as.numeric(.scmix_dml_solve(I, g[, j, drop = FALSE], nu[j],
-                                  penalty, solve_tolerance))
-    }, numeric(nrow(I)))
+    details <- lapply(seq_len(J), function(j) {
+      .scmix_dml_solve_v28_engine(
+        I, g[, j, drop = FALSE], nu[j], penalty, solve_tolerance)
+    })
+    out <- vapply(details, function(detail) as.numeric(detail$alpha),
+                  numeric(nrow(I)))
     if (J == 1L) out <- matrix(out, ncol = 1L)
+    trace_rows <- lapply(seq_len(J), function(j) {
+      detail <- details[[j]]
+      residual <- I %*% detail$alpha +
+        nu[[j]] * penalty %*% detail$alpha - g[, j, drop = FALSE]
+      data.frame(
+        purpose = purpose, training_rows = length(rows), target_index = j,
+        nu = nu[[j]],
+        original_coordinate_numerical_full_rank =
+          detail$original_coordinate_numerical_full_rank,
+        scale_free_full_rank = detail$scale_free_full_rank,
+        positive_ridge_pd_penalty = detail$positive_ridge_pd_penalty,
+        congruent_equilibration_used = detail$congruent_equilibration_used,
+        componentwise_backward_error =
+          detail$componentwise_backward_error,
+        normwise_backward_error = detail$normwise_backward_error,
+        original_coordinate_relative_residual =
+          sqrt(sum(residual^2)) / max(sqrt(sum(g[, j]^2)),
+                                      .Machine$double.xmin),
+        fallback_reason = detail$fallback_reason,
+        stringsAsFactors = FALSE)
+    })
+    solver_trace[[length(solver_trace) + 1L]] <<- do.call(rbind, trace_rows)
     out
   }
 
   selected <- rep(nu_grid[1L], J)
   risk <- matrix(NA_real_, length(nu_grid), J,
                  dimnames = list(NULL, paste0("target", seq_len(J))))
-  selection_source <- "legacy_shared_nuisance_inner_split"
+  selection_source <- "prespecified_first_grid_value"
   selection_data_dependent <- FALSE
   if (!is.null(selected_nu_override) && !is.null(fixed_nu_override)) {
     .scmix_dml_stop("scmix_dml(): signed and prespecified fixed Riesz ridge ",
@@ -1635,7 +1815,9 @@ scmix_delta_transform <- function(
       Ival <- crossprod(score_w[val, , drop = FALSE]) / length(val)
       gval <- grad_matrix(val)
       for (r in seq_along(nu_grid)) {
-        aa <- fit_alpha(subtrain, rep(nu_grid[r], J))
+        aa <- fit_alpha(
+          subtrain, rep(nu_grid[r], J),
+          purpose = paste0("training_validation_grid_", r))
         risk[r, ] <- colSums(aa * (Ival %*% aa)) -
           2 * colSums(aa * gval)
       }
@@ -1650,11 +1832,14 @@ scmix_delta_transform <- function(
     selected <- selected_validation$selected
     risk <- selected_validation$risk
     selection_data_dependent <- TRUE
+    selection_source <-
+      "outer_training_only_held_nuisance_validation_split"
   }
 
   Iall <- crossprod(score_w[train, , drop = FALSE]) / length(train)
-  alpha <- fit_alpha(train, selected)
-  alpha_zero <- fit_alpha(train, rep(0, J))
+  alpha <- fit_alpha(train, selected, purpose = "selected_full_training")
+  alpha_zero <- fit_alpha(
+    train, rep(0, J), purpose = "zero_reference_full_training")
   gall <- grad_matrix(train)
   eq <- Iall %*% alpha - gall
   eq_rel <- sqrt(colSums(eq^2)) / pmax(sqrt(colSums(gall^2)), 1e-12)
@@ -1686,7 +1871,10 @@ scmix_delta_transform <- function(
   correction_neighborhood <- lapply(seq_len(J), function(j) {
     values <- neighborhoods[[j]]
     out <- vapply(values, function(nu) {
-      aa <- fit_alpha(train, replace(selected, j, nu))[, j]
+      aa <- fit_alpha(
+        train, replace(selected, j, nu),
+        purpose = paste0("ridge_neighborhood_target_", j, "_nu_",
+                         format(nu, scientific = TRUE, trim = TRUE)))[, j]
       as.numeric(score_w[evaluation, , drop = FALSE] %*% aa)
     }, numeric(length(evaluation)))
     if (length(values) == 1L) out <- matrix(out, ncol = 1L)
@@ -1750,6 +1938,7 @@ scmix_delta_transform <- function(
     structural_inverse_sqrt = W,
     riesz_equation_relative_residual = eq_rel,
     ridge_relative_sensitivity = ridge_rel,
+    v28_solver_audit = do.call(rbind, solver_trace),
     sensitivity_nu = sensitivity_nu,
     ridge_neighborhood = neighborhoods,
     correction_neighborhood = correction_neighborhood,
@@ -2376,6 +2565,7 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
   labels <- deriv_sources <- deriv_refinement <- NULL
   fold_details <- vector("list", K)
   info_gate_failed <- character()
+  hz_crossfit_assembly <- list()
 
   for (k in seq_len(K)) {
     held <- which(layout$fold_resp == k)
@@ -2395,10 +2585,12 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                              derivative_refinement_factor,
                              derivative_refinement_tolerance)
     supporting_audit <- NULL
+    hz_assembly <- list()
     if (!is.null(v22_registry)) {
       primitive_tg <- .scmix_dml_v22_primitive_targets(
         tg, v22_registry, train, held)
       supporting_audit <- primitive_tg$supporting_audit
+      hz_assembly <- primitive_tg$hz_assembly
       tg <- primitive_tg
     }
     if (is.null(labels)) {
@@ -2413,6 +2605,29 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
                                  dimnames = dimnames(deriv_sources))
     } else if (!identical(labels, tg$labels)) {
       .scmix_dml_stop("scmix_dml(): target labels changed across folds.")
+    }
+    if (length(hz_assembly)) {
+      for (hz_id in names(hz_assembly)) {
+        if (!hz_id %in% labels) {
+          .scmix_dml_stop("scmix_dml(): H_Z assembly ID is absent from the ",
+                          "minimal primitive registry: ", hz_id, ".")
+        }
+        if (is.null(hz_crossfit_assembly[[hz_id]])) {
+          hz_crossfit_assembly[[hz_id]] <- list(
+            mean_direction = rep(NA_real_, N),
+            second_moment = rep(NA_real_, N),
+            training_center = rep(NA_real_, K),
+            evaluation_center = rep(NA_real_, K),
+            gradient_center_rule = "outer_training_only")
+        }
+        hz_entry <- hz_crossfit_assembly[[hz_id]]
+        hz_entry$mean_direction[held] <- hz_assembly[[hz_id]]$mean[held]
+        hz_entry$second_moment[held] <-
+          hz_assembly[[hz_id]]$second_moment[held]
+        hz_entry$training_center[k] <- hz_assembly[[hz_id]]$training_center
+        hz_entry$evaluation_center[k] <- hz_assembly[[hz_id]]$evaluation_center
+        hz_crossfit_assembly[[hz_id]] <- hz_entry
+      }
     }
     deriv_sources[k, ] <- tg$derivative_source
     deriv_refinement[k, ] <- tg$derivative_refinement_error
@@ -2594,6 +2809,7 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
         rz$selected_nu_by_target, labels),
       ridge_selection_source = rz$selection_source,
       ridge_selection_data_dependent = rz$selection_data_dependent,
+      v28_riesz_solver_audit = rz$v28_solver_audit,
       ridge_sensitivity_nu = rz$sensitivity_nu,
       training_plugin_mean = training_plugin_mean,
       direct_pz_center = direct_pz_center,
@@ -2652,17 +2868,52 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     out$fold_details <- fold_details
     return(out)
   }
+  global_hz_audit <- list()
+  if (length(hz_crossfit_assembly)) {
+    for (hz_id in names(hz_crossfit_assembly)) {
+      hz_entry <- hz_crossfit_assembly[[hz_id]]
+      if (anyNA(hz_entry$mean_direction) ||
+          anyNA(hz_entry$second_moment) ||
+          anyNA(hz_entry$training_center) ||
+          anyNA(hz_entry$evaluation_center)) {
+        .scmix_dml_stop("internal error: incomplete cross-fit H_Z support ",
+                        "assembly for ", hz_id, ".")
+      }
+      assembled <- .scmix_dml_global_hz_assembly(
+        hz_entry$mean_direction, hz_entry$second_moment)
+      plugin[, hz_id] <- assembled$row_contribution
+      direct_pz[, hz_id] <- assembled$direct_empirical_pz
+      global_hz_audit[[hz_id]] <- list(
+        target = hz_id,
+        global_crossfit_mean_direction = assembled$center,
+        global_crossfit_HZ = assembled$estimate,
+        outer_training_gradient_centers = hz_entry$training_center,
+        outer_evaluation_centers_audit_only = hz_entry$evaluation_center,
+        gradient_center_rule = hz_entry$gradient_center_rule,
+        assembly_rule = assembled$rule)
+      for (k in seq_len(K)) {
+        fold_details[[k]]$direct_pz_center[hz_id] <- assembled$estimate
+        fold_details[[k]]$global_crossfit_HZ[hz_id] <- assembled$estimate
+        fold_details[[k]]$global_crossfit_mean_direction[hz_id] <-
+          assembled$center
+        fold_details[[k]]$HZ_riesz_gradient_center[hz_id] <-
+          hz_entry$training_center[k]
+        fold_details[[k]]$HZ_assembly_rule[hz_id] <- assembled$rule
+      }
+    }
+  }
   if (anyNA(plugin) || anyNA(correction) || anyNA(direct_pz)) {
     .scmix_dml_stop("internal error: some respondents were not evaluated out of fold.")
   }
   psi <- plugin + correction
   estimate <- colMeans(psi)
   plugin_estimate <- colMeans(plugin)
-  ## The empirical-P_Z derivative is fold-specific. Ordinary row targets use
-  ## the outer-training center. A transformed variance primitive can register
-  ## its exact outer-evaluation center so its held-out contribution and honest
-  ## derivative use the evaluation-fold empirical P_Z. Only the assembled sum
-  ## is centered globally for covariance and multiplier calculations.
+  ## Ordinary row targets use fold-honest outer-training centers. For H_Z, the
+  ## Riesz gradient also uses only its outer-training center. Once every fold
+  ## is frozen, however, the direct empirical-P_Z contribution is assembled
+  ## from the complete cross-fit mean and second-moment vectors. This targets
+  ## the declared global finite-population variance without feeding a pooled
+  ## cross-fit center back into any fold's Riesz solve.
   uncentered_IF <- direct_pz + correction
   IF <- sweep(uncentered_IF, 2L, colMeans(uncentered_IF), `-`)
   colnames(IF) <- labels
@@ -2837,6 +3088,7 @@ scmix_dml <- function(fit, targets = "theta", plugin_targets = NULL,
     computational_loading_source = ag$A_source,
     fold_details = fold_details, derivative_source = deriv_sources,
     derivative_refinement_error = deriv_refinement,
+    v28_global_hz_assembly = global_hz_audit,
     v22_riesz_status = if (is.null(v22_riesz_evidence)) {
       "inner_nuisance_refit_evidence_absent"
     } else "signed_inner_nuisance_refit_evidence_used",

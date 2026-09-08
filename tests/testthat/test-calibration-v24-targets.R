@@ -233,7 +233,15 @@ test_that("v2.4 heterogeneity adapter requests direct H_Z and H_R solves", {
   expect_equal(direct$gradient[[2L]], gradient[[3L]])
   expect_false(isTRUE(all.equal(direct$gradient[[1L]], gradient[[2L]])))
   expect_equal(direct$value[1:2, 1L], (m[1:2] - mean(m[1:2]))^2)
-  expect_equal(direct$value[3:4, 1L], (m[3:4] - mean(m[3:4]))^2)
+  ## Foldwise Riesz gradients must use only the outer-training center.  The
+  ## held rows therefore retain that training center.  The reported H_Z
+  ## estimand is assembled later from the global cross-fit first and second
+  ## moments, rather than by averaging these fold-centered rows.
+  expect_equal(direct$value[3:4, 1L], (m[3:4] - mean(m[1:2]))^2)
+  assembled <- sconjoint:::.scmix_dml_global_hz_assembly(
+    mean_direction = m,
+    second_moment = m^2)
+  expect_equal(assembled$estimate, mean(m^2) - mean(m)^2)
 })
 
 test_that("v2.4 adapter runs the full scmix_dml minimal-primitive path", {
