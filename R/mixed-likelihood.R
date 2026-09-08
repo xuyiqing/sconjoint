@@ -881,6 +881,41 @@
   )
 }
 
+#' Make a Torch tensor with storage owned independently of an R host array
+#'
+#' On some R torch builds, `torch_tensor()` can retain storage borrowed from
+#' the R object supplied to it.  A tensor-level detach/clone is not by itself a
+#' reliable ownership boundary when the incoming tensor was created from such
+#' borrowed storage.  Round-trip through a private ordinary-R numeric object
+#' and immediately clone the newly tensorized value.
+#'
+#' @keywords internal
+#' @noRd
+.scmix_owned_tensor_copy <- function(x, dtype = NULL, device = NULL) {
+  if (!requireNamespace("torch", quietly = TRUE) ||
+      !inherits(x, "torch_tensor")) {
+    stop("An owned tensor copy requires one Torch tensor.", call. = FALSE)
+  }
+  if (is.null(dtype)) dtype <- x$dtype
+  if (is.null(device)) device <- x$device
+  value <- torch::as_array(x$detach()$cpu())
+  value_dim <- dim(value)
+  host <- numeric(length(value))
+  if (length(value)) host[] <- as.numeric(value)
+  if (!is.null(value_dim)) dim(host) <- value_dim
+  out <- torch::torch_tensor(host, dtype = dtype, device = device)$clone()
+  observed <- torch::as_array(out$detach()$cpu())
+  if (!identical(dim(observed), value_dim) ||
+      length(observed) != length(value) ||
+      any(!is.finite(observed)) ||
+      !isTRUE(all.equal(as.numeric(observed), as.numeric(value),
+                        tolerance = 0, check.attributes = FALSE))) {
+    stop("The owned tensor round-trip changed its shape or values.",
+         call. = FALSE)
+  }
+  out
+}
+
 #' Train one mixed-logit start on a data subset
 #'
 #' Full-batch Adam targets the respondent-average integrated negative log
@@ -1074,8 +1109,11 @@
           ## optimizer updates mutate the registered warm start.  That breaks
           ## independence when several starts are constructed from one base
           ## state and can even leave the caller's state nonfinite after a
-          ## failed line search.  Detach and clone at this ownership boundary.
-          own[[nm]] <- warm_state[[nm]]$detach()$clone()
+          ## failed line search. Cross a private host-array round trip and
+          ## clone at this ownership boundary.
+          own[[nm]] <- .scmix_owned_tensor_copy(
+            warm_state[[nm]], dtype = own[[nm]]$dtype,
+            device = own[[nm]]$device)
         }
       }
       net$load_state_dict(own)

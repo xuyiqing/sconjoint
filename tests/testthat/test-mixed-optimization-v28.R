@@ -207,4 +207,31 @@ test_that("an exact warm start retains caller-owned tensor values", {
   after <- lapply(warm, function(x) torch::as_array(x$detach()$cpu()))
   expect_true(all(vapply(after, function(x) all(is.finite(x)), logical(1L))))
   expect_identical(after, before)
+
+  source <- torch::torch_tensor(c(1, -2, 3),
+                                dtype = torch::torch_float64())
+  owned <- sconjoint:::.scmix_owned_tensor_copy(source)
+  source$zero_()
+  expect_identical(as.numeric(owned), c(1, -2, 3))
+  expect_false(identical(source$storage()$data_ptr(),
+                         owned$storage()$data_ptr()))
+})
+
+test_that("an owned tensor survives collection of its host and source", {
+  skip_if_not_installed("torch")
+  expected <- matrix(c(4, -5, 6, 7, -8, 9), nrow = 2L)
+
+  owned <- local({
+    host <- matrix(as.numeric(expected), nrow = 2L)
+    source <- torch::torch_tensor(host, dtype = torch::torch_float64())
+    sconjoint:::.scmix_owned_tensor_copy(source)
+  })
+
+  invisible(gc(verbose = FALSE))
+  pressure <- lapply(seq_len(32L), function(i) numeric(8192L))
+  rm(pressure)
+  invisible(gc(verbose = FALSE))
+
+  expect_identical(torch::as_array(owned$detach()$cpu()), expected)
+  expect_true(all(is.finite(as.numeric(owned))))
 })

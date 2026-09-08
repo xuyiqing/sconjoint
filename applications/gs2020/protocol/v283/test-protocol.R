@@ -1,0 +1,302 @@
+#!/usr/bin/env Rscript
+
+## Outcome-free static checks for the Graham--Svolik v2.8.3 fit protocol.
+
+args <- commandArgs(trailingOnly = FALSE)
+file_arg <- grep("^--file=", args, value = TRUE)
+protocol_dir <- if (length(file_arg) == 1L) {
+  dirname(normalizePath(sub("^--file=", "", file_arg), mustWork = TRUE))
+} else normalizePath(getwd(), mustWork = TRUE)
+repo_root <- normalizePath(file.path(protocol_dir, "..", "..", "..", ".."),
+                           mustWork = TRUE)
+
+checks <- 0L
+pending <- character()
+assert <- function(ok, message) {
+  if (length(ok) != 1L || is.na(ok) || !ok) stop(message, call. = FALSE)
+  checks <<- checks + 1L
+  invisible(TRUE)
+}
+read_registry <- function(name) utils::read.csv(
+  file.path(protocol_dir, name), stringsAsFactors = FALSE,
+  check.names = FALSE, na.strings = character())
+sha256 <- function(path) {
+  line <- system2(Sys.which("shasum"), c("-a", "256", shQuote(path)),
+                  stdout = TRUE, stderr = TRUE)
+  assert(length(line) == 1L && grepl("^[0-9a-f]{64}[[:space:]]", line),
+         paste("Could not hash", path))
+  sub("[[:space:]].*$", "", line)
+}
+check_hash <- function(path, expected, label) {
+  assert(file.exists(path), paste("Missing", label))
+  if (identical(expected, "PENDING_FINALIZATION")) {
+    pending <<- c(pending, label)
+    return(invisible(TRUE))
+  }
+  assert(grepl("^[0-9a-f]{64}$", expected) &&
+           identical(sha256(path), expected), paste("Hash mismatch:", label))
+}
+
+expected_files <- c(
+  "README.md", "application-contract.dcf", "implementation-manifest.csv",
+  "input-manifest.csv", "seed-registry.csv", "stage-registry.csv",
+  "state-registry.csv", "test-protocol.R", "CHECKSUMS.sha256")
+assert(setequal(list.files(protocol_dir), expected_files),
+       "The fit protocol directory has unregistered files")
+
+contract <- unlist(read.dcf(file.path(protocol_dir, "application-contract.dcf"),
+                            all = TRUE)[1L, , drop = TRUE], use.names = TRUE)
+exact <- c(
+  `Protocol-Id` = "gs2020-paperps-prospective-2026-09-07-v2.8.3-v1",
+  `Prior-GS-V283-Outcome` = "none",
+  `Prior-GS-V282-Outcome` =
+    "complete_fit_rank_and_target_checkpoint_tree",
+  `V282-Provenance-Audit` =
+    "43_of_54_stage_one_start_hashes_reconstructed",
+  `V282-Failure-Mode` = paste0(
+    "nonowning_R_to_Torch_storage_in_q1_initializer_corrupted_",
+    "later_candidate_inputs"),
+  `V282-Root-Cause-Evidence` = paste0(
+    "only_A_changed_and_immediate_clone_after_tensorization_",
+    "preserved_state"),
+  `V282-Mismatch-Scope` = paste0(
+    "11_of_12_q1_perturbed_or_constant_start_hashes_mismatched_",
+    "while_all_exact_and_all_q0_q2_starts_matched"),
+  `V282-Outcome-Inspection` = paste0(
+    "numerical_fit_rank_calibration_and_target_diagnostics_seen_before_",
+    "or_during_ownership_audit"),
+  `V282-Artifact-Validity` = "invalidated_for_substantive_use",
+  `V282-Artifact-Reuse` = "prohibited",
+  `V282-Statistical-Change` = "none_ownership_repair_only",
+  `Prior-GS-V281-Outcome` =
+    "preflight_plus_q1_outer_1_and_outer_2_checkpoints_only",
+  `V281-Failure-Mode` = paste0(
+    "torch_shared_storage_mutated_caller_warm_tensors_before_later_",
+    "candidate_starts"),
+  `V281-Discovery-Point` =
+    "q1_full_and_outer_3_execution_exposed_the_application_adapter_bug",
+  `V281-Substantive-Inspection` =
+    "no_printed_substantive_results_inspected_or_reused",
+  `V281-Artifact-Reuse` = "prohibited",
+  `Prior-GS-V28-Outcome` = "none",
+  `Historical-Fit-Role` = "matching_outer_fold_q1_states_are_initializers_only",
+  `Historical-Full-Fit` = "unavailable_not_invented",
+  `Full-Initializer` = paste0(
+    "deterministic_outer_1_state_affine_input_and_output_scale_remap_",
+    "followed_by_full_reoptimization"),
+  `Heldout-Leakage-Rule` =
+    "each_outer_scope_uses_only_its_matching_outer_training_state",
+  `Historical-Inner-Tuning-Audit` = paste0(
+    "exact_outer_complements_respondent_clustered_inner_folds_training_only_",
+    "preprocessing_validation_id_bound_scores_recomputed_selection_and_",
+    "refit_specification"),
+  `Historical-Inner-Tuning-Evidence-Limit` =
+    "retained_metadata_internal_consistency_only_cv_networks_were_not_retained",
+  `Prospective-Boundary` =
+    "no_v283_application_outcome_existed_when_this_protocol_was_written",
+  `Historical-Estimate-Reuse` = "prohibited",
+  `Historical-Gate-Reuse` = "prohibited",
+  `Historical-Target-Reuse` = "prohibited",
+  `Checkpoint-Pair-Recovery` = paste0(
+    "validate_installed_envelope_and_binding_then_recreate_only_",
+    "missing_sha_sidecar"),
+  `Amendment-Scope` = paste0(
+    "R_host_to_Torch_storage_ownership_and_immutable_start_templates"),
+  `Inherited-Numerical-Amendment` = paste0(
+    "v281_one_dimensional_parameter_shape_preservation_in_gradient_",
+    "audit"),
+  `Warm-Template-Ownership` =
+    "canonical_start_values_are_private_ordinary_R_arrays",
+  `Warm-Tensor-Ownership` = paste0(
+    "each_start_independently_tensorized_from_immutable_host_template_",
+    "with_immediate_clone_before_optimizer"),
+  `Package-Warm-Tensor-Ownership` = paste0(
+    "private_host_array_roundtrip_plus_immediate_tensor_clone_before_",
+    "load_state_dict"),
+  `Warm-Tensor-Fix-Scope` = paste0(
+    "package_ownership_boundary_plus_application_templates_and_",
+    "defense_in_depth"),
+  `Start-Input-Hash-Contract` = paste0(
+    "exact_perturbed_constant_templates_derived_before_first_optimizer_",
+    "and_bound_to_stage_one_ledgers"),
+  `Primary-Input-SHA256` =
+    "debd4a077330fb47b1c073cbc8a17e701d1c3f497fb10e188951b26110516878",
+  `Primary-Sample` = "1605_respondents_20657_tasks_1_to_13_tasks_each",
+  `Ranks` = "0,1,2", `Primary-Rank` = "1",
+  `Fresh-Optimization-Rule` =
+    "all_trainable_parameters_reoptimized_from_initializer",
+  `Q1-Initializer-Alias-Rule` = paste0(
+    "fit_preprocessing_identical_to_portable_state_preprocessing_and_names_",
+    "with_architecture_scale_agreement_at_1e-12"),
+  `Q1-Remap-Baseline-Shift` = paste0(
+    "unbounded_corrected_relu_deviation_g_of_a_minus_g_of_zero_never_",
+    "clipped_beta_difference"),
+  `Q1-Remap-Validation-Scope` = "every_row_in_the_fresh_fitting_scope",
+  `Analysis-Conditional-Dependency` =
+    "require_q2_gh15_checkpoint_when_q2_timing_decision_is_continue",
+  `Q2-Timing-Cutoff-Seconds` = "50400",
+  `Optimizer` = "float64_full_batch_LBFGS_strong_wolfe",
+  `Blockwise-KKT-Cutoff` = "0.00001",
+  `Near-Optimum-Relative-Cutoff` = "0.000001",
+  `Runtime-Link-Rule` =
+    "create_once_or_validate_exact_target_never_replace_during_concurrent_runs",
+  `Threshold-Change` = "none",
+  `Manifest-Finalization` = "completed_before_first_outcome_command")
+assert(all(names(exact) %in% names(contract)) &&
+         identical(unname(contract[names(exact)]), unname(exact)),
+       "A required fit-protocol rule changed")
+
+runtime_wrapper_text <- paste(readLines(file.path(
+  repo_root, "applications", "bin", "Rscript45"), warn = FALSE),
+  collapse = "\n")
+assert(!grepl("ln -sfn", runtime_wrapper_text, fixed = TRUE) &&
+         grepl("observed_runtime_root=$(readlink", runtime_wrapper_text,
+               fixed = TRUE) &&
+         grepl("if ! ln -s", runtime_wrapper_text, fixed = TRUE),
+       "The R runtime wrapper can replace its shared link during a concurrent start")
+
+fit_contract_text <- paste(readLines(file.path(
+  repo_root, "applications", "gs2020", "R", "gs_v283_contract.R"),
+  warn = FALSE), collapse = "\n")
+assert(all(vapply(c(
+  ".gs_v283_assert_historical_inner_tuning(prepared, nested, fold_index)",
+  "!identical(fit$preprocessing, state$preprocessing)",
+  ".gs_v283_unbounded_relu_deviation(before_net, mapped_new_zero)",
+  "before_net, fitting_internal_old)",
+  "target_net, repaired$internal)"
+), grepl, logical(1L), x = fit_contract_text, fixed = TRUE)),
+"The implementation no longer enforces the disclosed tuning/remap audit")
+fit_contract_env <- new.env(parent = globalenv())
+sys.source(file.path(repo_root, "applications", "gs2020", "R",
+                     "gs_v283_contract.R"), envir = fit_contract_env)
+fit_one_start_text <- paste(
+  deparse(body(fit_contract_env$.gs_v283_fit_one_start)), collapse = "\n")
+clone_helper_text <- paste(
+  deparse(body(fit_contract_env$.gs_v283_clone_owned_warm)), collapse = "\n")
+materialize_text <- paste(
+  deparse(body(fit_contract_env$.gs_v283_materialize_warm_template)),
+  collapse = "\n")
+clone_at <- regexpr(
+  "current_warm <- .gs_v283_clone_owned_warm(warm)", fit_one_start_text,
+  fixed = TRUE)[[1L]]
+optimizer_at <- regexpr(
+  ".gs_v283_fit_one_stage(", fit_one_start_text, fixed = TRUE)[[1L]]
+assert(clone_at > 0L && optimizer_at > clone_at &&
+         grepl("owned <- .gs_v283_materialize_warm_template(template)",
+               clone_helper_text, fixed = TRUE) &&
+         grepl("device = \"cpu\")$clone()", materialize_text,
+               fixed = TRUE) &&
+         grepl("An optimizer stage mutated its caller-owned warm state",
+               fit_one_start_text, fixed = TRUE),
+       paste("The application adapter must materialize private host templates",
+             "and verify caller hashes before and after optimizer work"))
+
+runner_text <- paste(readLines(file.path(
+  repo_root, "applications", "gs2020", "R", "05_run_fast_v283.R"),
+  warn = FALSE), collapse = "\n")
+templates_at <- regexpr("candidate_templates <- list(", runner_text,
+                        fixed = TRUE)[[1L]]
+exact_fit_at <- regexpr("exact <- .gs_v283_fit_template_start(", runner_text,
+                        fixed = TRUE)[[1L]]
+assert(templates_at > 0L && exact_fit_at > templates_at &&
+         grepl("fit$v283_start_input_hashes_verified <- TRUE", runner_text,
+               fixed = TRUE),
+       "Candidate templates and their ledger bindings are not frozen before optimization")
+
+inputs <- read_registry("input-manifest.csv")
+assert(nrow(inputs) == 5L && !anyDuplicated(inputs$input_id) &&
+         all(tolower(inputs$read_only) == "true") &&
+         identical(inputs$input_id[tolower(inputs$may_initialize) == "true"],
+                   "v21_primary_nested"),
+       "The five read-only inputs or initializer permissions changed")
+
+states <- read_registry("state-registry.csv")
+assert(identical(states$scope, c("full", paste0("outer_", 1:5))) &&
+         identical(states$source_position,
+                   c("outer_1", paste0("outer_", 1:5))) &&
+         identical(states$source_label,
+                   c("outer_2", "outer_2", "outer_4", "outer_3",
+                     "outer_1", "outer_5")) &&
+         identical(states$n_respondents, rep(1284L, 6L)) &&
+         identical(states$hidden, c(4L, 4L, 4L, 8L, 4L, 4L)) &&
+         identical(states$initializer_role,
+                   c("deterministic_full_transfer",
+                     rep("matching_outer_training_initializer", 5L))),
+       "The six disclosed q=1 initializer mappings changed")
+
+seeds <- read_registry("seed-registry.csv")
+assert(identical(seeds$value[seeds$component == "fit_master"], "202609176") &&
+         identical(seeds$value[seeds$component == "perturbation_scale"],
+                   "0.02") &&
+         identical(seeds$value[seeds$component == "q2_second_column_rule"],
+                   "deterministic_trigonometric"),
+       "A fit seed or deterministic perturbation rule changed")
+
+stages <- read_registry("stage-registry.csv")
+assert(identical(stages$stage_index, seq_len(nrow(stages))) &&
+         "conditional_depends_on" %in% names(stages) &&
+         all(c("q1_outer_2", "q1_assemble", "q0_assemble", "q2_outer_2",
+               "q2_timing_decision", "q2_assemble", "analysis") %in%
+               stages$stage_id),
+       "The q=0,1,2 checkpoint graph is incomplete")
+assert(identical(stages$conditional_depends_on[
+                   stages$stage_id == "analysis"],
+                 "q2_gh15_if_timing_decision_equals_continue") &&
+         all(stages$conditional_depends_on[
+           !stages$stage_id %in% c(paste0("q2_", c(
+             "full", "outer_1", "outer_3", "outer_4", "outer_5")),
+             "q2_assemble", "q2_gh15", "analysis")] == "none"),
+       "The conditional q=2 analysis dependency is not explicit")
+dependencies <- lapply(stages$depends_on, function(x) {
+  if (identical(x, "none")) character() else strsplit(x, "+", fixed = TRUE)[[1L]]
+})
+assert(all(vapply(seq_along(dependencies), function(i) {
+  earlier <- if (i == 1L) character() else stages$stage_id[seq_len(i - 1L)]
+  all(dependencies[[i]] %in% earlier)
+}, logical(1L))), "A stage depends on a checkpoint not created earlier")
+
+package_r <- sort(file.path(
+  "R", list.files(file.path(repo_root, "R"), pattern = "[.]R$", recursive = TRUE)))
+required_implementation <- c(
+  ".gitignore", "DESCRIPTION", "NAMESPACE", "applications/bin/Rscript45",
+  package_r, "tests/testthat/test-mixed-optimization-v28.R",
+  "applications/gs2020/R/gs_v283_contract.R",
+  "applications/gs2020/R/05_run_fast_v283.R",
+  "applications/gs2020/R/test_gs_v283_contract.R")
+implementation <- read_registry("implementation-manifest.csv")
+assert(identical(implementation$relative_path, required_implementation) &&
+         !anyDuplicated(implementation$relative_path),
+       "The fit implementation manifest is incomplete")
+for (i in seq_len(nrow(implementation))) {
+  path <- file.path(repo_root, implementation$relative_path[[i]])
+  check_hash(path, implementation$sha256[[i]],
+             paste("implementation", implementation$relative_path[[i]]))
+  if (grepl("[.]R$", path)) parse(path)
+}
+
+checksum_lines <- readLines(file.path(protocol_dir, "CHECKSUMS.sha256"),
+                            warn = FALSE)
+parts <- strsplit(checksum_lines, "  ", fixed = TRUE)
+assert(length(parts) > 0L && all(lengths(parts) == 2L),
+       "Malformed CHECKSUMS.sha256")
+registered <- vapply(parts, `[[`, character(1L), 2L)
+expected_hash <- vapply(parts, `[[`, character(1L), 1L)
+assert(setequal(registered, setdiff(expected_files, "CHECKSUMS.sha256")),
+       "Checksums do not cover every other fit-protocol file exactly once")
+for (i in seq_along(registered)) {
+  check_hash(file.path(protocol_dir, registered[[i]]), expected_hash[[i]],
+             paste("protocol", registered[[i]]))
+}
+
+source_root <- Sys.getenv("CONJOINTSTRUCTURAL_ROOT", unset = "")
+if (nzchar(source_root)) {
+  for (i in seq_len(nrow(inputs))) {
+    check_hash(file.path(source_root,
+                         inputs$relative_to_ConjointStructural[[i]]),
+               inputs$sha256[[i]], paste("external input", inputs$input_id[[i]]))
+  }
+}
+
+assert(!length(pending),
+       "The finalized fit protocol still contains pending hashes")
+cat(sprintf("Graham--Svolik v2.8.3 fit protocol checks passed: %d\n", checks))
