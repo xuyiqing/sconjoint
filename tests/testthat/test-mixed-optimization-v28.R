@@ -172,3 +172,39 @@ test_that("v2.8.1 gradient directions preserve rank-one ReLU shapes", {
   expect_true(all(is.finite(audit$table$autodiff)))
   expect_true(all(is.finite(audit$table$finite_difference)))
 })
+
+test_that("an exact warm start retains caller-owned tensor values", {
+  skip_if_not_installed("torch")
+  set.seed(57)
+  respondent_id <- rep(sprintf("r%02d", 1:6), each = 3)
+  deltaX <- matrix(rnorm(length(respondent_id) * 2), ncol = 2)
+  Z <- matrix(rnorm(length(respondent_id) * 2), ncol = 2)
+  y <- rep(c(0, 1, 0), 6)
+  scale <- c(1.2, 0.9)
+  grid <- sconjoint:::.sc_mixed_grid(
+    q = 1L, integration = "gh", n_nodes = 5L, n_draws = 1L,
+    seed = 1L, antithetic = TRUE, scramble = FALSE)
+  net <- sconjoint:::.sc_build_mixed_network(
+    p = 2L, p_Z = 2L, q = 1L, hidden = 2L,
+    mean_family = "relu", coefficient_scale = scale,
+    compute_dtype = "float64")
+  warm <- lapply(net$state_dict(), function(x) x$detach()$cpu()$clone())
+  before <- lapply(warm, function(x) torch::as_array(x$detach()$cpu()))
+
+  expect_silent(sconjoint:::.sc_train_mixed_multistart(
+    deltaX = sweep(deltaX, 2L, scale, `/`), y = y, Z = Z,
+    respondent_id = respondent_id, gh = grid, hidden = 2L,
+    mean_family = "relu", n_epochs = 0L, learning_rate = 0.01,
+    weight_decay = 0.01, n_starts = 1L, seed = 411L,
+    device = "cpu", verbose = FALSE, warm_state = warm,
+    warm_start_mode = "exact_state", early_stop = FALSE,
+    opt_tol = 0, grad_tol = 0, kkt_tol = NULL,
+    protocol_mode = "calibration", calibration_verification = NULL,
+    polish_max_iter = 2L, polish_history_size = 5L,
+    polish_tolerance_grad = 0, polish_tolerance_change = 0,
+    polish_lr = 0.25, coefficient_scale = scale))
+
+  after <- lapply(warm, function(x) torch::as_array(x$detach()$cpu()))
+  expect_true(all(vapply(after, function(x) all(is.finite(x)), logical(1L))))
+  expect_identical(after, before)
+})

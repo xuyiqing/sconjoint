@@ -1067,7 +1067,16 @@
           warm_start_mode == "pooled_nested" ||
             !nm %in% c("A", "kappa_raw")
         }
-        if (use) own[[nm]] <- warm_state[[nm]]
+        if (use) {
+          ## `load_state_dict()` may retain libtorch storage ownership rather
+          ## than copying it on every supported R torch build.  Passing the
+          ## caller's tensor through directly can therefore let subsequent
+          ## optimizer updates mutate the registered warm start.  That breaks
+          ## independence when several starts are constructed from one base
+          ## state and can even leave the caller's state nonfinite after a
+          ## failed line search.  Detach and clone at this ownership boundary.
+          own[[nm]] <- warm_state[[nm]]$detach()$clone()
+        }
       }
       net$load_state_dict(own)
       if (identical(warm_start_mode, "exact_state")) {

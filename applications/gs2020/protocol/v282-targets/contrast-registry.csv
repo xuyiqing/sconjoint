@@ -1,0 +1,5 @@
+contrast_id,diff_respParty,diff_p1_num,diff_p2_num,diff_dem_code_g_committee,diff_dem_code_g_officestructure,diff_dem_code_g_procedure,diff_dem_code_g_progEval,diff_dem_code_g_record,diff_dem_code_g_schedule,diff_dem_code_u_banProtest,diff_dem_code_u_court,diff_dem_code_u_execRule,diff_dem_code_u_gerry2,diff_dem_code_u_gerry10,diff_dem_code_u_journalists,diff_dem_code_u_limitVote,diff_dem_code_v_affair,diff_dem_code_v_tax,diff_sex_Female,diff_race_Asian,diff_race_Black,diff_race_Hispanic,diff_pro_Farmer,diff_pro_Lawyer,diff_pro_Legislative_staffer,diff_pro_Police_officer,diff_pro_Served_in_the_army,diff_pro_Served_in_the_navy,diff_pro_Small_business_owner,diff_pro_Teacher
+coparty,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+vote_restriction,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+oppose_vote_restriction,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+coparty_plus_vote_restriction,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0

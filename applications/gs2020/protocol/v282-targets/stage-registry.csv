@@ -1,0 +1,6 @@
+stage_index,stage_id,depends_on,outcome_generating,immutable_output,reporting_role
+1,binding,v282_q1_assembly_and_preflight,false,binding.rds,integrity
+2,basis,binding,false,basis.rds,integrity
+3,context_preferences,basis,true,families/context_preferences.rds,post_diagnostic_context
+4,heterogeneity_core,basis,true,families/heterogeneity_core.rds,post_diagnostic_heterogeneity_core
+5,export,both_core_family_checkpoints,false,export.rds,post_diagnostic_export

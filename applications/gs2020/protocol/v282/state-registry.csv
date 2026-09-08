@@ -1,0 +1,7 @@
+scope,source_position,source_label,initializer_role,q,state_hash,training_ids_sha256,n_respondents,mean_family,hidden,weight_decay,source_analysis_signature,timing_sentinel
+full,outer_1,outer_2,deterministic_full_transfer,1,scmix-state-v1-031405585ad983d5,2d8f2a01369d6f79beb57bc5c2ece636a474aeda1ad447a1ac2069c59d5e47ff,1284,relu,4,0.1,scmix-v1-4f6fb5867fe86bdc,false
+outer_1,outer_1,outer_2,matching_outer_training_initializer,1,scmix-state-v1-031405585ad983d5,2d8f2a01369d6f79beb57bc5c2ece636a474aeda1ad447a1ac2069c59d5e47ff,1284,relu,4,0.1,scmix-v1-4f6fb5867fe86bdc,false
+outer_2,outer_2,outer_4,matching_outer_training_initializer,1,scmix-state-v1-6cc039b11accb7c6,3e8ee5ba7e1da2b98617b731db6f49313d22107aa1c0a6044aa72fe6b9663977,1284,relu,4,0.1,scmix-v1-5f3bad936c2250a9,true
+outer_3,outer_3,outer_3,matching_outer_training_initializer,1,scmix-state-v1-1305a50c3dcce2af,20f4a6f707e7a85154066317108a5891d4313f9605ef57f85c0b974c4464c1e1,1284,relu,8,0.1,scmix-v1-168c22386f6314f5,false
+outer_4,outer_4,outer_1,matching_outer_training_initializer,1,scmix-state-v1-1612197714a95884,90c351905c2870e5a888c9dfd816756f9da604b2e492f24ce537b8f08fb0f074,1284,relu,4,0.1,scmix-v1-6db4aa4504253cae,false
+outer_5,outer_5,outer_5,matching_outer_training_initializer,1,scmix-state-v1-707e6ec40ca7d569,55c3720a0f233184375e00a155142805aa6adbbf9e14b084508029f4925fb024,1284,relu,4,0.1,scmix-v1-6dd2917e5876e36b,false
