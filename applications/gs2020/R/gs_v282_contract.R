@@ -358,6 +358,8 @@
       "every_loaded_R_file_exactly_hashed_and_tracked",
     `RNG-Kind` = "L'Ecuyer-CMRG,Inversion,Rejection",
     `Runtime-Wrapper` = "applications/bin/Rscript45_exact_hash",
+    `Runtime-Link-Rule` =
+      "create_once_or_validate_exact_target_never_replace_during_concurrent_runs",
     `Runtime-Binding` = paste0(
       "R_executable_sha256_R_version_platform_package_versions_",
       "native_torch_version_BLAS_and_single_thread_state"),

@@ -126,7 +126,9 @@ implementation manifest hashes the transitive package and application files
 used by the numerical and inference paths. It also hashes every package R file
 that `pkgload` can load and the exact R 4.5 wrapper. Checkpoints bind the R
 executable hash, R and package versions, native torch version, and frozen RNG
-kinds. Visible untracked files are rejected, and every manifest and protocol
+kinds. The wrapper creates its common runtime link once and thereafter verifies
+the exact target without replacing the link during concurrent starts. Visible
+untracked files are rejected, and every manifest and protocol
 file must already be tracked. Outputs, when authorized in a later step, will be
 immutable below
 `runs/gs2020/v282/prospective-2026-09-07-v1`. The historical q=1 artifacts are

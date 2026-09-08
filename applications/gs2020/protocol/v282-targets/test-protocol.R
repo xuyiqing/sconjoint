@@ -79,6 +79,8 @@ exact <- c(
   `Riesz-Correction-Relative-Cutoff` = "0.20",
   `Ridge-Movement-Cutoff` = "0.20",
   `Common-Family-Multiplier-Draws` = "9999",
+  `Runtime-Link-Rule` =
+    "create_once_or_validate_exact_target_never_replace_during_concurrent_runs",
   `Threshold-Change` = "none",
   `Formal-Release` =
     "withheld_post_diagnostic_same_sample_and_pending_complete_gates",

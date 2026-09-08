@@ -13,7 +13,31 @@ if [ ! -x "${runtime_root}/Library/Frameworks/R.framework/Resources/bin/R" ]; th
   exit 1
 fi
 
-ln -sfn "${runtime_root}" "${runtime_link}"
+if [ -L "${runtime_link}" ]; then
+  observed_runtime_root=$(readlink "${runtime_link}")
+  if [ "${observed_runtime_root}" != "${runtime_root}" ]; then
+    echo "${runtime_link} points to an unexpected R runtime." >&2
+    exit 1
+  fi
+elif [ -e "${runtime_link}" ]; then
+  echo "${runtime_link} exists but is not a symbolic link." >&2
+  exit 1
+else
+  # Never replace the common runtime link while another R process may be
+  # resolving its base packages. If another process wins this creation race,
+  # validate the link it installed instead of unlinking it.
+  if ! ln -s "${runtime_root}" "${runtime_link}" 2>/dev/null; then
+    if [ ! -L "${runtime_link}" ]; then
+      echo "Could not create the common R runtime link." >&2
+      exit 1
+    fi
+  fi
+  observed_runtime_root=$(readlink "${runtime_link}")
+  if [ "${observed_runtime_root}" != "${runtime_root}" ]; then
+    echo "${runtime_link} points to an unexpected R runtime." >&2
+    exit 1
+  fi
+fi
 mkdir -p "${library_root}"
 
 export R_LIBS_USER="${library_root}"

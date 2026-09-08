@@ -57,7 +57,9 @@ because the target core was selected after earlier outcomes were examined.
 
 Every outcome command requires a clean repository and exact protocol,
 implementation, runtime, input, and upstream-checkpoint hashes. Outputs are
-immutable. No external push is authorized. After finalization and commit, run
+immutable. The shared R runtime link is created once and then verified without
+replacement so simultaneous family processes cannot interrupt one another's
+base-package resolution. No external push is authorized. After finalization and commit, run
 `status`, `bind`, `basis`, both family commands, and `export`. The two family
 commands may run independently after the basis checkpoint exists.
 

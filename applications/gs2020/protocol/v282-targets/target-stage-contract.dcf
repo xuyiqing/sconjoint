@@ -74,6 +74,7 @@ Loaded-Package-R-Coverage: every_loaded_R_file_exactly_hashed_and_tracked
 Transitive-Code-Hashing: parent_protocol_target_wrappers_and_every_package_source_on_the_target_path
 RNG-Kind: L'Ecuyer-CMRG,Inversion,Rejection
 Runtime-Wrapper: applications/bin/Rscript45_exact_hash
+Runtime-Link-Rule: create_once_or_validate_exact_target_never_replace_during_concurrent_runs
 Runtime-Binding: R_executable_sha256_R_version_platform_package_versions_native_torch_version_BLAS_and_single_thread_state
 Manifest-Finalization: completed_before_first_outcome_command
 Fit-And-Analysis-Checkpoint-Mutation: prohibited

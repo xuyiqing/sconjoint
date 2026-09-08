@@ -112,11 +112,22 @@ exact <- c(
   `Optimizer` = "float64_full_batch_LBFGS_strong_wolfe",
   `Blockwise-KKT-Cutoff` = "0.00001",
   `Near-Optimum-Relative-Cutoff` = "0.000001",
+  `Runtime-Link-Rule` =
+    "create_once_or_validate_exact_target_never_replace_during_concurrent_runs",
   `Threshold-Change` = "none",
   `Manifest-Finalization` = "completed_before_first_outcome_command")
 assert(all(names(exact) %in% names(contract)) &&
          identical(unname(contract[names(exact)]), unname(exact)),
        "A required fit-protocol rule changed")
+
+runtime_wrapper_text <- paste(readLines(file.path(
+  repo_root, "applications", "bin", "Rscript45"), warn = FALSE),
+  collapse = "\n")
+assert(!grepl("ln -sfn", runtime_wrapper_text, fixed = TRUE) &&
+         grepl("observed_runtime_root=$(readlink", runtime_wrapper_text,
+               fixed = TRUE) &&
+         grepl("if ! ln -s", runtime_wrapper_text, fixed = TRUE),
+       "The R runtime wrapper can replace its shared link during a concurrent start")
 
 fit_contract_text <- paste(readLines(file.path(
   repo_root, "applications", "gs2020", "R", "gs_v282_contract.R"),
