@@ -1,0 +1,38 @@
+Ballard--Rosa v2.8 first-fit stop record
+=========================================
+
+Observed UTC: 2026-09-08T02:57:26Z
+Frozen code commit: 9b2f33536aa8cd5e36bd0fd300f7bcb2f97f15fb
+Protocol ID: br2017-paperps-prospective-2026-09-07-v2.8-v1
+
+Command:
+CONJOINTSTRUCTURAL_ROOT=<shared ConjointStructural root> \
+  applications/bin/Rscript45 applications/br2017/R/07_run_fast_v28.R \
+  fit --q=1 --scope=outer_2
+
+Terminal result:
+Error in array(random_sign(length(theta))/sqrt(total), dim = dim(theta)) :
+  'dims' cannot be of length 0
+Calls: .br_v28_main ... .scmix_dml_with_seed -> force -> lapply -> FUN -> array
+Execution halted
+
+Interpretation:
+The deterministic gradient-audit direction constructor assumed that each
+trainable value had a non-NULL dimension attribute.  A rank-one Torch bias
+becomes an ordinary R vector with a NULL dimension attribute.  Base R rejects
+array(..., dim = NULL).
+The stop is an implementation-shape error.  It is not an application result,
+an optimization-gate result, or evidence about the statistical model.
+
+Artifacts written before the stop:
+The pre-estimation data checkpoint and sidecar had already been written.  The
+checkpoint contains the prepared response but no fitted state, gate result, or
+substantive estimate.
+Their SHA-256 values are
+
+b9af73f4dcef2272ae6ca68f78af9e79de73a1a6d2a7fef697e1c3ffe31e4ea4  preflight.rds
+ede6423f99a6ce69ad2f8bef4bfb6bdd914cd3de5d8a65e1d7545c60c04b37df  preflight.rds.sha256
+
+No q=1 outer_2 fit checkpoint or sidecar was written.  No substantive value
+was printed or inspected.  The v2.8 commit and output directory remain frozen.
+Any repair must use a new protocol identifier, commit, and output directory.

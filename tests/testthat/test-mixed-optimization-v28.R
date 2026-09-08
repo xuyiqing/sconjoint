@@ -82,7 +82,7 @@ test_that("v2.8 rejects an incomplete dtype audit", {
                "invalid types")
 })
 
-test_that("v2.8 directional gradient ladder certifies a smooth linear fit", {
+test_that("v2.8.1 directional gradient ladder certifies a smooth linear fit", {
   skip_if_not_installed("torch")
   set.seed(11)
   respondents <- rep(sprintf("r%02d", 1:8), each = 3)
@@ -105,7 +105,70 @@ test_that("v2.8 directional gradient ladder certifies a smooth linear fit", {
     relative_tolerance = 5e-4, absolute_tolerance = 1e-7)
   expect_true(out$state_restored_exactly)
   expect_true(out$overall_pass)
+  expect_identical(out$protocol, "paperps-gradient-contract-v2.8.1")
   expect_true(all(c("position_effect", "unpenalized_mean_reference",
                     "centered_mean_deviation", "horizontal_loadings") %in%
                   names(out$pass_by_block)))
+})
+
+test_that("v2.8.1 gradient directions preserve rank-one ReLU shapes", {
+  skip_if_not_installed("torch")
+  net <- sconjoint:::.sc_build_mixed_network(
+    p = 3L, p_Z = 2L, q = 1L, hidden = 4L,
+    mean_family = "relu", coefficient_scale = c(1.2, 0.8, 1.5),
+    compute_dtype = "float64")
+  bank <- sconjoint:::.scmix_v28_direction_bank(
+    net, coefficient_scale = c(1.2, 0.8, 1.5),
+    kappa_bound = 10, alpha_bound = 5, a_bound = 10,
+    weight_bound = 10, seed = 912L)
+  expect_true("hidden.0.bias" %in%
+                names(bank$centered_mean_deviation))
+  for (block in bank) {
+    for (nm in names(block)) {
+      template <- sconjoint:::.scmix_parameter_array(net$parameters[[nm]])
+      expect_length(block[[nm]], length(template))
+      expect_identical(dim(block[[nm]]), dim(template))
+      expect_true(all(is.finite(block[[nm]])))
+    }
+  }
+
+  original <- sconjoint:::.scmix_v28_copy_parameter_arrays(net)
+  for (block in bank) {
+    candidate <- original
+    for (nm in names(block)) {
+      candidate[[nm]] <- candidate[[nm]] + 1e-4 * block[[nm]]
+    }
+    expect_silent(sconjoint:::.scmix_v28_load_parameter_arrays(net, candidate))
+    observed <- sconjoint:::.scmix_v28_copy_parameter_arrays(net)
+    expect_identical(lapply(observed, dim), lapply(candidate, dim))
+  }
+  expect_silent(sconjoint:::.scmix_v28_load_parameter_arrays(net, original))
+
+  malformed <- original
+  malformed$hidden.0.bias <- matrix(malformed$hidden.0.bias, nrow = 1L)
+  expect_error(
+    sconjoint:::.scmix_v28_load_parameter_arrays(net, malformed),
+    "state shape does not match")
+
+  set.seed(11)
+  respondent_id <- rep(sprintf("r%02d", 1:8), each = 3)
+  deltaX <- matrix(rnorm(length(respondent_id) * 3), ncol = 3)
+  Z <- matrix(rnorm(length(respondent_id) * 2), ncol = 2)
+  y <- rep(c(0, 1, 0), 8)
+  grid <- sconjoint:::.sc_mixed_grid(
+    q = 1L, integration = "gh", n_nodes = 7L, n_draws = 1L,
+    seed = 1L, antithetic = TRUE, scramble = FALSE)
+  audit <- sconjoint:::.scmix_v28_gradient_contract_audit(
+    net, deltaX, y, Z, respondent_id, grid, weight_decay = 0.01,
+    coefficient_scale = c(1.2, 0.8, 1.5), kappa_bound = 10,
+    alpha_bound = 5, a_bound = 10, weight_bound = 10,
+    steps = c(1e-4, 3e-5, 1e-5, 3e-6, 1e-6), seed = 22L,
+    relative_tolerance = 5e-4, absolute_tolerance = 1e-7)
+  expect_true(is.list(audit))
+  expect_setequal(names(audit$pass_by_block),
+                  c("position_effect", "unpenalized_mean_reference",
+                    "centered_mean_deviation", "horizontal_loadings"))
+  expect_true(audit$state_restored_exactly)
+  expect_true(all(is.finite(audit$table$autodiff)))
+  expect_true(all(is.finite(audit$table$finite_difference)))
 })

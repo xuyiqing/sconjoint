@@ -1,11 +1,12 @@
-## Prospective version 2.8 numerical audits.
+## Prospective version 2.8 numerical audits with the v2.8.1 shape amendment.
 ##
 ## These helpers do not change the version 2.2 optimizer.  They add an
 ## explicit selection policy for nonconvex starts, a transparent summary of
 ## the preprocessing-normalized blockwise KKT diagnostic, and an independent
 ## directional finite-difference check of the gradients used by that
 ## diagnostic.  Application protocols must freeze their constants before
-## inspecting version 2.8 outcomes.
+## inspecting version 2.8 outcomes. Version 2.8.1 preserves the R vector shape
+## of rank-one Torch parameters and otherwise retains the frozen audit.
 
 .scmix_v28_start_surface <- function(
     starts, near_objective_cutoff = 1e-6, kkt_cutoff = 1e-5) {
@@ -204,6 +205,14 @@
   coefficient_scale <- .scmix_loading_scale(
     coefficient_scale, p, "coefficient_scale")
   random_sign <- function(n) sample(c(-1, 1), n, replace = TRUE)
+  shape_like <- function(values, template) {
+    values <- as.numeric(values)
+    if (length(values) != length(template)) {
+      stop("A gradient-audit direction has the wrong length.", call. = FALSE)
+    }
+    template_dim <- dim(template)
+    if (is.null(template_dim)) values else array(values, dim = template_dim)
+  }
   out <- list()
   .scmix_dml_with_seed(as.integer(seed), {
     if ("kappa_raw" %in% names(params)) {
@@ -213,24 +222,29 @@
       out$position_effect <- list(kappa_raw = delta_kappa)
     }
     if ("alpha_raw" %in% names(params)) {
+      theta_alpha <- .scmix_parameter_array(params$alpha_raw)
       d <- random_sign(p) / sqrt(p)
       out$unpenalized_mean_reference <- list(
-        alpha_raw = d * coefficient_scale * alpha_bound)
+        alpha_raw = shape_like(
+          d * coefficient_scale * alpha_bound, theta_alpha))
     }
     deviation_names <- setdiff(
       names(params), c("A", "kappa_raw", "alpha_raw"))
     if (length(deviation_names)) {
       total <- sum(vapply(deviation_names, function(nm)
         length(.scmix_parameter_array(params[[nm]])), integer(1L)))
+      if (!is.finite(total) || total <= 0L) {
+        stop("The gradient-audit deviation block is empty.", call. = FALSE)
+      }
       dev <- lapply(deviation_names, function(nm) {
         theta <- .scmix_parameter_array(params[[nm]])
-        direction <- array(random_sign(length(theta)) / sqrt(total),
-                           dim = dim(theta))
+        direction <- shape_like(
+          random_sign(length(theta)) / sqrt(total), theta)
         scale <- if (!identical(net$mean_family, "legacy") &&
             identical(nm, "param_layer.weight")) {
           matrix(coefficient_scale * weight_bound, nrow = p,
                  ncol = ncol(as.matrix(theta)))
-        } else array(weight_bound, dim = dim(theta))
+        } else shape_like(rep(weight_bound, length(theta)), theta)
         direction * scale
       })
       names(dev) <- deviation_names
@@ -270,6 +284,12 @@
   torch::with_no_grad({
     for (nm in names(state)) {
       template <- net$parameters[[nm]]
+      template_array <- .scmix_parameter_array(template)
+      if (length(state[[nm]]) != length(template_array) ||
+          !identical(dim(state[[nm]]), dim(template_array))) {
+        stop("Parameter-array state shape does not match the network for ",
+             nm, ".", call. = FALSE)
+      }
       value <- torch::torch_tensor(
         state[[nm]], dtype = template$dtype, device = template$device)
       template$copy_(value)
@@ -316,6 +336,24 @@
   directions <- .scmix_v28_direction_bank(
     net, tensors$coefficient_scale, kappa_bound, alpha_bound,
     a_bound, weight_bound, seed)
+  for (block in names(directions)) {
+    direction <- directions[[block]]
+    if (!length(direction) || is.null(names(direction)) ||
+        !all(names(direction) %in% names(net$parameters))) {
+      stop("A gradient-audit block has an invalid parameter registry.",
+           call. = FALSE)
+    }
+    for (nm in names(direction)) {
+      template <- original[[nm]]
+      value <- direction[[nm]]
+      if (length(value) != length(template) ||
+          !identical(dim(value), dim(template)) ||
+          any(!is.finite(value))) {
+        stop("A gradient-audit direction is nonfinite or has the wrong shape for ",
+             nm, ".", call. = FALSE)
+      }
+    }
+  }
   evaluate_at <- function(direction, amount) {
     .scmix_v28_load_parameter_arrays(net, original)
     torch::with_no_grad({
@@ -374,7 +412,7 @@
   restored_hash <- .scmix_stable_state_hash(
     .scmix_v28_copy_parameter_arrays(net))
   list(
-    protocol = "paperps-gradient-contract-v2.8",
+    protocol = "paperps-gradient-contract-v2.8.1",
     objective_definition_id = .scmix_v22_objective_id,
     dtype = .scmix_net_dtype_label(net),
     state_hash_before = original_hash,
