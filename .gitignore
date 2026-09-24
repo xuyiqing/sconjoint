@@ -28,3 +28,8 @@ runs/
 applications/*/results/
 *.Rds
 *.rds
+
+# Compiled code (Rcpp, from the conjointRUM port)
+src/*.o
+src/*.so
+src/*.dll

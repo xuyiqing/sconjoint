@@ -50,3 +50,25 @@ matrix within the declared `1e-5` absolute tolerance. On the preserved R 4.5.3
 and torch 0.16.3 CPU environment, the observed maximum deviation was
 `7.12e-6`. A larger difference or a changed selected learner blocks substantive
 reporting.
+
+## conjointRUM 0.1.3 port (2026-09-24)
+
+- Source: `conjointRUM_0.1.3.tar.gz` in `ConjointStructural/2608_issues/Avi/mlcodex/conjointRUM/`,
+  SHA-256 `0af0dc558427f52e3c7449206a556a63f4181c53b0b1bb176ebcb3160b896c12`. Its `R/`, `src/`
+  and `tests/` match Avi's source tree on 2026-09-24. Every RUM result in the 09-23 memo and the
+  09-24 three-applications brief used this version.
+- Destination: branch `feat/rum`, from `feat/mixed-logit` at `62125e6`. Files: `R/rum-*.R`,
+  `src/rum_core.cpp`, `man/rum_*.Rd`, `tests/testthat/rum/*.R`.
+- Code changes: none. The R files turn Avi's roxygen-style comments into plain comments (his Rd
+  files in `man/` are the help pages) and tag each export with `@export`. `Makevars`
+  (`CXX_STD = CXX11`) is dropped. `RcppExports` is regenerated for `sconjoint`. The test scripts
+  change only the package name and the R file names.
+- Parity on the Ballard-Rosa data of the 09-23 memo (1,991 respondents): 15 checks, all
+  bit-for-bit identical to conjointRUM 0.1.3 (largest difference 0). They cover the quadrature,
+  subsetting, likelihood, information, simulation, the full-sample formula fit, the network training
+  under Avi's frozen settings, targets (fixed and population), a moment bank, the same-fit
+  assessment, the held-out assessment and the score comparison. Script and log:
+  `2608_issues/Yiqing/rum_absorb_2026-09-24/`. Avi's nine test scripts pass, and his synthetic
+  example prints the same output.
+- The branch is local-only. Pushing it publishes Avi's unreleased code in a public repository,
+  which needs the authors' agreement.

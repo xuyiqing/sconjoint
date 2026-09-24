@@ -14,5 +14,15 @@
 #' normality, rank, neural-network rates, optimization error, or numerical
 #' integration accuracy.
 #'
+#' The `rum_*` functions are the repeated-choice random utility model ported
+#' unchanged from `conjointRUM` 0.1.3 (Avidit Acharya): a one-factor mixed logit
+#' whose side preference varies across respondents. It has a formula version of
+#' the preference mean, fit by maximum likelihood with regular-inference targets
+#' ([rum_fit()], [rum_targets()]), and an experimental neural-network version
+#' without network inference ([rum_dnn_gaussian_train()]).
+#'
 #' @keywords internal
+#' @useDynLib sconjoint, .registration = TRUE
+#' @importFrom Rcpp evalCpp
+#' @importFrom utils head tail
 "_PACKAGE"

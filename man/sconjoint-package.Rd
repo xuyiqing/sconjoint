@@ -20,6 +20,13 @@ respondent posterior summaries are predictions rather than consistently
 recovered realized preferences. The package does not automatically verify
 normality, rank, neural-network rates, optimization error, or numerical
 integration accuracy.
+
+The \verb{rum_*} functions are the repeated-choice random utility model ported
+unchanged from \code{conjointRUM} 0.1.3 (Avidit Acharya): a one-factor mixed logit
+whose side preference varies across respondents. It has a formula version of
+the preference mean, fit by maximum likelihood with regular-inference targets
+(\code{\link[=rum_fit]{rum_fit()}}, \code{\link[=rum_targets]{rum_targets()}}), and an experimental neural-network version
+without network inference (\code{\link[=rum_dnn_gaussian_train]{rum_dnn_gaussian_train()}}).
 }
 \seealso{
 Useful links:

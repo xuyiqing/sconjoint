@@ -145,11 +145,26 @@ ggplot2-based visualization for `sc_quantity` objects (ridge plots, coefficient 
 
 Three bundled synthetic datasets mirroring published conjoint studies: `sw2022` (Saha-Weeks), `gs2020` (Graham-Svolik), `bs2013` (Bechtel-Scheve).
 
+### Random utility model (RUM) — `R/rum-*.R`, `src/rum_core.cpp`
+
+The `rum_*` functions are `conjointRUM` 0.1.3 (Avidit Acharya), ported without code changes on 2026-09-24. The model is a one-factor mixed logit whose side (position) preference varies across respondents: beta_i = mu(z_i) + lambda u_i and Pr(y_it = 1) = G(kappa + sigma v_i + d_it' beta_i), with u_i and v_i independent, v_i ~ N(0, 1), and u_i normal or three-point. With sigma = 0, the same features, the same mean and one factor, it is the one-factor `scmix` model.
+
+- `rum_data()`, `rum_mean_basis()`, `rum_subset()`, `rum_parameters()`, `rum_scale_features()`, `rum_scale_parameters()`: data and parameter containers (`R/rum-data.R`).
+- `rum_quadrature()`: tensor Gauss-Hermite rule over (u, v) (`R/rum-quadrature.R`).
+- `rum_loglik()`, `rum_information()`, `rum_fit()`, `rum_simulate()`: the sequence likelihood (native code in `src/rum_core.cpp`), observed information, the formula-version fit (`policy_rank` 0 or 1) and simulation (`R/rum-fit.R`).
+- `rum_targets()`: average utility differences and the variance parts H_Z and H_R, with Wald or fixed-rank-one projection intervals (`R/rum-targets.R`).
+- `rum_moment_bank()`, `rum_assess()`, `rum_holdout_assess()`, `rum_score_compare()`: respondent-level moment checks and held-out score comparisons (`R/rum-assessment.R`).
+- `rum_dnn_gaussian()` and relatives: the experimental network version, a base-R ReLU network for mu(z) with analytic gradients and bounded Adam training (epochs chosen on held-aside respondents, then a refit from the same start). It has no network inference (`R/rum-dnn-gaussian.R`, `R/rum-dnn-train.R`).
+
+The two engines are separate. The `rum_*` code uses base R and Rcpp, never torch, and shares no internals with `scmix`. Its help pages are Avi's hand-written Rd files (`man/rum_*.Rd`), and the R files keep his documentation as plain comments. Provenance: `MLCODEX_PROVENANCE.md`.
+
 ---
 
 ## Dependencies
 
-**Runtime**: torch (>= 0.13.0), stats, utils, parallel, future, future.apply, parallelly, withr, ggplot2, ggridges.
+**Runtime**: Rcpp, torch (>= 0.13.0), stats, utils, parallel, future, future.apply, parallelly, withr, ggplot2, ggridges.
+
+**LinkingTo**: Rcpp (for `src/rum_core.cpp`).
 
 **Suggests**: testthat (edition 3), knitr, rmarkdown, covr, patchwork, quarto, scales, viridisLite.
 
@@ -165,6 +180,7 @@ Three bundled synthetic datasets mirroring published conjoint studies: `sw2022` 
 - All twelve structural quantities (one test file per quantity)
 - Case-study smoke tests against bundled datasets
 - Lambda estimation, inference, plotting
+- The nine `conjointRUM` 0.1.3 test scripts, kept in `tests/testthat/rum/` and run by `test-rum-conjointrum-scripts.R` (excluded from the CRAN build)
 
 222 assertions pass as of M5.a. R CMD check: 0 errors, 0 warnings, 0 notes.
 

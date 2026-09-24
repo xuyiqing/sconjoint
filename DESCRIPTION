@@ -1,7 +1,7 @@
 Package: sconjoint
 Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.3.2.9000
-Date: 2026-09-06
+Version: 0.3.2.9001
+Date: 2026-09-24
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
@@ -18,13 +18,18 @@ Description: Implements a respondent-sequence low-rank normal mixed-logit
     recovery of realized respondent preferences with bounded task counts or
     automatic verification of normality, rank, neural-network rates, or
     numerical-integration error rates. Builds on 'torch' for the
-    deep-learning backend.
+    deep-learning backend. Also includes the repeated-choice random utility
+    model of 'conjointRUM' 0.1.3: a one-factor mixed logit with a persistent
+    respondent-specific side (position) preference, with a formula version of
+    the preference mean and an experimental neural-network version without
+    neural-network inference.
 License: MIT + file LICENSE
 URL: https://yiqingxu.org/packages/sconjoint/
 BugReports: https://github.com/xuyiqing/sconjoint/issues
 Depends:
     R (>= 4.1)
 Imports:
+    Rcpp,
     torch (>= 0.13.0),
     stats,
     utils,
@@ -35,6 +40,8 @@ Imports:
     withr,
     ggplot2,
     ggridges
+LinkingTo:
+    Rcpp
 Suggests:
     testthat (>= 3.0.0),
     covr,
