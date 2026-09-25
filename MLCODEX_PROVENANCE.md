@@ -70,5 +70,5 @@ reporting.
   assessment, the held-out assessment and the score comparison. Script and log:
   `2608_issues/Yiqing/rum_absorb_2026-09-24/`. Avi's nine test scripts pass, and his synthetic
   example prints the same output.
-- The branch is local-only. Pushing it publishes Avi's unreleased code in a public repository,
-  which needs the authors' agreement.
+- Pushed to `origin/feat/rum` on 2026-09-24 at Yiqing's request. The repository is public, so
+  this publishes conjointRUM 0.1.3's code for the first time.
