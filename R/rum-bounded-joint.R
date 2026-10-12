@@ -88,6 +88,10 @@
     om <- max(lin, floor); dom <- 1; hit <- lin < floor
   }
   v[p + 2L] <- om
+  if (!all(is.finite(c(v, mu_e)))) {                 # a trial step too long to evaluate
+    return(list(phi = matrix(NA_real_, length(f$te), length(score)), ll = -Inf, mu = mu_e,
+                th = .rum_th_list(v, p), floor_hit = hit, omega = om, omega_linear = lin))
+  }
   ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[1], v[1 + seq_len(p)], om, quad)
   cs <- ev$common_score; cs[, p + 2L] <- cs[, p + 2L] * dom
   phi <- vapply(score, function(d) rowSums(d$a * ev$output_score) + drop(cs %*% d$g),
@@ -129,7 +133,7 @@
     if (it >= max_iter) { status <- "max_iter"; break }
     t <- 1; ok <- FALSE
     for (h in 0:max_halving) {
-      cand <- eval(eps + t * cc$step)
+      cand <- tryCatch(eval(eps + t * cc$step), error = function(e) list(phi = NA_real_, ll = -Inf))
       if (all(is.finite(cand$phi)) && is.finite(cand$ll) &&
           cand$ll >= cur$ll - 1e-12 * abs(cur$ll)) { ok <- TRUE; break }
       t <- t / 2
