@@ -150,20 +150,44 @@
   list(phi = phi, phi_se = phi_se, ll = ll, st = st, floor_hit = hit, omega = om)
 }
 
+# The convergence criterion and Fisher step for a score matrix phi (n x J), computed on
+# normalized directions (Codex review of eae4719, finding 3). Each column is divided by its
+# root sum of squares D_j, so In = crossprod(phi / D) has unit diagonal and the criterion does
+# not depend on the directions' scales; In is eigen-decomposed and directions with eigenvalue
+# below rank_tol (relative to the largest) are dropped from the step. crit =
+# sqrt(Sn' In^+ Sn) over the kept directions (for J = 1: |sum phi| / sqrt(sum phi^2), the old
+# rule). resid_dropped = the largest |v' Sn| over dropped unit directions v: the residual that
+# the step cannot move, on the scale of the columns (an all-zero column has residual 0).
+# Before, the step and the criterion both used a truncated pseudoinverse of the unnormalized
+# matrix, so a direction with a small scale was dropped and its residual was never checked:
+# for score rows (1, 1e-10) and (-1, 1e-10) the old criterion was 0 although the second
+# direction's standardized residual is sqrt(2).
+.rum_score_crit <- function(phi, rank_tol = 1e-12) {
+  phi <- as.matrix(phi); S <- colSums(phi); D <- sqrt(colSums(phi^2)); D0 <- D > 0
+  Dn <- ifelse(D0, D, 1); Sn <- S / Dn; In <- crossprod(sweep(phi, 2, Dn, "/"))
+  e <- eigen((In + t(In)) / 2, symmetric = TRUE); mx <- max(e$values, 0)
+  keep <- e$values > rank_tol * mx
+  z <- drop(crossprod(e$vectors, Sn))
+  crit <- sqrt(sum(z[keep]^2 / e$values[keep]))
+  stepn <- if (any(keep)) drop(e$vectors[, keep, drop = FALSE] %*% (z[keep] / e$values[keep])) else numeric(length(S))
+  list(S = S, step = stepn / Dn, crit = crit, rank = sum(keep),
+       resid_dropped = if (any(!keep)) max(abs(z[!keep])) else 0)
+}
+
 # Fisher scoring with step halving on the held-out log likelihood along the path.
 # eval(eps) -> list(phi, ll). Returns eps, the last evaluation, status, iterations,
-# halvings, crit.
-.rum_tmle_solve <- function(eval, J, max_iter = 20L, tol = 1e-3, max_halving = 30L) {
-  eps <- numeric(J); cur <- eval(eps); it <- 0L; halv <- 0L; status <- NA_character_
-  crit_of <- function(r) {
-    S <- colSums(r$phi); I <- crossprod(r$phi)
-    st <- tryCatch(solve(I, S), error = function(e) .rum_ginv(I) %*% S)
-    list(S = S, step = drop(st), crit = sqrt(max(0, sum(S * st))))
-  }
+# halvings, crit, rank and resid_dropped (.rum_score_crit). Status "converged" needs the
+# criterion below tol on the kept directions AND resid_dropped below tol; when the kept
+# directions are solved but a dropped one is not, the status is "rank_deficient" (a failure).
+.rum_tmle_solve <- function(eval, J, max_iter = 20L, tol = 1e-3, max_halving = 30L,
+                            rank_tol = 1e-12, eps0 = numeric(J)) {
+  eps <- eps0; cur <- eval(eps); it <- 0L; halv <- 0L; status <- NA_character_
+  rank <- NA_integer_; rdrop <- NA_real_
   repeat {
     if (!all(is.finite(cur$phi)) || !is.finite(cur$ll)) { status <- "nonfinite"; crit <- NA_real_; break }
-    cc <- crit_of(cur); crit <- cc$crit
-    if (!is.finite(crit)) { status <- "nonfinite"; break }
+    cc <- .rum_score_crit(cur$phi, rank_tol); crit <- cc$crit; rank <- cc$rank; rdrop <- cc$resid_dropped
+    if (!is.finite(crit) || !is.finite(rdrop)) { status <- "nonfinite"; break }
+    if (crit < tol && rdrop >= tol) { status <- "rank_deficient"; break }
     if (crit < tol) { status <- "converged"; break }
     if (it >= max_iter) { status <- "max_iter"; break }
     t <- 1; ok <- FALSE
@@ -176,14 +200,8 @@
     if (!ok) { status <- "step_failed"; break }
     eps <- eps + t * cc$step; cur <- cand; it <- it + 1L; halv <- halv + h
   }
-  list(eps = eps, cur = cur, status = status, iterations = it, halvings = halv, crit = crit)
-}
-
-# Moore-Penrose inverse (base R), for a singular Fisher matrix.
-.rum_ginv <- function(X, tol = sqrt(.Machine$double.eps)) {
-  s <- svd(X); pos <- s$d > max(tol * s$d[1L], 0)
-  if (!any(pos)) return(array(0, dim(X)[2:1]))
-  s$v[, pos, drop = FALSE] %*% ((1 / s$d[pos]) * t(s$u[, pos, drop = FALSE]))
+  list(eps = eps, cur = cur, status = status, iterations = it, halvings = halv, crit = crit,
+       rank = rank, resid_dropped = rdrop)
 }
 
 # Held-out plug-in values m_i at the states of an evaluation.

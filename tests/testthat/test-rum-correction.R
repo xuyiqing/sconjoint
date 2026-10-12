@@ -293,6 +293,39 @@ test_that("where the bound does not bind, the targeted estimates match the one-s
   expect_lt(max(abs(j$table$se_population[1:3] / se[ji] - 1)), 0.05)
 })
 
+test_that("the joint solver normalizes directions and does not hide a residual in a dropped one", {
+  # Codex review of eae4719, finding 3: score rows (1, 1e-10) and (-1, 1e-10). The second
+  # direction's standardized residual is sqrt(2); the old truncated pseudoinverse dropped it
+  # and reported criterion 0 ("converged").
+  solve_ <- rinf(".rum_tmle_solve"); crit_ <- rinf(".rum_score_crit")
+  phi <- rbind(c(1, 1e-10), c(-1, 1e-10))
+  cc <- crit_(phi)
+  expect_equal(cc$crit, sqrt(2), tolerance = 1e-12)
+  expect_identical(cc$rank, 2L)
+  r <- solve_(function(eps) list(phi = phi, ll = 0), 2L, max_iter = 3L)
+  expect_false(identical(r$status, "converged"))
+  expect_equal(r$crit, sqrt(2), tolerance = 1e-12)
+  # scale invariance: rescaling a direction does not change the criterion
+  set.seed(31); P <- matrix(rnorm(300), 100, 3) + .05
+  expect_equal(crit_(P)$crit, crit_(sweep(P, 2, c(1, 1e-9, 1e6), "*"))$crit, tolerance = 1e-8)
+  # J = 1: the old rule |sum phi| / sqrt(sum phi^2)
+  expect_equal(crit_(P[, 1, drop = FALSE])$crit, abs(sum(P[, 1])) / sqrt(sum(P[, 1]^2)), tolerance = 1e-12)
+  # exactly collinear directions: one is dropped, its residual is 0, the kept one decides
+  x <- P[, 1] - mean(P[, 1]); Q <- cbind(x, 2 * x)
+  cq <- crit_(Q); expect_identical(cq$rank, 1L); expect_lt(cq$resid_dropped, 1e-12)
+  expect_identical(solve_(function(eps) list(phi = Q, ll = 0), 2L)$status, "converged")
+  # nearly collinear directions whose difference carries a material residual: with a coarse
+  # rank tolerance the difference is dropped, and the solver reports a rank failure instead
+  # of converging on the kept direction
+  z <- rnorm(100) + 1; wz <- 3e-3 * sqrt(sum(x^2)) * z / sqrt(sum(z^2))
+  Q2 <- cbind(x - wz, x + wz)                      # sums -s and +s: the kept sum direction is solved
+  c2 <- crit_(Q2, rank_tol = 1e-4)
+  expect_identical(c2$rank, 1L); expect_lt(c2$crit, 1e-3); expect_gt(c2$resid_dropped, 1e-3)
+  r2 <- solve_(function(eps) list(phi = Q2, ll = 0), 2L, rank_tol = 1e-4)
+  expect_identical(r2$status, "rank_deficient")
+  expect_false(identical(solve_(function(eps) list(phi = Q2, ll = 0), 2L, max_iter = 2L)$status, "converged"))
+})
+
 # ---- discrete-switch AMEs ------------------------------------------------------------------
 
 # brute force: P(choose focal) by nested integrate() over u and v
