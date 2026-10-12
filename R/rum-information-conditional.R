@@ -322,7 +322,7 @@
     rr <- if (spec$uses_resp) cond$resp else NULL
     list(own = TRUE, M = M, T = spec$T, designs_of = function(i)
       .rum_draw_designs(spec, if (is.null(rr)) NULL else rr[i, , drop = FALSE], M,
-                        seed = (sd_k * 100003L + i) %% 2147483647L))
+                        seed = as.integer((as.numeric(sd_k) * 100003 + i) %% 2147483647)))
   } else .rum_draw_designs_crn(spec, cond$resp, M, seed = sd_k, n = n)
   M <- as.integer(crn$M)
   R <- .rum_cond_info(data, mu, th, crn, cond$method, cond$quad, cond$ny, sd_k + 7919L,
