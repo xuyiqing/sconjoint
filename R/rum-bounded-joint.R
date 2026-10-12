@@ -216,6 +216,49 @@
 
 .rum_wald01 <- function(est, se, sgn) pmin(pmax(est + sgn * 1.96 * se, 0), 1)
 
+# Targeting rounds (Codex review of eae4719, finding 4). The solver zeroes the PATH score phi,
+# but the standard errors use phi_se (the correction a' s_mu + g' s_theta at the moved state).
+# They differ on the omega component: by the factor omega_eps / omega on the log path, and
+# where the clamp binds. So, at a solution, the influence equation's own residual (the
+# criterion of .rum_score_crit on phi_se) is checked against the same tolerance. If it is
+# material, the update is retargeted: a new path starts at the moved states with the same
+# directions; at its start its path score IS phi_se (the log path's factor is 1 there, and the
+# linear components compose exactly), so solving it removes that residual, and the new
+# mismatch is of the order of the (small) second step. At most max_rounds rounds; then status
+# "influence_residual", a failure (estimate NA). Typical cause: a fold at the variance
+# boundary where the clamp binds and the omega part of the correction cannot be targeted.
+# pdirs: the path directions (J); sdirs: all score directions; keep: the columns of the
+# score that the path solves. Returns the last solve's fields plus FS (the states the final
+# path starts from), cur (its .rum_path_all evaluation), rounds, iterations and halvings
+# summed over rounds, eps (the sum over rounds of the step sizes; additive on the linear
+# components) and if_crit, if_resid_dropped (the influence equation's residual at the end).
+.rum_tmle_rounds <- function(FS, pdirs, sdirs, keep, n, p, quad, omega_path, omega_boundary,
+                             max_iter, tol, max_halving, rank_tol = 1e-12, max_rounds = 5L) {
+  J <- length(pdirs); rounds <- 0L; its <- 0L; halv <- 0L; eps_sum <- numeric(J)
+  repeat {
+    FSr <- FS
+    eval <- function(eps) {
+      r <- .rum_path_all(FSr, pdirs, eps, n, p, quad, omega_path, score = sdirs,
+                         omega_boundary = omega_boundary)
+      r$phi <- r$phi[, keep, drop = FALSE]; r       # the solved columns; phi_se keeps all
+    }
+    sol <- .rum_tmle_solve(eval, J, max_iter, tol, max_halving, rank_tol)
+    rounds <- rounds + 1L; its <- its + sol$iterations; halv <- halv + sol$halvings
+    eps_sum <- eps_sum + sol$eps
+    ic <- if (all(is.finite(sol$cur$phi_se))) .rum_score_crit(sol$cur$phi_se[, keep, drop = FALSE], rank_tol)
+          else list(crit = NA_real_, resid_dropped = NA_real_)
+    if (!identical(sol$status, "converged")) break
+    if (ic$crit < tol && ic$resid_dropped < tol) break
+    if (rounds >= max_rounds) { sol$status <- "influence_residual"; break }
+    for (k in names(FS)) {                           # restart from the moved states
+      st <- sol$cur$st[[k]]; FS[[k]]$mu[FS[[k]]$te, ] <- st$mu; FS[[k]]$th <- st$th
+    }
+  }
+  c(sol[c("status", "crit", "rank", "resid_dropped", "cur")],
+    list(FS = FSr, rounds = rounds, iterations = its, halvings = halv, eps = eps_sum,
+         if_crit = ic$crit, if_resid_dropped = ic$resid_dropped))
+}
+
 # ---- scalar targeted update ---------------------------------------------------------------
 # For each target separately. omega_path "auto" (default: the log path, with "clamp" in folds
 # whose fitted omega is below omega_boundary), "log", "clamp", or
@@ -235,7 +278,7 @@
                            info_basis = c("constant", "model", "linear"), model_M = NULL,
                            model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                            cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                           cache_require = FALSE, FS = NULL) {
+                           cache_require = FALSE, FS = NULL, max_rounds = 5L) {
   omega_path <- match.arg(omega_path); on_fail <- match.arg(on_fail)
   info_basis <- match.arg(info_basis)
   n <- data$n; p <- data$p
@@ -261,20 +304,22 @@
         eps <- eps + sum(ph) / sum(ph^2); it <- it + 1L
       }
       sol <- list(eps = eps, cur = cur, status = if (conv) "converged" else "max_iter",
-                  iterations = it, halvings = 0L, crit = abs(sc))
+                  iterations = it, halvings = 0L, crit = abs(sc), rounds = 1L, FS = FS,
+                  if_crit = abs(sum(cur$phi_se)) / sqrt(sum(cur$phi_se^2)))
     } else {
-      sol <- .rum_tmle_solve(eval, 1L, max_iter, tol, max_halving)
+      sol <- .rum_tmle_rounds(FS, dirs, dirs, 1L, n, p, quad_score, path_kind, omega_boundary,
+                              max_iter, tol, max_halving, max_rounds = max_rounds)
     }
     ev0 <- eval(0); phi0 <- ev0$phi[, 1]
     m0 <- numeric(n); for (k in names(FS)) m0[FS[[k]]$te] <- dirs[[1]][[k]]$plug
     plug <- sum(w * m0) / sum(w); onestep <- plug + mean(phi0)
     ok <- identical(sol$status, "converged") || on_fail == "last"
     if (ok) {
-      m_star <- .rum_path_m(FS, sol$cur, tg, n); phi <- sol$cur$phi_se[, 1]
+      m_star <- .rum_path_m(sol$FS, sol$cur, tg, n); phi <- sol$cur$phi_se[, 1]
       est <- sum(w * m_star) / sum(w)
       iff <- phi - mean(phi); ifp <- iff + wr * (m_star - est)
       sef <- stats::sd(iff) / sqrt(n); sep <- stats::sd(ifp) / sqrt(n)
-    } else { est <- sef <- sep <- NA_real_; iff <- ifp <- rep(NA_real_, n) }
+    } else { est <- sef <- sep <- NA_real_; iff <- ifp <- phi <- rep(NA_real_, n) }
     lin <- vapply(names(FS), function(k) sol$cur$st[[k]]$omega_linear, 0)
     list(row = data.frame(target = tg$name, kind = tg$kind, n_group = sum(w > 0),
                           method = switch(omega_path, auto = sprintf("CV-TMLE, log-omega path (clamp in folds with omega < %g), step control", omega_boundary),
@@ -283,6 +328,7 @@
                                           legacy = "CV-TMLE, legacy (linear omega, floor 1e-8)"),
                           status = sol$status, converged = identical(sol$status, "converged"),
                           iterations = sol$iterations, halvings = sol$halvings, crit = sol$crit,
+                          rounds = sol$rounds, if_crit = sol$if_crit,
                           eps = sol$eps, plug_in = plug, onestep = onestep, estimate = est,
                           se_population = sep, lower_population = .rum_wald01(est, sep, -1),
                           upper_population = .rum_wald01(est, sep, 1), se_fixed = sef,
@@ -294,12 +340,15 @@
                           folds_clamped = if (omega_path == "auto") sum(vapply(FS, function(f) f$th$omega < omega_boundary, TRUE))
                                           else if (omega_path == "clamp") length(FS) else 0L,
                           stringsAsFactors = FALSE),
-         iff = iff, ifp = ifp)
+         iff = iff, ifp = ifp, phi = phi)
   })
   out <- do.call(rbind, lapply(res, `[[`, "row")); rownames(out) <- out$target
   nmt <- vapply(targets, `[[`, "", "name")
   attr(out, "IFF") <- `colnames<-`(matrix(sapply(res, `[[`, "iff"), n), nmt)
   attr(out, "IFP") <- `colnames<-`(matrix(sapply(res, `[[`, "ifp"), n), nmt)
+  # the uncentered influence values (phi_se at the final state): their mean is the residual of
+  # the influence equation, which IFF's centering hides
+  attr(out, "PHI") <- `colnames<-`(matrix(sapply(res, `[[`, "phi"), n), nmt)
   attr(out, "n_failed") <- sum(!out$converged)
   out
 }
@@ -321,7 +370,7 @@
                             info_basis = c("constant", "model", "linear"), model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                            cache_require = FALSE, FS = NULL) {
+                            cache_require = FALSE, FS = NULL, max_rounds = 5L) {
   info_basis <- match.arg(info_basis); omega_path <- match.arg(omega_path)
   n <- data$n; p <- data$p; G <- length(targets)
   if (G < 2L) stop("a joint update needs at least two shares")
@@ -343,21 +392,17 @@
                        omega_boundary = omega_boundary)
   dir_sum <- max(abs(rowSums(ev0$phi)))
   onestep <- plug + colMeans(ev0$phi)
-  eval <- function(eps) {
-    r <- .rum_path_all(FS, dirs[keep], eps, n, p, quad_score, omega_path, score = dirs,
-                       omega_boundary = omega_boundary)
-    list(phi = r$phi[, keep, drop = FALSE], ll = r$ll, full = r)
-  }
-  sol <- .rum_tmle_solve(eval, G - 1L, max_iter, tol, max_halving)
+  sol <- .rum_tmle_rounds(FS, dirs[keep], dirs, keep, n, p, quad_score, omega_path,
+                          omega_boundary, max_iter, tol, max_halving, max_rounds = max_rounds)
   ok <- identical(sol$status, "converged")
   nm <- vapply(targets, `[[`, "", "name")
   if (ok) {
-    full <- sol$cur$full; m_star <- matrix(0, n, G)
-    for (g in seq_len(G)) m_star[, g] <- .rum_path_m(FS, full, targets[[g]], n)
+    full <- sol$cur; m_star <- matrix(0, n, G)
+    for (g in seq_len(G)) m_star[, g] <- .rum_path_m(sol$FS, full, targets[[g]], n)
     est <- colSums(w * m_star) / sum(w); phi <- full$phi_se
     IFF <- sweep(phi, 2, colMeans(phi)); IFP <- IFF + wr * sweep(m_star, 2, est)
   } else {
-    est <- rep(NA_real_, G); IFF <- IFP <- matrix(NA_real_, n, G)
+    est <- rep(NA_real_, G); IFF <- IFP <- phi <- matrix(NA_real_, n, G)
   }
   colnames(IFF) <- colnames(IFP) <- nm
   Vp <- stats::cov(IFP) / n; Vf <- stats::cov(IFF) / n
@@ -375,8 +420,9 @@
   tab$upper_fixed <- .rum_wald01(tab$estimate, tab$se_fixed, 1)
   rownames(tab) <- tab$target
   list(table = tab, status = sol$status, converged = ok, iterations = sol$iterations,
-       halvings = sol$halvings, crit = sol$crit, eps = stats::setNames(sol$eps, nm[keep]),
-       IFF = IFF, IFP = IFP, V_population = Vp, V_fixed = Vf, dir_sum_max = dir_sum,
-       sum_check_max = sum_check, omega_min = min(sol$cur$full$omega),
+       halvings = sol$halvings, crit = sol$crit, rounds = sol$rounds, if_crit = sol$if_crit,
+       rank = sol$rank, resid_dropped = sol$resid_dropped, eps = stats::setNames(sol$eps, nm[keep]),
+       IFF = IFF, IFP = IFP, PHI = `colnames<-`(phi, nm), V_population = Vp, V_fixed = Vf, dir_sum_max = dir_sum,
+       sum_check_max = sum_check, omega_min = min(sol$cur$omega),
        omega_fit_min = min(vapply(FS, function(f) f$th$omega, 0)), omega_path = omega_path)
 }

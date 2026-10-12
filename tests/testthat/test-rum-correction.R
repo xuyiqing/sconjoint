@@ -207,11 +207,42 @@ test_that("on a path that crosses the old floor, log-omega stays positive and co
   leg <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "legacy",
                                 on_fail = "last")
   new <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg)
-  expect_true(new$omega_min > 0)
+  expect_true(leg$floor_hit_any)                      # the case the test is about
+  expect_lt(leg$omega_linear_min, 1e-8)
+  expect_identical(new$status, "converged")
+  expect_gt(new$omega_min, 0)
   expect_false(new$floor_hit_any)
-  if (leg$floor_hit_any) expect_lt(leg$omega_linear_min, 1e-8)
-  expect_true(new$status %in% c("converged", "max_iter", "step_failed"))
-  if (new$converged) expect_true(new$estimate >= 0 && new$estimate <= 1)
+  expect_true(new$estimate >= 0 && new$estimate <= 1)
+  expect_true(is.finite(new$se_population) && new$se_population > 0)
+  # the default bounded routine is this checked update, and returns the same numbers
+  bd <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, ffl, tg)
+  expect_identical(bd$estimate, new$estimate); expect_identical(bd$status, "converged")
+})
+
+test_that("a converged targeted update also solves the influence equation used for its SEs", {
+  # Codex review of eae4719, finding 4: the solver zeroes the path score phi, the SEs use
+  # phi_se; on the log path they differ by the factor omega_eps / omega on the omega part.
+  # Here the correction pulls omega from 0.1 to about 0.03.
+  fins <- lapply(fx$fins, function(f) { f$omega <- 0.1; f })
+  ffl <- function(k) fins[[k]]
+  tg <- list(rinf(".rum_tgt_choice_set")("choice", rbind(c(1, 0, 0)), coef = 1))
+  tg[[1]]$kind <- "share"
+  crit <- function(x) abs(sum(x)) / sqrt(sum(x^2))
+  one <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "log", max_rounds = 1L)
+  # one round (the eae4719 rule): the path score is solved, the influence equation is not
+  expect_lt(one$crit, 1e-3)
+  expect_gt(one$if_crit, 1e-3)
+  expect_identical(one$status, "influence_residual")
+  expect_true(is.na(one$estimate))
+  new <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "log")
+  expect_identical(new$status, "converged")
+  expect_gt(new$rounds, 1L)
+  expect_lt(new$if_crit, 1e-3)
+  expect_lt(crit(attr(new, "PHI")[, 1]), 1e-3)        # the reported influence values' own residual
+  # joint update: the same check
+  fj <- lapply(fx$fins, function(f) { f$omega <- 5e-3; f })
+  j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, function(k) fj[[k]], IMP, omega_path = "log")
+  if (j$converged) expect_lt(j$if_crit, 1e-3)
 })
 
 test_that("the path score is the derivative of the held-out log likelihood along the path taken", {
