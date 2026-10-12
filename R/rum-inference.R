@@ -109,17 +109,28 @@
 # The one correction routine. Returns a list (names are target names):
 #   est, plug         one-step estimates and cross-fitted plug-ins (weighted means of m_i);
 #   IFF, IFP          n x nt per-respondent influence values, fixed reference (phi - mean
-#                     phi) and population reference (IFF + (w/Wbar)(m_i - plug));
+#                     phi) and population reference (phi + (w/Wbar)(m_i - est));
 #                     SE = sd(IF) / sqrt(n) (se_kind "sd");
 #   phi, m            n x nt raw corrections and held-out plug-in values m_i;
 #   diag              fold diagnostics; fold_loadings (folds x p); model_info (model basis);
-#   kind, n_group, info_basis.
+#   kind, n_group, info_basis, pop_center.
+# The population-reference values for a subgroup (weights w, wr = w / Wbar). The estimate is
+# a ratio of cross-fitted moments, est = nu1 / nu2 with q1_i = w_i m_i + phi_i Wbar and
+# q2_i = w_i (paperps1011.tex Appendix D, "Targets built from moments" and eq.
+# moment_delta_variance: Dt evaluated at nu-hat, so the ratio derivative is taken at est).
+# The delta method gives IFP_i = phi_i + wr_i (m_i - est), which sums to zero over i.
+# pop_center = "plug_in" is the reproduction's construction, (phi_i - mean phi) +
+# wr_i (m_i - plug): the ratio derivative at the plug-in instead of at the estimate. The two
+# differ by (1 - wr_i) mean(phi): identical for a full-population target (wr = 1), and
+# asymptotically equivalent (mean(phi) = est - plug -> 0), but only the default is the
+# construction the paper states. Kept, by explicit opt-in, for parity with Phase C.
 .rum_onestep <- function(data, Z, fold, fold_final, targets, quad_score = .rum_score_quadrature(),
                          info_basis = c("constant", "linear", "model"), ridge_rel = 1e-2,
                          eig_floor_rel = 1e-6, model_M = NULL, model_quad = .rum_info_quadrature(),
                          model_seed = 20260926L, cache_net = NULL, cache_dir = NULL,
-                         cache_write = TRUE, cache_require = FALSE) {
-  info_basis <- match.arg(info_basis)
+                         cache_write = TRUE, cache_require = FALSE,
+                         pop_center = c("estimate", "plug_in")) {
+  info_basis <- match.arg(info_basis); pop_center <- match.arg(pop_center)
   ids <- data$ids; n <- data$n; p <- data$p; ks <- sort(unique(fold)); nt <- length(targets)
   model <- .rum_model_options(model_M, model_quad, model_seed, cache_net, cache_dir,
                               cache_write, cache_require)
@@ -145,7 +156,9 @@
   for (t in seq_len(nt)) {
     w <- wmat[, t]; wr <- w / mean(w); plug[t] <- sum(w * M[, t]) / sum(w)
     phi <- PHI[, t]; est[t] <- plug[t] + mean(phi)
-    IFF[, t] <- phi - mean(phi); IFP[, t] <- IFF[, t] + wr * (M[, t] - plug[t])
+    IFF[, t] <- phi - mean(phi)
+    IFP[, t] <- if (pop_center == "estimate") phi + wr * (M[, t] - est[t])
+                else IFF[, t] + wr * (M[, t] - plug[t])
   }
   nm <- vapply(targets, `[[`, "", "name")
   names(est) <- names(plug) <- colnames(IFF) <- colnames(IFP) <- colnames(PHI) <- colnames(M) <- nm
@@ -153,7 +166,7 @@
        diag = do.call(rbind, diag_fold), fold_loadings = loads,
        kind = stats::setNames(vapply(targets, `[[`, "", "kind"), nm),
        n_group = stats::setNames(colSums(wmat > 0), nm), info_basis = info_basis,
-       phi = PHI, m = M, model_info = if (length(meta)) do.call(rbind, meta) else NULL)
+       pop_center = pop_center, phi = PHI, m = M, model_info = if (length(meta)) do.call(rbind, meta) else NULL)
 }
 
 # The one-step as a table (the columns of the reproduction's debias_dnn()), with attributes
@@ -179,17 +192,18 @@
 }
 
 # Drop-in for the reproduction's debias_dnn() (same arguments in the same order, plus the
-# cache controls; the cache directory has no default here).
+# cache controls; the cache directory has no default here). Its numbers for subgroup targets
+# need pop_center = "plug_in" (see .rum_onestep).
 .rum_debias_dnn <- function(data, Z, fold, fold_final, targets, quad_score = .rum_score_quadrature(),
                             info_basis = c("constant", "linear", "model"), ridge_rel = 1e-2,
                             eig_floor_rel = 1e-6, model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                            cache_require = FALSE) {
-  info_basis <- match.arg(info_basis)
+                            cache_require = FALSE, pop_center = c("estimate", "plug_in")) {
+  info_basis <- match.arg(info_basis); pop_center <- match.arg(pop_center)
   .rum_onestep_table(.rum_onestep(data, Z, fold, fold_final, targets, quad_score, info_basis,
     ridge_rel, eig_floor_rel, model_M, model_quad, model_seed, cache_net, cache_dir,
-    cache_write, cache_require))
+    cache_write, cache_require, pop_center))
 }
 
 # ---- DNN version, bounded targets: cross-validated targeted update (CV-TMLE) ------------

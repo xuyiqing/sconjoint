@@ -70,8 +70,9 @@ test_that("exact sequence scores equal the evaluator's scores and a numerical gr
 test_that("one-step (constant, linear, model basis) reproduces the reproduction engine", {
   o <- fx$out
   for (b in c("constant", "linear", "model")) {
+    # pop_center = "plug_in": the reproduction's population-reference values (explicit opt-in)
     r <- rinf(".rum_onestep")(fx$data, fx$Z, fx$fold, fold_final, TG, info_basis = b,
-                              model_M = fx$model_M)
+                              model_M = fx$model_M, pop_center = "plug_in")
     tb <- rinf(".rum_onestep_table")(r)
     old <- o[[paste0("debias_", b)]]
     expect_lt(table_diff(old$table, tb), TOL)
@@ -198,4 +199,36 @@ test_that("the formula state and influence values work with a single feature (p 
                                           rinf(".rum_tgt_share")("s", 1, w = c(1, 1, 1, 0, 0, 0))))
   expect_identical(dim(fi$IFP), c(n, 2L))
   expect_true(all(is.finite(fi$IFP)))
+})
+
+test_that("subgroup population-reference values are the ratio delta method at the one-step estimate", {
+  # Codex review of eae4719, finding 6. est = plug + mean(phi) is nu1 / nu2 for the
+  # cross-fitted moments q1 = w m + Wbar phi, q2 = w; the delta method at nu-hat (Appendix D,
+  # eq. moment_delta_variance) gives phi + wr (m - est). The reproduction used
+  # (phi - mean phi) + wr (m - plug), which differs by (1 - wr) mean(phi).
+  for (b in c("constant", "linear")) {
+    r <- rinf(".rum_onestep")(fx$data, fx$Z, fx$fold, fold_final, TG, info_basis = b)
+    old <- rinf(".rum_onestep")(fx$data, fx$Z, fx$fold, fold_final, TG, info_basis = b,
+                                pop_center = "plug_in")
+    n <- fx$data$n
+    for (t in seq_along(TG)) {
+      w <- if (is.null(TG[[t]]$w)) rep(1, n) else as.numeric(TG[[t]]$w); wr <- w / mean(w)
+      phi <- r$phi[, t]; m <- r$m[, t]; est <- unname(r$est[t])
+      # the paper's construction, written out from the two moments
+      q1 <- w * m + mean(w) * phi; q2 <- w
+      nu1 <- mean(q1); nu2 <- mean(q2)
+      expect_equal(est, nu1 / nu2, tolerance = 1e-12)
+      if_delta <- ((q1 - nu1) - (nu1 / nu2) * (q2 - nu2)) / nu2
+      expect_lt(max(abs(r$IFP[, t] - if_delta)), 1e-12)
+      expect_lt(abs(sum(r$IFP[, t])), 1e-10)
+      # the legacy values differ by exactly (1 - wr) mean(phi); not at all for wr = 1
+      expect_lt(max(abs(r$IFP[, t] - old$IFP[, t] - (1 - wr) * mean(phi))), 1e-12)
+      expect_identical(r$IFF[, t], old$IFF[, t]); expect_identical(r$est[t], old$est[t])
+    }
+    sub <- vapply(TG, function(t) !is.null(t$w), TRUE)
+    expect_true(any(sub))
+    expect_lt(max(abs(r$IFP[, !sub] - old$IFP[, !sub])), 1e-12)
+    expect_gt(max(abs(r$IFP[, sub] - old$IFP[, sub])), 1e-8)
+  }
+  expect_identical(r$pop_center, "estimate")
 })
