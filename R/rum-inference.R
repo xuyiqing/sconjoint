@@ -203,7 +203,7 @@
   info_basis <- match.arg(info_basis); pop_center <- match.arg(pop_center)
   .rum_onestep_table(.rum_onestep(data, Z, fold, fold_final, targets, quad_score, info_basis,
     ridge_rel, eig_floor_rel, model_M, model_quad, model_seed, cache_net, cache_dir,
-    cache_write, cache_require, pop_center))
+    cache_write, cache_require, pop_center = pop_center))
 }
 
 # ---- DNN version, bounded targets: cross-validated targeted update (CV-TMLE) ------------
