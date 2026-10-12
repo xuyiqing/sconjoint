@@ -234,6 +234,10 @@ test_that("a converged targeted update also solves the influence equation used f
   expect_gt(one$if_crit, 1e-3)
   expect_identical(one$status, "influence_residual")
   expect_true(is.na(one$estimate))
+  # a looser influence tolerance accepts the one-round answer, labeled with its residual
+  lo <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "log", max_rounds = 1L,
+                               if_tol = 0.2)
+  expect_identical(lo$status, "converged"); expect_equal(lo$if_crit, one$if_crit)
   new <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "log")
   expect_identical(new$status, "converged")
   expect_gt(new$rounds, 1L)

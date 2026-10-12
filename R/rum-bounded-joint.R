@@ -227,13 +227,23 @@
 # mismatch is of the order of the (small) second step. At most max_rounds rounds; then status
 # "influence_residual", a failure (estimate NA). Typical cause: a fold at the variance
 # boundary where the clamp binds and the omega part of the correction cannot be targeted.
+# if_tol: the tolerance for the influence residual (default: tol, the solver's; both are in
+# units of the residual's own standard error, |sum phi_se| / sqrt(sum phi_se^2)). A residual
+# r means the reported estimate keeps an uncorrected first-order term of about r standard
+# errors. On Saha-Weeks (one fold at omega 1e-6, held at 0 by the clamp) 19 of 40 bounded
+# targets keep residuals of 0.004 to 0.13 SE that no round can remove; with the default they
+# fail; if_tol = 0.15 would report them.
+# omega_path "auto" decides per fold at the start of each round: a fold whose moved omega has
+# fallen below omega_boundary continues on the clamp path. A round that fails (max_iter,
+# step_failed, ...) ends the update with that status.
 # pdirs: the path directions (J); sdirs: all score directions; keep: the columns of the
 # score that the path solves. Returns the last solve's fields plus FS (the states the final
 # path starts from), cur (its .rum_path_all evaluation), rounds, iterations and halvings
 # summed over rounds, eps (the sum over rounds of the step sizes; additive on the linear
 # components) and if_crit, if_resid_dropped (the influence equation's residual at the end).
 .rum_tmle_rounds <- function(FS, pdirs, sdirs, keep, n, p, quad, omega_path, omega_boundary,
-                             max_iter, tol, max_halving, rank_tol = 1e-12, max_rounds = 5L) {
+                             max_iter, tol, max_halving, rank_tol = 1e-12, max_rounds = 5L,
+                             if_tol = tol) {
   J <- length(pdirs); rounds <- 0L; its <- 0L; halv <- 0L; eps_sum <- numeric(J)
   repeat {
     FSr <- FS
@@ -248,7 +258,7 @@
     ic <- if (all(is.finite(sol$cur$phi_se))) .rum_score_crit(sol$cur$phi_se[, keep, drop = FALSE], rank_tol)
           else list(crit = NA_real_, resid_dropped = NA_real_)
     if (!identical(sol$status, "converged")) break
-    if (ic$crit < tol && ic$resid_dropped < tol) break
+    if (ic$crit < if_tol && ic$resid_dropped < if_tol) break
     if (rounds >= max_rounds) { sol$status <- "influence_residual"; break }
     for (k in names(FS)) {                           # restart from the moved states
       st <- sol$cur$st[[k]]; FS[[k]]$mu[FS[[k]]$te, ] <- st$mu; FS[[k]]$th <- st$th
@@ -278,7 +288,7 @@
                            info_basis = c("constant", "model", "linear"), model_M = NULL,
                            model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                            cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                           cache_require = FALSE, FS = NULL, max_rounds = 5L) {
+                           cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol) {
   omega_path <- match.arg(omega_path); on_fail <- match.arg(on_fail)
   info_basis <- match.arg(info_basis)
   n <- data$n; p <- data$p
@@ -308,7 +318,7 @@
                   if_crit = abs(sum(cur$phi_se)) / sqrt(sum(cur$phi_se^2)))
     } else {
       sol <- .rum_tmle_rounds(FS, dirs, dirs, 1L, n, p, quad_score, path_kind, omega_boundary,
-                              max_iter, tol, max_halving, max_rounds = max_rounds)
+                              max_iter, tol, max_halving, max_rounds = max_rounds, if_tol = if_tol)
     }
     ev0 <- eval(0); phi0 <- ev0$phi[, 1]
     m0 <- numeric(n); for (k in names(FS)) m0[FS[[k]]$te] <- dirs[[1]][[k]]$plug
@@ -370,7 +380,7 @@
                             info_basis = c("constant", "model", "linear"), model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                            cache_require = FALSE, FS = NULL, max_rounds = 5L) {
+                            cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol) {
   info_basis <- match.arg(info_basis); omega_path <- match.arg(omega_path)
   n <- data$n; p <- data$p; G <- length(targets)
   if (G < 2L) stop("a joint update needs at least two shares")
@@ -393,7 +403,8 @@
   dir_sum <- max(abs(rowSums(ev0$phi)))
   onestep <- plug + colMeans(ev0$phi)
   sol <- .rum_tmle_rounds(FS, dirs[keep], dirs, keep, n, p, quad_score, omega_path,
-                          omega_boundary, max_iter, tol, max_halving, max_rounds = max_rounds)
+                          omega_boundary, max_iter, tol, max_halving, max_rounds = max_rounds,
+                          if_tol = if_tol)
   ok <- identical(sol$status, "converged")
   nm <- vapply(targets, `[[`, "", "name")
   if (ok) {
