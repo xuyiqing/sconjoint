@@ -78,6 +78,11 @@
 #   dm/dlambda = sum_r a_r E[.5(L'(A)+L'(B)) u] d_r
 #   dm/domega  = sum_r a_r E[.5(L'(A)-L'(B)) v] / (2 sqrt(omega)),
 # with A = kappa + s v + d'(mu + lambda u), B = -kappa - s v + d'(mu + lambda u), s = sqrt(omega).
+# At the boundary the division is 0/0. For v ~ N(0, 1), E[f(s v) v] = s E[f'(s v)] (Stein), so
+#   dm/domega  = sum_r a_r E[.5(L''(A)+L''(B))] / 2,
+# with no division; its value at omega = 0 is the right derivative. It is used when omega is
+# below .rum_omega_small (1e-8: where the division form has lost about 1e-16 / s of precision,
+# s < 1e-4); above it the division form is kept (unchanged numbers).
 .rum_tgt_choice_set <- function(name, D, coef = rep(1 / nrow(rbind(D)), nrow(rbind(D))),
                                 w = NULL, quad = .rum_law_quadrature()) {
   D <- rbind(D)
@@ -95,7 +100,9 @@
       gm <- gm + coef[r] * outer(c1, d)
       gk <- gk + coef[r] * drop((0.5 * (da - db)) %*% quad$weight)
       glv <- glv + coef[r] * outer(drop((0.5 * (da + db) * um) %*% quad$weight), d)
-      go <- go + coef[r] * drop((0.5 * (da - db) * vm) %*% quad$weight) / (2 * s)
+      go <- go + coef[r] * (if (th$omega < .rum_omega_small)
+        drop((0.25 * (da * (1 - 2 * pa) + db * (1 - 2 * pb))) %*% quad$weight)
+        else drop((0.5 * (da - db) * vm) %*% quad$weight) / (2 * s))
     }
     list(m = val, gm = gm, gt = cbind(gk, glv, go))
   }
@@ -131,12 +138,18 @@
 }
 
 # ---- gradients --------------------------------------------------------------------------
+# Below this omega, omega derivatives use their boundary forms (no division by sqrt(omega)).
+.rum_omega_small <- 1e-8
+
 .rum_th_vec  <- function(th) c(th$kappa, th$loading, th$omega)
 .rum_th_list <- function(v, p) list(kappa = v[1], loading = v[1 + seq_len(p)], omega = v[p + 2])
 
 # Per-respondent value m_i and gradients m_mu (n x p) and m_theta (n x q). Exact gradients
 # when the target supplies them; mean contrasts are analytic; otherwise central differences
-# (m_i depends only on mu_i, so a whole column moves at once).
+# (m_i depends only on mu_i, so a whole column moves at once). omega >= 0: when omega - h < 0
+# the omega column uses the one-sided second-order difference (-3 m(omega) + 4 m(omega + h)
+# - m(omega + 2 h)) / (2 h), which never evaluates a target at a negative variance (at
+# omega = 0 it is the right derivative).
 .rum_target_grad <- function(tg, mu, th, h = 1e-6) {
   n <- nrow(mu); p <- ncol(mu); q <- p + 2L
   if (!is.null(tg$grad)) return(tg$grad(mu, th))
@@ -150,7 +163,11 @@
   v <- .rum_th_vec(th); gt <- matrix(0, n, q)
   for (j in seq_len(q)) {
     v1 <- v; v2 <- v; v1[j] <- v1[j] + h; v2[j] <- v2[j] - h
-    gt[, j] <- (tg$m(mu, .rum_th_list(v1, p)) - tg$m(mu, .rum_th_list(v2, p))) / (2 * h)
+    if (j == q && v2[j] < 0) {                       # omega: stay in the domain
+      v3 <- v; v3[j] <- v3[j] + 2 * h
+      gt[, j] <- (-3 * tg$m(mu, th) + 4 * tg$m(mu, .rum_th_list(v1, p)) -
+                    tg$m(mu, .rum_th_list(v3, p))) / (2 * h)
+    } else gt[, j] <- (tg$m(mu, .rum_th_list(v1, p)) - tg$m(mu, .rum_th_list(v2, p))) / (2 * h)
   }
   list(m = tg$m(mu, th), gm = gm, gt = gt)
 }

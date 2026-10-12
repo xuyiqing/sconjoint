@@ -47,11 +47,14 @@
   }
   ll <- sweep(ll, 2, log(quad$weight), "+"); P <- exp(ll - apply(ll, 1, max)); P <- P / rowSums(P)
   smu <- slam <- matrix(0, B, p); sk <- som <- numeric(B)
+  boundary <- th$omega < .rum_omega_small; RS <- CV <- 0
   for (t in seq_len(T)) {
-    r <- P * (Y[, t] - stats::plogis(ETA[[t]])); R0 <- rowSums(r)
+    pr <- stats::plogis(ETA[[t]]); r <- P * (Y[, t] - pr); R0 <- rowSums(r)
     smu <- smu + DL[[t]] * R0; slam <- slam + DL[[t]] * rowSums(r * um); sk <- sk + R0
-    som <- som + rowSums(r * vm)
+    if (boundary) { RS <- RS + (Y[, t] - pr); CV <- CV + pr * (1 - pr) }
+    else som <- som + rowSums(r * vm)
   }
+  if (boundary) return(cbind(smu, sk, slam, rowSums(P * 0.5 * (RS^2 - CV))))
   cbind(smu, sk, slam, som / (2 * s))
 }
 

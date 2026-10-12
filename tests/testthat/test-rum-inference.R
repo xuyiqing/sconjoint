@@ -232,3 +232,48 @@ test_that("subgroup population-reference values are the ratio delta method at th
   }
   expect_identical(r$pop_center, "estimate")
 })
+
+test_that("omega derivatives stay in the domain at omega = 0 and tiny positive omega", {
+  # Codex review of eae4719, finding 7: central differences crossed omega = 0 (sqrt of a
+  # negative variance for choice targets), the choice-set derivative divided by sqrt(omega),
+  # and so did the sequence scores' omega column.
+  set.seed(7L); n <- 5L; p <- 3L
+  mu <- matrix(rnorm(n * p, sd = .5), n, p)
+  D <- rbind(c(1, 0, -1), c(0, 1, 1))
+  cs <- rinf(".rum_tgt_choice_set")("cs", D)
+  ch <- rinf(".rum_tgt_choice")("ch", D[1, ])
+  csn <- cs; csn$grad <- NULL                      # the same target by central differences
+  th <- function(om) list(kappa = .4, loading = c(.3, -.2, .5), omega = om)
+  gt_at <- function(tg, om) rinf(".rum_target_grad")(tg, mu, th(om))$gt[, p + 2L]
+  # the right derivative at 0 from well inside the domain (m is smooth in omega)
+  lim <- (-3 * cs$m(mu, th(0)) + 4 * cs$m(mu, th(1e-4)) - cs$m(mu, th(2e-4))) / 2e-4
+  for (om in c(0, 1e-300, 1e-12, 5e-7)) {
+    g_an <- suppressWarnings(gt_at(cs, om)); g_cd <- suppressWarnings(gt_at(csn, om))
+    g_ch <- suppressWarnings(gt_at(ch, om))
+    expect_true(all(is.finite(g_an)) && all(is.finite(g_cd)) && all(is.finite(g_ch)))
+    expect_lt(max(abs(g_an - lim)), 1e-5)
+    expect_lt(max(abs(g_cd - lim)), 1e-5)
+    expect_lt(max(abs(g_ch - gt_at(rinf(".rum_tgt_choice_set")("c1", D[1, , drop = FALSE]), om))), 1e-5)
+  }
+  expect_silent(gt_at(ch, 5e-7))                   # no sqrt of a negative variance
+  # in the interior the analytic derivative still agrees with central differences
+  expect_lt(max(abs(gt_at(cs, .3) - gt_at(csn, .3))), 1e-7)
+  # sequence scores: omega column at 0 equals the evaluator's boundary score; tiny omega is
+  # finite and continuous; the interior is unchanged
+  B <- 8L; T <- 4L
+  d <- lapply(seq_len(B), function(i) matrix(sample(c(-1, 0, 1), T * p, replace = TRUE), T, p))
+  dat <- rum_data(lapply(seq_len(B), function(i) rbinom(T, 1, .5)), d, metadata = list(orientation = "test"))
+  MU <- matrix(rnorm(B * p), B, p, dimnames = list(dat$ids, NULL))
+  DL <- lapply(seq_len(T), function(t) dat$d[dat$offsets[-(B + 1L)] + t, , drop = FALSE])
+  Y <- matrix(dat$y, B, T, byrow = TRUE); quad <- rum_quadrature(c(11L, 9L))
+  sc <- function(om) rinf(".rum_seq_scores")(MU, DL, Y, th(om), quad)
+  ev <- function(om) { e <- rum_dnn_gaussian_evaluate(dat, MU, .4, c(.3, -.2, .5), om, quad)
+    cbind(e$output_score, e$common_score) }
+  expect_lt(max(abs(sc(0) - ev(0))), 1e-12)
+  for (om in c(1e-300, 1e-12, 1e-9)) {
+    expect_true(all(is.finite(sc(om))))
+    expect_lt(max(abs(sc(om) - sc(0))), 1e-6)
+  }
+  expect_lt(max(abs(sc(1e-6)[, 2 * p + 2] - sc(0)[, 2 * p + 2])), 1e-3)
+  expect_lt(max(abs(sc(.5) - ev(.5))), 1e-12)
+})
