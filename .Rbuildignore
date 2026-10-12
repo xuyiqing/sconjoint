@@ -92,6 +92,7 @@
 ^tests/testthat/test-weight-decay-adaptive\.R$
 ^tests/testthat/test-which-beta\.R$
 ^tests/testthat/test-rum-.*\.R$
+^tests/testthat/fixtures/rum-inference-fixture\.rds$
 ^tests/testthat/rum$
 ^tests/testthat/helper-reference-impl\.R$
 ^tests/testthat/helper-sw-demo\.R$
