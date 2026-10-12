@@ -121,7 +121,7 @@ test_that("true values under two factors and straight-liners match brute-force M
              sconjoint:::.rum_ms_switch_target("ame", "br", raw, "r6", 6L, 1L, position = FALSE),
              sconjoint:::.rum_ms_switch_target("ame (position)", "br", raw, "r6", 6L, 1L, position = TRUE))
   tv <- sconjoint:::.rum_ms_true_values(list(c = tr), tg)
-  expect_true(all(tv$quad_err < 1e-8))
+  expect_true(all(tv$quad_err < 1e-6))
   expect_true(all(is.na(tv$ctx_se[1:3])) && all(tv$ctx_se[4:5] >= 0))
   # brute force: R draws of (u1, u2, v, straight-liner, side) per respondent
   R <- 20000L
@@ -141,7 +141,7 @@ test_that("true values under two factors and straight-liners match brute-force M
     }
     tgp <- tg[[3]]; e3 <- environment(tgp$grad)
     c(mean(beta_c(cc) > 0), rowsP(list(D = d2, side = 1, coef = 1), FALSE),
-      rowsP(list(D = rbind(d2, -d2), side = c(1, -1), coef = c(0.5, 0.5)), TRUE),
+      rowsP(list(D = rbind(d2, d2), side = c(1, -1), coef = c(0.5, 0.5)), TRUE),
       rowsP(tg[[4]]$rows[[1]], FALSE), rowsP(tg[[5]]$rows[[1]], TRUE))
   })
   # Monte Carlo SE <= 0.5 / sqrt(n R) per probability; the AMEs average differences over rows

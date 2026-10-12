@@ -116,7 +116,7 @@
   }
   colnames(D) <- spec$features
   if (is.null(data)) {
-    data <- rum_data(split(y, ri), lapply(split(seq_len(nt), ri), function(j) D[j, , drop = FALSE]),
+    data <- rum_data(unname(split(y, ri)), unname(lapply(split(seq_len(nt), ri), function(j) D[j, , drop = FALSE])),
                      ids = rownames(truth$mu), feature_names = spec$features,
                      metadata = list(orientation = paste("y = 1 selects side 1 of the", spec$study, "design")))
   } else {
@@ -189,7 +189,8 @@
     if (!is.null(env$D) && !is.null(env$coef)) {                         # .rum_tgt_choice_set(_pref)
       pos <- "svm" %in% all.names(body(tg$grad))                         # choice_set integrates the side
       D <- rbind(env$D)
-      rows <- if (pos) list(D = rbind(D, -D), side = c(rep(1, nrow(D)), rep(-1, nrow(D))), coef = c(env$coef, env$coef) / 2)
+      # position-neutral: profile A on side 1 (side +1) and on side 2 (side -1); D stays A minus B
+      rows <- if (pos) list(D = rbind(D, D), side = c(rep(1, nrow(D)), rep(-1, nrow(D))), coef = c(env$coef, env$coef) / 2)
               else list(D = D, side = rep(1, nrow(D)), coef = env$coef)
       return(c(out, list(ms_kind = "rows", rows = list(rows), group = NULL, position = pos)))
     }
