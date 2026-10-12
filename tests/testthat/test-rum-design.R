@@ -91,3 +91,82 @@ test_that("BR revenue draws follow the rule's probabilities", {
   expect_lt(max(abs(observed - expected) / sqrt(expected)), 5)
   expect_gt(mean(.rum_br_revenue_code(.rum_br_revenue_ratio(rates)) == as.vector(r$taxrev)), 0.95)
 })
+
+# ---------------------------------------------------------------------------
+# Sequence-level gates (agent G1, 2026-10-12). The per-task gates above cannot
+# see dependence across one respondent's tasks; these compare whole sequences.
+# ---------------------------------------------------------------------------
+
+test_that("GS: the negative candidate's side is a balanced 8/8 block over scenarios 1-16", {
+  sp <- .rum_design_spec("gs")
+  M <- 20000L
+  r <- .rum_design_draw_raw(sp, M, seed = 101)
+  negL <- r$dem[, , 1] > 7
+  negR <- r$dem[, , 2] > 7
+  k <- rowSums(negL)
+  # 9 negatives per sequence; a block of 8 left / 8 right: never 0 or 9 on one side
+  expect_true(all(rowSums(negL | negR) == 9))
+  expect_true(all(k >= 1 & k <= 8))
+  # hypergeometric(16 sides, 8 left, 9 drawn): mean 4.5, variance 9 * 1/4 * 7/15 = 1.05 (coin flips: 2.25)
+  expect_lt(abs(mean(k) - 4.5), 4 * sqrt(1.05 / M))
+  expect_lt(abs(stats::var(k) - 1.05), 0.06)
+  p <- stats::dhyper(1:8, 8, 8, 9)
+  z <- (tabulate(k, 8) - M * p) / sqrt(M * p * (1 - p))
+  expect_lt(max(abs(z)), 4.5)
+  # each scenario still has the negative candidate on the left with probability 1/2
+  pl <- colSums(negL) / colSums(negL | negR)
+  expect_lt(max(abs(pl - 0.5)), 4.5 * sqrt(0.25 / (M * 9 / 13)))
+  # truncation keeps the block's law for the first T scenarios
+  r5 <- .rum_design_draw_raw(sp, 4000L, seed = 101, T = 5)
+  expect_identical(dim(r5$dem), c(4000L, 5L, 2L))
+})
+
+test_that("generated sequences match the observed designs' sequence statistics", {
+  fx <- local({ e <- new.env(); sys.source(test_path("fixtures", "rum-design-sequence-stats.R"), envir = e); e$rum_design_seq_fixture })
+  M <- 20000L
+  pair_moment <- function(D) { T <- ncol(D); s <- rowSums(D); (s^2 - rowSums(D^2)) / (T * (T - 1)) }
+  sumcols <- function(d, cols) apply(d[, , cols, drop = FALSE], c(1, 2), sum)
+  gen <- list()   # per-sequence generated values, keyed "study|group|cell"
+  r <- .rum_design_draw_raw(.rum_design_spec("gs"), M, seed = 202)
+  dl <- r$dem[, , 1]; dr <- r$dem[, , 2]; pl <- r$party[, , 1]; pr <- r$party[, , 2]
+  cnt <- list("negative on side1" = rowSums(dl > 7),
+              "undemocratic on side1" = rowSums(dl >= 8 & dl <= 14),
+              "valence on side1" = rowSums(dl > 14),
+              "negative is D" = rowSums((dl > 7 & pl == 1) | (dr > 7 & pr == 1)),
+              "negative in same-party pair" = rowSums((dl > 7 | dr > 7) & pl == pr),
+              "negative on side1 in opposite pair" = rowSums(dl > 7 & pl != pr),
+              "negative on side1 in same pair" = rowSums(dl > 7 & pl == pr),
+              "female on side1 and negative" = rowSums(r$female[, , 1] == 1 & dl > 7),
+              "party D on side1" = rowSums(pl == 1))
+  for (nm in names(cnt)) gen[[paste("gs|all", nm, sep = "|")]] <- cnt[[nm]]
+  for (g in c("D", "R", "I")) {
+    d <- .rum_design_code(.rum_design_spec("gs"), r, g); fn <- dimnames(d)[[3]]
+    gen[[paste("gs", g, "undemocratic", sep = "|")]] <- pair_moment(sumcols(d, grep("^diff_dem_code_u_", fn)))
+    gen[[paste("gs", g, "negative", sep = "|")]] <- pair_moment(sumcols(d, grep("^diff_dem_code_[uv]_", fn)))
+    gen[[paste("gs", g, "policy1", sep = "|")]] <- pair_moment(d[, , "diff_p1_num"])
+    gen[[paste("gs", g, "policy2", sep = "|")]] <- pair_moment(d[, , "diff_p2_num"])
+  }
+  d <- .rum_draw_designs("br", M = M, seed = 203)
+  gen[["br|all|top"]] <- pair_moment(d[, , 11])
+  gen[["br|all|bottom"]] <- pair_moment(d[, , 1])
+  gen[["br|all|progressivity"]] <- pair_moment(apply(sweep(d[, , seq(1, 11, by = 2)], 3, c(-5, -3, -1, 1, 3, 5), "*"), c(1, 2), sum))
+  d <- .rum_draw_designs("sw_additive", M = M, seed = 204)
+  gen[["sw|all|gender"]] <- pair_moment(d[, , "cand_genderMale"])
+  gen[["sw|all|ambition"]] <- pair_moment(d[, , "cand_runYes"])
+
+  key <- paste(fx$study, fx$group, fx$cell, sep = "|")
+  expect_setequal(key, names(gen))
+  z <- vapply(seq_len(nrow(fx)), function(i) {
+    v <- gen[[key[i]]]
+    if (fx$stat[i] == "count_var") {           # observed variance vs the law's, sd of (C - mu)^2 from the draws
+      w <- (v - mean(v))^2
+      (fx$obs_var[i] - mean(w)) / sqrt(stats::var(w) / fx$n[i] + stats::var(w) / M)
+    } else (fx$obs_mean[i] - mean(v)) / sqrt(stats::var(v) / fx$n[i] + stats::var(v) / M)
+  }, 0)
+  names(z) <- key
+  # each cell's bound is its study's two-sided Bonferroni 5% bound over the whole sequence audit (G1_design_fix.md):
+  # GS 4.29, BR 3.84, SW 3.64. BR's top-rate pair moment sits at z = 3.1 (open, see the report); the old GS
+  # coin-flip side gives z = -15 on the first cell.
+  bad <- abs(z) >= fx$bound
+  expect_true(!any(bad), info = paste(sprintf("%s z = %.2f", key[bad], z[bad]), collapse = "; "))
+})
