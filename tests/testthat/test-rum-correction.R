@@ -183,11 +183,23 @@ test_that("forced non-convergence returns a failure status and no number", {
                                  update = "log_omega")
   expect_true(all(is.na(bd$estimate)) && all(bd$status == "max_iter"))
   expect_identical(attr(bd, "n_failed"), length(BND))
+  # Codex review of eae4719, finding 5: the DEFAULT bounded routine is the checked one, and
+  # it returns no number on non-convergence; the legacy routine needs an explicit opt-in
+  bd0 <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND, max_iter = 0L)
+  expect_true(all(bd0$status == "max_iter"))
+  expect_true(all(is.na(bd0$estimate) & is.na(bd0$se_population) & is.na(bd0$lower_population) &
+                  is.na(bd0$upper_population) & is.na(bd0$lower_fixed)))
+  expect_true(all(is.na(attr(bd0, "IFP"))))
+  bl <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND, max_iter = 0L,
+                                 update = "legacy")
+  expect_true(all(is.finite(bl$estimate)))          # legacy keeps the last iterate, labeled
+  expect_true(all(grepl("^max_iter", bl$status[!bl$tmle_converged])))
 })
 
 test_that("on a path that crosses the old floor, log-omega stays positive and converges", {
   # a share whose correction pulls omega down hard: kappa-heavy choice target in a fold
-  # state with a tiny omega
+  # state with a tiny omega. Codex review of eae4719, finding 5: the test now requires that
+  # the legacy path really crosses the floor and that the checked update converges.
   fins <- lapply(fx$fins, function(f) { f$omega <- 2e-3; f })
   ffl <- function(k) fins[[k]]
   tg <- list(rinf(".rum_tgt_choice_set")("choice", rbind(c(1, 0, 0)), coef = 1))

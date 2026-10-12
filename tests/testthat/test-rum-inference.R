@@ -105,7 +105,8 @@ test_that("CV-TMLE and the bounded rule reproduce the reproduction engine", {
   expect_lt(table_diff(o$tmle_model$table, tmm), TOL)
   expect_lt(maxdiff(o$tmle_model$attrs$IFP, attr(tmm, "IFP")), TOL)
   expect_identical(attr(tmm, "info_basis"), "model")
-  bd <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND)
+  # the reproduction's bounded rule is the legacy update, by explicit opt-in
+  bd <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND, update = "legacy")
   expect_lt(table_diff(o$bounded$table, bd), TOL)
   expect_identical(rownames(bd), rownames(o$bounded$table))
   expect_true(all(bd$lower_population >= 0 & bd$upper_population <= 1))

@@ -285,18 +285,24 @@
 }
 
 # Bounded targets (quantities in [0, 1]): the CV-TMLE estimate with its Wald interval
-# truncated to [0, 1]. Returns the one-step table's columns plus the method, so callers can
-# swap these rows in; attributes IFF and IFP from the CV-TMLE. Arguments after targets go
-# to .rum_tmle_dnn(). update = "log_omega" uses .rum_tmle_path() instead (rum-bounded-joint.R:
-# omega on the log scale, or held linear and stopped at 0 in a fold whose fitted omega is at
-# the boundary, step control, and estimate NA with status "max_iter",
-# "step_failed" or "nonfinite" when the update fails; extra columns status and n_failed
-# attribute); the default "legacy" is the reproduction's routine, unchanged.
+# truncated to [0, 1]. Returns the one-step table's columns plus the method and status, so
+# callers can swap these rows in; attributes IFF and IFP from the CV-TMLE.
+# update = "log_omega" (the default since the Codex review of eae4719, finding 5) uses
+# .rum_tmle_path() (rum-bounded-joint.R): omega on the log scale, or held linear and stopped
+# at 0 in a fold whose fitted omega is at the boundary (omega_path "auto", unless given in
+# ...), step control, the influence-equation check with retargeting, and, when the update
+# fails, estimate, SEs and interval NA with status "max_iter", "step_failed", "nonfinite",
+# "rank_deficient" or "influence_residual" (attribute n_failed). Nothing is returned as if it
+# had converged. update = "legacy" (explicit opt-in only; for parity with Phase C) is the
+# reproduction's routine, .rum_tmle_dnn(), unchanged: linear omega floored at 1e-8 with the
+# unfloored tangent, and the last iterate returned at max_iter (status "max_iter", numbers
+# kept). Arguments after targets go to the chosen routine.
 .rum_bounded_dnn <- function(data, Z, fold, fold_final, targets, ...,
-                             update = c("legacy", "log_omega")) {
+                             update = c("log_omega", "legacy")) {
   update <- match.arg(update)
   if (update == "log_omega") {
-    tp <- .rum_tmle_path(data, Z, fold, fold_final, targets, ..., omega_path = "auto")
+    a <- list(...); if (is.null(a$omega_path)) a$omega_path <- "auto"
+    tp <- do.call(.rum_tmle_path, c(list(data, Z, fold, fold_final, targets), a))
     out <- data.frame(target = tp$target, kind = tp$kind, n_group = tp$n_group,
                       info_basis = if (is.null(list(...)$info_basis)) "constant" else list(...)$info_basis,
                       plug_in = tp$plug_in, estimate = tp$estimate,
@@ -304,7 +310,7 @@
                       upper_population = tp$upper_population, se_fixed = tp$se_fixed,
                       lower_fixed = tp$lower_fixed, upper_fixed = tp$upper_fixed,
                       correction_in_se = (tp$estimate - tp$plug_in) / tp$se_population,
-                      method = "CV-TMLE (log-omega path), Wald interval truncated to [0, 1]",
+                      method = paste0(tp$method, "; Wald interval truncated to [0, 1]"),
                       tmle_converged = tp$converged, tmle_iterations = tp$iterations,
                       status = tp$status, stringsAsFactors = FALSE)
     rownames(out) <- out$target
@@ -325,6 +331,7 @@
                     correction_in_se = tm$correction_in_se,
                     method = "CV-TMLE, Wald interval truncated to [0, 1]",
                     tmle_converged = tm$converged, tmle_iterations = tm$iterations,
+                    status = ifelse(tm$converged, "converged", "max_iter (legacy: last iterate kept)"),
                     stringsAsFactors = FALSE)
   rownames(out) <- out$target
   attr(out, "IFF") <- attr(tm, "IFF"); attr(out, "IFP") <- attr(tm, "IFP")
