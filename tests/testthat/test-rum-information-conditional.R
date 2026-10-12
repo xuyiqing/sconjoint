@@ -129,3 +129,21 @@ test_that("info_basis = 'conditional' runs through the one-step and the CV-TMLE;
   expect_error(rinf(".rum_onestep")(fx$data, fx$Z, fx$fold, function(k) fx$fins[[k]], tg,
                                     info_basis = "conditional"), "cond")
 })
+
+test_that("null_zero: no weight on exactly null coordinates; identical to the floor otherwise", {
+  tn <- tiny(seed = 6L, n = 3L, M = 6L, p = 3L); quad <- small_quad(); data <- tiny_data(tn)
+  I <- rinf(".rum_cond_info")(data, tn$mu, tn$th, tiny_crn(tn), "exact", quad)$I
+  p <- tn$p; q <- p + 2L
+  W1 <- rinf(".rum_weight_parts")(function(i) I[i, , ], tn$n, p, q, 1e-6)
+  W2 <- rinf(".rum_cond_weight_parts")(I, p, q, 1e-6)
+  expect_lt(max(abs(W1$Li - W2$Li)), 1e-10); expect_lt(max(abs(W1$Ic - W2$Ic)), 1e-10)
+  crn0 <- tiny_crn(tn); z <- crn0$designs$all; z[, , 2] <- 0       # respondents 2 and 3 never see coordinate 2
+  crn0$designs <- list(a = crn0$designs$all, z = z); crn0$key <- c(1L, 2L, 2L)
+  I0 <- rinf(".rum_cond_info")(data, tn$mu, tn$th, crn0, "exact", quad)$I
+  W0 <- rinf(".rum_cond_weight_parts")(I0, p, q, 1e-6)
+  expect_identical(W0$null, 2L)
+  expect_true(all(W0$Li[2:3, 2, ] == 0) && all(W0$Li[2:3, , 2] == 0) && all(W0$Li[1, 2, ] != 0))
+  v <- matrix(1, tn$n, p)
+  a <- rinf(".rum_correction")(W0, v, rep(0.1, q), seq_len(tn$n))$a
+  expect_true(all(a[2:3, 2] == 0) && a[1, 2] != 0 && all(is.finite(a)))
+})

@@ -198,18 +198,44 @@
     data.frame(row = integer(0), id = character(0), eig_rel = numeric(0), direction = character(0))
 }
 
+# Weight ingredients like .rum_weight_parts(), except that a coordinate whose row of a
+# respondent's information is exactly zero (no design the respondent could face moves it:
+# in Graham-Svolik the co-partisan taste and loading of a pure independent) gets no weight:
+# the matrix is reduced to the other coordinates before the floor and the inverse, so
+# a(z) is 0 there and the CV-TMLE path never moves that respondent along it. The default
+# (cond$null_zero FALSE) keeps .rum_weight_parts(), which floors such directions instead.
+# Also returns null = the number of respondents with at least one zero coordinate.
+.rum_cond_weight_parts <- function(I, p, q, eig_floor_rel) {
+  n <- dim(I)[1L]; D <- p + q
+  Li <- array(0, c(n, p, p)); Lt <- array(0, c(n, p, q)); Ic <- matrix(0, q, q); nfl <- 0L; nnull <- 0L
+  for (i in seq_len(n)) {
+    L <- I[i, , ]; keep <- which(rowSums(abs(L)) > 0); if (length(keep) < D) nnull <- nnull + 1L
+    Lk <- L[keep, keep, drop = FALSE]; e <- eigen(Lk, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
+    if (any(e$values < fl)) { nfl <- nfl + 1L; Lk <- e$vectors %*% (pmax(e$values, fl) * t(e$vectors)) }
+    L[keep, keep] <- Lk
+    km <- keep[keep <= p]; kt <- keep[keep > p] - p
+    li <- matrix(0, p, p); li[km, km] <- solve(L[km, km, drop = FALSE])
+    lt <- L[1:p, p + seq_len(q)]; tt <- L[p + seq_len(q), p + seq_len(q)]
+    Li[i, , ] <- li; Lt[i, , ] <- lt
+    Ic <- Ic + tt - crossprod(lt, li %*% lt)
+  }
+  list(Li = Li, Lt = Lt, Ic = Ic / n, floored = nfl, shared = FALSE, null = nnull)
+}
+
 # Options of the conditional information (passed to the inference routines as cond = ...).
 # spec: a design spec or study string ("gs", "br", "sw_additive", "sw_explicit"); resp:
 # respondent inputs for the design key in data$ids order (GS: a data frame with pid7);
 # method, ny, louis_rb: see .rum_cond_info(); M: design draws (default 200 for exact,
 # 400 for louis and mc). crn: optional fixed design draws (a .rum_draw_designs_crn()-shaped
-# list) used for every fold instead of spec (for tests and custom designs).
+# list) used for every fold instead of spec (for tests and custom designs). null_zero: see
+# .rum_cond_weight_parts() (does not change the information or its cache).
 .rum_cond_options <- function(spec, resp = NULL, method = c("exact", "louis", "mc"), M = NULL,
                               ny = 8L, louis_rb = TRUE, seed = 20261011L,
                               quad = .rum_info_quadrature(), cache_dir = NULL, cache_net = NULL,
-                              cache_write = TRUE, cache_require = FALSE, crn = NULL) {
+                              cache_write = TRUE, cache_require = FALSE, crn = NULL,
+                              null_zero = FALSE) {
   method <- match.arg(method)
-  list(spec = spec, resp = resp, method = method, crn = crn,
+  list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero,
        M = if (is.null(M)) (if (method == "exact") 200L else 400L) else as.integer(M),
        ny = as.integer(ny), louis_rb = louis_rb, seed = as.integer(seed), quad = quad,
        cache_dir = cache_dir, cache_net = cache_net, cache_write = cache_write,

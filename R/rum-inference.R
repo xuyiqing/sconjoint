@@ -60,7 +60,9 @@
     MI <- if (info_basis == "model") .rum_model_info_fold(data, ff$mu, ff$th, k, model$M, model$quad, model$seed,
                                model$cache_net, model$cache_dir, fin, model$cache_write,
                                model$cache_require) else .rum_cond_info_fold(data, ff$mu, ff$th, k, model$cond, fin)
-    W <- .rum_weight_parts(function(i) MI$I[i, , ], n, p, q, eig_floor_rel)
+    W <- if (info_basis == "conditional" && isTRUE(model$cond$null_zero))
+      .rum_cond_weight_parts(MI$I, p, q, eig_floor_rel) else
+      .rum_weight_parts(function(i) MI$I[i, , ], n, p, q, eig_floor_rel)
     Ite <- apply(MI$I[te, , , drop = FALSE], c(2, 3), mean)
     Ote <- crossprod(S[te, , drop = FALSE]) / sum(te)
     err <- norm(Ite - Ote, "F") / norm(Ote, "F")
