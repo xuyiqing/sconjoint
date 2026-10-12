@@ -52,8 +52,10 @@
 #    linearly, stops at 0, and its tangent is 0 from there on, so the path score is still the
 #    derivative of the path actually taken (no floor inconsistency) without the log scale's
 #    sensitivity. The tables report each fold's fitted omega (omega_fit_min) so the boundary
-#    case is visible. Neither choice makes inference regular at the boundary (the paper's
-#    argument needs omega_0 > 0).
+#    case is visible. The default, omega_path = "auto", uses the log path in folds whose fitted
+#    omega is at least 1e-4 and the clamp in the others (the path may differ by fold: each fold
+#    has its own fitted state, and every path has the same tangent at eps = 0). Neither choice
+#    makes inference regular at the boundary (the paper's argument needs omega_0 > 0).
 #  * Clipping is not targeting: .rum_bounded_dnn() truncates Wald intervals to [0, 1]; a
 #    clipped point estimate is not a targeted estimate. The routines here never clip; their
 #    estimates are in [0, 1] because they are plug-ins at updated fitted states.
@@ -91,17 +93,21 @@
 #   "clamp"        omega_eps = max(omega + sum_j eps_j g_j[omega], 0): linear, stops at 0, and its
 #                  tangent is then 0, so the path score is the derivative of the path taken;
 #   "linear_floor" the old path: omega + eps g_omega floored at `floor`, score with the
-#                  unfloored direction (the inconsistency of item 4).
+#                  unfloored direction (the inconsistency of item 4);
+#   "auto"         "log" in a fold whose fitted omega is at least omega_boundary (default 1e-4),
+#                  "clamp" in a fold whose fitted omega is below it (at the boundary).
 # Returns phi (path scores: the chain rule applied, d loglik / d eps_j), phi_se (the correction
 # a_j' s_mu + g_j' s_theta with the fixed directions at the moved state: the influence values
 # used for standard errors; equal to phi except for the omega factor of the log path and the
 # clamped omega tangent), ll, the moved state, floor_hit (legacy: the floor binds; clamp: omega
 # is held at 0), omega, omega_linear (where the linear path would put omega).
-.rum_path_fold <- function(f, path, eps, p, quad, omega_path, score = path, floor = 1e-8) {
+.rum_path_fold <- function(f, path, eps, p, quad, omega_path, score = path, floor = 1e-8,
+                           omega_boundary = 1e-4) {
   A <- 0; G <- 0
   for (j in seq_along(path)) { A <- A + eps[j] * path[[j]]$a; G <- G + eps[j] * path[[j]]$g }
   mu_e <- f$mu[f$te, , drop = FALSE] + A
   v0 <- .rum_th_vec(f$th); v <- v0 + G; om0 <- v0[p + 2L]; lin <- v[p + 2L]
+  if (omega_path == "auto") omega_path <- if (om0 >= omega_boundary) "log" else "clamp"
   if (omega_path == "log") {
     if (om0 > 0) { om <- om0 * exp(G[p + 2L] / om0); dom <- om / om0 } else { om <- 0; dom <- 0 }
     hit <- FALSE
@@ -130,13 +136,14 @@
 
 # All folds at eps: phi and phi_se stacked in respondent order (n x J), total held-out log
 # likelihood, and the per-fold states.
-.rum_path_all <- function(FS, dirs, eps, n, p, quad, omega_path, score = NULL) {
+.rum_path_all <- function(FS, dirs, eps, n, p, quad, omega_path, score = NULL,
+                          omega_boundary = 1e-4) {
   ks <- names(FS); J <- if (is.null(score)) length(dirs) else length(score)
   phi <- phi_se <- matrix(NA_real_, n, J); ll <- 0; st <- list(); hit <- FALSE; om <- numeric(0)
   for (k in ks) {
     f <- FS[[k]]; pd <- lapply(dirs, `[[`, k)
     sd <- if (is.null(score)) pd else lapply(score, `[[`, k)
-    r <- .rum_path_fold(f, pd, eps, p, quad, omega_path, sd)
+    r <- .rum_path_fold(f, pd, eps, p, quad, omega_path, sd, omega_boundary = omega_boundary)
     phi[f$te, ] <- r$phi; phi_se[f$te, ] <- r$phi_se; ll <- ll + r$ll; st[[k]] <- r
     hit <- hit || r$floor_hit; om <- c(om, r$omega)
   }
@@ -192,7 +199,8 @@
 .rum_wald01 <- function(est, se, sgn) pmin(pmax(est + sgn * 1.96 * se, 0), 1)
 
 # ---- scalar targeted update ---------------------------------------------------------------
-# For each target separately. omega_path "log" with step control (the fix; default), or
+# For each target separately. omega_path "auto" (default: the log path, with "clamp" in folds
+# whose fitted omega is below omega_boundary), "log", "clamp", or
 # "legacy": the old .rum_tmle_dnn() iteration exactly (linear omega with the 1e-8 floor, no
 # step control), with the floor hits and the non-convergence recorded. on_fail "na" (default)
 # returns estimate NA for a failed target; "last" returns the last iterate (the old behavior;
@@ -204,8 +212,8 @@
 .rum_tmle_path <- function(data, Z, fold, fold_final, targets,
                            quad_score = .rum_score_quadrature(), ridge_rel = 1e-2,
                            eig_floor_rel = 1e-6, max_iter = 20L, tol = 1e-3,
-                           omega_path = c("log", "clamp", "legacy"), on_fail = c("na", "last"),
-                           max_halving = 30L,
+                           omega_path = c("auto", "log", "clamp", "legacy"),
+                           on_fail = c("na", "last"), max_halving = 30L, omega_boundary = 1e-4,
                            info_basis = c("constant", "model", "linear"), model_M = NULL,
                            model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                            cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
@@ -222,7 +230,8 @@
   res <- lapply(seq_along(targets), function(t) {
     w <- wmat[, t]; wr <- w / mean(w); tg <- targets[[t]]
     dirs <- list(.rum_tmle_dirs(FS, tg, w))
-    eval <- function(eps) .rum_path_all(FS, dirs, eps, n, p, quad_score, path_kind)
+    eval <- function(eps) .rum_path_all(FS, dirs, eps, n, p, quad_score, path_kind,
+                                        omega_boundary = omega_boundary)
     hit_any <- FALSE
     if (omega_path == "legacy") {             # the old loop, verbatim arithmetic
       eps <- 0; it <- 0L; conv <- FALSE
@@ -250,7 +259,8 @@
     } else { est <- sef <- sep <- NA_real_; iff <- ifp <- rep(NA_real_, n) }
     lin <- vapply(names(FS), function(k) sol$cur$st[[k]]$omega_linear, 0)
     list(row = data.frame(target = tg$name, kind = tg$kind, n_group = sum(w > 0),
-                          method = switch(omega_path, log = "CV-TMLE, log-omega path, step control",
+                          method = switch(omega_path, auto = sprintf("CV-TMLE, log-omega path (clamp in folds with omega < %g), step control", omega_boundary),
+                                          log = "CV-TMLE, log-omega path, step control",
                                           clamp = "CV-TMLE, linear omega stopping at 0, step control",
                                           legacy = "CV-TMLE, legacy (linear omega, floor 1e-8)"),
                           status = sol$status, converged = identical(sol$status, "converged"),
@@ -263,6 +273,8 @@
                           floor_hit_final = sol$cur$floor_hit, floor_hit_any = hit_any || sol$cur$floor_hit,
                           omega_min = min(sol$cur$omega), omega_linear_min = min(lin),
                           omega_fit_min = min(vapply(FS, function(f) f$th$omega, 0)),
+                          folds_clamped = if (omega_path == "auto") sum(vapply(FS, function(f) f$th$omega < omega_boundary, TRUE))
+                                          else if (omega_path == "clamp") length(FS) else 0L,
                           stringsAsFactors = FALSE),
          iff = iff, ifp = ifp)
   })
@@ -287,7 +299,7 @@
                             quad_score = .rum_score_quadrature(), ridge_rel = 1e-2,
                             eig_floor_rel = 1e-6, max_iter = 50L, tol = 1e-3,
                             max_halving = 30L, check_tol = 1e-8,
-                            omega_path = c("log", "clamp"),
+                            omega_path = c("auto", "log", "clamp"), omega_boundary = 1e-4,
                             info_basis = c("constant", "model", "linear"), model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
@@ -309,11 +321,13 @@
   if (sum_check > check_tol) stop(sprintf("the shares do not sum to one at the fitted states (max |sum - 1| = %.2e)", sum_check))
   plug <- colSums(w * m0) / sum(w)
   drop_g <- which.max(plug); keep <- setdiff(seq_len(G), drop_g)
-  ev0 <- .rum_path_all(FS, dirs[keep], numeric(G - 1L), n, p, quad_score, omega_path, score = dirs)
+  ev0 <- .rum_path_all(FS, dirs[keep], numeric(G - 1L), n, p, quad_score, omega_path, score = dirs,
+                       omega_boundary = omega_boundary)
   dir_sum <- max(abs(rowSums(ev0$phi)))
   onestep <- plug + colMeans(ev0$phi)
   eval <- function(eps) {
-    r <- .rum_path_all(FS, dirs[keep], eps, n, p, quad_score, omega_path, score = dirs)
+    r <- .rum_path_all(FS, dirs[keep], eps, n, p, quad_score, omega_path, score = dirs,
+                       omega_boundary = omega_boundary)
     list(phi = r$phi[, keep, drop = FALSE], ll = r$ll, full = r)
   }
   sol <- .rum_tmle_solve(eval, G - 1L, max_iter, tol, max_halving)

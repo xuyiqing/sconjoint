@@ -169,6 +169,21 @@ test_that("the path score is the derivative of the held-out log likelihood along
   expect_gt(abs(sum(r$phi[, 1]) - (a - b) / 2e-6), 1e-3)
 })
 
+test_that("at a boundary omega the log path breaks down and the default switches that fold to the clamp", {
+  fins <- fx$fins; fins[[2]]$omega <- 1e-6                     # one fold at the trainer's lower bound
+  ffb <- function(k) fins[[k]]
+  lg <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffb, IMP, omega_path = "log")
+  au <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffb, IMP)
+  cl <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffb, IMP, omega_path = "clamp")
+  expect_true(all(au$folds_clamped == 1L))
+  expect_true(all(is.finite(au$se_population[au$converged])))
+  expect_true(all(au$omega_min >= 0))
+  expect_true(all(lg$omega_min >= 0))     # the log path can underflow omega to 0 here
+  expect_true(all(cl$folds_clamped == 3L))
+  j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, ffb, IMP)
+  if (j$converged) expect_lt(abs(sum(j$table$estimate[1:3]) - 1), 1e-12)
+})
+
 test_that("the joint update keeps shares in [0, 1] adding to exactly 1, with joint covariance", {
   sep <- rinf(".rum_tmle_dnn")(fx$data, fx$Z, fx$fold, fold_final, IMP)
   j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final, IMP)
