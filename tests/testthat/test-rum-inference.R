@@ -172,3 +172,30 @@ test_that("the model information cache is optional, private to tempdir, and exac
   expect_identical(r3$IFP, r1$IFP)
   expect_length(list.files(dir, pattern = "^toy2"), 0L)
 })
+
+test_that("the formula state and influence values work with a single feature (p = 1)", {
+  # Codex review of eae4719, finding 8: vapply() returns a vector when p = 1, and t() of it
+  # was 1 x n, so naming its rows by respondent failed
+  set.seed(8L); n <- 6L; T <- 5L
+  d <- lapply(seq_len(n), function(i) matrix(sample(c(-1, 0, 1), T, replace = TRUE), T, 1))
+  dat <- rum_data(lapply(seq_len(n), function(i) rep(0, T)), d, feature_names = "f1",
+                  metadata = list(orientation = "test"))
+  par <- rum_parameters(dat, kappa = .1, alpha = .4, loading = .3, position_variance = .5)
+  st <- rinf(".rum_state_formula")(dat, par)
+  expect_identical(dim(st$mu), c(n, 1L))
+  expect_identical(rownames(st$mu), dat$ids)
+  expect_equal(unname(st$mu[, 1]), rep(.4, n))
+  # a moderated mean (respondent-specific basis), p = 1
+  z <- cbind(1, seq_len(n) / n)
+  dat2 <- rum_data(lapply(seq_len(n), function(i) rep(0, T)), d, feature_names = "f1",
+                   mean_basis = rum_mean_basis(z, "f1"), metadata = list(orientation = "test"))
+  par2 <- rum_parameters(dat2, kappa = .1, alpha = c(.4, -.2), loading = .3, position_variance = .5)
+  st2 <- rinf(".rum_state_formula")(dat2, par2)
+  expect_equal(unname(st2$mu[, 1]), .4 - .2 * z[, 2])
+  # the formula influence values run end to end on a p = 1 fit-like object
+  fit <- list(data = dat2, par = par2, information = diag(5), score = matrix(rnorm(n * 5), n, 5))
+  fi <- rinf(".rum_formula_if")(fit, list(rinf(".rum_tgt_mean")("m", 1),
+                                          rinf(".rum_tgt_share")("s", 1, w = c(1, 1, 1, 0, 0, 0))))
+  expect_identical(dim(fi$IFP), c(n, 2L))
+  expect_true(all(is.finite(fi$IFP)))
+})

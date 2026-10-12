@@ -31,7 +31,9 @@
 .rum_state_formula <- function(data, par) {
   r <- data$r; p <- data$p; alpha <- par[1L + seq_len(r)]
   basis <- if (is.list(data$basis)) data$basis else rep(list(data$basis), data$n)
-  mu <- t(vapply(basis, function(b) drop(b %*% alpha), numeric(p)))
+  # vapply() simplifies to a vector when p = 1; reshape to p x n before transposing so that
+  # mu is always n x p
+  mu <- t(matrix(vapply(basis, function(b) drop(b %*% alpha), numeric(p)), nrow = p))
   dimnames(mu) <- list(data$ids, data$feature_names)
   list(mu = mu, kappa = unname(par[1]), loading = unname(par[1L + r + seq_len(p)]),
        omega = unname(utils::tail(par, 1)), version = "formula")
