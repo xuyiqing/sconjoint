@@ -93,18 +93,36 @@
 # once, permuted; 14 party pairs (D,R) x4, (R,D) x4, (D,D) x3, (R,R) x3 over
 # scenarios 1-13 and 16, with 16 opposite-party; 16 area-pair slots (4 each),
 # permuted; 12 women among the 32 candidates of scenarios 1-16. Everything else
-# is independent. Rows are scenario IDs 1-13 (the fitted task order); the law is
-# exchangeable over IDs, so the first T rows have the law of any T scenarios.
+# is independent, except the side of the negative candidate (below). Rows are
+# scenario IDs 1-13 (the fitted task order); the law is exchangeable over IDs, so
+# the first T rows have the law of any T scenarios.
+#
+# Negative candidate's side. The appendix table says "a coin flip", but the data
+# balance it within respondent: among the 9 negative scenarios the number shown
+# on the left has variance 1.08 (1,682 respondents), against 2.25 for 9 coin
+# flips, and its distribution matches a hypergeometric draw of 9 from a block of
+# 16 sides with 8 left (variance 1.05; chi-square p = 0.13); every pair of
+# scenarios has correlation about -1/15 (G1_design_fix.md). So each sequence
+# gets a shuffled block of 8 left and 8 right over scenario IDs 1-16, and the
+# negative candidate in scenario s sits on the left iff slot s is "left". The
+# block is built from 16 iid uniforms per row: the 13 per-scenario uniforms the
+# old coin flip used plus 3 drawn last, the 8 smallest being "left", so a seed
+# gives the same draws as before for every other attribute.
+.rum_gs_side_block <- function(u13, M, S) {
+  U <- cbind(matrix(u13, M, S), matrix(stats::runif(M * (16L - S)), M, 16L - S))
+  rk <- integer(M * 16L)
+  rk[order(row(U), U)] <- rep(seq_len(16L), M)
+  matrix(rk, M, 16L)[, seq_len(S), drop = FALSE] <= 8L
+}
+
 .rum_gs_draw <- function(M, T = 13L) {
   S <- 13L
   # democracy: 0 = generic-vs-generic, 8..16 = the negative position's code
   type <- .rum_row_perm(M, c(rep(0L, 4L), 8:16))
   neg <- type > 0L
-  neg_left <- stats::runif(M * S) < .5
+  u_side <- stats::runif(M * S)                 # side uniforms; the block is set below
   gen1 <- sample.int(7L, M * S, replace = TRUE)
   gen2 <- ((gen1 - 1L + sample.int(6L, M * S, replace = TRUE)) %% 7L) + 1L  # distinct from gen1
-  demL <- ifelse(neg, ifelse(neg_left, type, gen1), gen1)
-  demR <- ifelse(neg, ifelse(neg_left, gen1, type), gen2)
   # party pairs: scenario 16 takes (D,R) or (R,D); scenarios 1-13 permute the rest
   s16_dr <- stats::runif(M) < .5
   pair <- .rum_row_perm(M, c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L, 4L, 4L, 4L, 0L))
@@ -118,14 +136,19 @@
   femR <- fem[, 2L * seq_len(S), drop = FALSE]
   n2 <- M * S * 2L
   arr <- function(x) array(as.integer(x), c(M, S, 2L))
+  p1 <- arr(sample.int(4L, n2, replace = TRUE))
+  p2 <- arr(sample.int(4L, n2, replace = TRUE))
+  race <- arr(sample.int(4L, n2, replace = TRUE, prob = .RUM_GS_RACE_P))
+  pro <- arr(sample.int(9L, n2, replace = TRUE, prob = .RUM_GS_PRO_P))
+  neg_left <- .rum_gs_side_block(u_side, M, S)  # drawn last: 3 more uniforms per row
+  demL <- ifelse(neg, ifelse(neg_left, type, gen1), gen1)
+  demR <- ifelse(neg, ifelse(neg_left, gen1, type), gen2)
   raw <- list(
     party = .rum_side_array(.RUM_GS_PAIR_LEFT[pair], .RUM_GS_PAIR_RIGHT[pair], M, S),
     dem = .rum_side_array(demL, demR, M, S),
-    p1 = arr(sample.int(4L, n2, replace = TRUE)),
-    p2 = arr(sample.int(4L, n2, replace = TRUE)),
+    p1 = p1, p2 = p2,
     female = .rum_side_array(femL, femR, M, S),
-    race = arr(sample.int(4L, n2, replace = TRUE, prob = .RUM_GS_RACE_P)),
-    pro = arr(sample.int(9L, n2, replace = TRUE, prob = .RUM_GS_PRO_P)),
+    race = race, pro = pro,
     area = matrix(as.integer(area), M, S))
   .rum_raw_head(raw, T)
 }
@@ -399,7 +422,7 @@
         source = "Graham and Svolik (2020) online appendix, 'Candidate choices and the randomization procedure'; F_design_specs.md section 1",
         tasks = "scenarios 1-13 in scenario-ID order (display order not in the data); side 1 = displayed left",
         democracy = list(levels = .RUM_GS_DEM, generic = 1:7, negative = 8:16,
-          rule = "per sequence: 4 generic-vs-generic scenarios (two distinct generic levels, each uniform) and each of the 9 negative positions exactly once vs a uniform generic; permuted over IDs; negative side left w.p. 1/2"),
+          rule = "per sequence: 4 generic-vs-generic scenarios (two distinct generic levels, each uniform) and each of the 9 negative positions exactly once vs a uniform generic; permuted over IDs; negative side from a shuffled block of 8 left / 8 right over scenario IDs 1-16 (left w.p. 1/2 per scenario; the 9 negatives' left count is hypergeometric, variance 1.05, not binomial)"),
         party = list(pairs = c(DR = 4L, RD = 4L, DD = 3L, RR = 3L),
           rule = "14 (left, right) pairs over scenarios 1-13 and 16, permuted; 16 is opposite-party, so 1-13 hold 3 DD, 3 RR, DR = 3 or 4 (1/2 each)"),
         areas = list(pairs = paste0(.RUM_GS_AREA_P1, .RUM_GS_AREA_P2),
