@@ -31,7 +31,10 @@
 #   ridge regression of the outer products on b(z) = 1);
 # "linear": the regression on b(z) = [1, z], ridge penalty ridge_rel * mean(diag(B'B)) on the
 #   slopes; one matrix per respondent;
-# "model": each respondent's own model-based information (rum-inference-model.R).
+# "model": each respondent's own model-based information (rum-inference-model.R);
+# "conditional": each respondent's own information with designs drawn from the experiment's
+#   randomization law and coded with the respondent's covariates (rum-information-conditional.R;
+#   options through cond = .rum_cond_options(...)).
 # Every matrix is made positive definite by an eigenvalue floor (eig_floor_rel).
 
 .rum_target_weights <- function(targets, n)
@@ -53,11 +56,13 @@
 .rum_fold_information <- function(info_basis, data, Z, ff, fin, k, tr, te, ridge_rel,
                                   eig_floor_rel, model) {
   n <- data$n; p <- data$p; q <- p + 2L; D <- p + q; S <- ff$S
-  if (info_basis == "model") {
-    MI <- .rum_model_info_fold(data, ff$mu, ff$th, k, model$M, model$quad, model$seed,
+  if (info_basis %in% c("model", "conditional")) {
+    MI <- if (info_basis == "model") .rum_model_info_fold(data, ff$mu, ff$th, k, model$M, model$quad, model$seed,
                                model$cache_net, model$cache_dir, fin, model$cache_write,
-                               model$cache_require)
-    W <- .rum_weight_parts(function(i) MI$I[i, , ], n, p, q, eig_floor_rel)
+                               model$cache_require) else .rum_cond_info_fold(data, ff$mu, ff$th, k, model$cond, fin)
+    W <- if (info_basis == "conditional" && isTRUE(model$cond$null_zero))
+      .rum_cond_weight_parts(MI$I, p, q, eig_floor_rel) else
+      .rum_weight_parts(function(i) MI$I[i, , ], n, p, q, eig_floor_rel)
     Ite <- apply(MI$I[te, , , drop = FALSE], c(2, 3), mean)
     Ote <- crossprod(S[te, , drop = FALSE]) / sum(te)
     err <- norm(Ite - Ote, "F") / norm(Ote, "F")
@@ -125,15 +130,16 @@
 # asymptotically equivalent (mean(phi) = est - plug -> 0), but only the default is the
 # construction the paper states. Kept, by explicit opt-in, for parity with Phase C.
 .rum_onestep <- function(data, Z, fold, fold_final, targets, quad_score = .rum_score_quadrature(),
-                         info_basis = c("constant", "linear", "model"), ridge_rel = 1e-2,
+                         info_basis = c("constant", "linear", "model", "conditional"), ridge_rel = 1e-2,
                          eig_floor_rel = 1e-6, model_M = NULL, model_quad = .rum_info_quadrature(),
                          model_seed = 20260926L, cache_net = NULL, cache_dir = NULL,
-                         cache_write = TRUE, cache_require = FALSE,
+                         cache_write = TRUE, cache_require = FALSE, cond = NULL,
                          pop_center = c("estimate", "plug_in")) {
   info_basis <- match.arg(info_basis); pop_center <- match.arg(pop_center)
   ids <- data$ids; n <- data$n; p <- data$p; ks <- sort(unique(fold)); nt <- length(targets)
   model <- .rum_model_options(model_M, model_quad, model_seed, cache_net, cache_dir,
                               cache_write, cache_require)
+  model$cond <- cond                     # conditional basis: .rum_cond_options() (rum-information-conditional.R)
   wmat <- .rum_target_weights(targets, n)
   M <- PHI <- matrix(NA_real_, n, nt); diag_fold <- meta <- list()
   loads <- matrix(NA_real_, length(ks), p)
@@ -195,15 +201,16 @@
 # cache controls; the cache directory has no default here). Its numbers for subgroup targets
 # need pop_center = "plug_in" (see .rum_onestep).
 .rum_debias_dnn <- function(data, Z, fold, fold_final, targets, quad_score = .rum_score_quadrature(),
-                            info_basis = c("constant", "linear", "model"), ridge_rel = 1e-2,
+                            info_basis = c("constant", "linear", "model", "conditional"), ridge_rel = 1e-2,
                             eig_floor_rel = 1e-6, model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                            cache_require = FALSE, pop_center = c("estimate", "plug_in")) {
+                            cache_require = FALSE, cond = NULL,
+                            pop_center = c("estimate", "plug_in")) {
   info_basis <- match.arg(info_basis); pop_center <- match.arg(pop_center)
   .rum_onestep_table(.rum_onestep(data, Z, fold, fold_final, targets, quad_score, info_basis,
     ridge_rel, eig_floor_rel, model_M, model_quad, model_seed, cache_net, cache_dir,
-    cache_write, cache_require, pop_center = pop_center))
+    cache_write, cache_require, cond, pop_center = pop_center))
 }
 
 # ---- DNN version, bounded targets: cross-validated targeted update (CV-TMLE) ------------
@@ -219,14 +226,15 @@
 # basis other than constant) info_basis.
 .rum_tmle_dnn <- function(data, Z, fold, fold_final, targets, quad_score = .rum_score_quadrature(),
                           ridge_rel = 1e-2, eig_floor_rel = 1e-6, max_iter = 20L, tol = 1e-3,
-                          info_basis = c("constant", "model", "linear"), model_M = NULL,
+                          info_basis = c("constant", "model", "linear", "conditional"), model_M = NULL,
                           model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                           cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                          cache_require = FALSE) {
+                          cache_require = FALSE, cond = NULL) {
   info_basis <- match.arg(info_basis)
   ids <- data$ids; n <- data$n; p <- data$p; ks <- sort(unique(fold)); nt <- length(targets)
   model <- .rum_model_options(model_M, model_quad, model_seed, cache_net, cache_dir,
                               cache_write, cache_require)
+  model$cond <- cond
   wmat <- .rum_target_weights(targets, n)
   FS <- list()                                       # per fold: data subset, state, parts
   for (k in ks) {
