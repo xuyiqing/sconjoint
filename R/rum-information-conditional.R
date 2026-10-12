@@ -143,11 +143,12 @@
     g = matrix(sample.int(G, M * ny, replace = TRUE, prob = quad$weight), M, ny),
     U = array(stats::runif(M * ny * crn$T), c(M, ny, crn$T)))) else NULL
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
-  chk <- c(0, 0); Ys <- list()
+  chk <- c(0, 0); Ys <- list(); nA <- ceiling(M / 2)
   for (grp in split(seq_len(n), paste(crn$key, Tj))) {
     T <- Tj[grp[1L]]; dk <- crn$designs[[crn$key[grp[1L]]]]; ng <- length(grp); J <- 3L * T
     if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
     Yall <- Ys[[as.character(T)]]; MUg <- mu[grp, , drop = FALSE]
+    acc <- accA <- array(0, c(D, ng, D))             # (b, respondent, a): I_j[b, a], summed over designs
     for (m in seq_len(M)) {
       Dm <- matrix(dk[m, seq_len(T), ], T, p)
       Am <- .rum_cond_A(Dm, s); amat <- th$kappa + MUg %*% t(Dm); b <- drop(Dm %*% th$loading)
@@ -158,20 +159,19 @@
         KK[, j] <- r$K; xo[j] <- r$xo
         if (method == "exact") chk <- pmax(chk, r$check)
       }
-      # contributions A_m K_j A_m' for every respondent of the group, two matrix products
-      X <- Am %*% matrix(KK, J, J * ng)                           # D x (J ng): A K_j blocks
-      X <- matrix(aperm(array(X, c(D, J, ng)), c(1L, 3L, 2L)), D * ng, J)
-      Cm <- aperm(array(X %*% t(Am), c(D, ng, D)), c(2L, 1L, 3L))  # ng x D x D
-      if (any(xo != 0)) Cm[, D, D] <- Cm[, D, D] + xo
-      I[grp, , ] <- I[grp, , , drop = FALSE] + Cm
-      if (halves) {
-        if (m %% 2L == 1L) IA[grp, , ] <- IA[grp, , , drop = FALSE] + Cm
-        else IB[grp, , ] <- IB[grp, , , drop = FALSE] + Cm
-      }
+      # A_m K_j A_m' for every respondent of the group, in two matrix products:
+      # X = A_m [K_1 .. K_ng] (D x J ng); then A_m X_j' for all j at once
+      X <- Am %*% matrix(KK, J, J * ng)
+      Cm <- array(Am %*% matrix(t(X), J, ng * D), c(D, ng, D))
+      if (any(xo != 0)) Cm[D, , D] <- Cm[D, , D] + xo
+      acc <- acc + Cm
+      if (halves && m %% 2L == 1L) accA <- accA + Cm
     }
+    I[grp, , ] <- aperm(acc, c(2L, 1L, 3L))
+    if (halves) { IA[grp, , ] <- aperm(accA, c(2L, 1L, 3L)); IB[grp, , ] <- aperm(acc - accA, c(2L, 1L, 3L)) }
   }
   I <- I / M
-  if (halves) { IA <- IA / ceiling(M / 2); IB <- IB / floor(M / 2) }
+  if (halves) { IA <- IA / nA; IB <- IB / (M - nA) }
   list(I = I, IA = IA, IB = IB, M = M, method = method, ny = if (method == "exact") NA_integer_ else ny,
        check = if (method == "exact") chk else c(NA_real_, NA_real_))
 }
