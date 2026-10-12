@@ -1,0 +1,321 @@
+# Tests of the identification check (R/rum-correction-solver.R), the targeted updates with
+# omega on the log scale and the joint simplex update (R/rum-bounded-joint.R), and the
+# discrete-switch AMEs (R/rum-targets-switch.R). Inputs: the small simulated fixture of
+# test-rum-inference.R (90 respondents, 3 features, 3 folds of untrained networks), B1's
+# design generators, and simulated data. Single-threaded; nothing is written.
+
+rinf <- function(nm) get(nm, envir = asNamespace("sconjoint"))
+fx <- readRDS(test_path("fixtures", "rum-inference-fixture.rds"))
+fold_final <- function(k) fx$fins[[k]]
+CTOR <- list(mean = rinf(".rum_tgt_mean"), share = rinf(".rum_tgt_share"),
+             choice = rinf(".rum_tgt_choice"), choice_pref = rinf(".rum_tgt_choice_pref"),
+             choice_set = rinf(".rum_tgt_choice_set"),
+             choice_set_pref = rinf(".rum_tgt_choice_set_pref"),
+             lincomb = rinf(".rum_tgt_lincomb"))
+spec_targets <- function(specs) lapply(specs, function(s) {
+  a <- s$args; if (s$f == "lincomb") a$parts <- spec_targets(a$parts)
+  do.call(CTOR[[s$f]], c(list(name = s$name), a))
+})
+TG <- spec_targets(fx$specs)
+BND <- TG[vapply(TG, function(t) t$kind %in% rinf(".rum_bounded_kinds"), TRUE)]
+# importance shares over single features: r_g = E_u[b_g^2 / sum_h b_h^2], b = mu + lambda u
+UQ <- rinf(".rum_gh_rule")(21L)
+imp_target <- function(name, g, w = NULL) list(name = name, kind = "importance", w = w,
+  m = function(mu, th) {
+    acc <- 0
+    for (j in seq_along(UQ$z)) {
+      B <- mu + matrix(th$loading * UQ$z[j], nrow(mu), ncol(mu), byrow = TRUE)
+      acc <- acc + UQ$w[j] * B[, g]^2 / rowSums(B^2)
+    }
+    acc
+  })
+IMP <- lapply(1:3, function(g) imp_target(paste0("imp", g), g))
+
+# ---- identification check ------------------------------------------------------------------
+
+test_that("the check flags targets loading on a feature some respondents never face", {
+  # respondents in group 1 never see feature 2: its design column is always 0
+  p <- 3L; n <- 40L
+  set.seed(1)
+  mu <- matrix(rnorm(n * p, sd = .2), n, p); th <- list(kappa = .1, loading = c(.3, .2, .1), omega = .5)
+  grp <- rep(1:2, each = n / 2)
+  null <- list(N = list(matrix(c(0, 1, 0), 3, 1), matrix(0, 3, 0)), group = grp,
+               keys = c("never sees f2", "all"), features = c("f1", "f2", "f3"),
+               source = "test", tol_rel = 1e-8)
+  tg <- list(rinf(".rum_tgt_mean")("mean f1", c(1, 0, 0)),
+             rinf(".rum_tgt_mean")("mean f2", c(0, 1, 0)),
+             rinf(".rum_tgt_share")("share f2 + f3", c(0, 1, 1)),
+             rinf(".rum_tgt_mean")("mean f2, group 2", c(0, 1, 0), w = as.numeric(grp == 2)))
+  chk <- rinf(".rum_identification_check")
+  expect_error(chk(tg, mu, th, null), "mean f2: 20 of 40 respondents")
+  r <- chk(tg, mu, th, null, on_fail = "none")
+  expect_identical(r$table$n_not_identified, c(0L, 20L, 20L, 0L))
+  expect_identical(r$floor_hits, 20L)
+  expect_identical(names(r$suggest_w), c("mean f2", "share f2 + f3"))
+  expect_identical(r$suggest_w[["mean f2"]], as.numeric(grp == 2))
+  expect_match(r$table$null_span[2], "f2")
+  # restricting to the suggestion passes
+  tg2 <- tg[2]; tg2[[1]]$w <- r$suggest_w[["mean f2"]]
+  expect_identical(chk(tg2, mu, th, null)$table$n_not_identified, 0L)
+})
+
+test_that("the null space from the information matrices matches the design support", {
+  p <- 3L; set.seed(2)
+  I <- array(0, c(4, 2 * p + 2, 2 * p + 2))
+  for (i in 1:4) { X <- matrix(rnorm(50 * 8), 50, 8); if (i > 2) X[, 2] <- 0; I[i, , ] <- crossprod(X) / 50 }
+  ns <- rinf(".rum_nullspace_info")(I, p)
+  expect_identical(ns$group, c(1L, 1L, 2L, 2L))
+  expect_identical(unname(ns$dims), c(0L, 1L))
+  expect_equal(abs(drop(ns$N[[2]])), c(0, 1, 0), tolerance = 1e-10)
+})
+
+test_that("GS pure independents have a co-partisan null direction in the design law", {
+  ns <- rinf(".rum_nullspace_design")("gs", resp = c(-3, 0, 2, 0), M = 200L, seed = 5L)
+  expect_identical(unname(ns$dims[ns$keys == "I"]), 1L)
+  expect_identical(unname(ns$dims[ns$keys != "I"]), c(0L, 0L))
+  NI <- ns$N[[which(ns$keys == "I")]]
+  expect_equal(abs(NI[1, 1]), 1, tolerance = 1e-12)                  # diff_respParty
+  expect_identical(ns$group[c(2, 4)], rep(which(ns$keys == "I"), 2))
+})
+
+test_that("the checked one-step leaves identified targets' numbers unchanged and restricts the others", {
+  n <- fx$data$n; grp <- fx$grp
+  null <- list(N = list(matrix(c(0, 0, 1), 3, 1), matrix(0, 3, 0)),
+               group = ifelse(grp == 1, 1L, 2L), keys = c("no f3", "all"),
+               features = fx$data$feature_names, source = "test", tol_rel = 1e-8)
+  tg <- list(rinf(".rum_tgt_mean")("mean f1", c(1, 0, 0)),
+             rinf(".rum_tgt_mean")("mean f3", c(0, 0, 1)))
+  expect_error(rinf(".rum_onestep_checked")(fx$data, fx$Z, fx$fold, fold_final, tg, null),
+               "mean f3: 4[0-9] of 90 respondents|mean f3: [0-9]+ of 90 respondents")
+  r <- rinf(".rum_onestep_checked")(fx$data, fx$Z, fx$fold, fold_final, tg, null,
+                                    on_unidentified = "restrict")
+  base <- rinf(".rum_onestep")(fx$data, fx$Z, fx$fold, fold_final, tg[1])
+  expect_identical(unname(r$est[1]), unname(base$est[1]))
+  expect_identical(unname(r$IFP[, 1]), unname(base$IFP[, 1]))
+  expect_identical(r$identification$n_dropped, c(0L, as.integer(sum(grp == 1))))
+  expect_identical(r$restricted_w[["mean f3"]], as.numeric(grp != 1))
+  expect_equal(unname(r$n_group[2]), sum(grp != 1))
+})
+
+# ---- targeted updates -------------------------------------------------------------------------
+
+test_that("the legacy path reproduces .rum_tmle_dnn exactly and records floor hits", {
+  old <- rinf(".rum_tmle_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND)
+  leg <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, fold_final, BND, omega_path = "legacy",
+                                on_fail = "last")
+  expect_lt(max(abs(old$estimate - leg$estimate)), 1e-12)
+  expect_lt(max(abs(old$se_population - leg$se_population)), 1e-12)
+  expect_lt(max(abs(attr(old, "IFP") - attr(leg, "IFP"))), 1e-12)
+  expect_identical(old$converged, leg$converged)
+  expect_identical(as.integer(old$iterations), leg$iterations)
+  expect_true(all(c("floor_hit_any", "omega_linear_min") %in% names(leg)))
+})
+
+test_that("forced non-convergence returns a failure status and no number", {
+  r <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, fold_final, BND, max_iter = 0L)
+  expect_true(all(r$status == "max_iter"))
+  expect_true(all(is.na(r$estimate) & is.na(r$se_population) & is.na(r$lower_population)))
+  expect_true(all(is.na(attr(r, "IFP"))))
+  expect_identical(attr(r, "n_failed"), length(BND))
+  j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final, IMP, max_iter = 1L)
+  expect_identical(j$status, "max_iter")
+  expect_true(all(is.na(j$table$estimate)))
+  bd <- rinf(".rum_bounded_dnn")(fx$data, fx$Z, fx$fold, fold_final, BND, max_iter = 0L,
+                                 update = "log_omega")
+  expect_true(all(is.na(bd$estimate)) && all(bd$status == "max_iter"))
+  expect_identical(attr(bd, "n_failed"), length(BND))
+})
+
+test_that("on a path that crosses the old floor, log-omega stays positive and converges", {
+  # a share whose correction pulls omega down hard: kappa-heavy choice target in a fold
+  # state with a tiny omega
+  fins <- lapply(fx$fins, function(f) { f$omega <- 2e-3; f })
+  ffl <- function(k) fins[[k]]
+  tg <- list(rinf(".rum_tgt_choice_set")("choice", rbind(c(1, 0, 0)), coef = 1))
+  tg[[1]]$kind <- "share"
+  leg <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg, omega_path = "legacy",
+                                on_fail = "last")
+  new <- rinf(".rum_tmle_path")(fx$data, fx$Z, fx$fold, ffl, tg)
+  expect_true(new$omega_min > 0)
+  expect_false(new$floor_hit_any)
+  if (leg$floor_hit_any) expect_lt(leg$omega_linear_min, 1e-8)
+  expect_true(new$status %in% c("converged", "max_iter", "step_failed"))
+  if (new$converged) expect_true(new$estimate >= 0 && new$estimate <= 1)
+})
+
+test_that("the joint update keeps shares in [0, 1] adding to exactly 1, with joint covariance", {
+  sep <- rinf(".rum_tmle_dnn")(fx$data, fx$Z, fx$fold, fold_final, IMP)
+  j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final, IMP)
+  tb <- j$table
+  expect_identical(j$status, "converged")
+  est <- tb$estimate[1:3]
+  expect_true(all(est >= 0 & est <= 1))
+  expect_lt(abs(sum(est) - 1), 1e-12)
+  expect_lt(abs(sum(tb$onestep[1:3]) - 1), 1e-8)       # plain corrections add to zero
+  expect_lt(j$dir_sum_max, 1e-6)
+  expect_lt(max(abs(rowSums(j$IFP))), 1e-6)            # stacked influence values add to zero
+  expect_lt(abs(sum(j$V_population)), 1e-12)
+  expect_equal(unname(sqrt(diag(j$V_population))), tb$se_population[1:3], tolerance = 1e-12)
+  expect_gt(abs(sum(sep$estimate) - 1), 1e-3)          # the separate updates do not add to 1
+  # subgroup weights
+  jw <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final,
+                                lapply(1:3, function(g) imp_target(paste0("w", g), g, w = fx$grp)))
+  expect_lt(abs(sum(jw$table$estimate[1:3]) - 1), 1e-12)
+  expect_error(rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final, IMP[1:2]),
+               "do not sum to one")
+})
+
+test_that("where the bound does not bind, the targeted estimates match the one-step to first order", {
+  # data simulated from the fitted state itself (the same state in every fold), so the
+  # corrections are O(n^-1/2) and targeted minus one-step is O(1/n): small against the SE
+  set.seed(11); n <- 12000L; p <- 3L; T <- 6L
+  net <- fx$fins[[1]]$network; th <- fx$fins[[1]][c("kappa", "loading", "omega")]
+  Z <- matrix(rnorm(n * 2), n, 2, dimnames = list(sprintf("r%05d", 1:n), colnames(fx$Z)))
+  mu <- rum_dnn_gaussian_forward(net, Z)
+  d <- lapply(seq_len(n), function(i) matrix(sample(c(-1, 0, 1), T * p, replace = TRUE), T, p))
+  u <- rnorm(n); v <- rnorm(n)
+  y <- lapply(seq_len(n), function(i) {
+    eta <- th$kappa + drop(d[[i]] %*% (mu[i, ] + th$loading * u[i])) + sqrt(th$omega) * v[i]
+    as.numeric(runif(T) < stats::plogis(eta)) })
+  dat <- rum_data(y, d, ids = rownames(Z), feature_names = fx$data$feature_names,
+                  metadata = list(orientation = "test"))
+  fold <- rep(1:3, length.out = n); ffs <- function(k) fx$fins[[1]]
+  tg <- c(list(rinf(".rum_tgt_share")("share_f1", c(1, 0, 0))), IMP)   # IMP last
+  ji <- 2:4
+  one <- rinf(".rum_onestep")(dat, Z, fold, ffs, tg)
+  se <- apply(one$IFP, 2, stats::sd) / sqrt(n)
+  tp <- rinf(".rum_tmle_path")(dat, Z, fold, ffs, tg)
+  expect_true(all(tp$converged))
+  expect_true(all(abs(tp$estimate - one$est) < 0.05 * se))
+  expect_lt(max(abs(tp$onestep - one$est)), 1e-12)
+  j <- rinf(".rum_tmle_joint")(dat, Z, fold, ffs, IMP)
+  expect_true(all(abs(j$table$estimate[1:3] - one$est[ji]) < 0.05 * se[ji]))
+  expect_lt(max(abs(j$table$se_population[1:3] / se[ji] - 1)), 0.05)
+})
+
+# ---- discrete-switch AMEs ------------------------------------------------------------------
+
+# brute force: P(choose focal) by nested integrate() over u and v
+p_focal <- function(D, s, mu, lam, kappa, omega, position) {
+  f <- function(u, v) stats::plogis((if (position) s * (kappa + sqrt(omega) * v) else 0) +
+                                    sum(D * mu) + sum(D * lam) * u)
+  stats::integrate(function(v) vapply(v, function(vv) stats::integrate(function(u)
+    f(u, vv) * stats::dnorm(u), -Inf, Inf, rel.tol = 1e-11)$value, 0) * stats::dnorm(v),
+    -Inf, Inf, rel.tol = 1e-10)$value
+}
+
+test_that("the switch AME equals brute-force enumeration on a tiny design with an interaction", {
+  # attributes a (2 levels), b (3 levels); features a2, b2, b3, a2:b3; uniform independent
+  # design, one task: enumerate all 36 (A, B) pairs
+  levs <- expand.grid(a = 1:2, b = 1:3)
+  x <- function(a, b) c(a == 2, b == 2, b == 3, (a == 2) * (b == 3)) * 1
+  pairs <- expand.grid(A = 1:6, B = 1:6)
+  raw <- list(a = array(0L, c(36, 1, 2)), b = array(0L, c(36, 1, 2)))
+  raw$a[, 1, 1] <- levs$a[pairs$A]; raw$b[, 1, 1] <- levs$b[pairs$A]
+  raw$a[, 1, 2] <- levs$a[pairs$B]; raw$b[, 1, 2] <- levs$b[pairs$B]
+  code <- function(r) {
+    X1 <- t(mapply(x, r$a[, 1, 1], r$b[, 1, 1])); X2 <- t(mapply(x, r$a[, 1, 2], r$b[, 1, 2]))
+    array(X1 - X2, c(dim(r$a)[1], 1, 4))
+  }
+  mu <- rbind(c(.4, -.3, .5, -.8), c(-.2, .6, .1, .9)); lam <- c(.3, -.2, .4, .5)
+  th <- list(kappa = .25, loading = lam, omega = .6)
+  for (position in c(TRUE, FALSE)) {
+    rows <- rinf(".rum_switch_rows")(raw, code, "a", 2L, 1L)
+    tg <- rinf(".rum_tgt_choice_rows")("ame a", rows, position = position, order = 41L)
+    got <- tg$m(mu, th)
+    bf <- vapply(1:2, function(i) {
+      acc <- 0
+      for (r in 1:36) for (s in 1:2) {
+        A <- c(raw$a[r, 1, 1], raw$b[r, 1, 1]); B <- c(raw$a[r, 1, 2], raw$b[r, 1, 2])
+        foc <- if (s == 1) A else B; opp <- if (s == 1) B else A
+        D1 <- x(2, foc[2]) - x(opp[1], opp[2]); D0 <- x(1, foc[2]) - x(opp[1], opp[2])
+        sg <- if (s == 1) 1 else -1
+        acc <- acc + p_focal(D1, sg, mu[i, ], lam, th$kappa, th$omega, position) -
+          p_focal(D0, sg, mu[i, ], lam, th$kappa, th$omega, position)
+      }
+      acc / 72 }, 0)
+    expect_lt(max(abs(got - bf)), 1e-8)
+    # exact derivatives against central differences
+    g <- tg$grad(mu, th); tg2 <- tg; tg2$grad <- NULL
+    nd <- rinf(".rum_target_grad")(tg2, mu, th, h = 1e-5)
+    expect_lt(max(abs(g$gm - nd$gm)), 1e-8)
+    expect_lt(max(abs(g$gt - nd$gt)), 1e-8)
+  }
+  # the conditional (difference-in-means) version equals the switch version here: the
+  # attribute is independent of everything else in the task
+  rc <- rinf(".rum_switch_rows")(raw, code, "a", 2L, 1L, context = "conditional")
+  tc <- rinf(".rum_tgt_choice_rows")("dm a", rc, order = 41L)
+  ts <- rinf(".rum_tgt_choice_rows")("ame a", rinf(".rum_switch_rows")(raw, code, "a", 2L, 1L),
+                                     order = 41L)
+  expect_lt(max(abs(tc$m(mu, th) - ts$m(mu, th))), 1e-12)
+})
+
+test_that("an attribute without interaction weight has the same AME with or without interaction columns", {
+  raw <- rinf(".rum_design_draw_raw")("sw_additive", 300L, seed = 3L)
+  set.seed(4); n <- 5L
+  mu13 <- matrix(rnorm(n * 13, sd = .5), n, 13); lam13 <- rnorm(13, sd = .3)
+  mu72 <- cbind(mu13, matrix(0, n, 59)); lam72 <- c(lam13, numeric(59))
+  th13 <- list(kappa = .1, loading = lam13, omega = .4); th72 <- th13; th72$loading <- lam72
+  for (a in list(list("gender", 2L, 1L), list("talent", 4L, 1L), list("child", 3L, 1L))) {
+    t13 <- rinf(".rum_tgt_switch_ame")("x", "sw_additive", raw, a[[1]], a[[2]], a[[3]])
+    t72 <- rinf(".rum_tgt_switch_ame")("x", "sw_explicit", raw, a[[1]], a[[2]], a[[3]])
+    expect_lt(max(abs(t13$m(mu13, th13) - t72$m(mu72, th72))), 1e-12)
+    expect_lt(max(abs(t13$grad(mu13, th13)$gm - t72$grad(mu72, th72)$gm[, 1:13])), 1e-12)
+  }
+  # a nonzero interaction weight on gender x run changes the gender AME (the coder updates it)
+  k <- which(rinf(".RUM_SW_FEATURES_EXPLICIT") == "cand_genderMale:cand_runYes")
+  mu72b <- mu72; mu72b[, k] <- 1
+  t72 <- rinf(".rum_tgt_switch_ame")("x", "sw_explicit", raw, "gender", 2L, 1L)
+  t13 <- rinf(".rum_tgt_switch_ame")("x", "sw_additive", raw, "gender", 2L, 1L)
+  expect_gt(min(abs(t72$m(mu72b, th72) - t13$m(mu13, th13))), 1e-3)
+  # and switching an attribute not in that interaction is unchanged only to the extent that
+  # its contexts never meet it: the agenda AME moves too (the interaction enters every task)
+  expect_true(all(is.finite(t72$m(mu72b, th72))))
+})
+
+test_that("on a large randomized simulation the true-law AME equals the design-based AMCE", {
+  set.seed(21); n <- 30000L
+  spec <- rinf(".rum_design_spec")("sw_explicit")
+  raw <- rinf(".rum_design_draw_raw")(spec, n, seed = 22L)
+  d <- spec$code(raw)                                          # n x 3 x 72
+  theta <- c(-.3, .2, rnorm(11, sd = .3), rnorm(59, sd = .15))
+  lam <- c(rnorm(13, sd = .4), numeric(59)); kappa <- .3; omega <- .5
+  u <- rnorm(n); v <- rnorm(n)
+  y <- matrix(0, n, 3)
+  for (t in 1:3) {
+    eta <- kappa + drop(d[, t, ] %*% theta) + drop(d[, t, ] %*% lam) * u + sqrt(omega) * v
+    y[, t] <- as.numeric(runif(n) < stats::plogis(eta))
+  }
+  ctx <- rinf(".rum_design_draw_raw")(spec, 4000L, seed = 23L)
+  mu <- matrix(theta, 1, 72); th <- list(kappa = kappa, loading = lam, omega = omega)
+  for (a in list(list("gender", 2L, 1L), list("agenda", 3L, 1L), list("talent", 6L, 1L))) {
+    dm <- rinf(".rum_dm_amce")(as.vector(raw[[a[[1]]]][, , 1]), as.vector(raw[[a[[1]]]][, , 2]),
+                               as.vector(y), rep(seq_len(n), 3), a[[2]], a[[3]])
+    for (cx in c("switch", "conditional")) {
+      tg <- rinf(".rum_tgt_switch_ame")("x", spec, ctx, a[[1]], a[[2]], a[[3]], context = cx)
+      truth <- tg$m(mu, th)
+      expect_lt(abs(truth - dm[["estimate"]]), 4 * dm[["se"]])
+    }
+  }
+  # without position effects the AME differs (kappa = .3 and omega = .5 enter the level)
+  tg0 <- rinf(".rum_tgt_switch_ame")("x", spec, ctx, "gender", 2L, 1L, position = FALSE)
+  tg1 <- rinf(".rum_tgt_switch_ame")("x", spec, ctx, "gender", 2L, 1L)
+  expect_gt(abs(tg0$m(mu, th) - tg1$m(mu, th)), 1e-4)
+})
+
+test_that("GS co-partisan switches are defined for partisans only", {
+  raw <- rinf(".rum_design_draw_raw")("gs", 20L, seed = 9L)
+  keys <- c("D", "R", "I", "D")
+  lev <- function(k) c(D = 1L, R = 2L, I = NA)[[k]]; ref <- function(k) c(D = 2L, R = 1L, I = NA)[[k]]
+  tg <- rinf(".rum_tgt_switch_ame")("copartisan", "gs", raw, "party", lev, ref, keys = keys)
+  expect_identical(tg$excluded, 3L)
+  expect_identical(tg$w, c(1, 1, 0, 1))
+  mu <- matrix(0, 4, 30); mu[, 1] <- 1
+  th <- list(kappa = 0, loading = numeric(30), omega = .3)
+  m <- tg$m(mu, th)
+  expect_gt(min(m[-3]), 0); expect_identical(m[3], 0)
+  # the rows recode the co-partisan column from the respondent's party
+  ch <- rinf(".rum_identification_check")(list(tg), mu, th,
+    rinf(".rum_nullspace_design")("gs", resp = keys, M = 100L), on_fail = "none")
+  expect_identical(ch$table$n_not_identified, 0L)
+})

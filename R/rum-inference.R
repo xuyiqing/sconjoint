@@ -273,8 +273,30 @@
 # Bounded targets (quantities in [0, 1]): the CV-TMLE estimate with its Wald interval
 # truncated to [0, 1]. Returns the one-step table's columns plus the method, so callers can
 # swap these rows in; attributes IFF and IFP from the CV-TMLE. Arguments after targets go
-# to .rum_tmle_dnn().
-.rum_bounded_dnn <- function(data, Z, fold, fold_final, targets, ...) {
+# to .rum_tmle_dnn(). update = "log_omega" uses .rum_tmle_path() instead (rum-bounded-joint.R:
+# omega on the log scale, step control, and estimate NA with status "max_iter",
+# "step_failed" or "nonfinite" when the update fails; extra columns status and n_failed
+# attribute); the default "legacy" is the reproduction's routine, unchanged.
+.rum_bounded_dnn <- function(data, Z, fold, fold_final, targets, ...,
+                             update = c("legacy", "log_omega")) {
+  update <- match.arg(update)
+  if (update == "log_omega") {
+    tp <- .rum_tmle_path(data, Z, fold, fold_final, targets, ..., omega_path = "log")
+    out <- data.frame(target = tp$target, kind = tp$kind, n_group = tp$n_group,
+                      info_basis = if (is.null(list(...)$info_basis)) "constant" else list(...)$info_basis,
+                      plug_in = tp$plug_in, estimate = tp$estimate,
+                      se_population = tp$se_population, lower_population = tp$lower_population,
+                      upper_population = tp$upper_population, se_fixed = tp$se_fixed,
+                      lower_fixed = tp$lower_fixed, upper_fixed = tp$upper_fixed,
+                      correction_in_se = (tp$estimate - tp$plug_in) / tp$se_population,
+                      method = "CV-TMLE (log-omega path), Wald interval truncated to [0, 1]",
+                      tmle_converged = tp$converged, tmle_iterations = tp$iterations,
+                      status = tp$status, stringsAsFactors = FALSE)
+    rownames(out) <- out$target
+    attr(out, "IFF") <- attr(tp, "IFF"); attr(out, "IFP") <- attr(tp, "IFP")
+    attr(out, "n_failed") <- attr(tp, "n_failed")
+    return(out)
+  }
   tm <- .rum_tmle_dnn(data, Z, fold, fold_final, targets, ...)
   lg <- function(est, se, sgn) pmin(pmax(est + sgn * 1.96 * se, 0), 1)       # truncated Wald
   out <- data.frame(target = tm$target, kind = tm$kind, n_group = tm$n_group,
