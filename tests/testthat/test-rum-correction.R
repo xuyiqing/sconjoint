@@ -97,6 +97,65 @@ test_that("the checked one-step leaves identified targets' numbers unchanged and
   expect_equal(unname(r$n_group[2]), sum(grp != 1))
 })
 
+test_that("the check catches a mean confounded with kappa (a feature constant in every task)", {
+  # Codex review of eae4719, finding 2: with d = 1 for feature 1 in every task, s_mu1 = s_kappa.
+  # I_mumu is positive definite, so the mean-block check passes, but mu1 + c, kappa - c leaves
+  # the likelihood unchanged: a target loading on mu1 is not identified.
+  set.seed(41); p <- 3L; B <- 400L; T <- 6L
+  DL <- lapply(seq_len(T), function(t) cbind(1, matrix(sample(c(-1, 0, 1), B * 2, TRUE), B, 2)))
+  th <- list(kappa = .2, loading = c(.3, .4, -.2), omega = .5)
+  MU <- matrix(rnorm(B * p, sd = .3), B, p)
+  u <- rnorm(B); v <- rnorm(B)
+  Y <- sapply(seq_len(T), function(t) as.numeric(runif(B) < plogis(th$kappa +
+    rowSums(DL[[t]] * (MU + outer(u, th$loading))) + sqrt(th$omega) * v)))
+  S <- rinf(".rum_seq_scores")(MU, DL, Y, th, rum_quadrature(c(11L, 9L)))
+  expect_lt(max(abs(S[, 1] - S[, p + 1])), 1e-12)            # s_mu1 = s_kappa
+  I <- crossprod(S) / B
+  tg <- list(rinf(".rum_tgt_mean")("mean f1", c(1, 0, 0)),
+             rinf(".rum_tgt_mean")("mean f2", c(0, 1, 0)),
+             rinf(".rum_tgt_share")("share f1 + f2", c(1, 1, 0)),
+             rinf(".rum_tgt_mean")("mean f2 - f3", c(0, 1, -1)))
+  chk <- rinf(".rum_identification_check")
+  null <- rinf(".rum_nullspace_info")(array(rep(I, each = B), c(B, dim(I))), p)
+  old <- chk(tg, MU, th, null, on_fail = "none")              # the mean-block check alone
+  expect_identical(old$table$n_not_identified, c(0L, 0L, 0L, 0L))
+  new <- chk(tg, MU, th, null, on_fail = "none", info = I)
+  expect_identical(new$table$common_confounded, c(TRUE, FALSE, TRUE, FALSE))
+  expect_gt(new$table$max_rel_common[1], .5)
+  NJ <- new$common$null_J; expect_identical(ncol(NJ), 1L)
+  expect_equal(abs(unname(NJ["kappa", 1])), 1, tolerance = 1e-6)      # the kappa direction
+  expect_error(chk(tg, MU, th, null, info = I), "confounded")
+  expect_silent(chk(tg[c(2, 4)], MU, th, null, info = I))
+  # per-respondent information gives the same answer
+  new2 <- chk(tg, MU, th, null, on_fail = "none", info = array(rep(I, each = B), c(B, dim(I))))
+  expect_identical(new2$table$common_confounded, new$table$common_confounded)
+  # without the confounding (feature 1 varies) nothing is flagged
+  DL2 <- lapply(DL, function(d) { d[, 1] <- sample(c(-1, 0, 1), B, TRUE); d })
+  I2 <- crossprod(rinf(".rum_seq_scores")(MU, DL2, Y, th, rum_quadrature(c(11L, 9L)))) / B
+  expect_false(any(chk(tg, MU, th, null, on_fail = "none", info = I2)$table$common_confounded))
+})
+
+test_that("the checked one-step stops on a mean confounded with kappa", {
+  n <- fx$data$n; set.seed(42); T <- 5L
+  d <- lapply(seq_len(n), function(i) cbind(1, matrix(sample(c(-1, 0, 1), T * 2, TRUE), T, 2)))
+  y <- lapply(seq_len(n), function(i) rbinom(T, 1, .5))
+  dat <- rum_data(y, d, ids = fx$data$ids, feature_names = fx$data$feature_names,
+                  metadata = list(orientation = "test"))
+  null0 <- list(N = list(matrix(0, 3, 0)), group = rep(1L, n), keys = "all",
+                features = fx$data$feature_names, source = "test", tol_rel = 1e-8)
+  tg <- list(rinf(".rum_tgt_mean")("mean f1", c(1, 0, 0)), rinf(".rum_tgt_mean")("mean f2", c(0, 1, 0)))
+  msg <- tryCatch(rinf(".rum_onestep_checked")(dat, fx$Z, fx$fold, fold_final, tg, null0,
+                                               on_unidentified = "restrict"), error = conditionMessage)
+  expect_match(msg, "confounded", fixed = TRUE)
+  expect_match(msg, "mean f1 (relative", fixed = TRUE)
+  expect_false(grepl("mean f2 (relative", msg, fixed = TRUE))
+  r <- rinf(".rum_onestep_checked")(dat, fx$Z, fx$fold, fold_final, tg[2], null0)
+  expect_true(is.finite(r$est[1]))
+  # the check can be switched off (the old behavior: the floored inverse gives a number)
+  r0 <- rinf(".rum_onestep_checked")(dat, fx$Z, fx$fold, fold_final, tg, null0, common = FALSE)
+  expect_true(all(is.finite(r0$est)))
+})
+
 # ---- targeted updates -------------------------------------------------------------------------
 
 test_that("the legacy path reproduces .rum_tmle_dnn exactly and records floor hits", {
