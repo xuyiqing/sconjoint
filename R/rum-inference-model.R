@@ -16,11 +16,27 @@
 # same M draws, from a private seed (seed + fold); the caller's random stream is untouched.
 # Inverting an average of M outer products inflates the weights by about M / (M - p - 1),
 # so the default is M = 20 D (D = 2p + 2).
+#
+# Known limitation, kept on purpose (Codex review of eae4719, finding 1). The synthetic
+# respondents' designs are drawn from the whole bank of ALREADY-CODED sequences (dr$j below),
+# so respondent i borrows a donor's coded design and the donor's task count. Where the coding
+# depends on the respondent (Graham-Svolik: the co-partisan column is coded from the
+# respondent's party and is always 0 for pure independents), an independent can receive a
+# partisan's nonzero co-partisan column, and its model information then shows identification
+# its own design does not have. This routine is left unchanged so that the "model" basis
+# reproduces Phase C exactly (parity tests). The fix is the conditional information basis
+# (agent B2, branch wip/rum-info: designs generated from the experiment's law and coded for the
+# recipient's own design key and task count, R/rum-design.R generators); use it, not this
+# basis, wherever the coding depends on the respondent.
 
 # Exact RUM sequence scores for B synthetic respondents that share the task count T.
 # MU: B x p means; DL: list of T design matrices (B x p); Y: B x T choices; th: list(kappa,
 # loading, omega); quad: a rum_quadrature rule. Columns: s_mu[1..p], kappa, loading[1..p],
-# omega (the evaluator's order). Equals rum_dnn_gaussian_evaluate()'s scores.
+# omega (the evaluator's order). Equals rum_dnn_gaussian_evaluate()'s scores. omega score:
+# E[sum_t r_t v | Y] / (2 sqrt(omega)) in the interior; when omega is below .rum_omega_small
+# the boundary form E[(sum_t r_t)^2 - sum_t G'(e_t) | Y] / 2 (the evaluator's formula at
+# omega = 0, the right derivative; integration by parts in v of the interior form), so there is
+# no division by sqrt(omega).
 .rum_seq_scores <- function(MU, DL, Y, th, quad) {
   B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
   um <- matrix(quad$u, B, G, byrow = TRUE); vm <- matrix(quad$v, B, G, byrow = TRUE); svm <- s * vm
