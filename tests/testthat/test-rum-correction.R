@@ -143,6 +143,32 @@ test_that("on a path that crosses the old floor, log-omega stays positive and co
   if (new$converged) expect_true(new$estimate >= 0 && new$estimate <= 1)
 })
 
+test_that("the path score is the derivative of the held-out log likelihood along the path taken", {
+  model <- rinf(".rum_model_options")(NULL, rinf(".rum_info_quadrature")(), 1L, NULL, NULL, FALSE, FALSE)
+  q <- rinf(".rum_score_quadrature")()
+  FS <- rinf(".rum_tmle_folds")(fx$data, fx$Z, fx$fold, fold_final, q, "constant", 1e-2, 1e-6, model)
+  dirs <- list(rinf(".rum_tmle_dirs")(FS, IMP[[1]], rep(1, fx$data$n)),
+               rinf(".rum_tmle_dirs")(FS, IMP[[2]], rep(1, fx$data$n)))
+  # make the omega directions large and negative so that the clamp binds at eps = 1 in some fold
+  dirs[[1]] <- lapply(dirs[[1]], function(d) { d$g[length(d$g)] <- -0.6; d })
+  n <- fx$data$n; p <- fx$data$p
+  for (mode in c("log", "clamp")) for (e1 in c(0.3, 1)) {
+    eps <- c(e1, -0.2); h <- 1e-6
+    r <- rinf(".rum_path_all")(FS, dirs, eps, n, p, q, mode)
+    num <- vapply(1:2, function(j) { e <- eps; e[j] <- e[j] + h; a <- rinf(".rum_path_all")(FS, dirs, e, n, p, q, mode)$ll
+      e[j] <- eps[j] - h; b <- rinf(".rum_path_all")(FS, dirs, e, n, p, q, mode)$ll; (a - b) / (2 * h) }, 0)
+    expect_lt(max(abs(colSums(r$phi) - num)), 1e-5 * max(1, abs(num)))
+    if (mode == "log") expect_true(all(r$omega > 0))
+    if (mode == "clamp" && e1 == 1) expect_true(r$floor_hit)
+  }
+  # the legacy floored path does NOT have this property where the floor binds
+  r <- rinf(".rum_path_all")(FS, dirs, c(1, -0.2), n, p, q, "linear_floor")
+  expect_true(r$floor_hit)
+  e <- c(1 + 1e-6, -0.2); a <- rinf(".rum_path_all")(FS, dirs, e, n, p, q, "linear_floor")$ll
+  e <- c(1 - 1e-6, -0.2); b <- rinf(".rum_path_all")(FS, dirs, e, n, p, q, "linear_floor")$ll
+  expect_gt(abs(sum(r$phi[, 1]) - (a - b) / 2e-6), 1e-3)
+})
+
 test_that("the joint update keeps shares in [0, 1] adding to exactly 1, with joint covariance", {
   sep <- rinf(".rum_tmle_dnn")(fx$data, fx$Z, fx$fold, fold_final, IMP)
   j <- rinf(".rum_tmle_joint")(fx$data, fx$Z, fx$fold, fold_final, IMP)
