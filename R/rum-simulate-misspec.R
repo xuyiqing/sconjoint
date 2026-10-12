@@ -251,8 +251,10 @@
 # integrated once. Returns one row per truth and target:
 #   value      the true value (taste targets: all n respondents' tastes; behavioural targets:
 #              the choice process, straight-liners included);
-#   quad_err   |value(order) - value(order_check)|, the Gauss-Hermite error (rows targets; shares
-#              and linear targets are exact);
+#   quad_err   |value(order) - value(order_check)| (Gauss-Hermite orders 45 and 31): the error of
+#              the lower order, a conservative bound for the reported value's error (rows targets;
+#              shares and linear targets are exact). Integrands with SD sigma_r > 5 converge slowly;
+#              on the three studies' truths the bound is below 1e-6;
 #   ctx_se     for switch AMEs built by .rum_ms_switch_target: the simulation SE of the context
 #              draws relative to the design-law expectation (sequences are iid); 0 relative to
 #              the given context set;
@@ -260,7 +262,7 @@
 #              straight-liners): what RUM's law says if it recovered mu, kappa, L1, omega exactly.
 #              It is NOT RUM's pseudo-true value (a fit to wrong-model data moves mu and lambda
 #              to absorb L2 and the straight-liners); that is left to the simulation.
-.rum_ms_true_values <- function(truths, targets, order = 31L, order_check = 45L) {
+.rum_ms_true_values <- function(truths, targets, order = 45L, order_check = 31L) {
   if (inherits(truths, "rum_ms_truth")) truths <- list(truth = truths)
   if (is.null(names(truths)) || any(!nzchar(names(truths)))) stop("truths must be named.")
   specs <- lapply(targets, .rum_ms_spec)

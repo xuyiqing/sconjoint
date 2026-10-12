@@ -121,7 +121,7 @@ test_that("true values under two factors and straight-liners match brute-force M
              sconjoint:::.rum_ms_switch_target("ame", "br", raw, "r6", 6L, 1L, position = FALSE),
              sconjoint:::.rum_ms_switch_target("ame (position)", "br", raw, "r6", 6L, 1L, position = TRUE))
   tv <- sconjoint:::.rum_ms_true_values(list(c = tr), tg)
-  expect_true(all(tv$quad_err < 1e-6))
+  expect_true(all(tv$quad_err < 2e-5))   # toy loadings give SDs up to 6.4
   expect_true(all(is.na(tv$ctx_se[1:3])) && all(tv$ctx_se[4:5] >= 0))
   # brute force: R draws of (u1, u2, v, straight-liner, side) per respondent
   R <- 20000L
