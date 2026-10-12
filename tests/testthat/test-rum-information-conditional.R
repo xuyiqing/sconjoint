@@ -147,3 +147,14 @@ test_that("null_zero: no weight on exactly null coordinates; identical to the fl
   a <- rinf(".rum_correction")(W0, v, rep(0.1, q), seq_len(tn$n))$a
   expect_true(all(a[2:3, 2] == 0) && a[1, 2] != 0 && all(is.finite(a)))
 })
+
+test_that("own draws: with every respondent given the shared draws, exact equals the common path", {
+  tn <- tiny(seed = 8L, n = 3L, M = 5L); quad <- small_quad(); data <- tiny_data(tn); crn <- tiny_crn(tn)
+  ci <- rinf(".rum_cond_info")
+  a <- ci(data, tn$mu, tn$th, crn, "exact", quad, halves = TRUE)
+  own <- list(own = TRUE, M = tn$M, T = tn$T, designs_of = function(i) tn$designs)
+  b <- ci(data, tn$mu, tn$th, own, "exact", quad, halves = TRUE)
+  expect_lt(max(abs(a$I - b$I)), 1e-12); expect_lt(max(abs(a$IA - b$IA)), 1e-12)
+  l <- ci(data, tn$mu, tn$th, own, "louis", quad, ny = 3000L, seed = 2L)
+  expect_lt(max(abs(l$I - a$I)) / max(abs(a$I)), 0.05)
+})

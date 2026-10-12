@@ -136,6 +136,11 @@
   method <- match.arg(method)
   n <- nrow(mu); p <- ncol(mu); D <- 2L * p + 2L; s <- sqrt(th$omega); M <- as.integer(crn$M)
   Tj <- as.integer(data$T); G <- length(quad$weight)
+  if (isTRUE(crn$own)) {
+    stopifnot(n == data$n, p == data$p, M >= 2L, all(Tj <= crn$T))
+    if (method == "exact" && max(Tj) > 16L) stop("method 'exact' enumerates 2^T sequences; T > 16 is too many")
+    return(.rum_cond_info_own(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb))
+  }
   stopifnot(n == data$n, p == data$p, length(crn$key) == n, M >= 2L, all(Tj <= crn$T),
             all(vapply(crn$designs, function(x) dim(x)[3L], 1L) == p))
   if (method == "exact" && max(Tj) > 16L) stop("method 'exact' enumerates 2^T sequences; T > 16 is too many")
@@ -172,6 +177,39 @@
   }
   I <- I / M
   if (halves) { IA <- IA / nA; IB <- IB / (M - nA) }
+  list(I = I, IA = IA, IB = IB, M = M, method = method, ny = if (method == "exact") NA_integer_ else ny,
+       check = if (method == "exact") chk else c(NA_real_, NA_real_))
+}
+
+# The same with each respondent's OWN design draws (crn$own = TRUE; crn$designs_of(i)
+# returns respondent i's M x T x p array) and own simulated choices. With common draws the
+# Monte Carlo error of a(z) is shared by every respondent and does not average out in a
+# target; with own draws it does. Respondent i's simulation seed is seed + i.
+.rum_cond_info_own <- function(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb) {
+  n <- nrow(mu); p <- ncol(mu); D <- 2L * p + 2L; s <- sqrt(th$omega); M <- as.integer(crn$M)
+  Tj <- as.integer(data$T); G <- length(quad$weight)
+  I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
+  chk <- c(0, 0); Ys <- list(); odd <- seq_len(M) %% 2L == 1L
+  for (i in seq_len(n)) {
+    T <- Tj[i]; J <- 3L * T; dk <- crn$designs_of(i)
+    if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
+    sims <- if (method != "exact") .rum_with_seed(seed + i, list(
+      g = matrix(sample.int(G, M * ny, replace = TRUE, prob = quad$weight), M, ny),
+      U = array(stats::runif(M * ny * T), c(M, ny, T)))) else NULL
+    X <- A <- matrix(0, D, J * M); xo <- numeric(M)
+    for (m in seq_len(M)) {
+      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- .rum_cond_A(Dm, s)
+      sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
+      r <- .rum_cond_K(th$kappa + drop(Dm %*% mu[i, ]), drop(Dm %*% th$loading), s, quad, method,
+                       Ys[[as.character(T)]], sim, louis_rb)
+      if (method == "exact") chk <- pmax(chk, r$check)
+      cols <- (m - 1L) * J + seq_len(J); A[, cols] <- Am; X[, cols] <- Am %*% r$K; xo[m] <- r$xo
+    }
+    acc <- function(sel) { cs <- rep(sel, each = J); R <- X[, cs, drop = FALSE] %*% t(A[, cs, drop = FALSE])
+      R[D, D] <- R[D, D] + sum(xo[sel]); (R + t(R)) / (2 * sum(sel)) }
+    I[i, , ] <- acc(rep(TRUE, M))
+    if (halves) { IA[i, , ] <- acc(odd); IB[i, , ] <- acc(!odd) }
+  }
   list(I = I, IA = IA, IB = IB, M = M, method = method, ny = if (method == "exact") NA_integer_ else ny,
        check = if (method == "exact") chk else c(NA_real_, NA_real_))
 }
@@ -228,14 +266,16 @@
 # method, ny, louis_rb: see .rum_cond_info(); M: design draws (default 200 for exact,
 # 400 for louis and mc). crn: optional fixed design draws (a .rum_draw_designs_crn()-shaped
 # list) used for every fold instead of spec (for tests and custom designs). null_zero: see
-# .rum_cond_weight_parts() (does not change the information or its cache).
+# .rum_cond_weight_parts() (does not change the information or its cache). draws: "common"
+# (the same M design draws for every respondent) or "own" (each respondent's own draws; its
+# Monte Carlo error averages out over respondents in a target).
 .rum_cond_options <- function(spec, resp = NULL, method = c("exact", "louis", "mc"), M = NULL,
                               ny = 8L, louis_rb = TRUE, seed = 20261011L,
                               quad = .rum_info_quadrature(), cache_dir = NULL, cache_net = NULL,
                               cache_write = TRUE, cache_require = FALSE, crn = NULL,
-                              null_zero = FALSE) {
-  method <- match.arg(method)
-  list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero,
+                              null_zero = FALSE, draws = c("common", "own")) {
+  method <- match.arg(method); draws <- match.arg(draws)
+  list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero, draws = draws,
        M = if (is.null(M)) (if (method == "exact") 200L else 400L) else as.integer(M),
        ny = as.integer(ny), louis_rb = louis_rb, seed = as.integer(seed), quad = quad,
        cache_dir = cache_dir, cache_net = cache_net, cache_write = cache_write,
@@ -255,13 +295,16 @@
   stopifnot(length(key_resp) == n)
   f <- NULL; key <- NULL; tag <- if (cond$method == "exact") "exact" else
     sprintf("%s%s_ny%d", cond$method, if (cond$method == "louis" && !cond$louis_rb) "nrb" else "", cond$ny)
+  if (identical(cond$draws, "own")) tag <- paste0(tag, "_own")
   if (!is.null(cond$cache_net) && !is.null(cond$cache_dir)) {
     if (requireNamespace("digest", quietly = TRUE)) {
-      key <- digest::digest(list(version = "rum_cond_info v1", final = fin[c("network", "kappa", "loading", "omega")],
+      kl <- list(version = "rum_cond_info v1", final = fin[c("network", "kappa", "loading", "omega")],
         mu = unname(mu), ids = data$ids, T = data$T, keys = key_resp,
         study = if (is.null(spec)) cond$crn$designs else spec$study, M = M,
         method = cond$method, ny = cond$ny, louis_rb = cond$louis_rb,
-        quad = unclass(cond$quad)[c("u", "v", "weight")], seed = sd_k))
+        quad = unclass(cond$quad)[c("u", "v", "weight")], seed = sd_k)
+      if (identical(cond$draws, "own")) kl$draws <- "own"   # common draws keep the v1 key
+      key <- digest::digest(kl)
       f <- file.path(cond$cache_dir, sprintf("%s_fold%d_%s_M%d.rds", cond$cache_net, k, tag, M))
     } else message("package 'digest' is not installed; the conditional information is not cached")
   }
@@ -275,7 +318,12 @@
   } else if (isTRUE(cond$cache_require)) stop("conditional information cache required but not found: ",
                                                if (is.null(f)) "no cache file" else f)
   t0 <- proc.time()[["elapsed"]]
-  crn <- if (is.null(cond$crn)) .rum_draw_designs_crn(spec, cond$resp, M, seed = sd_k, n = n) else cond$crn
+  crn <- if (!is.null(cond$crn)) cond$crn else if (identical(cond$draws, "own")) {
+    rr <- if (spec$uses_resp) cond$resp else NULL
+    list(own = TRUE, M = M, T = spec$T, designs_of = function(i)
+      .rum_draw_designs(spec, if (is.null(rr)) NULL else rr[i, , drop = FALSE], M,
+                        seed = (sd_k * 100003L + i) %% 2147483647L))
+  } else .rum_draw_designs_crn(spec, cond$resp, M, seed = sd_k, n = n)
   M <- as.integer(crn$M)
   R <- .rum_cond_info(data, mu, th, crn, cond$method, cond$quad, cond$ny, sd_k + 7919L,
                       louis_rb = cond$louis_rb)
