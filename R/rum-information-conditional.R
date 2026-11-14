@@ -48,6 +48,22 @@
 # averages the complete-data negative Hessian over the (q + 2)^2 blocks. The quadrature nodes
 # are G x q (quad$u) and are taken from the fold's own information rule (.rum_quad_for).
 # One factor (q = 1): the original code, unchanged (3T, six moments).
+#
+# Small omega at q > 1 (Codex review of 829393d, finding 1). Below .rum_omega_small the sequence
+# scores (.rum_seq_scores_q and the C++ kernel) use the boundary form of the omega score,
+# E[v^2 (R^2 - sum_t p_t (1 - p_t)) | y] / 2 with R = sum_t e_t, instead of E[R v | y] / (2 s) (for a
+# rule symmetric in v its limit as omega -> 0). The information must describe that same score, so
+# when omega < .rum_omega_small (bnd = TRUE) the last block of c(y) holds
+# E[v^2 (e_t R - p_t (1 - p_t)) | y] (t = 1..T; its sum over t is twice the boundary score) and A_D
+# maps it to omega with 1/2 instead of 1/(2 s). The complete-data analogue at node g,
+# h_t = v_g^2 (e_t R - pi_t) (pi_t = p_t (1 - p_t)), is no longer e_t times a node constant, so the
+# Louis first term H3 gets the Bernoulli moments of the independent residuals given the node:
+# E[e_s z_k h_t] = z_k v^2 kappa3_t 1{s = t} (kappa3 = pi (1 - 2 p)) and
+# E[h_s h_t] = v^4 (pi_s pi_t + 1{s = t} (kappa4_t + pi_t sum_r pi_r - 3 pi_t^2))
+# (kappa4 = pi (1 - 3 p + 3 p^2)), averaged over the nodes with the weights; the posterior variance
+# uses the same h. louis_rb = FALSE
+# uses this H3 too at the boundary (the omega second-derivative term xo is for the interior form).
+# Above the threshold, and at q = 1, nothing changes.
 
 # All 2^T binary sequences (rows), as a numeric matrix.
 .rum_cond_Y <- function(T) {
@@ -60,14 +76,17 @@
 # Rows: s_mu (1..p), then theta in its layout (.rum_th_idx with offset p).
 # With q = n_fac factors: D x (q + 2)T (D = p + p q + 2); block k (k = 1..q) of c holds
 # E[e_t u_k | y] and maps to factor k's loading rows; the last block (E[e_t v | y]) to omega.
-.rum_cond_A <- function(Dm, s, n_fac = 1L) {
+# bnd (q > 1, omega below .rum_omega_small): the last block is the boundary block, weight 1/2.
+.rum_cond_A <- function(Dm, s, n_fac = 1L, bnd = FALSE) {
   T <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, n_fac, offset = p); D <- p + ix$n_th
   A <- matrix(0, D, (n_fac + 2L) * T)
   A[seq_len(p), seq_len(T)] <- t(Dm); A[ix$kappa, seq_len(T)] <- 1
   for (k in seq_len(n_fac)) A[ix$loading[(k - 1L) * p + seq_len(p)], k * T + seq_len(T)] <- t(Dm)
-  A[ix$omega, (n_fac + 1L) * T + seq_len(T)] <- 1 / (2 * s)
+  A[ix$omega, (n_fac + 1L) * T + seq_len(T)] <- if (bnd) 0.5 else 1 / (2 * s)
   A
 }
+# The boundary rule applies at q > 1 when omega is below the shared threshold.
+.rum_cond_bnd <- function(omega, n_fac) n_fac > 1L && omega < .rum_omega_small
 
 # Linear predictors on the quadrature for one respondent and one design: a = kappa + D mu
 # (length T), b = D loading (length T). Returns E (T x G), P, and the log probabilities.
@@ -91,8 +110,8 @@
 
 # c(y) for each row of Y given the posterior Pi: R x 3T, columns (R0_t, R1_t, R2_t).
 # With q factors: R x (q + 2)T, blocks (R0_t; E[e_t u_1 | y]; ...; E[e_t u_q | y]; E[e_t v | y]).
-.rum_cond_c <- function(Y, Pi, e, quad) {
-  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_c_q(Y, Pi, e, quad))
+.rum_cond_c <- function(Y, Pi, e, quad, bnd = FALSE) {
+  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_c_q(Y, Pi, e, quad, bnd))
   T <- ncol(Y); Pt <- t(e$P)
   Mx <- Pi %*% cbind(Pt, Pt * quad$u, Pt * quad$v, quad$u, quad$v)
   cbind(Y - Mx[, seq_len(T), drop = FALSE],
@@ -101,13 +120,20 @@
 }
 
 .rum_cond_z <- function(quad) cbind(1, quad$u, quad$v)           # G x (q + 2): (1, u_1..u_q, v)
-.rum_cond_c_q <- function(Y, Pi, e, quad) {
+.rum_cond_c_q <- function(Y, Pi, e, quad, bnd = FALSE) {
   T <- ncol(Y); Pt <- t(e$P); Zq <- .rum_cond_z(quad)[, -1L, drop = FALSE]; nz <- ncol(Zq)  # q + 1
   Mx <- Pi %*% cbind(Pt, do.call(cbind, lapply(seq_len(nz), function(k) Pt * Zq[, k])), Zq)
   out <- matrix(0, nrow(Y), (nz + 1L) * T); t1 <- seq_len(T)
   out[, t1] <- Y - Mx[, t1, drop = FALSE]
   for (k in seq_len(nz))
     out[, k * T + t1] <- Y * Mx[, (nz + 1L) * T + k] - Mx[, k * T + t1, drop = FALSE]
+  if (bnd) {           # boundary block: E[v^2 (e_t R - pi_t) | y], R = sum_s e_s (see the header)
+    Pg <- colSums(e$P); Yt <- rowSums(Y); v2 <- quad$v^2
+    Mb <- Pi %*% cbind(v2, Pg * v2, Pt * (Pg * v2), Pt * v2, t(e$P * (1 - e$P)) * v2)
+    # E[v^2 | y], E[v^2 P | y], E[v^2 p_t P | y], E[v^2 p_t | y], E[v^2 pi_t | y]
+    out[, nz * T + t1] <- Y * (Yt * Mb[, 1L]) - Y * Mb[, 2L] - Yt * Mb[, 2L + T + t1, drop = FALSE] +
+      Mb[, 2L + t1, drop = FALSE] - Mb[, 2L + 2L * T + t1, drop = FALSE]
+  }
   out
 }
 
@@ -115,14 +141,26 @@
 # the complete-data information in the 3T space (exact over y).
 # With q factors b_tg = e_t z_g, z_g = (1, u_1..u_q, v): (q + 2)T x (q + 2)T, block (a, b)
 # diagonal over t with entries sum_g w_g p(1-p) z_a z_b: (q + 2)(q + 3)/2 distinct moments.
-.rum_cond_H3 <- function(e, quad) {
+.rum_cond_H3 <- function(e, quad, bnd = FALSE) {
   if (.rum_quad_nfac(quad) > 1L) {
     T <- nrow(e$P); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
     pq <- e$P * (1 - e$P); H <- matrix(0, nz * T, nz * T)
     for (a in seq_len(nz)) for (b in a:nz) {
+      if (bnd && b == nz) next                                     # boundary block: below
       m <- drop(pq %*% (quad$weight * Zq[, a] * Zq[, b]))
       H[cbind((a - 1L) * T + t1, (b - 1L) * T + t1)] <- m
       H[cbind((b - 1L) * T + t1, (a - 1L) * T + t1)] <- m
+    }
+    if (bnd) {
+      w <- quad$weight; v2 <- quad$v^2; k3 <- pq * (1 - 2 * e$P); k4 <- pq * (1 - 3 * e$P + 3 * e$P^2)
+      tb <- (nz - 1L) * T + t1
+      for (a in seq_len(nz - 1L)) {
+        m <- drop(k3 %*% (w * v2 * Zq[, a]))
+        H[cbind((a - 1L) * T + t1, tb)] <- m; H[cbind(tb, (a - 1L) * T + t1)] <- m
+      }
+      sp <- colSums(pq); w4 <- w * v2^2                           # sum_r pi_r per node; w v^4
+      H[tb, tb] <- (pq * rep(w4, each = T)) %*% t(pq) +
+        diag(drop((k4 + pq * rep(sp, each = T) - 3 * pq^2) %*% w4), T)
     }
     return(H)
   }
@@ -140,22 +178,22 @@
 # simulated sequence, U = ny x T uniforms) (louis, mc). Returns list(K, xo, check): xo is
 # the scalar added to I[omega, omega] (louis_rb = FALSE only); check (exact only) holds
 # max |sum_y p(y) c(y)| and |sum_y p(y) - 1|.
-.rum_cond_K <- function(a, b, s, quad, method, Yall = NULL, sim = NULL, louis_rb = TRUE) {
+.rum_cond_K <- function(a, b, s, quad, method, Yall = NULL, sim = NULL, louis_rb = TRUE, bnd = FALSE) {
   e <- .rum_cond_eta(a, b, s, quad); lw <- log(quad$weight); T <- length(a)
   if (method == "exact") {
-    po <- .rum_cond_post(Yall, e, lw); cc <- .rum_cond_c(Yall, po$Pi, e, quad); py <- exp(po$logp)
+    po <- .rum_cond_post(Yall, e, lw); cc <- .rum_cond_c(Yall, po$Pi, e, quad, bnd); py <- exp(po$logp)
     return(list(K = crossprod(cc * py, cc), xo = 0,
                 check = c(max(abs(colSums(cc * py))), abs(sum(py) - 1))))
   }
   ny <- length(sim$g)
   Ys <- (sim$U[, seq_len(T), drop = FALSE] < t(e$P[, sim$g, drop = FALSE])) + 0
-  po <- .rum_cond_post(Ys, e, lw); cc <- .rum_cond_c(Ys, po$Pi, e, quad)
+  po <- .rum_cond_post(Ys, e, lw); cc <- .rum_cond_c(Ys, po$Pi, e, quad, bnd)
   if (method == "mc") return(list(K = crossprod(cc) / ny, xo = 0, check = c(NA_real_, NA_real_)))
   # louis: E_y[c c'] = H3 - E_y Var_post(c_g | y); posterior second moments of c_g over
   # the stacked (sequence, node) rows, weighted by the posterior.
   G <- length(quad$weight); kk <- rep(seq_len(ny), G); gg <- rep(seq_len(G), each = ny)
   er <- Ys[kk, , drop = FALSE] - t(e$P)[gg, , drop = FALSE]; pw <- as.vector(po$Pi)
-  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_K_louis_q(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb))
+  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_K_louis_q(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb, bnd))
   Cr <- cbind(er, er * quad$u[gg], er * quad$v[gg])
   Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
   if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
@@ -173,11 +211,12 @@
 # The Louis variant with q > 1 factors: complete-data c_g = e z_g over z = (1, u_1..u_q, v),
 # posterior variance over the stacked (sequence, node) rows; louis_rb = FALSE takes the posterior
 # mean of the complete-data negative Hessian over the q + 2 blocks, sequence by sequence.
-.rum_cond_K_louis_q <- function(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb) {
+.rum_cond_K_louis_q <- function(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb, bnd = FALSE) {
   T <- ncol(Ys); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
   Cr <- do.call(cbind, lapply(seq_len(nz), function(k) er * Zq[gg, k]))
+  if (bnd) Cr[, (nz - 1L) * T + t1] <- (er * rowSums(er) - t(e$P * (1 - e$P))[gg, , drop = FALSE]) * quad$v[gg]^2
   Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
-  if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
+  if (louis_rb || bnd) return(list(K = .rum_cond_H3(e, quad, bnd) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
   pq <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
   H3p <- matrix(0, nz * T, nz * T)
   for (r in seq_len(nz)) for (c2 in seq_len(nz)) {
@@ -217,7 +256,7 @@
   quad <- .rum_quad_for(quad, nf, "info")
   method <- .rum_cond_method(method, max(data$T), length(quad$weight), nf)
   n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p, nf)$omega; D <- p + .rum_th_len(p, nf)
-  s <- sqrt(th$omega); M <- as.integer(crn$M)
+  s <- sqrt(th$omega); M <- as.integer(crn$M); bnd <- .rum_cond_bnd(th$omega, nf)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   if (isTRUE(crn$own)) {
     stopifnot(n == data$n, p == data$p, M >= 2L, all(Tj <= crn$T))
@@ -239,12 +278,13 @@
     acc <- accA <- array(0, c(D, ng, D))             # (b, respondent, a): I_j[b, a], summed over designs
     for (m in seq_len(M)) {
       Dm <- matrix(dk[m, seq_len(T), ], T, p)
-      Am <- .rum_cond_A(Dm, s, nf); amat <- th$kappa + MUg %*% t(Dm)
+      Am <- if (bnd) .rum_cond_A(Dm, s, nf, TRUE) else .rum_cond_A(Dm, s, nf); amat <- th$kappa + MUg %*% t(Dm)
       b <- if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading      # T x q at q > 1
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
       KK <- matrix(0, J * J, ng); xo <- numeric(ng)
       for (j in seq_len(ng)) {
-        r <- .rum_cond_K(amat[j, ], b, s, quad, method, Yall, sim, louis_rb)
+        r <- if (bnd) .rum_cond_K(amat[j, ], b, s, quad, method, Yall, sim, louis_rb, TRUE) else
+          .rum_cond_K(amat[j, ], b, s, quad, method, Yall, sim, louis_rb)
         KK[, j] <- r$K; xo[j] <- r$xo
         if (method == "exact") chk <- pmax(chk, r$check)
       }
@@ -271,7 +311,7 @@
 # target; with own draws it does. Respondent i's simulation seed is seed + i.
 .rum_cond_info_own <- function(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb, nf = 1L) {
   n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p, nf)$omega; D <- p + .rum_th_len(p, nf)
-  s <- sqrt(th$omega); M <- as.integer(crn$M)
+  s <- sqrt(th$omega); M <- as.integer(crn$M); bnd <- .rum_cond_bnd(th$omega, nf)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); odd <- seq_len(M) %% 2L == 1L
@@ -283,11 +323,11 @@
       U = array(stats::runif(M * ny * T), c(M, ny, T)))) else NULL
     X <- A <- matrix(0, D, J * M); xo <- numeric(M)
     for (m in seq_len(M)) {
-      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- .rum_cond_A(Dm, s, nf)
+      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- if (bnd) .rum_cond_A(Dm, s, nf, TRUE) else .rum_cond_A(Dm, s, nf)
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
       r <- .rum_cond_K(th$kappa + drop(Dm %*% mu[i, ]),
                        if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading, s, quad, method,
-                       Ys[[as.character(T)]], sim, louis_rb)
+                       Ys[[as.character(T)]], sim, louis_rb, bnd)
       if (method == "exact") chk <- pmax(chk, r$check)
       cols <- (m - 1L) * J + seq_len(J); A[, cols] <- Am; X[, cols] <- Am %*% r$K; xo[m] <- r$xo
     }

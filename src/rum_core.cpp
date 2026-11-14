@@ -5,6 +5,19 @@
 
 // [[Rcpp::plugins(cpp11)]]
 
+// Below this omega the q > 1 sequence scores use the boundary form of the omega score,
+// E[v^2 ((sum_t r_t)^2 - sum_t p_t (1 - p_t)) | Y] / 2 at the current nodes, with no division by
+// sqrt(omega). For a rule symmetric in v (the default Sobol rule, and every product rule) it is the
+// limit of the interior form E[v sum_t r_t | Y] / (2 sqrt(omega)) as omega -> 0 (the odd terms in v
+// cancel node pair by node pair), so it differs from the interior form by O(omega) and its value
+// at omega = 0 is the right derivative of the quadrature log likelihood. (For a product rule the
+// v^2 weight integrates to 1 within every u and the form equals E[R^2 - sum p(1-p) | Y] / 2.) The single definition of the threshold: R reads it through
+// rum_omega_small_cpp() into .rum_omega_small when the package loads (R/rum-zzz.R), so the
+// pure-R scores (.rum_seq_scores), the conditional information and this kernel switch at the same
+// omega (Codex review of 829393d, finding 1). The one-factor kernel keeps its own rule
+// (boundary only at omega == 0) for bitwise parity with f20956e.
+static const double RUM_OMEGA_SMALL = 1e-8;
+
 namespace {
 
 struct Dimensions {
@@ -138,7 +151,7 @@ Rcpp::List rum_sequence_q(const Dimensions& dim, const Rcpp::NumericVector& y,
                           const Rcpp::NumericVector& par, const Rcpp::NumericVector& u,
                           const Rcpp::NumericVector& v, const Rcpp::NumericVector& weight) {
   const double omega = par[dim.h - 1], scale = std::sqrt(omega);
-  const bool boundary = omega == 0.0;
+  const bool boundary = omega < RUM_OMEGA_SMALL;
   const int G = dim.nodes, nf = dim.nf;
   Rcpp::NumericVector loglik(dim.n);
   Rcpp::NumericMatrix score(dim.n, dim.h);
@@ -167,7 +180,7 @@ Rcpp::List rum_sequence_q(const Dimensions& dim, const Rcpp::NumericVector& y,
         if (boundary) curvature += prob * (1.0 - prob);
       }
       const double node_omega = boundary ?
-        0.5 * (residual_sum * residual_sum - curvature) :
+        0.5 * v[k] * v[k] * (residual_sum * residual_sum - curvature) :
         v[k] * residual_sum / (2.0 * scale);
       if (!R_FINITE(node_omega)) Rcpp::stop("non-finite conditional score");
       const double log_node = std::log(weight[k]) + ll;
@@ -224,6 +237,10 @@ void validate_bank_matrix(const Rcpp::NumericMatrix& x, int rows, int columns,
 }
 
 } // namespace
+
+// The omega threshold of the q > 1 scores (see RUM_OMEGA_SMALL).
+// [[Rcpp::export]]
+double rum_omega_small_cpp() { return RUM_OMEGA_SMALL; }
 
 // Full sequence probabilities and observed-data scores. At omega = 0 the
 // last score is the right derivative for adding independent Gaussian variance.

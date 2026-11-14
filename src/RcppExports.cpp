@@ -10,6 +10,16 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// rum_omega_small_cpp
+double rum_omega_small_cpp();
+RcppExport SEXP _sconjoint_rum_omega_small_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(rum_omega_small_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
 // rum_sequence_cpp
 Rcpp::List rum_sequence_cpp(Rcpp::NumericVector y, Rcpp::NumericMatrix d, Rcpp::NumericMatrix a, Rcpp::IntegerVector offsets, Rcpp::NumericVector par, Rcpp::NumericVector u, Rcpp::NumericVector v, Rcpp::NumericVector weight, int n_fac);
 RcppExport SEXP _sconjoint_rum_sequence_cpp(SEXP ySEXP, SEXP dSEXP, SEXP aSEXP, SEXP offsetsSEXP, SEXP parSEXP, SEXP uSEXP, SEXP vSEXP, SEXP weightSEXP, SEXP n_facSEXP) {
@@ -51,6 +61,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_sconjoint_rum_omega_small_cpp", (DL_FUNC) &_sconjoint_rum_omega_small_cpp, 0},
     {"_sconjoint_rum_sequence_cpp", (DL_FUNC) &_sconjoint_rum_sequence_cpp, 9},
     {"_sconjoint_rum_moments_cpp", (DL_FUNC) &_sconjoint_rum_moments_cpp, 10},
     {NULL, NULL, 0}

@@ -189,7 +189,9 @@
 
 # ---- gradients --------------------------------------------------------------------------
 # Below this omega, omega derivatives use their boundary forms (no division by sqrt(omega)).
-.rum_omega_small <- 1e-8
+# The value (1e-8) is defined once, in the C++ kernel (RUM_OMEGA_SMALL in src/rum_core.cpp), and
+# assigned here when the namespace loads (R/rum-zzz.R), so R and C++ switch at the same omega.
+.rum_omega_small <- NULL
 
 # ---- layout of the common parameters theta ----------------------------------------------
 # theta = (kappa, loading, omega), the order of the evaluator's common score. With n_fac taste

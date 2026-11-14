@@ -26,7 +26,9 @@
 #   u_1 fastest and v slowest (at n_fac = 1 exactly the original two-dimensional rule).
 # rule = "sobol": Owen-scrambled Sobol points over (u, v) in n_fac + 1 dimensions
 #   (spacefillr::generate_sobol_owen_set with a fixed seed), mapped through qnorm, equal
-#   weights; order is ignored.
+#   weights; order is ignored. nodes is the number of Sobol POINTS; with symmetric = "v" (the
+#   default) every point (u, v) is paired with (u, -v), so the rule has 2 x nodes nodes, and with
+#   "uv" with (u, -v), (-u, v), (-u, -v) (4 x nodes); "none" is the plain point set.
 # rule = "auto": the product rule at n_fac = 1 (today's rule, unchanged), Sobol with
 #   `nodes` points at n_fac > 1.
 # With n_fac = 1 and the product rule the object is the original one (u a length-G vector);
@@ -34,14 +36,14 @@
 #' @export
 rum_quadrature <- function(order = c(11L, 11L), policy_law = c("normal", "three_point"),
                            n_fac = 1L, rule = c("auto", "product", "sobol"),
-                           nodes = 512L, seed = 20261114L) {
+                           nodes = 512L, seed = 20261114L, symmetric = c("v", "uv", "none")) {
   policy_law <- match.arg(policy_law)
-  rule <- match.arg(rule)
+  rule <- match.arg(rule); symmetric <- match.arg(symmetric)
   if (!is.numeric(n_fac) || length(n_fac) != 1L || !is.finite(n_fac) || n_fac < 1 ||
       n_fac != floor(n_fac) || n_fac > 20) stop("n_fac must be one integer from 1 to 20.")
   n_fac <- as.integer(n_fac)
   if (rule == "auto") rule <- if (n_fac == 1L) "product" else "sobol"
-  if (rule == "sobol") return(.rum_sobol_rule(n_fac, nodes, seed, policy_law))
+  if (rule == "sobol") return(.rum_sobol_rule(n_fac, nodes, seed, policy_law, symmetric))
   if (n_fac == 1L) {
     if (length(order) == 1L) order <- rep(order, 2L)
     if (length(order) != 2L) stop("Specify policy and position integration orders.")
@@ -77,32 +79,50 @@ rum_quadrature <- function(order = c(11L, 11L), policy_law = c("normal", "three_
 # Owen-scrambled Sobol rule over (u_1, ..., u_n_fac, v). spacefillr draws the scrambling from
 # its own generator seeded by `seed`, so R's random-number state is neither used nor changed.
 # The first m points of a seed's sequence do not depend on the requested count.
-.rum_sobol_rule <- function(n_fac, nodes = 512L, seed = 20261114L, policy_law = "normal") {
+# symmetric (Codex review of 829393d, finding 1): "v" pairs every point (u_g, v_g) with
+# (u_g, -v_g), each with weight 1 / (2 nodes). The rule is then exactly symmetric in v for every u,
+# so at omega -> 0 the posterior mean E[v sum_t r_t | Y] vanishes to rounding at the order-one
+# term and the omega score E[v sum_t r_t | Y] / (2 sqrt(omega)) is not amplified quadrature error
+# (a plain Sobol set lacks the symmetry; the error is then multiplied by 1 / sqrt(omega)). "uv"
+# also mirrors u (four nodes per point); "none" is the plain set. Nodes are interleaved
+# (point 1 and its mirrors, then point 2, ...), so the rule with m points is the first nodes of
+# the rule with more points. The object records points (the Sobol point count), nodes (the node
+# count) and symmetric.
+.rum_sobol_rule <- function(n_fac, nodes = 512L, seed = 20261114L, policy_law = "normal",
+                            symmetric = "v") {
   if (!identical(policy_law, "normal")) stop("The Sobol rule integrates a normal policy law only.")
   nodes <- .rum_dnn_integer(nodes, "nodes")
   if (nodes < 2L) stop("nodes must be at least 2.")
   if (!is.numeric(seed) || length(seed) != 1L || !is.finite(seed) || seed < 0 ||
       seed > .Machine$integer.max || seed != floor(seed))
     stop("seed must be one nonnegative integer.")
+  if (!symmetric %in% c("v", "uv", "none")) stop("symmetric must be \"v\", \"uv\" or \"none\".")
   pts <- spacefillr::generate_sobol_owen_set(nodes, n_fac + 1L, seed = as.integer(seed))
   pts <- matrix(pts, nodes, n_fac + 1L)
   if (any(!is.finite(pts)) || any(pts <= 0 | pts >= 1))
     stop("Sobol points must lie strictly inside the unit cube.")
   z <- stats::qnorm(pts)
-  structure(list(u = z[, seq_len(n_fac), drop = FALSE], v = z[, n_fac + 1L],
-    weight = rep(1 / nodes, nodes), order = nodes, policy_law = "normal",
-    n_fac = as.integer(n_fac), rule = "sobol", nodes = nodes, seed = as.integer(seed)),
-    class = "rum_quadrature")
+  sg <- switch(symmetric, none = matrix(1, 1L, 2L), v = rbind(c(1, 1), c(1, -1)),
+               uv = rbind(c(1, 1), c(1, -1), c(-1, 1), c(-1, -1)))       # (u sign, v sign) per mirror
+  k <- nrow(sg); ix <- rep(seq_len(nodes), each = k); s <- sg[rep(seq_len(k), times = nodes), , drop = FALSE]
+  u <- z[ix, seq_len(n_fac), drop = FALSE] * s[, 1L]; v <- z[ix, n_fac + 1L] * s[, 2L]
+  G <- nodes * k
+  structure(list(u = u, v = v, weight = rep(1 / G, G), order = nodes, policy_law = "normal",
+    n_fac = as.integer(n_fac), rule = "sobol", nodes = as.integer(G), seed = as.integer(seed),
+    points = nodes, symmetric = symmetric), class = "rum_quadrature")
 }
 
 # Number of taste factors a rule integrates (a vector u is one factor).
 .rum_quad_nfac <- function(quadrature)
   if (is.matrix(quadrature$u)) ncol(quadrature$u) else 1L
 
-# Short label of a rule ("15x15", "11x11x15", "sobol512").
+# Short label of a rule ("15x15", "11x11x15", "sobol512v": 512 Sobol points mirrored in v).
 .rum_quad_label <- function(quadrature)
-  if (identical(quadrature$rule, "sobol")) paste0("sobol", quadrature$nodes) else
-    paste(quadrature$order, collapse = "x")
+  if (identical(quadrature$rule, "sobol")) {
+    sym <- if (is.null(quadrature$symmetric)) "none" else quadrature$symmetric
+    paste0("sobol", if (is.null(quadrature$points)) quadrature$nodes else quadrature$points,
+           if (sym == "none") "" else sym)
+  } else paste(quadrature$order, collapse = "x")
 
 #' @export
 rum_loglik <- function(data, par, quadrature = rum_quadrature()) {

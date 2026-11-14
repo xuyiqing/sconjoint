@@ -62,7 +62,9 @@
 # The same with q = ncol(th$loading) > 1 taste factors: eta = kappa + d'mu + d'Lambda u + s v with
 # u (G x q, quad$u) and the loading score for factor k, sum_t d_t E[e_t u_k | Y], in the
 # column-major layout of theta (factor 1's p entries first). Columns: s_mu[1..p], kappa,
-# vec(Lambda) (p q), omega (.rum_th_idx(p, q, offset = p)).
+# vec(Lambda) (p q), omega (.rum_th_idx(p, q, offset = p)). Below .rum_omega_small (the C++ kernel's
+# threshold, one definition) the omega score is E[v^2 (R^2 - sum_t p_t(1-p_t)) | Y] / 2, the C++ kernel's
+# boundary form: for a rule symmetric in v the limit of the interior form (see src/rum_core.cpp).
 .rum_seq_scores_q <- function(MU, DL, Y, th, quad) {
   B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
   L <- as.matrix(th$loading); nf <- ncol(L)
@@ -83,7 +85,7 @@
     if (boundary) { RS <- RS + (Y[, t] - pr); CV <- CV + pr * (1 - pr) }
     else som <- som + rowSums(r * vm)
   }
-  if (boundary) return(cbind(smu, sk, slam, rowSums(P * 0.5 * (RS^2 - CV))))
+  if (boundary) return(cbind(smu, sk, slam, rowSums(P * 0.5 * vm^2 * (RS^2 - CV))))
   cbind(smu, sk, slam, som / (2 * s))
 }
 

@@ -158,3 +158,129 @@ test_that("finding 4: the correction solves on the estimable range and flags inc
   expect_true(rq(".rum_dirs_unsolved")(list(f1 = list(g = cw$g), f2 = list(g = cw2$g))))
   expect_false(rq(".rum_dirs_unsolved")(list(f1 = list(g = cw$g))))
 })
+
+# ---- finding 1: small omega; one omega score in R, C++ and the conditional information ------
+# Helpers: all 2^T sequences of one respondent with design Dm, scored three ways.
+fx_scores3 <- function(mu1, Dm, th, quad) {
+  T <- nrow(Dm); p <- ncol(Dm); nf <- ncol(th$loading)
+  Yall <- rq(".rum_cond_Y")(T); B <- nrow(Yall)
+  sR <- rq(".rum_seq_scores")(matrix(mu1, B, p, byrow = TRUE),
+                               lapply(seq_len(T), function(t) matrix(Dm[t, ], B, p, byrow = TRUE)), Yall, th, quad)
+  ids <- sprintf("y%02d", seq_len(B))
+  dat <- rum_data(lapply(seq_len(B), function(r) Yall[r, ]), rep(list(Dm), B), ids = ids,
+                  metadata = list(orientation = "y = 1 picks the first profile"))
+  ev <- rum_dnn_gaussian_evaluate(dat, matrix(mu1, B, p, byrow = TRUE, dimnames = list(ids, NULL)),
+                                  th$kappa, th$loading, th$omega, quad)
+  sC <- cbind(ev$output_score, ev$common_score)
+  bnd <- nf > 1L && th$omega < rq(".rum_omega_small")
+  s <- sqrt(th$omega); a <- th$kappa + drop(Dm %*% mu1); b <- Dm %*% th$loading
+  e <- rq(".rum_cond_eta")(a, b, s, quad); po <- rq(".rum_cond_post")(Yall, e, log(quad$weight))
+  cc <- rq(".rum_cond_c")(Yall, po$Pi, e, quad, bnd)
+  A <- rq(".rum_cond_A")(Dm, s, nf, bnd)
+  K <- rq(".rum_cond_K")(a, b, s, quad, "exact", Yall, NULL, TRUE, bnd)$K
+  list(R = unname(sR), C = unname(sC), Ac = t(A %*% t(cc)), info = A %*% K %*% t(A),
+       info_cpp = crossprod(unname(sC) * exp(ev$loglik), unname(sC)), py = exp(ev$loglik), bnd = bnd,
+       e = e, Yall = Yall, a = a, b = b, s = s, A = A)
+}
+rel <- function(x, y) max(abs(x - y)) / max(abs(y))
+
+test_that("finding 1: the q > 1 Sobol rule is exactly symmetric in v (512 points -> 1,024 nodes)", {
+  q2 <- rum_quadrature(n_fac = 2L)
+  expect_identical(q2$points, 512L); expect_identical(q2$nodes, 1024L); expect_identical(length(q2$v), 1024L)
+  odd <- seq(1L, 1024L, 2L)
+  expect_identical(q2$u[odd, ], q2$u[odd + 1L, ]); expect_identical(q2$v[odd], -q2$v[odd + 1L])
+  expect_identical(rq(".rum_quad_label")(q2), "sobol512v")
+  expect_identical(rq(".rum_info_quadrature")(2L)$nodes, 1024L)
+  expect_identical(rq(".rum_score_quadrature")(2L)$points, 2048L)
+  big <- rum_quadrature(n_fac = 2L, nodes = 2048L)                 # nested: first nodes are the smaller rule
+  expect_identical(big$u[1:1024, ], q2$u); expect_identical(big$v[1:1024], q2$v)
+  uv <- rum_quadrature(n_fac = 2L, nodes = 256L, symmetric = "uv")
+  expect_identical(uv$nodes, 1024L)
+  expect_identical(uv$u[seq(1L, 1024L, 4L), ], -uv$u[seq(3L, 1024L, 4L), ])
+  expect_equal(colSums(uv$u * uv$weight), c(0, 0), tolerance = 1e-15)
+  expect_identical(rum_quadrature(n_fac = 2L, symmetric = "none")$nodes, 512L)
+  # the threshold has one definition (C++), read by R at load
+  expect_identical(rq(".rum_omega_small"), rq("rum_omega_small_cpp")())
+  expect_identical(rq(".rum_omega_small"), 1e-8)
+})
+
+test_that("finding 1: R scores, C++ scores and A_D c agree, and the information is the C++ score outer product", {
+  set.seed(11)
+  p <- 3L; q <- 2L; T <- 4L
+  Lam <- matrix(c(.6, -.3, .4, .2, .5, -.4), p, q); mu1 <- c(.3, -.5, .2)
+  Dm <- matrix(c(1, -1, 0, 1, 0, 1, -1, 1, -1, 0, 1, 1), T, p)
+  quad <- rq(".rum_info_quadrature")(q)
+  for (om in c(1e-12, 1e-6, 1e-4, 0.01, 0.25)) {
+    th <- list(kappa = .7, loading = Lam, omega = om)
+    S <- fx_scores3(mu1, Dm, th, quad)
+    expect_identical(S$bnd, om < 1e-8)
+    expect_lt(rel(S$R, S$C), 1e-10, label = sprintf("R vs C++ at omega %g", om))
+    expect_lt(rel(S$Ac, S$C), 1e-10, label = sprintf("A_D c vs C++ at omega %g", om))
+    expect_lt(rel(S$info, S$info_cpp), 1e-10, label = sprintf("A K A' vs sum_y p s s' at omega %g", om))
+    expect_lt(abs(sum(S$py) - 1), 1e-12)
+    expect_lt(max(abs(colSums(S$C * S$py))), 1e-12)                 # E_y[s] = 0 on the rule
+  }
+  # the boundary form is continuous with the interior form across the threshold (the v-symmetric rule)
+  sc <- function(om) fx_scores3(mu1, Dm, list(kappa = .7, loading = Lam, omega = om), quad)$C[, 11]
+  expect_lt(max(abs(sc(0.99e-8) - sc(1.01e-8))) / max(abs(sc(1e-2))), 1e-6)
+  expect_lt(max(abs(sc(0) - sc(1e-12))) / max(abs(sc(1e-2))), 1e-9)
+})
+
+test_that("finding 1: the boundary block's H3 and the Louis variant match brute force and exact", {
+  set.seed(12)
+  p <- 3L; q <- 2L; T <- 3L
+  Lam <- matrix(c(.6, -.3, .4, .2, .5, -.4), p, q); mu1 <- c(.3, -.5, .2)
+  Dm <- matrix(c(1, -1, 0, 1, 0, 1, -1, 1, -1), T, p)
+  quad <- rum_quadrature(n_fac = q, nodes = 64L)
+  th <- list(kappa = .7, loading = Lam, omega = 1e-12)
+  S <- fx_scores3(mu1, Dm, th, quad); expect_true(S$bnd)
+  # H3 = sum_g w_g E_{y | g}[c_g c_g'] with the boundary block h_t = e_t R - pi_t, by enumeration
+  Z <- cbind(1, quad$u); H <- matrix(0, 4L * T, 4L * T)
+  for (g in seq_along(quad$weight)) {
+    pg <- S$e$P[, g]; pyg <- apply(S$Yall, 1, function(y) prod(ifelse(y == 1, pg, 1 - pg)))
+    for (r in seq_len(nrow(S$Yall))) {
+      er <- S$Yall[r, ] - pg
+      cg <- c(er * Z[g, 1], er * Z[g, 2], er * Z[g, 3], quad$v[g]^2 * (er * sum(er) - pg * (1 - pg)))
+      H <- H + quad$weight[g] * pyg[r] * tcrossprod(cg)
+    }
+  }
+  expect_lt(rel(rq(".rum_cond_H3")(S$e, quad, TRUE), H), 1e-12)
+  # Louis (both forms) and mc against exact at the boundary, simulated sequences
+  ny <- 4000L
+  sim <- withr::with_seed(5L, list(g = sample.int(length(quad$weight), ny, TRUE, prob = quad$weight),
+                                   U = matrix(runif(ny * T), ny, T)))
+  KE <- rq(".rum_cond_K")(S$a, S$b, S$s, quad, "exact", S$Yall, NULL, TRUE, TRUE)$K
+  IE <- S$A %*% KE %*% t(S$A)
+  for (m in c("louis", "mc")) {
+    KL <- rq(".rum_cond_K")(S$a, S$b, S$s, quad, m, NULL, sim, TRUE, TRUE)$K
+    expect_lt(rel(S$A %*% KL %*% t(S$A), IE), if (m == "louis") 0.05 else 0.08, label = m)
+  }
+  KN <- rq(".rum_cond_K")(S$a, S$b, S$s, quad, "louis", NULL, sim, FALSE, TRUE)
+  expect_identical(KN$xo, 0)
+})
+
+test_that("finding 1: the model information is the mean outer product of the C++ scores on its draws", {
+  P <- fx_problem(n = 4L, p = 3L, n_fac = 2L, seed = 13L)
+  dat <- P$data; p <- dat$p; M <- 40L; seed <- 77L
+  for (om in c(1e-12, 0.25)) {
+    th <- list(kappa = .2, loading = P$L, omega = om); quad <- rq(".rum_info_quadrature")(2L)
+    MI <- rq(".rum_model_info")(dat, P$mu, th, M, quad, seed)
+    dr <- rq(".rum_with_seed")(seed, list(j = sample.int(dat$n, M, replace = TRUE),
+      u = matrix(stats::rnorm(M * 2L), M, 2L), v = stats::rnorm(M), U = matrix(stats::runif(M * max(dat$T)), M, max(dat$T))))
+    for (i in seq_len(dat$n)) {
+      ys <- ds <- list()
+      for (m in seq_len(M)) {
+        j <- dr$j[m]; rows <- dat$offsets[j] + seq_len(dat$T[j]); Dm <- dat$d[rows, , drop = FALSE]
+        beta <- P$mu[i, ] + drop(th$loading %*% dr$u[m, ])
+        ys[[m]] <- as.numeric(dr$U[m, seq_len(dat$T[j])] < plogis(th$kappa + drop(Dm %*% beta) + sqrt(om) * dr$v[m]))
+        ds[[m]] <- Dm
+      }
+      ids <- sprintf("m%03d", seq_len(M))
+      sd <- rum_data(ys, ds, ids = ids, metadata = list(orientation = "y = 1 picks the first profile"))
+      ev <- rum_dnn_gaussian_evaluate(sd, matrix(P$mu[i, ], M, p, byrow = TRUE, dimnames = list(ids, NULL)),
+                                      th$kappa, th$loading, om, quad)
+      SC <- cbind(ev$output_score, ev$common_score)
+      expect_lt(rel(MI$I[i, , ], crossprod(SC) / M), 1e-10, label = sprintf("respondent %d omega %g", i, om))
+    }
+  }
+})

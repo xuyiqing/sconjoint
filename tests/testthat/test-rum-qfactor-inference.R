@@ -258,7 +258,9 @@ test_that("q=2: bounded updates (single shares, joint importance) do not depend 
     ja <- tj(base); jb <- tj(diff)
     expect_true(ja$converged); expect_identical(ja$status, jb$status)
     expect_lt(relmax(jb$table$estimate, ja$table$estimate), 1e-6)
-    expect_lt(relmax(jb$table$se_population, ja$table$se_population), 1e-6)
+    sh_rows <- ja$table$kind != "total"     # the TOTAL row's SE is rounding (about 1e-9): compared absolutely
+    expect_lt(relmax(jb$table$se_population[sh_rows], ja$table$se_population[sh_rows]), 1e-6)
+    expect_lt(max(abs(jb$table$se_population[!sh_rows])), 1e-6)
     expect_lt(abs(sum(ja$table$estimate[ja$table$kind != "total"]) - 1), 1e-12)
   }
   # the legacy CV-TMLE (.rum_tmle_dnn) and the bounded wrapper evaluate q-factor states too
@@ -373,9 +375,9 @@ test_that("p = 1 runs (one and two factors; constant, model and conditional base
 
 test_that("default rules: one-factor defaults are replaced at q > 1; method 'auto' picks exact or Louis", {
   sq <- rq(".rum_quad_for")(rq(".rum_score_quadrature")(), 2L, "score")
-  expect_identical(c(rq(".rum_quad_nfac")(sq), length(sq$weight)), c(2L, 2048L))
+  expect_identical(c(rq(".rum_quad_nfac")(sq), length(sq$weight)), c(2L, 4096L))  # 2,048 points mirrored in v
   iq <- rq(".rum_quad_for")(rq(".rum_info_quadrature")(), 3L, "info")
-  expect_identical(c(rq(".rum_quad_nfac")(iq), length(iq$weight)), c(3L, 512L))
+  expect_identical(c(rq(".rum_quad_nfac")(iq), length(iq$weight)), c(3L, 1024L))  # 512 points mirrored in v
   expect_identical(rq(".rum_quad_for")(rq(".rum_score_quadrature")(), 1L), rq(".rum_score_quadrature")())
   expect_error(rq(".rum_quad_for")(rum_quadrature(c(5L, 5L)), 2L, "score"), "taste factor")
   m <- rq(".rum_cond_method")

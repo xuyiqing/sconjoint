@@ -6,7 +6,8 @@
 \description{Integrate a complete task product over shared policy and position latent effects using a stable compiled core.}
 \usage{
 rum_quadrature(order = c(11L, 11L), policy_law = c("normal", "three_point"),
-  n_fac = 1L, rule = c("auto", "product", "sobol"), nodes = 512L, seed = 20261114L)
+  n_fac = 1L, rule = c("auto", "product", "sobol"), nodes = 512L, seed = 20261114L,
+  symmetric = c("v", "uv", "none"))
 rum_loglik(data, par, quadrature = rum_quadrature())
 rum_information(data, par, quadrature = rum_quadrature(), step = 1e-4)
 }
@@ -17,6 +18,7 @@ rum_information(data, par, quadrature = rum_quadrature(), step = 1e-4)
 \item{rule}{\code{"product"} Gauss-Hermite product rule (\code{order} then has one, two, or \code{n_fac + 1} entries); \code{"sobol"} Owen-scrambled Sobol points over the factors and the position effect, mapped through the normal quantile function, with equal weights; \code{"auto"} is the product rule at one factor and Sobol above one.}
 \item{nodes}{Number of Sobol points.}
 \item{seed}{Scrambling seed of the Sobol rule; R's random-number state is not used.}
+\item{symmetric}{Mirroring of the Sobol points: \code{"v"} (default) pairs each point \eqn{(u, v)} with \eqn{(u, -v)}, so the rule has \code{2 * nodes} nodes; \code{"uv"} also mirrors \eqn{u} (\code{4 * nodes} nodes); \code{"none"} keeps the plain points.}
 \item{data}{A \code{rum_data} object.}
 \item{par}{Parameter vector kappa, alpha, loading, omega.}
 \item{quadrature}{A \code{rum_quadrature} rule.}

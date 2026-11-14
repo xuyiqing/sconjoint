@@ -92,12 +92,12 @@ for (q in 2:3) {
   })
 
   test_that(paste0("q=", q, ": scrambled Sobol agrees with the product rule"), {
-    s512 <- rum_quadrature(n_fac = q)                                 # auto -> Sobol 512
-    expect_identical(s512$rule, "sobol"); expect_identical(dim(s512$u), c(512L, q))
-    expect_equal(s512$weight, rep(1 / 512, 512))
+    s512 <- rum_quadrature(n_fac = q)                 # auto -> Sobol 512 points, mirrored in v: 1,024 nodes
+    expect_identical(s512$rule, "sobol"); expect_identical(dim(s512$u), c(1024L, q))
+    expect_equal(s512$weight, rep(1 / 1024, 1024))
     expect_identical(s512, rum_quadrature(n_fac = q, rule = "sobol", nodes = 512L, seed = 20261114L))
     s4k <- rum_quadrature(n_fac = q, nodes = 4096L)
-    expect_identical(s4k$u[1:512, , drop = FALSE], s512$u)          # nested sequence
+    expect_identical(s4k$u[1:1024, , drop = FALSE], s512$u)         # nested sequence
     ref <- ev_ll(P, quad = quad)$loglik
     d512 <- ev_ll(P, quad = s512)$loglik - ref; d4k <- ev_ll(P, quad = s4k)$loglik - ref
     expect_lt(abs(mean(d512)), 5e-3); expect_lt(max(abs(d512)), 2e-2)
