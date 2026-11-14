@@ -7,10 +7,12 @@
 # variation along some attributes than one factor allows, and BR has twice the predicted
 # straight-liners (88 of 1,991 vs 44). The truths here are built to fail in those two ways.
 #
-#   (a) two factors:   beta_i = mu(z_i) + L1 u1_i + L2 u2_i, u1, u2 iid N(0, 1);
+#   (a) two factors:   beta_i = mu(z_i) + L1 u1_i + L2 u2_i, u1, u2 iid N(0, 1); more generally
+#       K factors, beta_i = mu(z_i) + L u_i with L p x K and u_i ~ N(0, I_K) (a fitted q-factor
+#       RUM as the truth: pass its p x q loading matrix);
 #   (b) straight-liners: with probability pi, respondent i ignores the profiles and picks the
-#       same side s_i in every task (s_i = side 1 with probability q; each choice flips with
-#       probability eps, 0 by default); otherwise i follows the RUM above. Membership is
+#       same side s_i in every task (s_i = side 1 with probability p_side; each choice flips
+#       with probability eps, 0 by default); otherwise i follows the RUM above. Membership is
 #       independent of z_i and of the tastes;
 #   (c) both.
 # L2 = 0 and pi = 0 give back the fitted one-factor RUM (same draws, same choices).
@@ -20,9 +22,10 @@
 # taste law of ALL n respondents, straight-liners included: straight-lining is a response
 # process that hides a taste, it does not remove it. Their true values use the two-factor law,
 # c'beta_i ~ N(c'mu_i, sum_k (c'L_k)^2), and are one-dimensional normal integrals (Gauss-Hermite).
+# Importance shares (kind "importance") are evaluated by the target itself at the truth's law.
 # Behavioural targets (position = TRUE: win probabilities and AMEs with the side preference) are
 # properties of the observed choice process: a straight-liner chooses the focal profile with
-# probability q (focal on side 1) or 1 - q (side 2), whatever the profiles, so
+# probability p_side (focal on side 1) or 1 - p_side (side 2), whatever the profiles, so
 #   m_i(behaviour) = (1 - pi) m_i(attentive) + pi m_i(straight-liner).
 # A design-based AMCE estimates the behavioural AME; a structural fit aims at the taste AME.
 # Values are conditional on the sample's covariates (the average over the n respondents of a
@@ -31,7 +34,10 @@
 # ---- truth object -------------------------------------------------------------------------
 # mu: n x p matrix of mean tastes (or a function of Z returning one); kappa, loading (L1), omega:
 # the fitted RUM's common parameters; loading2: L2 (NULL or 0: one factor); pi_sl, sl_side1,
-# sl_flip: the straight-liner mixture.
+# sl_flip: the straight-liner mixture. loading may also be a p x K matrix (K >= 2; columns
+# L1..LK, e.g. a fitted q-factor RUM's loading); loading2 must then be NULL. A vector or a p x 1
+# matrix is the two-factor interface (truth$L is p x 2, L2 = loading2 or 0); a p x K matrix
+# gives truth$L = that matrix (p x K).
 .rum_ms_truth <- function(mu, kappa, loading, omega, loading2 = NULL, pi_sl = 0,
                           sl_side1 = 0.5, sl_flip = 0, Z = NULL, label = NULL) {
   if (is.function(mu)) {
@@ -41,16 +47,32 @@
   if (!is.matrix(mu) || !is.numeric(mu) || any(!is.finite(mu))) stop("mu must be a finite n x p matrix.")
   p <- ncol(mu)
   chk <- function(x, k, nm) if (!is.numeric(x) || length(x) != k || any(!is.finite(x))) stop(nm, " must be finite, length ", k, ".")
-  chk(kappa, 1L, "kappa"); chk(loading, p, "loading"); chk(omega, 1L, "omega")
+  multi <- is.matrix(loading) && ncol(loading) > 1L
+  if (is.matrix(loading) && ncol(loading) == 1L) loading <- loading[, 1L]
+  if (multi) {
+    if (!is.numeric(loading) || nrow(loading) != p || any(!is.finite(loading)))
+      stop("loading must be finite, length ", p, " or a ", p, " x K matrix.")
+    if (!is.null(loading2)) stop("loading2 must be NULL when loading is a matrix.")
+  } else chk(loading, p, "loading")
+  chk(kappa, 1L, "kappa"); chk(omega, 1L, "omega")
   if (omega < 0) stop("omega must be nonnegative.")
-  if (is.null(loading2)) loading2 <- rep(0, p)
-  chk(loading2, p, "loading2")
+  if (!multi) {
+    if (is.null(loading2)) loading2 <- rep(0, p)
+    chk(loading2, p, "loading2")
+  }
   for (x in list(pi_sl, sl_side1, sl_flip)) chk(x, 1L, "mixture parameters")
   if (pi_sl < 0 || pi_sl > 1 || sl_side1 < 0 || sl_side1 > 1 || sl_flip < 0 || sl_flip > 0.5)
     stop("pi_sl and sl_side1 must be in [0, 1], sl_flip in [0, 0.5].")
-  L <- cbind(L1 = unname(loading), L2 = unname(loading2))
+  if (multi) {
+    L <- unname(loading); colnames(L) <- paste0("L", seq_len(ncol(L)))
+    nz <- sum(colSums(L != 0) > 0)
+    fac <- if (nz <= 1L) NULL else if (nz == 2L) "two-factor" else paste0(nz, "-factor")
+  } else {
+    L <- cbind(L1 = unname(loading), L2 = unname(loading2))
+    fac <- if (any(loading2 != 0)) "two-factor"
+  }
   rownames(L) <- colnames(mu)
-  type <- paste(c(if (any(loading2 != 0)) "two-factor", if (pi_sl > 0) "straight-liners"), collapse = " + ")
+  type <- paste(c(fac, if (pi_sl > 0) "straight-liners"), collapse = " + ")
   if (!nzchar(type)) type <- "one-factor RUM"
   structure(list(mu = mu, kappa = unname(kappa), L = L, omega = unname(omega), pi_sl = pi_sl,
                  sl_side1 = sl_side1, sl_flip = sl_flip, type = type,
@@ -66,9 +88,10 @@
 # respondent (draw i is respondent i's; GS coded by the respondent's party key), truncated to
 # the respondent's task count T_i. Random draws, in this order under seed + 1000003: u1 (n),
 # v (n), U (one uniform per task), then u2 (n), the straight-liner indicator uniforms (n), the
-# side uniforms (n) and the flip uniforms (one per task). The first three are exactly the S-A
-# harness's draws (SA_common.R simulate_data), so a one-factor truth reproduces its data and
-# the extra draws never change the RUM part.
+# side uniforms (n) and the flip uniforms (one per task), then (K > 2 factors only) u3, ..., uK
+# (n each). The first three are exactly the S-A harness's draws (SA_common.R simulate_data), so
+# a one-factor truth reproduces its data and the extra draws never change the RUM part; a K-factor
+# truth shares u1, u2, v, U and the straight-liner draws with the two-factor one.
 # data: a rum_data template (ids, T, basis, metadata are kept; d, a, y are replaced); or give
 # n and T. resp: GS respondent party input (pid7 or D/R/I, one per respondent).
 .rum_ms_simulate <- function(truth, spec, data = NULL, resp = NULL, T = NULL, seed) {
@@ -91,7 +114,8 @@
   dr <- .rum_with_seed(seed + 1000003L, {
     u <- stats::rnorm(n); v <- stats::rnorm(n); U <- stats::runif(nt)
     u2 <- stats::rnorm(n); S <- stats::runif(n); side <- stats::runif(n); flip <- stats::runif(nt)
-    list(u = u, v = v, U = U, u2 = u2, S = S, side = side, flip = flip)
+    uk <- if (ncol(truth$L) > 2L) lapply(3:ncol(truth$L), function(k) stats::rnorm(n))
+    list(u = u, v = v, U = U, u2 = u2, S = S, side = side, flip = flip, uk = uk)
   })
   D <- matrix(0, nt, p)
   for (k in seq_along(crn$designs)) {
@@ -104,6 +128,7 @@
   L <- truth$L
   B <- truth$mu[ri, , drop = FALSE] + outer(dr$u[ri], L[, 1L])
   if (any(L[, 2L] != 0)) B <- B + outer(dr$u2[ri], L[, 2L])
+  for (k in seq_along(dr$uk)) if (any(L[, k + 2L] != 0)) B <- B + outer(dr$uk[[k]][ri], L[, k + 2L])
   eta <- truth$kappa + rowSums(D * B) + sqrt(truth$omega) * dr$v[ri]
   y <- as.numeric(dr$U < stats::plogis(eta))
   straight <- dr$S < truth$pi_sl
@@ -127,7 +152,8 @@
   data$metadata$simulation <- list(seed = seed, truth = truth$label, type = truth$type,
     kappa = truth$kappa, L = truth$L, omega = truth$omega, pi_sl = truth$pi_sl,
     sl_side1 = truth$sl_side1, sl_flip = truth$sl_flip,
-    latent = list(u1 = dr$u, u2 = dr$u2, v = dr$v, straight = straight, sl_side = sl_side))
+    latent = c(list(u1 = dr$u, u2 = dr$u2, v = dr$v, straight = straight, sl_side = sl_side),
+               if (length(dr$uk)) stats::setNames(dr$uk, paste0("u", 2L + seq_along(dr$uk)))))
   data
 }
 
@@ -174,12 +200,14 @@
 # rum-targets-switch.R) or built directly. Kinds:
 #   linear  value linear in mu and free of the law (mean contrasts, subgroup contrasts): tg$m;
 #   share   Pr(c'beta > 0) = Phi(c'mu / sqrt(sum_k (c'L_k)^2));
-#   rows    contest rows (win probabilities and switch AMEs), with or without position.
+#   rows    contest rows (win probabilities and switch AMEs), with or without position;
+#   law     the target's own m at the truth's law (importance shares; .rum_ms_law_th).
 .rum_ms_spec <- function(tg) {
   if (!is.null(tg$ms_kind)) return(tg)
   out <- list(name = tg$name, w = tg$w, class = tg$class)
   if (tg$kind %in% c("mean", "group contrast")) return(c(out, list(ms_kind = "linear", m = tg$m)))
   if (identical(tg$kind, "share")) return(c(out, list(ms_kind = "share", c = tg$c)))
+  if (identical(tg$kind, "importance") && is.function(tg$m)) return(c(out, list(ms_kind = "law", m = tg$m)))
   if (!is.null(tg$grad)) {
     env <- environment(tg$grad)
     if (!is.null(env$rows)) {                                            # .rum_tgt_choice_rows / switch AME
@@ -224,10 +252,19 @@
        class = class, n_seq = M)
 }
 
+# The truth's law as a fitted state th: trailing all-zero loading columns are dropped; one
+# remaining column is a plain vector (the one-factor targets), more a p x K matrix.
+.rum_ms_law_th <- function(truth) {
+  L <- unname(truth$L); nz <- which(colSums(L != 0) > 0); K <- max(1L, nz)
+  list(kappa = truth$kappa, loading = if (K == 1L) L[, 1L] else L[, seq_len(K), drop = FALSE],
+       omega = truth$omega)
+}
+
 # Per-respondent values of one spec under a truth (attentive law; no straight-liners).
 .rum_ms_values <- function(truth, sp, order = 31L) {
   mu <- truth$mu; L <- truth$L
   switch(sp$ms_kind,
+    law = sp$m(mu, .rum_ms_law_th(truth)),
     linear = sp$m(mu, list(kappa = truth$kappa, loading = L[, 1L], omega = truth$omega)),
     share = {
       s <- sqrt(sum(crossprod(L, sp$c)^2)); m <- drop(mu %*% sp$c)
@@ -237,12 +274,13 @@
 }
 
 # A straight-liner's value of a behavioural (position) rows target: the focal profile wins
-# with probability q* when it is on side 1, 1 - q* on side 2 (q* = q (1 - eps) + (1 - q) eps).
+# with probability p* when it is on side 1, 1 - p* on side 2 (p* = p_side (1 - eps) +
+# (1 - p_side) eps, p_side = truth$sl_side1).
 .rum_ms_sl_value <- function(truth, sp, n) {
-  q <- truth$sl_side1 * (1 - truth$sl_flip) + (1 - truth$sl_side1) * truth$sl_flip
+  p_side <- truth$sl_side1 * (1 - truth$sl_flip) + (1 - truth$sl_side1) * truth$sl_flip
   grp <- if (is.null(sp$group)) rep(1L, n) else sp$group
   per <- vapply(sp$rows, function(R) if (is.null(R)) 0 else
-    sum(R$coef * ifelse(R$side > 0, q, 1 - q)), 0)
+    sum(R$coef * ifelse(R$side > 0, p_side, 1 - p_side)), 0)
   per[grp]
 }
 
@@ -260,6 +298,7 @@
 #              the given context set;
 #   one_factor the same target under the truth's one-factor reading (L2 = 0, no
 #              straight-liners): what RUM's law says if it recovered mu, kappa, L1, omega exactly.
+#              (For a K-factor truth this keeps L1 only, which depends on the rotation of L.)
 #              It is NOT RUM's pseudo-true value (a fit to wrong-model data moves mu and lambda
 #              to absorb L2 and the straight-liners); that is left to the simulation.
 .rum_ms_true_values <- function(truths, targets, order = 45L, order_check = 31L) {
@@ -323,21 +362,27 @@
   list(pair = out, same = same, all1 = all1)
 }
 
-# Expected values under a truth on given designs (product Gauss-Hermite in u1, u2, v).
+# Expected values under a truth on given designs (product Gauss-Hermite in u1, u2, v; a K-factor
+# truth adds u3..uK, each with order[2] nodes when its column is nonzero).
 .rum_ms_expected_moments <- function(truth, data, dirs, scale, order = c(15L, 15L, 11L)) {
   n <- data$n; K <- ncol(dirs); L <- truth$L
   g1 <- .rum_gh_rule(order[1]); two <- any(L[, 2L] != 0)
   g2 <- if (two) .rum_gh_rule(order[2]) else list(z = 0, w = 1)
   g3 <- if (truth$omega > 0) .rum_gh_rule(order[3]) else list(z = 0, w = 1)
-  grid <- expand.grid(a = seq_along(g1$z), b = seq_along(g2$z), c = seq_along(g3$z))
+  ext <- if (ncol(L) > 2L) which(colSums(L[, -(1:2), drop = FALSE] != 0) > 0) + 2L else integer(0)
+  gx <- lapply(ext, function(k) .rum_gh_rule(order[2]))
+  grid <- do.call(expand.grid, c(list(a = seq_along(g1$z), b = seq_along(g2$z), c = seq_along(g3$z)),
+                                 lapply(gx, function(g) seq_along(g$z))))
   U1 <- g1$z[grid$a]; U2 <- g2$z[grid$b]; V <- g3$z[grid$c]
   W <- g1$w[grid$a] * g2$w[grid$b] * g3$w[grid$c]
+  for (j in seq_along(gx)) W <- W * gx[[j]]$w[grid[[3L + j]]]
   out <- matrix(0, n, K, dimnames = list(data$ids, colnames(dirs))); same <- all1 <- numeric(n)
   for (i in seq_len(n)) {
     ix <- data$offsets[i] + seq_len(data$T[i]); ti <- length(ix); d <- data$d[ix, , drop = FALSE]
     base <- truth$kappa + drop(d %*% truth$mu[i, ])
     eta <- base + outer(drop(d %*% L[, 1L]), U1) + sqrt(truth$omega) * matrix(V, ti, length(W), byrow = TRUE)
     if (two) eta <- eta + outer(drop(d %*% L[, 2L]), U2)
+    for (j in seq_along(gx)) eta <- eta + outer(drop(d %*% L[, ext[j]]), gx[[j]]$z[grid[[3L + j]]])
     P <- stats::plogis(eta)
     p1 <- sum(W * apply(P, 2L, prod)); p0 <- sum(W * apply(1 - P, 2L, prod))
     if (ti > 1L) {
@@ -365,10 +410,12 @@
 
 # Straight-liner fraction and side share that close the observed excess of same-side
 # respondents over a truth's prediction (on the observed designs):
-#   pi = (S_obs - S_pred) / (n - S_pred), q = excess on side 1 / total excess (clipped to [0, 1]).
+#   pi = (S_obs - S_pred) / (n - S_pred), p_side = excess on side 1 / total excess (clipped to
+#   [0, 1]). Returned as c(pi, q): the element name "q" (the straight-liners' side-1 share,
+#   sl_side1 of .rum_ms_truth, not a factor count) is kept for existing callers.
 .rum_ms_calibrate_pi <- function(S_obs, S_pred, S1_obs, S1_pred, n) {
   pi <- max(0, (S_obs - S_pred) / (n - S_pred))
   ex1 <- S1_obs - S1_pred; ex0 <- (S_obs - S1_obs) - (S_pred - S1_pred)
-  q <- if (ex1 + ex0 > 0) min(1, max(0, ex1 / (ex1 + ex0))) else 0.5
-  c(pi = pi, q = q)
+  p_side <- if (ex1 + ex0 > 0) min(1, max(0, ex1 / (ex1 + ex0))) else 0.5
+  c(pi = pi, q = p_side)
 }

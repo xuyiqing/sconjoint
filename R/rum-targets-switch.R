@@ -34,6 +34,9 @@
 #   dm/dmu = sum_r c_r E[G'] D_r;  dm/dkappa = sum_r c_r s_r E[G'] (position only);
 #   dm/dlambda = sum_r c_r K_r (D_r' lambda) D_r;  dm/domega = sum_r c_r K_r / 2 (position only),
 #   K_r = E[G'(m_r + sigma_r z) z] / sigma_r  (-> G''(m_r) as sigma_r -> 0).
+# q > 1 taste factors (beta_i ~ N(mu(z_i), Lambda Lambda'), Lambda p x q): (D_r' lambda)^2 becomes
+# ||Lambda' D_r||^2 and dm/dLambda[, k] = sum_r c_r K_r (D_r' Lambda[, k]) D_r (theta's
+# column-major loading block). One factor keeps the signed D_r' lambda path (bitwise unchanged).
 
 .rum_gh_rule <- function(order = 31L) { r <- .rum_normal_rule(order); list(z = r$nodes, w = r$weights) }
 
@@ -47,13 +50,19 @@
   gh <- .rum_gh_rule(order)
   vg <- function(mu, th) {
     n <- nrow(mu); p <- ncol(mu); grp <- if (is.null(group)) rep(1L, n) else group
-    m <- numeric(n); gm <- matrix(0, n, p); gl <- matrix(0, n, p); gk <- go <- numeric(n)
+    multi <- .rum_multi_fac(th$loading); nf <- if (multi) ncol(th$loading) else 1L
+    m <- numeric(n); gm <- matrix(0, n, p); gl <- matrix(0, n, p * nf); gk <- go <- numeric(n)
     for (g in unique(grp)) {
       R <- rows[[g]]; if (is.null(R)) next
       ii <- which(grp == g); ni <- length(ii)
       D <- R$D; cf <- R$coef; sd <- R$side
-      dl <- drop(D %*% th$loading)
-      sig <- sqrt(dl^2 + if (position) th$omega else 0)
+      if (multi) {
+        DL <- D %*% th$loading
+        sig <- sqrt(rowSums(DL^2) + if (position) th$omega else 0)
+      } else {
+        dl <- drop(D %*% th$loading)
+        sig <- sqrt(dl^2 + if (position) th$omega else 0)
+      }
       MD <- mu[ii, , drop = FALSE] %*% t(D)
       if (position) MD <- MD + rep(th$kappa * sd, each = ni)
       V <- A <- B <- matrix(0, ni, nrow(D))
@@ -69,7 +78,8 @@
       }
       m[ii] <- drop(V %*% cf)
       gm[ii, ] <- A %*% (cf * D)
-      gl[ii, ] <- K %*% ((cf * dl) * D)
+      gl[ii, ] <- if (multi) do.call(cbind, lapply(seq_len(nf), function(k) K %*% ((cf * DL[, k]) * D)))
+                  else K %*% ((cf * dl) * D)
       if (position) { gk[ii] <- drop(A %*% (cf * sd)); go[ii] <- drop(K %*% cf) / 2 }
     }
     list(m = m, gm = gm, gt = cbind(gk, gl, go))
