@@ -32,9 +32,11 @@
     result$network$biases[[j]][] <- par[cursor + seq_len(count)]
     cursor <- cursor + count
   }
-  ix <- .rum_th_idx(result$network$p, offset = cursor)   # theta follows the network parameters
+  n_fac <- .rum_th_nfac(result)
+  ix <- .rum_th_idx(result$network$p, n_fac, offset = cursor)   # theta follows the network parameters
   result$kappa <- par[ix$kappa]
-  result$loading <- par[ix$loading]
+  result$loading <- if (n_fac == 1L) par[ix$loading] else
+    matrix(par[ix$loading], result$network$p, n_fac)
   result$omega <- exp(par[ix$omega])
   result
 }
@@ -47,15 +49,70 @@
 
 .rum_dnn_adam_step <- function(par, gradient, m, v, iteration,
                                learning_rate, beta1, beta2, epsilon,
-                               lower, upper) {
+                               lower, upper, rows = NULL) {
   m <- beta1 * m + (1 - beta1) * gradient
   v <- beta2 * v + (1 - beta2) * gradient^2
   proposal <- par - learning_rate * (m / (1 - beta1^iteration)) /
     (sqrt(v / (1 - beta2^iteration)) + epsilon)
   if (any(!is.finite(c(m, v, proposal)))) stop("Non-finite Adam update.")
   projected <- proposal < lower | proposal > upper
-  list(par = pmax(lower, pmin(upper, proposal)), m = m, v = v,
-       projected = projected)
+  out <- pmax(lower, pmin(upper, proposal))
+  if (!is.null(rows)) {
+    pr <- .rum_project_rows(out, rows)
+    out <- pr$par; projected <- projected | pr$projected
+  }
+  list(par = out, m = m, v = v, projected = projected)
+}
+
+# Row-length bound on a p x n_fac loading (several factors): rows$index is the p x n_fac
+# matrix of the loading's positions in par and rows$radius the bound on each row's length
+# sqrt(sum_k Lambda[j, k]^2). Rows outside the ball are rescaled onto it (the Euclidean
+# projection onto the ball). With one factor the trainer keeps the elementwise box, which
+# is the same set.
+.rum_project_rows <- function(par, rows) {
+  projected <- rep(FALSE, length(par))
+  for (j in seq_len(nrow(rows$index))) {
+    at <- rows$index[j, ]
+    len <- sqrt(sum(par[at]^2))
+    if (len > rows$radius) {
+      par[at] <- par[at] * (rows$radius / len); projected[at] <- TRUE
+    }
+  }
+  list(par = par, projected = projected)
+}
+
+# Row lengths of a loading (vector: absolute values).
+.rum_loading_row_length <- function(loading)
+  if (is.matrix(loading)) sqrt(rowSums(loading^2)) else abs(loading)
+
+# Radius of the row-length bound from the elementwise loading bounds (-r, r).
+.rum_loading_radius <- function(control) {
+  b <- control$loading_bounds
+  if (!isTRUE(all.equal(-b[1L], b[2L], tolerance = 0)))
+    stop("With several taste factors loading_bounds must be symmetric, c(-r, r).")
+  b[2L]
+}
+
+# Principal-axes rotation of a p x n_fac loading (reporting convention, build plan D3):
+# Lambda V with V the eigenvectors of Lambda'Lambda in decreasing eigenvalue order, each
+# column's sign set so that its largest-absolute entry is positive. Lambda Lambda' (and so
+# the model) does not change. One factor (a vector or a p x 1 matrix) is returned as is,
+# sign included, so the one-factor path is untouched.
+.rum_canonical_rotation <- function(L) {
+  if (!is.matrix(L) || ncol(L) == 1L) return(matrix(1, 1L, 1L))
+  e <- eigen(crossprod(L), symmetric = TRUE)
+  V <- e$vectors[, order(e$values, decreasing = TRUE), drop = FALSE]
+  LV <- L %*% V
+  for (k in seq_len(ncol(V))) {
+    if (LV[which.max(abs(LV[, k])), k] < 0) V[, k] <- -V[, k]
+  }
+  V
+}
+.rum_canonical_loading <- function(L) {
+  if (!is.matrix(L) || ncol(L) == 1L) return(L)
+  out <- L %*% .rum_canonical_rotation(L)
+  dimnames(out) <- dimnames(L)
+  out
 }
 
 .rum_dnn_train_control <- function(control, starts_count) {
@@ -117,7 +174,10 @@
 
 .rum_dnn_train_eval <- function(state, prepared, order, deadline,
                                 retain = FALSE, need_gradient = TRUE) {
-  rule <- rum_quadrature(order, policy_law = "normal")
+  # order: a Gauss-Hermite order (one factor, the original rule) or a rum_quadrature rule
+  rule <- if (inherits(order, "rum_quadrature")) order else
+    rum_quadrature(order, policy_law = "normal")
+  if (inherits(order, "rum_quadrature")) order <- .rum_quad_label(order)
   loss <- 0
   gradient <- if (need_gradient) numeric(length(.rum_dnn_train_pack(state))) else NULL
   saved <- vector("list", length(prepared$blocks))
@@ -153,10 +213,30 @@
 .rum_dnn_train_bounds <- function(state, control) {
   n_net <- state$network$parameter_count
   p <- state$network$p
-  list(lower = c(rep(-Inf, n_net), control$kappa_bounds[1L],
+  n_fac <- .rum_th_nfac(state)
+  if (n_fac == 1L)
+    return(list(lower = c(rep(-Inf, n_net), control$kappa_bounds[1L],
       rep(control$loading_bounds[1L], p), log(control$omega_bounds[1L])),
     upper = c(rep(Inf, n_net), control$kappa_bounds[2L],
-      rep(control$loading_bounds[2L], p), log(control$omega_bounds[2L])))
+      rep(control$loading_bounds[2L], p), log(control$omega_bounds[2L]))))
+  # several factors: no box on the loading; each row's length is bounded instead (D4)
+  ix <- .rum_th_idx(p, n_fac, offset = n_net)
+  list(lower = c(rep(-Inf, n_net), control$kappa_bounds[1L],
+      rep(-Inf, p * n_fac), log(control$omega_bounds[1L])),
+    upper = c(rep(Inf, n_net), control$kappa_bounds[2L],
+      rep(Inf, p * n_fac), log(control$omega_bounds[2L])),
+    rows = list(index = matrix(ix$loading, p, n_fac), radius = .rum_loading_radius(control)))
+}
+
+# Coordinates on a bound (box, or a loading row on the row-length bound).
+.rum_dnn_active_bounds <- function(par, bounds, tol = 1e-8) {
+  active <- (is.finite(bounds$lower) & par <= bounds$lower + tol) |
+    (is.finite(bounds$upper) & par >= bounds$upper - tol)
+  if (!is.null(bounds$rows)) for (j in seq_len(nrow(bounds$rows$index))) {
+    at <- bounds$rows$index[j, ]
+    if (sqrt(sum(par[at]^2)) >= bounds$rows$radius - tol) active[at] <- TRUE
+  }
+  which(active)
 }
 
 .rum_dnn_train_penalize <- function(loss, gradient, par, count, coefficient) {
@@ -168,7 +248,8 @@
 }
 
 .rum_dnn_train_stage <- function(initial, training, validation, control,
-                                 deadline, epochs, selection = TRUE) {
+                                 deadline, epochs, selection = TRUE,
+                                 rule = control$train_order) {
   time0 <- proc.time()
   state <- initial
   par <- .rum_dnn_train_pack(state)
@@ -186,19 +267,19 @@
   tryCatch({
     .rum_dnn_train_guard(deadline)
     if (selection) {
-      val <- .rum_dnn_train_eval(state, validation, control$train_order, deadline,
+      val <- .rum_dnn_train_eval(state, validation, rule, deadline,
         need_gradient = FALSE)$loss
       best <- add_checkpoint(0L, val, state)
       checkpoints[[1L]] <- best
     }
     if (epochs > 0L) for (epoch in seq_len(epochs)) {
       .rum_dnn_train_guard(deadline)
-      ev <- .rum_dnn_train_eval(state, training, control$train_order, deadline)
+      ev <- .rum_dnn_train_eval(state, training, rule, deadline)
       pp <- .rum_dnn_train_penalize(ev$loss, ev$gradient, par,
         state$network$parameter_count, control$network_l2)
       update <- .rum_dnn_adam_step(par, pp$gradient, m, v, epoch,
         control$learning_rate, control$beta1, control$beta2, control$epsilon,
-        bounds$lower, bounds$upper)
+        bounds$lower, bounds$upper, bounds$rows)
       par <- update$par; m <- update$m; v <- update$v
       projected <- projected | update$projected
       state <- .rum_dnn_train_unpack(par, initial)
@@ -211,7 +292,7 @@
         penalized_objective_before_update = pp$objective, validation_loss = val,
         elapsed = .rum_dnn_train_clock() - unname(time0["elapsed"]))
       if (selection && (epoch == 1L || epoch %% control$validation_every == 0L || epoch == epochs)) {
-        val <- .rum_dnn_train_eval(state, validation, control$train_order, deadline,
+        val <- .rum_dnn_train_eval(state, validation, rule, deadline,
           need_gradient = FALSE)$loss
         checkpoint <- add_checkpoint(epoch, val, state)
         checkpoints[[length(checkpoints) + 1L]] <- checkpoint
@@ -248,10 +329,36 @@
     cpu = unname(time_used["user.self"] + time_used["sys.self"]))
 }
 
+# Training and check rules. NULL at one factor keeps the integer Gauss-Hermite orders of
+# the control (the original path). Several factors default to Sobol: 512 nodes for
+# training, 2,048 for the check (the first 512 of the 2,048 are the training nodes).
+.rum_dnn_train_rules <- function(quadrature, n_fac) {
+  if (is.null(quadrature)) {
+    if (n_fac == 1L) return(NULL)
+    return(list(train = rum_quadrature(n_fac = n_fac, rule = "sobol", nodes = 512L),
+                check = list(rum_quadrature(n_fac = n_fac, rule = "sobol", nodes = 2048L))))
+  }
+  if (inherits(quadrature, "rum_quadrature")) stop("quadrature must be list(train = , check = ).")
+  if (!is.list(quadrature) || !inherits(quadrature$train, "rum_quadrature") ||
+      !is.list(quadrature$check) || !length(quadrature$check) ||
+      !all(vapply(quadrature$check, inherits, TRUE, "rum_quadrature")))
+    stop("quadrature must be list(train = <rum_quadrature>, check = list(<rum_quadrature>, ...)).")
+  for (r in c(list(quadrature$train), quadrature$check)) .rum_dnn_check_normal_rule(r, n_fac)
+  labels <- vapply(c(list(quadrature$train), quadrature$check), .rum_quad_label, "")
+  if (anyDuplicated(labels)) stop("The training and check rules must differ.")
+  list(train = quadrature$train, check = quadrature$check)
+}
+
 # Bounded Gaussian Structured-Network Training
 #' @export
+# n_fac: number of taste factors (loading p x n_fac; a vector at n_fac = 1).
+# quadrature: NULL (one factor: the Gauss-Hermite orders control$train_order and
+#   control$check_orders, as before; several factors: Sobol, 512 training nodes and a 2,048
+#   node check, seed 20261114), or list(train = <rum_quadrature>, check = list(<rum_quadrature>,
+#   ...)) with rules that integrate n_fac factors.
 rum_dnn_gaussian_train <- function(data, Z, validation_ids,
-    hidden = c(32L, 32L, 16L), seeds = c(42L, 7L, 1609L), control = list(), starts = NULL) {
+    hidden = c(32L, 32L, 16L), seeds = c(42L, 7L, 1609L), control = list(), starts = NULL,
+    n_fac = 1L, quadrature = NULL) {
   time0 <- proc.time()
   .rum_dnn_check_sequence_data(data)
   if (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != data$n || !ncol(Z) ||
@@ -265,12 +372,19 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
       any(seeds < 0 | seeds > .Machine$integer.max | seeds != floor(seeds)) || anyDuplicated(seeds))
     stop("Supply distinct nonnegative integer initialization seeds.")
   control <- .rum_dnn_train_control(control, length(seeds))
+  n_fac <- .rum_dnn_integer(n_fac, "n_fac")
+  rules <- .rum_dnn_train_rules(quadrature, n_fac)
+  if (n_fac > 1L) .rum_loading_radius(control)
   deadline <- unname(time0["elapsed"]) + control$max_seconds
   j <- seq_len(data$p)
+  pattern <- function(index) .10 * switch(index, sin(j), cos(j), (-1)^j)
+  # Start s uses pattern (s - 1) mod 3 + 1 for the first factor; factor k moves k - 1
+  # patterns on (the q-factor prototype's rule, rum_apps_twofactor_2026-11-05/K_common.R).
   if (is.null(starts)) starts <- lapply(seq_along(seeds), function(s) {
     index <- (s - 1L) %% 3L + 1L
     list(network = rum_dnn_gaussian(ncol(Z), data$p, hidden, seeds[s]), kappa = 0,
-      loading = .10 * switch(index, sin(j), cos(j), (-1)^j),
+      loading = if (n_fac == 1L) pattern(index) else
+        vapply(seq_len(n_fac), function(k) pattern((index + k - 2L) %% 3L + 1L), numeric(data$p)),
       omega = c(.25, .5, .75)[index])
   })
   if (!is.list(starts) || length(starts) != length(seeds))
@@ -286,11 +400,14 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
     if (state$network$p_z != ncol(Z) || state$network$p != data$p ||
         !identical(as.integer(state$network$hidden), as.integer(hidden)) ||
         !is.numeric(state$kappa) || length(state$kappa) != 1L || !is.finite(state$kappa) ||
-        !is.numeric(state$loading) || length(state$loading) != data$p || any(!is.finite(state$loading)) ||
+        !is.numeric(state$loading) || length(state$loading) != data$p * n_fac || any(!is.finite(state$loading)) ||
+        (n_fac > 1L && !identical(dim(state$loading), c(data$p, n_fac))) ||
         !is.numeric(state$omega) || length(state$omega) != 1L || !is.finite(state$omega) || state$omega <= 0)
       stop("Initial state does not match the declared dimensions or parameters.")
     par <- .rum_dnn_train_pack(state); bounds <- .rum_dnn_train_bounds(state, control)
-    if (any(par < bounds$lower | par > bounds$upper)) stop("Initial state is outside declared bounds.")
+    if (any(par < bounds$lower | par > bounds$upper) ||
+        (!is.null(bounds$rows) && any(.rum_loading_row_length(state$loading) > bounds$rows$radius)))
+      stop("Initial state is outside declared bounds.")
   }
   inner_val <- which(data$ids %in% validation_ids)
   inner_train <- which(!data$ids %in% validation_ids)
@@ -324,8 +441,10 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
   for (s in seq_along(seeds)) {
     start_deadline <- min(.rum_dnn_train_clock() + control$start_seconds,
       deadline - control$refit_seconds - control$evaluation_reserve)
-    result <- .rum_dnn_train_stage(starts[[s]], training, validation, control,
-      start_deadline, control$max_epochs, selection = TRUE)
+    result <- if (is.null(rules)) .rum_dnn_train_stage(starts[[s]], training, validation,
+      control, start_deadline, control$max_epochs, selection = TRUE) else
+      .rum_dnn_train_stage(starts[[s]], training, validation, control,
+      start_deadline, control$max_epochs, selection = TRUE, rule = rules$train)
     answer$starts[[s]] <- result
     costs[[length(costs) + 1L]] <- data.frame(stage = paste0("start", s),
       elapsed = result$elapsed, cpu = result$cpu, stop_reason = result$stop_reason)
@@ -342,17 +461,25 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
     budget_limited = limited, tie_break = "first declared start, then earliest checkpoint")
   refit_deadline <- min(.rum_dnn_train_clock() + control$refit_seconds,
                        deadline - control$evaluation_reserve)
-  answer$refit <- .rum_dnn_train_stage(starts[[winner]], full, NULL, control,
-    refit_deadline, best$epoch, selection = FALSE)
+  answer$refit <- if (is.null(rules)) .rum_dnn_train_stage(starts[[winner]], full, NULL,
+    control, refit_deadline, best$epoch, selection = FALSE) else
+    .rum_dnn_train_stage(starts[[winner]], full, NULL, control,
+    refit_deadline, best$epoch, selection = FALSE, rule = rules$train)
   costs[[length(costs) + 1L]] <- data.frame(stage = "refit", elapsed = answer$refit$elapsed,
     cpu = answer$refit$cpu, stop_reason = answer$refit$stop_reason)
   if (!is.null(answer$refit$error)) answer$errors$refit <- answer$refit$error
   if (!answer$refit$completed) {answer$status <- "incomplete_refit"; return(finish())}
   state <- answer$refit$last_state
-  orders <- sort(unique(c(control$train_order, control$check_orders)))
+  # several factors: report the loading on its principal axes (D3); the model is unchanged
+  if (n_fac > 1L) state$loading <- .rum_canonical_loading(state$loading)
+  orders <- if (is.null(rules)) sort(unique(c(control$train_order, control$check_orders))) else
+    c(list(rules$train), rules$check)
+  order_labels <- if (is.null(rules)) orders else vapply(orders, .rum_quad_label, "")
   for (order in orders) {
+    if (inherits(order, "rum_quadrature")) {rule_q <- order; order <- .rum_quad_label(order)}
+    else rule_q <- order
     eval_time <- proc.time()
-    ev <- tryCatch(.rum_dnn_train_eval(state, full, order, deadline,
+    ev <- tryCatch(.rum_dnn_train_eval(state, full, rule_q, deadline,
       retain = TRUE), error = function(e) e)
     used <- proc.time() - eval_time
     failed <- inherits(ev, "error")
@@ -372,7 +499,7 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
     ll <- abs(b$objective - a$objective)
     mu_max <- max(abs(mu_difference)); common_max <- max(abs(common_difference))
     network_max <- max(abs(b$network_gradient - a$network_gradient))
-    data.frame(from = orders[i - 1L], to = orders[i], mean_loglik_difference = ll,
+    data.frame(from = order_labels[i - 1L], to = order_labels[i], mean_loglik_difference = ll,
       max_output_score_difference = mu_max, rms_output_score_difference = sqrt(mean(mu_difference^2)),
       max_common_score_difference = common_max, rms_common_score_difference = sqrt(mean(common_difference^2)),
       max_network_gradient_difference = network_max,
@@ -383,11 +510,18 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
   answer$numerical_checks <- do.call(rbind, checks)
   answer$numerical_status <- if (all(answer$numerical_checks$passed)) "passed" else "qualified"
   par <- .rum_dnn_train_pack(state); bounds <- .rum_dnn_train_bounds(state, control)
-  answer$active_bound_coordinates <- which((is.finite(bounds$lower) & par <= bounds$lower + 1e-8) |
-    (is.finite(bounds$upper) & par >= bounds$upper - 1e-8))
+  answer$active_bound_coordinates <- if (n_fac == 1L)
+    which((is.finite(bounds$lower) & par <= bounds$lower + 1e-8) |
+    (is.finite(bounds$upper) & par >= bounds$upper - 1e-8)) else
+    .rum_dnn_active_bounds(par, bounds)
   answer$ever_projected_coordinates <- sort(unique(c(unlist(lapply(answer$starts,
     `[[`, "projected_coordinates")), answer$refit$projected_coordinates)))
   answer$final <- state
+  if (n_fac > 1L) {
+    answer$n_fac <- n_fac
+    answer$quadrature <- list(train = .rum_quad_label(rules$train),
+                              check = vapply(rules$check, .rum_quad_label, ""))
+  }
   answer$completed <- TRUE
   answer$status <- if (limited) "completed_selection_budget_limited" else if (best$epoch == 0L)
     "completed_zero_epoch_selection" else "completed"

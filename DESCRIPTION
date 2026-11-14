@@ -39,7 +39,8 @@ Imports:
     parallelly,
     withr,
     ggplot2,
-    ggridges
+    ggridges,
+    spacefillr
 LinkingTo:
     Rcpp
 Suggests:

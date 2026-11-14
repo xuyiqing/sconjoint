@@ -167,18 +167,30 @@ rum_dnn_gaussian_forward <- function(network, Z) {
   invisible(data)
 }
 
-.rum_dnn_check_normal_rule <- function(quadrature) {
+.rum_dnn_check_normal_rule <- function(quadrature, n_fac = 1L) {
   if (!inherits(quadrature, "rum_quadrature") ||
       !identical(quadrature$policy_law, "normal"))
     stop("The Gaussian DNN evaluator requires a normal rum_quadrature rule.")
   count <- length(quadrature$weight)
+  u_ok <- if (n_fac == 1L && !is.matrix(quadrature$u)) length(quadrature$u) == count else
+    is.matrix(quadrature$u) && identical(dim(quadrature$u), c(count, as.integer(n_fac)))
   if (count < 1L || !is.numeric(quadrature$weight) ||
       !is.numeric(quadrature$u) || !is.numeric(quadrature$v) ||
-      length(quadrature$u) != count || length(quadrature$v) != count ||
+      !u_ok || length(quadrature$v) != count ||
       any(!is.finite(c(quadrature$u, quadrature$v, quadrature$weight))) ||
       any(quadrature$weight <= 0) || abs(sum(quadrature$weight) - 1) > 1e-10)
-    stop("Invalid Gaussian quadrature nodes or positive normalized weights.")
+    stop(if (u_ok) "Invalid Gaussian quadrature nodes or positive normalized weights." else
+      paste0("The quadrature rule does not integrate ", n_fac, " taste factor(s)."))
   invisible(quadrature)
+}
+
+# Taste-factor count of a loading: a length-p vector is one factor, a p x n_fac matrix has
+# n_fac. Returns NA when the loading is neither.
+.rum_loading_nfac <- function(loading, p) {
+  if (!is.numeric(loading) || any(!is.finite(loading))) return(NA_integer_)
+  if (is.null(dim(loading))) return(if (length(loading) == p) 1L else NA_integer_)
+  if (is.matrix(loading) && nrow(loading) == p && ncol(loading) >= 1L) return(ncol(loading))
+  NA_integer_
 }
 
 # @rdname rum_dnn_gaussian
@@ -186,7 +198,8 @@ rum_dnn_gaussian_forward <- function(network, Z) {
 # @param mu Numeric n-by-p conditional mean outputs. These replace data's
 #   finite mean basis; their order must match data$ids and data$feature_names.
 # @param kappa Common recorded-label intercept.
-# @param loading Length-p loading vector for one persistent Gaussian factor.
+# @param loading Length-p loading vector for one persistent Gaussian factor, or a p x n_fac
+#   matrix for n_fac factors (the quadrature rule must then integrate n_fac factors).
 # @param omega Nonnegative variance of the independent Gaussian label effect.
 # @param quadrature Gaussian tensor-product rule from rum_quadrature().
 # @return The evaluator returns sequence log likelihoods, output/common scores,
@@ -196,28 +209,32 @@ rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
                                       quadrature = rum_quadrature()) {
   .rum_dnn_check_sequence_data(data)
   .rum_dnn_matrix(mu, data$n, data$p, "mu", data$ids)
+  n_fac <- .rum_loading_nfac(loading, data$p)
   if (!is.numeric(kappa) || length(kappa) != 1L || !is.finite(kappa) ||
-      !is.numeric(loading) || !is.null(dim(loading)) || length(loading) != data$p ||
-      any(!is.finite(loading)) || !is.numeric(omega) || length(omega) != 1L ||
+      is.na(n_fac) || !is.numeric(omega) || length(omega) != 1L ||
       !is.finite(omega) || omega < 0)
-    stop("Provide finite kappa, a length-p loading vector, and nonnegative omega.")
-  .rum_dnn_check_normal_rule(quadrature)
+    stop("Provide finite kappa, a length-p loading vector (or p x n_fac matrix), and nonnegative omega.")
+  .rum_dnn_check_normal_rule(quadrature, n_fac)
   loglik <- numeric(data$n)
   output_score <- matrix(0, data$n, data$p)
-  # the native parameter vector is c(kappa, mu_i, loading, omega): theta with the p means
-  # inserted after kappa
-  ix <- .rum_th_idx(data$p)
+  # the native parameter vector is c(kappa, mu_i, vec(loading), omega): theta with the p
+  # means inserted after kappa
+  ix <- .rum_th_idx(data$p, n_fac)
   common_score <- matrix(0, data$n, ix$n_th)
   mean_columns <- 1L + seq_len(data$p)
   common_columns <- c(ix$kappa, data$p + ix$loading, data$p + ix$omega)
+  lvec <- as.numeric(loading)                  # column-major vec(Lambda)
   for (i in seq_len(data$n)) {
     rows <- seq.int(data$offsets[i] + 1L, data$offsets[i + 1L])
     di <- data$d[rows, , drop = FALSE]
     # a=di makes the native finite mean coefficients exactly this mu_i.
     # One native respondent call preserves the same u,v across every task.
-    one <- rum_sequence_cpp(data$y[rows], di, di,
-      as.integer(c(0L, length(rows))), c(kappa, mu[i, ], loading, omega),
-      quadrature$u, quadrature$v, quadrature$weight)
+    one <- if (n_fac == 1L) rum_sequence_cpp(data$y[rows], di, di,
+      as.integer(c(0L, length(rows))), c(kappa, mu[i, ], lvec, omega),
+      quadrature$u, quadrature$v, quadrature$weight) else
+      rum_sequence_cpp(data$y[rows], di, di,
+      as.integer(c(0L, length(rows))), c(kappa, mu[i, ], lvec, omega),
+      quadrature$u, quadrature$v, quadrature$weight, n_fac)
     loglik[i] <- one$loglik[1L]
     output_score[i, ] <- one$score[1L, mean_columns]
     common_score[i, ] <- one$score[1L, common_columns]
@@ -225,11 +242,12 @@ rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
   names(loglik) <- data$ids
   dimnames(output_score) <- list(data$ids, data$feature_names)
   dimnames(common_score) <- list(data$ids,
-    .rum_th_names(paste0("loading:", data$feature_names)))
+    .rum_th_names(paste0("loading:", data$feature_names), n_fac))
   common_gradient <- colMeans(common_score)
   objective_gradient <- list(mu = output_score / data$n,
     kappa = unname(common_gradient[ix$kappa]),
-    loading = unname(common_gradient[ix$loading]),
+    loading = if (n_fac == 1L) unname(common_gradient[ix$loading]) else
+      matrix(unname(common_gradient[ix$loading]), data$p, n_fac),
     omega = unname(common_gradient[ix$omega]))
   list(loglik = loglik, objective = mean(loglik), loss = -mean(loglik),
     mu = mu, output_score = output_score, common_score = common_score,

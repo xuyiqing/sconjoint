@@ -8,7 +8,7 @@ an optimization procedure, not an inferential or model-adequacy certificate.}
 \usage{
 rum_dnn_gaussian_train(data, Z, validation_ids,
   hidden = c(32L, 32L, 16L), seeds = c(42L, 7L, 1609L),
-  control = list(), starts = NULL)
+  control = list(), starts = NULL, n_fac = 1L, quadrature = NULL)
 }
 \arguments{
 \item{data}{Complete respondent records from \code{rum_data()}.}
@@ -24,6 +24,15 @@ the selected full-training-bank refit. The function never creates a split.}
 \code{network}, \code{kappa}, \code{loading}, and \code{omega}. Dimension and
 bound checks are applied. Supplied states must not use held-out outcomes or
 simulation truth.}
+\item{n_fac}{Number of persistent taste factors. With \code{n_fac > 1} the
+loading is a p by \code{n_fac} matrix, start s gives factor k the loading
+pattern \eqn{((s-1) \bmod 3 + k - 1) \bmod 3 + 1}, each loading row's length is
+bounded by \code{loading_bounds[2]} (which must be symmetric) instead of the
+elementwise box, and the final loading is rotated to principal axes.}
+\item{quadrature}{\code{NULL}, or \code{list(train = , check = list(...))} of
+\code{rum_quadrature} rules integrating \code{n_fac} factors. \code{NULL} uses
+the Gauss-Hermite orders of the control at one factor and scrambled Sobol rules
+(512 training nodes, 2048 check nodes) at several.}
 }
 \details{
 The raw objective is respondent-average negative sequence log likelihood plus

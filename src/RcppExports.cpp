@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // rum_sequence_cpp
-Rcpp::List rum_sequence_cpp(Rcpp::NumericVector y, Rcpp::NumericMatrix d, Rcpp::NumericMatrix a, Rcpp::IntegerVector offsets, Rcpp::NumericVector par, Rcpp::NumericVector u, Rcpp::NumericVector v, Rcpp::NumericVector weight);
-RcppExport SEXP _sconjoint_rum_sequence_cpp(SEXP ySEXP, SEXP dSEXP, SEXP aSEXP, SEXP offsetsSEXP, SEXP parSEXP, SEXP uSEXP, SEXP vSEXP, SEXP weightSEXP) {
+Rcpp::List rum_sequence_cpp(Rcpp::NumericVector y, Rcpp::NumericMatrix d, Rcpp::NumericMatrix a, Rcpp::IntegerVector offsets, Rcpp::NumericVector par, Rcpp::NumericVector u, Rcpp::NumericVector v, Rcpp::NumericVector weight, int n_fac);
+RcppExport SEXP _sconjoint_rum_sequence_cpp(SEXP ySEXP, SEXP dSEXP, SEXP aSEXP, SEXP offsetsSEXP, SEXP parSEXP, SEXP uSEXP, SEXP vSEXP, SEXP weightSEXP, SEXP n_facSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -24,7 +24,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type u(uSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type v(vSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type weight(weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(rum_sequence_cpp(y, d, a, offsets, par, u, v, weight));
+    Rcpp::traits::input_parameter< int >::type n_fac(n_facSEXP);
+    rcpp_result_gen = Rcpp::wrap(rum_sequence_cpp(y, d, a, offsets, par, u, v, weight, n_fac));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -50,7 +51,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_sconjoint_rum_sequence_cpp", (DL_FUNC) &_sconjoint_rum_sequence_cpp, 8},
+    {"_sconjoint_rum_sequence_cpp", (DL_FUNC) &_sconjoint_rum_sequence_cpp, 9},
     {"_sconjoint_rum_moments_cpp", (DL_FUNC) &_sconjoint_rum_moments_cpp, 10},
     {NULL, NULL, 0}
 };
