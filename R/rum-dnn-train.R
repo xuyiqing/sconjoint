@@ -383,8 +383,10 @@ rum_dnn_gaussian_train <- function(data, Z, validation_ids,
   if (is.null(starts)) starts <- lapply(seq_along(seeds), function(s) {
     index <- (s - 1L) %% 3L + 1L
     list(network = rum_dnn_gaussian(ncol(Z), data$p, hidden, seeds[s]), kappa = 0,
+      # matrix(): vapply() simplifies to a vector when p = 1 (Codex review of 829393d, finding 3)
       loading = if (n_fac == 1L) pattern(index) else
-        vapply(seq_len(n_fac), function(k) pattern((index + k - 2L) %% 3L + 1L), numeric(data$p)),
+        matrix(vapply(seq_len(n_fac), function(k) pattern((index + k - 2L) %% 3L + 1L), numeric(data$p)),
+               data$p, n_fac),
       omega = c(.25, .5, .75)[index])
   })
   if (!is.list(starts) || length(starts) != length(seeds))
