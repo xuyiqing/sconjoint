@@ -385,9 +385,9 @@ test_that("default rules: one-factor defaults are replaced at q > 1; method 'aut
   expect_identical(m("auto", 13L, 512L, 2L), "louis")              # Graham-Svolik
   expect_identical(m("auto", 3L, 512L, 3L), "exact")               # Saha-Weeks
   expect_identical(m("louis", 3L, 512L, 1L), "louis")
-  op <- rq(".rum_cond_options")("br")
+  op <- rq(".rum_cond_options")("br", n_fac = 2L)               # automatic selection is explicit
   expect_identical(op$method, "auto"); expect_true(is.na(op$M))
-  expect_identical(rq(".rum_cond_options")("br", method = "exact")$M, 200L)
+  expect_identical(rq(".rum_cond_options")("br")$M, 200L)         # default: exact, as at f20956e
   # at one factor "auto" gives exactly the old default (exact, M = 200, same cache key and numbers)
   fx <- readRDS(test_path("fixtures", "rum-inference-fixture.rds"))
   set.seed(7L); M <- 4L; T <- max(fx$data$T); p <- fx$data$p
@@ -395,7 +395,7 @@ test_that("default rules: one-factor defaults are replaced at q > 1; method 'aut
               key = rep(1L, fx$data$n), M = M, T = T)
   qd <- rum_quadrature(c(7L, 5L)); cache <- file.path(tempdir(), "rum-qf-auto")
   ff <- rq(".rum_fold_fit")(fx$data, fx$Z, fx$fins[[1]], rq(".rum_score_quadrature")())
-  f1 <- rq(".rum_cond_info_fold")(fx$data, ff$mu, ff$th, 1L, rq(".rum_cond_options")(NULL, crn = crn, quad = qd,
+  f1 <- rq(".rum_cond_info_fold")(fx$data, ff$mu, ff$th, 1L, rq(".rum_cond_options")(NULL, method = "auto", crn = crn, quad = qd,
           cache_dir = cache, cache_net = "a"), fx$fins[[1]])
   f2 <- rq(".rum_cond_info_fold")(fx$data, ff$mu, ff$th, 1L, rq(".rum_cond_options")(NULL, method = "exact", crn = crn,
           quad = qd, cache_dir = cache, cache_net = "a", cache_require = TRUE), fx$fins[[1]])

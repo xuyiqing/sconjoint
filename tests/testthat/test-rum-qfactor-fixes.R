@@ -40,3 +40,30 @@ test_that("finding 3: default starts work with one feature and two factors", {
   }
   expect_identical(dim(fit$final$loading), c(1L, 2L))
 })
+
+# ---- finding 8: .rum_cond_options() at one factor returns the f20956e object ---------------
+test_that("finding 8: the conditional options keep the one-factor defaults (method exact, M 200)", {
+  co <- rq(".rum_cond_options")
+  # the f20956e constructor's output, written out
+  old <- function(spec, resp = NULL, method = "exact", M = NULL, ny = 8L, louis_rb = TRUE,
+                  seed = 20261011L, quad = rq(".rum_info_quadrature")(), cache_dir = NULL,
+                  cache_net = NULL, cache_write = TRUE, cache_require = FALSE, crn = NULL,
+                  null_zero = FALSE, draws = "common")
+    list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero, draws = draws,
+         M = if (is.null(M)) (if (method == "exact") 200L else 400L) else as.integer(M),
+         ny = as.integer(ny), louis_rb = louis_rb, seed = as.integer(seed), quad = quad,
+         cache_dir = cache_dir, cache_net = cache_net, cache_write = cache_write,
+         cache_require = cache_require)
+  expect_identical(co("br"), old("br"))
+  expect_identical(co("br")$method, "exact"); expect_identical(co("br")$M, 200L)
+  expect_identical(co("gs", resp = data.frame(pid7 = 1:3), M = 50L, draws = "own"),
+                   old("gs", resp = data.frame(pid7 = 1:3), M = 50L, draws = "own"))
+  expect_identical(co("sw_additive", method = "louis"), old("sw_additive", method = "louis"))
+  expect_identical(co("br", method = "mc", ny = 4L, null_zero = TRUE), old("br", method = "mc", ny = 4L, null_zero = TRUE))
+  expect_identical(co("br", n_fac = 1L), old("br"))
+  # automatic selection only when asked for: method "auto", or n_fac > 1 with the default method
+  expect_identical(co("br", n_fac = 2L)$method, "auto"); expect_true(is.na(co("br", n_fac = 2L)$M))
+  expect_identical(co("br", method = "exact", n_fac = 2L)$M, 200L)
+  expect_identical(co("br", method = "auto")$method, "auto")
+  expect_null(co("br", n_fac = 3L)$n_fac)
+})

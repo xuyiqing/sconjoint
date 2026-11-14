@@ -354,19 +354,24 @@
 # Options of the conditional information (passed to the inference routines as cond = ...).
 # spec: a design spec or study string ("gs", "br", "sw_additive", "sw_explicit"); resp:
 # respondent inputs for the design key in data$ids order (GS: a data frame with pid7);
-# method, ny, louis_rb: see .rum_cond_info(); method "auto" (default) is resolved per fold by
-# .rum_cond_method() ("exact" at one factor, as before); M: design draws (default 200 for
+# method, ny, louis_rb: see .rum_cond_info(); method "auto" is resolved per fold by
+# .rum_cond_method() ("exact" at one factor); M: design draws (default 200 for
 # exact, 400 for louis and mc, by the resolved method). crn: optional fixed design draws (a .rum_draw_designs_crn()-shaped
 # list) used for every fold instead of spec (for tests and custom designs). null_zero: see
 # .rum_cond_weight_parts() (does not change the information or its cache). draws: "common"
 # (the same M design draws for every respondent) or "own" (each respondent's own draws; its
 # Monte Carlo error averages out over respondents in a target).
-.rum_cond_options <- function(spec, resp = NULL, method = c("auto", "exact", "louis", "mc"), M = NULL,
+# Default method (Codex review of 829393d, finding 8): "exact", as at f20956e, so a one-factor
+# caller gets exactly the old object (method "exact", M 200). Automatic selection is explicit:
+# method = "auto", or n_fac > 1 given with method left at its default (then method "auto" and
+# M NA, resolved per fold by .rum_cond_method()). n_fac (appended last) is not stored.
+.rum_cond_options <- function(spec, resp = NULL, method = c("exact", "louis", "mc", "auto"), M = NULL,
                               ny = 8L, louis_rb = TRUE, seed = 20261011L,
                               quad = .rum_info_quadrature(), cache_dir = NULL, cache_net = NULL,
                               cache_write = TRUE, cache_require = FALSE, crn = NULL,
-                              null_zero = FALSE, draws = c("common", "own")) {
-  method <- match.arg(method); draws <- match.arg(draws)
+                              null_zero = FALSE, draws = c("common", "own"), n_fac = NULL) {
+  method <- if (missing(method) && !is.null(n_fac) && n_fac > 1L) "auto" else match.arg(method)
+  draws <- match.arg(draws)
   list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero, draws = draws,
        M = if (is.null(M)) (if (method == "exact") 200L else if (method == "auto") NA_integer_ else 400L)
            else as.integer(M),
