@@ -34,6 +34,20 @@
 # E_g[c_g c_g'] = H3 (block diagonal over tasks), so the Louis identity holds in this
 # 3T space: E_y[c c'] = H3 - E_y Var_post(c_g | y). (The omega coordinate's second
 # derivative term (y - p) d2eta/domega2 has expectation zero; it enters only louis_rb = FALSE.)
+#
+# q > 1 taste factors (Stage 2 of the q-factor build, 2026-11-14). eta_t = kappa + d_t'mu +
+# d_t'Lambda u + s v with u in R^q. Write z = (1, u_1, ..., u_q, v). Then c(y) stacks, per task,
+# the posterior means E[e_t z_k | y] for k = 0..q+1: (q + 2)T numbers, in q + 2 blocks of T
+# (block 0: R0_t; block k: E[e_t u_k | y]; block q+1: E[e_t v | y]). A_D is D x (q + 2)T with
+# D = p + p q + 2: s_mu = sum_t d_t R0_t, s_kappa = sum_t R0_t, factor k's loading
+# s_(Lambda[, k]) = sum_t d_t E[e_t u_k | y] (the rows .rum_th_idx(p, q, offset = p) gives factor
+# k), s_omega = sum_t E[e_t v | y] / (2 s). The complete-data c_g = e z_g has
+# E_g[c_g c_g'] = H3 with block (a, b) diagonal over t, entry sum_g w_g p_tg(1 - p_tg) z_ga z_gb:
+# (q + 2)(q + 3)/2 distinct posterior-free moments per task (6 at q = 1). The Louis identity
+# E_y[c c'] = H3 - E_y Var_post(c_g | y) holds block by block as before, and louis_rb = FALSE
+# averages the complete-data negative Hessian over the (q + 2)^2 blocks. The quadrature nodes
+# are G x q (quad$u) and are taken from the fold's own information rule (.rum_quad_for).
+# One factor (q = 1): the original code, unchanged (3T, six moments).
 
 # All 2^T binary sequences (rows), as a numeric matrix.
 .rum_cond_Y <- function(T) {
@@ -44,18 +58,24 @@
 
 # A_D: the D x 3T map from c(y) to the score, for one design (T x p) and s = sqrt(omega).
 # Rows: s_mu (1..p), then theta in its layout (.rum_th_idx with offset p).
-.rum_cond_A <- function(Dm, s) {
-  T <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, offset = p); D <- p + ix$n_th
-  A <- matrix(0, D, 3L * T)
+# With q = n_fac factors: D x (q + 2)T (D = p + p q + 2); block k (k = 1..q) of c holds
+# E[e_t u_k | y] and maps to factor k's loading rows; the last block (E[e_t v | y]) to omega.
+.rum_cond_A <- function(Dm, s, n_fac = 1L) {
+  T <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, n_fac, offset = p); D <- p + ix$n_th
+  A <- matrix(0, D, (n_fac + 2L) * T)
   A[seq_len(p), seq_len(T)] <- t(Dm); A[ix$kappa, seq_len(T)] <- 1
-  A[ix$loading, T + seq_len(T)] <- t(Dm); A[ix$omega, 2L * T + seq_len(T)] <- 1 / (2 * s)
+  for (k in seq_len(n_fac)) A[ix$loading[(k - 1L) * p + seq_len(p)], k * T + seq_len(T)] <- t(Dm)
+  A[ix$omega, (n_fac + 1L) * T + seq_len(T)] <- 1 / (2 * s)
   A
 }
 
 # Linear predictors on the quadrature for one respondent and one design: a = kappa + D mu
 # (length T), b = D loading (length T). Returns E (T x G), P, and the log probabilities.
+# With q factors b is the T x q matrix D Lambda and quad$u is G x q: E = a + b u' + s v.
 .rum_cond_eta <- function(a, b, s, quad) {
-  E <- a + outer(b, quad$u) + matrix(s * quad$v, length(a), length(quad$u), byrow = TRUE)
+  E <- if (is.matrix(b) && ncol(b) > 1L)
+    a + b %*% t(quad$u) + matrix(s * quad$v, length(a), length(quad$weight), byrow = TRUE) else
+    a + outer(b, quad$u) + matrix(s * quad$v, length(a), length(quad$u), byrow = TRUE)
   list(P = stats::plogis(E), L1 = stats::plogis(E, log.p = TRUE), L0 = stats::plogis(-E, log.p = TRUE))
 }
 
@@ -70,7 +90,9 @@
 }
 
 # c(y) for each row of Y given the posterior Pi: R x 3T, columns (R0_t, R1_t, R2_t).
+# With q factors: R x (q + 2)T, blocks (R0_t; E[e_t u_1 | y]; ...; E[e_t u_q | y]; E[e_t v | y]).
 .rum_cond_c <- function(Y, Pi, e, quad) {
+  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_c_q(Y, Pi, e, quad))
   T <- ncol(Y); Pt <- t(e$P)
   Mx <- Pi %*% cbind(Pt, Pt * quad$u, Pt * quad$v, quad$u, quad$v)
   cbind(Y - Mx[, seq_len(T), drop = FALSE],
@@ -78,9 +100,32 @@
         Y * Mx[, 3L * T + 2L] - Mx[, 2L * T + seq_len(T), drop = FALSE])
 }
 
+.rum_cond_z <- function(quad) cbind(1, quad$u, quad$v)           # G x (q + 2): (1, u_1..u_q, v)
+.rum_cond_c_q <- function(Y, Pi, e, quad) {
+  T <- ncol(Y); Pt <- t(e$P); Zq <- .rum_cond_z(quad)[, -1L, drop = FALSE]; nz <- ncol(Zq)  # q + 1
+  Mx <- Pi %*% cbind(Pt, do.call(cbind, lapply(seq_len(nz), function(k) Pt * Zq[, k])), Zq)
+  out <- matrix(0, nrow(Y), (nz + 1L) * T); t1 <- seq_len(T)
+  out[, t1] <- Y - Mx[, t1, drop = FALSE]
+  for (k in seq_len(nz))
+    out[, k * T + t1] <- Y * Mx[, (nz + 1L) * T + k] - Mx[, k * T + t1, drop = FALSE]
+  out
+}
+
 # H3 = sum_g w_g sum_t p_tg (1 - p_tg) b_tg b_tg' with b_tg = (e_t, u_g e_t, v_g e_t):
 # the complete-data information in the 3T space (exact over y).
+# With q factors b_tg = e_t z_g, z_g = (1, u_1..u_q, v): (q + 2)T x (q + 2)T, block (a, b)
+# diagonal over t with entries sum_g w_g p(1-p) z_a z_b: (q + 2)(q + 3)/2 distinct moments.
 .rum_cond_H3 <- function(e, quad) {
+  if (.rum_quad_nfac(quad) > 1L) {
+    T <- nrow(e$P); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
+    pq <- e$P * (1 - e$P); H <- matrix(0, nz * T, nz * T)
+    for (a in seq_len(nz)) for (b in a:nz) {
+      m <- drop(pq %*% (quad$weight * Zq[, a] * Zq[, b]))
+      H[cbind((a - 1L) * T + t1, (b - 1L) * T + t1)] <- m
+      H[cbind((b - 1L) * T + t1, (a - 1L) * T + t1)] <- m
+    }
+    return(H)
+  }
   T <- nrow(e$P); u <- quad$u; v <- quad$v
   H6 <- (e$P * (1 - e$P)) %*% (quad$weight * cbind(1, u, v, u * u, u * v, v * v))
   H <- matrix(0, 3L * T, 3L * T); t1 <- seq_len(T); t2 <- T + t1; t3 <- 2L * T + t1
@@ -110,6 +155,7 @@
   # the stacked (sequence, node) rows, weighted by the posterior.
   G <- length(quad$weight); kk <- rep(seq_len(ny), G); gg <- rep(seq_len(G), each = ny)
   er <- Ys[kk, , drop = FALSE] - t(e$P)[gg, , drop = FALSE]; pw <- as.vector(po$Pi)
+  if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_K_louis_q(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb))
   Cr <- cbind(er, er * quad$u[gg], er * quad$v[gg])
   Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
   if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
@@ -124,6 +170,37 @@
   xo <- sum(cc[, 2L * T + t1]) / ny / (4 * s^3)                 # posterior mean of (y-p) v/(4 s^3)
   list(K = H3p - Vpost, xo = xo, check = c(NA_real_, NA_real_))
 }
+# The Louis variant with q > 1 factors: complete-data c_g = e z_g over z = (1, u_1..u_q, v),
+# posterior variance over the stacked (sequence, node) rows; louis_rb = FALSE takes the posterior
+# mean of the complete-data negative Hessian over the q + 2 blocks, sequence by sequence.
+.rum_cond_K_louis_q <- function(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb) {
+  T <- ncol(Ys); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
+  Cr <- do.call(cbind, lapply(seq_len(nz), function(k) er * Zq[gg, k]))
+  Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
+  if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
+  pq <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
+  H3p <- matrix(0, nz * T, nz * T)
+  for (r in seq_len(nz)) for (c2 in seq_len(nz)) {
+    wrc <- colSums(pq * (Zq[gg, r] * Zq[gg, c2]))
+    H3p[cbind((r - 1L) * T + t1, (c2 - 1L) * T + t1)] <- wrc / ny
+  }
+  xo <- sum(cc[, (nz - 1L) * T + t1]) / ny / (4 * s^3)        # posterior mean of (y-p) v/(4 s^3)
+  list(K = H3p - Vpost, xo = xo, check = c(NA_real_, NA_real_))
+}
+
+# The variant used when method = "auto". One factor: "exact" (the old default). q > 1 factors:
+# "exact" when 2^T G <= .rum_cond_exact_max (T the largest task count, G the information rule's
+# nodes), else "louis". Cost per (respondent, design): exact enumerates 2^T sequences on G nodes,
+# about 2^T G (q + 2)T multiply-adds for c(y) plus 2^T ((q + 2)T)^2 for K; Louis (ny sequences)
+# about ny G ((q + 2)T)^2. With 2^19 = 524,288: Ballard-Rosa (T = 8) is exact up to G = 2,048
+# (at G = 512 exact and Louis with ny = 8 cost about the same, and exact has no simulation
+# error); Graham-Svolik (T up to 13: 2^13 G = 4.2e6 at G = 512) uses Louis; Saha-Weeks
+# (T = 5) is exact. Measured costs: report/s2_report.md.
+.rum_cond_exact_max <- 2^19
+.rum_cond_method <- function(method, Tmax, G, n_fac) {
+  if (method != "auto") return(method)
+  if (n_fac == 1L || 2^Tmax * G <= .rum_cond_exact_max) "exact" else "louis"
+}
 
 # Per-respondent conditional information: n x D x D array (data$ids order), the same shape
 # as .rum_model_info(). crn: designs from .rum_draw_designs_crn() for these respondents
@@ -132,17 +209,20 @@
 # halves for Monte Carlo error checks). ny: simulated choice sequences per design (louis,
 # mc). Returns list(I, IA, IB, M, method, ny, check) with check = (max |sum_y p s| in the
 # 3T space, max |sum_y p - 1|) for the exact method.
-.rum_cond_info <- function(data, mu, th, crn, method = c("exact", "louis", "mc"),
+.rum_cond_info <- function(data, mu, th, crn, method = c("exact", "louis", "mc", "auto"),
                            quad = .rum_info_quadrature(), ny = 8L, seed = 20261011L,
                            halves = FALSE, louis_rb = TRUE) {
-  method <- match.arg(method)
-  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p)$omega; D <- p + .rum_th_len(p)
+  method <- match.arg(method); nf <- .rum_th_nfac(th)
+  if (NROW(th$loading) != ncol(mu)) stop("the loading does not have p rows")
+  quad <- .rum_quad_for(quad, nf, "info")
+  method <- .rum_cond_method(method, max(data$T), length(quad$weight), nf)
+  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p, nf)$omega; D <- p + .rum_th_len(p, nf)
   s <- sqrt(th$omega); M <- as.integer(crn$M)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   if (isTRUE(crn$own)) {
     stopifnot(n == data$n, p == data$p, M >= 2L, all(Tj <= crn$T))
     if (method == "exact" && max(Tj) > 16L) stop("method 'exact' enumerates 2^T sequences; T > 16 is too many")
-    return(.rum_cond_info_own(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb))
+    return(.rum_cond_info_own(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb, nf))
   }
   stopifnot(n == data$n, p == data$p, length(crn$key) == n, M >= 2L, all(Tj <= crn$T),
             all(vapply(crn$designs, function(x) dim(x)[3L], 1L) == p))
@@ -153,13 +233,14 @@
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); nA <- ceiling(M / 2)
   for (grp in split(seq_len(n), paste(crn$key, Tj))) {
-    T <- Tj[grp[1L]]; dk <- crn$designs[[crn$key[grp[1L]]]]; ng <- length(grp); J <- 3L * T
+    T <- Tj[grp[1L]]; dk <- crn$designs[[crn$key[grp[1L]]]]; ng <- length(grp); J <- (nf + 2L) * T
     if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
     Yall <- Ys[[as.character(T)]]; MUg <- mu[grp, , drop = FALSE]
     acc <- accA <- array(0, c(D, ng, D))             # (b, respondent, a): I_j[b, a], summed over designs
     for (m in seq_len(M)) {
       Dm <- matrix(dk[m, seq_len(T), ], T, p)
-      Am <- .rum_cond_A(Dm, s); amat <- th$kappa + MUg %*% t(Dm); b <- drop(Dm %*% th$loading)
+      Am <- .rum_cond_A(Dm, s, nf); amat <- th$kappa + MUg %*% t(Dm)
+      b <- if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading      # T x q at q > 1
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
       KK <- matrix(0, J * J, ng); xo <- numeric(ng)
       for (j in seq_len(ng)) {
@@ -188,23 +269,24 @@
 # returns respondent i's M x T x p array) and own simulated choices. With common draws the
 # Monte Carlo error of a(z) is shared by every respondent and does not average out in a
 # target; with own draws it does. Respondent i's simulation seed is seed + i.
-.rum_cond_info_own <- function(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb) {
-  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p)$omega; D <- p + .rum_th_len(p)
+.rum_cond_info_own <- function(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb, nf = 1L) {
+  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p, nf)$omega; D <- p + .rum_th_len(p, nf)
   s <- sqrt(th$omega); M <- as.integer(crn$M)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); odd <- seq_len(M) %% 2L == 1L
   for (i in seq_len(n)) {
-    T <- Tj[i]; J <- 3L * T; dk <- crn$designs_of(i)
+    T <- Tj[i]; J <- (nf + 2L) * T; dk <- crn$designs_of(i)
     if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
     sims <- if (method != "exact") .rum_with_seed(seed + i, list(
       g = matrix(sample.int(G, M * ny, replace = TRUE, prob = quad$weight), M, ny),
       U = array(stats::runif(M * ny * T), c(M, ny, T)))) else NULL
     X <- A <- matrix(0, D, J * M); xo <- numeric(M)
     for (m in seq_len(M)) {
-      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- .rum_cond_A(Dm, s)
+      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- .rum_cond_A(Dm, s, nf)
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
-      r <- .rum_cond_K(th$kappa + drop(Dm %*% mu[i, ]), drop(Dm %*% th$loading), s, quad, method,
+      r <- .rum_cond_K(th$kappa + drop(Dm %*% mu[i, ]),
+                       if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading, s, quad, method,
                        Ys[[as.character(T)]], sim, louis_rb)
       if (method == "exact") chk <- pmax(chk, r$check)
       cols <- (m - 1L) * J + seq_len(J); A[, cols] <- Am; X[, cols] <- Am %*% r$K; xo[m] <- r$xo
@@ -247,7 +329,11 @@
 # a(z) is 0 there and the CV-TMLE path never moves that respondent along it. The default
 # (cond$null_zero FALSE) keeps .rum_weight_parts(), which floors such directions instead.
 # Also returns null = the number of respondents with at least one zero coordinate.
-.rum_cond_weight_parts <- function(I, p, n_th, eig_floor_rel) {
+# rot (q > 1 factors): the rotation directions, removed as in .rum_weight_parts_rot().
+.rum_cond_weight_parts <- function(I, p, n_th, eig_floor_rel, rot = NULL) {
+  if (!is.null(rot) && ncol(rot) > 0L)
+    return(.rum_weight_parts_rot(function(i) I[i, , ], dim(I)[1L], p, n_th, eig_floor_rel, rot,
+                                 shared = FALSE, null_zero = TRUE))
   n <- dim(I)[1L]; D <- p + n_th
   Li <- array(0, c(n, p, p)); Lt <- array(0, c(n, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L; nnull <- 0L
   for (i in seq_len(n)) {
@@ -257,7 +343,7 @@
     L[keep, keep] <- Lk
     km <- keep[keep <= p]; kt <- keep[keep > p] - p
     li <- matrix(0, p, p); li[km, km] <- solve(L[km, km, drop = FALSE])
-    lt <- L[1:p, p + seq_len(n_th)]; tt <- L[p + seq_len(n_th), p + seq_len(n_th)]
+    lt <- L[1:p, p + seq_len(n_th), drop = FALSE]; tt <- L[p + seq_len(n_th), p + seq_len(n_th)]
     Li[i, , ] <- li; Lt[i, , ] <- lt
     Ic <- Ic + tt - crossprod(lt, li %*% lt)
   }
@@ -267,20 +353,22 @@
 # Options of the conditional information (passed to the inference routines as cond = ...).
 # spec: a design spec or study string ("gs", "br", "sw_additive", "sw_explicit"); resp:
 # respondent inputs for the design key in data$ids order (GS: a data frame with pid7);
-# method, ny, louis_rb: see .rum_cond_info(); M: design draws (default 200 for exact,
-# 400 for louis and mc). crn: optional fixed design draws (a .rum_draw_designs_crn()-shaped
+# method, ny, louis_rb: see .rum_cond_info(); method "auto" (default) is resolved per fold by
+# .rum_cond_method() ("exact" at one factor, as before); M: design draws (default 200 for
+# exact, 400 for louis and mc, by the resolved method). crn: optional fixed design draws (a .rum_draw_designs_crn()-shaped
 # list) used for every fold instead of spec (for tests and custom designs). null_zero: see
 # .rum_cond_weight_parts() (does not change the information or its cache). draws: "common"
 # (the same M design draws for every respondent) or "own" (each respondent's own draws; its
 # Monte Carlo error averages out over respondents in a target).
-.rum_cond_options <- function(spec, resp = NULL, method = c("exact", "louis", "mc"), M = NULL,
+.rum_cond_options <- function(spec, resp = NULL, method = c("auto", "exact", "louis", "mc"), M = NULL,
                               ny = 8L, louis_rb = TRUE, seed = 20261011L,
                               quad = .rum_info_quadrature(), cache_dir = NULL, cache_net = NULL,
                               cache_write = TRUE, cache_require = FALSE, crn = NULL,
                               null_zero = FALSE, draws = c("common", "own")) {
   method <- match.arg(method); draws <- match.arg(draws)
   list(spec = spec, resp = resp, method = method, crn = crn, null_zero = null_zero, draws = draws,
-       M = if (is.null(M)) (if (method == "exact") 200L else 400L) else as.integer(M),
+       M = if (is.null(M)) (if (method == "exact") 200L else if (method == "auto") NA_integer_ else 400L)
+           else as.integer(M),
        ny = as.integer(ny), louis_rb = louis_rb, seed = as.integer(seed), quad = quad,
        cache_dir = cache_dir, cache_net = cache_net, cache_write = cache_write,
        cache_require = cache_require)
@@ -293,7 +381,12 @@
 # cache, hit, check).
 .rum_cond_info_fold <- function(data, mu, th, k, cond, fin) {
   if (is.null(cond)) stop("info_basis 'conditional' needs cond = .rum_cond_options(...)")
-  n <- data$n; D <- data$p + .rum_th_len(data$p); M <- as.integer(if (is.null(cond$crn)) cond$M else cond$crn$M); sd_k <- cond$seed + as.integer(k)
+  nf <- .rum_th_nfac(th)
+  if (NROW(th$loading) != data$p) stop("the loading does not have p rows")
+  quad <- .rum_quad_for(cond$quad, nf, "info")
+  cond$method <- .rum_cond_method(cond$method, max(data$T), length(quad$weight), nf)
+  if (is.na(cond$M)) cond$M <- if (cond$method == "exact") 200L else 400L
+  n <- data$n; D <- data$p + .rum_th_len(data$p, nf); M <- as.integer(if (is.null(cond$crn)) cond$M else cond$crn$M); sd_k <- cond$seed + as.integer(k)
   spec <- if (is.null(cond$crn)) .rum_spec_arg(cond$spec) else NULL
   key_resp <- if (!is.null(cond$crn)) cond$crn$key else if (spec$uses_resp) spec$key(cond$resp) else rep("all", n)
   stopifnot(length(key_resp) == n)
@@ -306,8 +399,9 @@
         mu = unname(mu), ids = data$ids, T = data$T, keys = key_resp,
         study = if (is.null(spec)) cond$crn$designs else spec$study, M = M,
         method = cond$method, ny = cond$ny, louis_rb = cond$louis_rb,
-        quad = unclass(cond$quad)[c("u", "v", "weight")], seed = sd_k)
+        quad = unclass(quad)[c("u", "v", "weight")], seed = sd_k)
       if (identical(cond$draws, "own")) kl$draws <- "own"   # common draws keep the v1 key
+      if (nf > 1L) kl$n_fac <- nf                          # one factor keeps the v1 key
       key <- digest::digest(kl)
       f <- file.path(cond$cache_dir, sprintf("%s_fold%d_%s_M%d.rds", cond$cache_net, k, tag, M))
     } else message("package 'digest' is not installed; the conditional information is not cached")
@@ -329,7 +423,7 @@
                         seed = as.integer((as.numeric(sd_k) * 100003 + i) %% 2147483647)))
   } else .rum_draw_designs_crn(spec, cond$resp, M, seed = sd_k, n = n)
   M <- as.integer(crn$M)
-  R <- .rum_cond_info(data, mu, th, crn, cond$method, cond$quad, cond$ny, sd_k + 7919L,
+  R <- .rum_cond_info(data, mu, th, crn, cond$method, quad, cond$ny, sd_k + 7919L,
                       louis_rb = cond$louis_rb)
   pk <- .rum_info_pack(R$I); secs <- proc.time()[["elapsed"]] - t0
   if (!is.null(f) && isTRUE(cond$cache_write)) {
@@ -337,7 +431,7 @@
     tmp <- paste0(f, ".tmp", Sys.getpid())
     saveRDS(list(key = key, info = pk, n = n, D = D, M = M, method = cond$method, ny = cond$ny,
                  louis_rb = cond$louis_rb, study = if (is.null(spec)) "crn" else spec$study,
-                 quad_order = cond$quad$order,
+                 quad_order = quad$order,
                  seed = sd_k, ids = data$ids, network = cond$cache_net, fold = k, seconds = secs,
                  check = R$check, created = format(Sys.time()),
                  storage = "upper triangles, float32, respondent-major"), tmp)

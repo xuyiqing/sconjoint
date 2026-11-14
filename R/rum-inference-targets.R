@@ -30,10 +30,29 @@
 .rum_bounded_kinds <- c("share", "share_nonlinear", "importance")
 
 # Quadrature rules of the engine: fitted-law integrals in targets (41 x 41), sequence
-# scores (21 x 21), and the model-based information (21 nodes in u, 11 in v).
+# scores (21 x 21), and the model-based information (21 nodes in u, 11 in v). With n_fac > 1
+# taste factors (Stage 2 of the q-factor build, 2026-11-14): the scores use the trainer's check
+# rule (Owen-scrambled Sobol, 2,048 nodes over (u, v), seed 20261114) and the information the
+# training rule (Sobol 512, the run plan's rule); the fitted-law targets keep their
+# one-dimensional rule (d' Lambda u is N(0, ||Lambda' d||^2)). n_fac = 1 gives the old objects.
 .rum_law_quadrature <- function() rum_quadrature(c(41L, 41L))
-.rum_score_quadrature <- function() rum_quadrature(c(21L, 21L))
-.rum_info_quadrature <- function() rum_quadrature(c(21L, 11L))
+.rum_score_quadrature <- function(n_fac = 1L)
+  if (n_fac == 1L) rum_quadrature(c(21L, 21L)) else rum_quadrature(n_fac = n_fac, rule = "sobol", nodes = 2048L)
+.rum_info_quadrature <- function(n_fac = 1L)
+  if (n_fac == 1L) rum_quadrature(c(21L, 11L)) else rum_quadrature(n_fac = n_fac, rule = "sobol", nodes = 512L)
+# The rule for a state with n_fac factors. A rule with n_fac factors is returned as is. The
+# one-factor default of the inference routines (quad_score = .rum_score_quadrature(),
+# model_quad = .rum_info_quadrature(), cond$quad), given for a state with n_fac > 1 factors,
+# is replaced by the n_fac-factor default of the same kind; any other mismatch stops.
+.rum_quad_for <- function(quad, n_fac, kind = c("score", "info")) {
+  kind <- match.arg(kind)
+  if (.rum_quad_nfac(quad) == n_fac) return(quad)
+  d1 <- if (kind == "score") .rum_score_quadrature() else .rum_info_quadrature()
+  if (n_fac > 1L && identical(unclass(quad), unclass(d1)))
+    return(if (kind == "score") .rum_score_quadrature(n_fac) else .rum_info_quadrature(n_fac))
+  stop(sprintf("the %s quadrature has %d taste factor(s) but the fitted state has %d; pass a rule built with rum_quadrature(n_fac = %d)",
+               kind, .rum_quad_nfac(quad), n_fac, n_fac), call. = FALSE)
+}
 
 # ---- fitted states ------------------------------------------------------------------
 # Formula version: mu_i = B_i alpha. Returns list(mu, kappa, loading, omega, version).
@@ -263,6 +282,17 @@
   qrR <- qr(R); if (!qrR$rank) return(g)
   Q <- qr.Q(qrR)[, seq_len(qrR$rank), drop = FALSE]
   g - (g %*% Q) %*% t(Q)
+}
+# Orthonormal basis (n x (n - r) matrix) of the complement of the column space of rot, the
+# rotation directions (.rum_rotation_dirs) in some coordinates; r = qr(rot)$rank, which depends
+# on Lambda alone (r < q (q - 1) / 2 only when Lambda has rank below q), not on any quadrature.
+# NULL when rot has no columns or rank 0 (one factor): nothing to remove.
+.rum_rotation_complement <- function(rot) {
+  if (is.null(rot) || !ncol(rot)) return(NULL)
+  qr_r <- qr(rot); k <- qr_r$rank
+  if (!k) return(NULL)
+  if (k == nrow(rot)) return(matrix(0, nrow(rot), 0L))
+  qr.Q(qr_r, complete = TRUE)[, (k + 1L):nrow(rot), drop = FALSE]
 }
 # Principal axes of Lambda: Lambda V (V from svd(Lambda)), orthogonal columns with decreasing
 # lengths; a rotation of Lambda gives the same axes (up to column signs, and up to rotations

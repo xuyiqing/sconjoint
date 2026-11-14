@@ -72,6 +72,7 @@
                                  eig_floor_rel, model)
     FS[[as.character(k)]] <- list(te = which(te), sub = rum_subset(data, data$ids[te]),
                                   mu = ff$mu, th = ff$th, parts = inf$parts)
+    if (.rum_th_nfac(ff$th) > 1L) FS[[as.character(k)]]$quad <- ff$quad
   }
   FS
 }
@@ -107,6 +108,7 @@
   for (j in seq_along(path)) { A <- A + eps[j] * path[[j]]$a; G <- G + eps[j] * path[[j]]$g }
   mu_e <- f$mu[f$te, , drop = FALSE] + A
   nf <- .rum_th_nfac(f$th); ix <- .rum_th_idx(p, nf); io <- ix$omega
+  if (nf > 1L) quad <- .rum_quad_for(quad, nf, "score")
   v0 <- .rum_th_vec(f$th, nf); v <- v0 + G; om0 <- v0[io]; lin <- v[io]
   if (omega_path == "auto") omega_path <- if (om0 >= omega_boundary) "log" else "clamp"
   if (omega_path == "log") {
@@ -124,7 +126,8 @@
     return(list(phi = na, phi_se = na, ll = -Inf, mu = mu_e, th = .rum_th_list(v, p, nf),
                 floor_hit = hit, omega = om, omega_linear = lin))
   }
-  ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa], v[ix$loading], om, quad)
+  ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa],
+                                  if (nf == 1L) v[ix$loading] else matrix(v[ix$loading], p, nf), om, quad)
   base <- vapply(score, function(d) rowSums(d$a * ev$output_score) +
                    drop(ev$common_score[, -io, drop = FALSE] %*% d$g[-io]), numeric(nte))
   so <- ev$common_score[, io]
@@ -286,15 +289,17 @@
                            eig_floor_rel = 1e-6, max_iter = 20L, tol = 1e-3,
                            omega_path = c("auto", "log", "clamp", "legacy"),
                            on_fail = c("na", "last"), max_halving = 30L, omega_boundary = 1e-4,
-                           info_basis = c("constant", "model", "linear"), model_M = NULL,
+                           info_basis = c("constant", "model", "linear", "conditional"), model_M = NULL,
                            model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                            cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                           cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol) {
+                           cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol,
+                           cond = NULL) {
   omega_path <- match.arg(omega_path); on_fail <- match.arg(on_fail)
   info_basis <- match.arg(info_basis)
   n <- data$n; p <- data$p
   model <- .rum_model_options(model_M, model_quad, model_seed, cache_net, cache_dir,
                               cache_write, cache_require)
+  model$cond <- cond
   if (is.null(FS)) FS <- .rum_tmle_folds(data, Z, fold, fold_final, quad_score, info_basis,
                                          ridge_rel, eig_floor_rel, model)
   wmat <- .rum_target_weights(targets, n)
@@ -378,15 +383,17 @@
                             eig_floor_rel = 1e-6, max_iter = 50L, tol = 1e-3,
                             max_halving = 30L, check_tol = 1e-8,
                             omega_path = c("auto", "log", "clamp"), omega_boundary = 1e-4,
-                            info_basis = c("constant", "model", "linear"), model_M = NULL,
+                            info_basis = c("constant", "model", "linear", "conditional"), model_M = NULL,
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
-                            cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol) {
+                            cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol,
+                            cond = NULL) {
   info_basis <- match.arg(info_basis); omega_path <- match.arg(omega_path)
   n <- data$n; p <- data$p; G <- length(targets)
   if (G < 2L) stop("a joint update needs at least two shares")
   model <- .rum_model_options(model_M, model_quad, model_seed, cache_net, cache_dir,
                               cache_write, cache_require)
+  model$cond <- cond
   wmat <- .rum_target_weights(targets, n)
   if (max(abs(wmat - wmat[, 1])) > 0) stop("the shares of one joint update need the same population weights")
   w <- wmat[, 1]; wr <- w / mean(w)

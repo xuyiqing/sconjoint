@@ -38,6 +38,7 @@
 # omega = 0, the right derivative; integration by parts in v of the interior form), so there is
 # no division by sqrt(omega).
 .rum_seq_scores <- function(MU, DL, Y, th, quad) {
+  if (.rum_th_nfac(th) > 1L) return(.rum_seq_scores_q(MU, DL, Y, th, quad))
   B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
   um <- matrix(quad$u, B, G, byrow = TRUE); vm <- matrix(quad$v, B, G, byrow = TRUE); svm <- s * vm
   ETA <- vector("list", T); ll <- matrix(0, B, G)
@@ -58,31 +59,71 @@
   cbind(smu, sk, slam, som / (2 * s))
 }
 
+# The same with q = ncol(th$loading) > 1 taste factors: eta = kappa + d'mu + d'Lambda u + s v with
+# u (G x q, quad$u) and the loading score for factor k, sum_t d_t E[e_t u_k | Y], in the
+# column-major layout of theta (factor 1's p entries first). Columns: s_mu[1..p], kappa,
+# vec(Lambda) (p q), omega (.rum_th_idx(p, q, offset = p)).
+.rum_seq_scores_q <- function(MU, DL, Y, th, quad) {
+  B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
+  L <- as.matrix(th$loading); nf <- ncol(L)
+  if (.rum_quad_nfac(quad) != nf) stop("the quadrature rule does not have ncol(loading) taste factors")
+  U <- matrix(quad$u, G, nf); vm <- matrix(quad$v, B, G, byrow = TRUE); svm <- s * vm
+  ETA <- vector("list", T); ll <- matrix(0, B, G)
+  for (t in seq_len(T)) {
+    e <- th$kappa + rowSums(DL[[t]] * MU) + (DL[[t]] %*% L) %*% t(U) + svm; ETA[[t]] <- e
+    ll <- ll + Y[, t] * stats::plogis(e, log.p = TRUE) + (1 - Y[, t]) * stats::plogis(-e, log.p = TRUE)
+  }
+  ll <- sweep(ll, 2, log(quad$weight), "+"); P <- exp(ll - apply(ll, 1, max)); P <- P / rowSums(P)
+  smu <- matrix(0, B, p); slam <- matrix(0, B, p * nf); sk <- som <- numeric(B)
+  boundary <- th$omega < .rum_omega_small; RS <- CV <- 0
+  for (t in seq_len(T)) {
+    pr <- stats::plogis(ETA[[t]]); r <- P * (Y[, t] - pr); R0 <- rowSums(r)
+    smu <- smu + DL[[t]] * R0; sk <- sk + R0; RU <- r %*% U          # B x q: E[e_t u_k | Y]
+    for (k in seq_len(nf)) slam[, (k - 1L) * p + seq_len(p)] <- slam[, (k - 1L) * p + seq_len(p)] + DL[[t]] * RU[, k]
+    if (boundary) { RS <- RS + (Y[, t] - pr); CV <- CV + pr * (1 - pr) }
+    else som <- som + rowSums(r * vm)
+  }
+  if (boundary) return(cbind(smu, sk, slam, rowSums(P * 0.5 * (RS^2 - CV))))
+  cbind(smu, sk, slam, som / (2 * s))
+}
+
 # Per-respondent model information: n x D x D array (data$ids order). halves = TRUE also
 # returns the averages over odd and even draws (two independent estimates, for Monte Carlo
 # error checks). Respondents are processed in blocks of at most max_cells score cells.
 .rum_model_info <- function(data, mu, th, M, quad = .rum_info_quadrature(), seed = 20260926L,
                             halves = FALSE, max_cells = 2e7) {
-  n <- nrow(mu); p <- ncol(mu); D <- p + .rum_th_len(p); G <- length(quad$weight); Tmax <- max(data$T)
+  nf <- .rum_th_nfac(th)
+  n <- nrow(mu); p <- ncol(mu); D <- p + .rum_th_len(p, nf); G <- length(quad$weight); Tmax <- max(data$T)
   s <- sqrt(th$omega)
+  if (.rum_quad_nfac(quad) != nf) stop("the quadrature rule does not have the state's number of taste factors")
   stopifnot(n == data$n, p == data$p, M >= 2L)
   off <- data$offsets; Tj <- data$T; nb <- max(1L, floor(max_cells / (M * G * Tmax)))
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   oddm <- seq(1L, M, 2L); evenm <- seq(2L, M, 2L)
   # common random numbers: the same M designs, taste and side draws and uniforms for every
   # respondent (drawn once, so the result does not depend on batching)
-  dr <- .rum_with_seed(seed, list(j = sample.int(data$n, M, replace = TRUE),
-    u = stats::rnorm(M), v = stats::rnorm(M), U = matrix(stats::runif(M * Tmax), M, Tmax)))
+  # (n_fac > 1: u is M x n_fac, drawn in the same position of the stream)
+  dr <- if (nf == 1L) .rum_with_seed(seed, list(j = sample.int(data$n, M, replace = TRUE),
+    u = stats::rnorm(M), v = stats::rnorm(M), U = matrix(stats::runif(M * Tmax), M, Tmax))) else
+    .rum_with_seed(seed, list(j = sample.int(data$n, M, replace = TRUE),
+    u = matrix(stats::rnorm(M * nf), M, nf), v = stats::rnorm(M), U = matrix(stats::runif(M * Tmax), M, Tmax)))
   for (bi in split(seq_len(n), ceiling(seq_len(n) / nb))) {
     nr <- length(bi); np <- nr * M; ii <- rep(bi, each = M); mm <- rep(seq_len(M), times = nr)
-    jm <- dr$j[mm]; um <- dr$u[mm]; vm <- dr$v[mm]; U <- dr$U[mm, , drop = FALSE]
+    jm <- dr$j[mm]; um <- if (nf == 1L) dr$u[mm] else dr$u[mm, , drop = FALSE]
+    vm <- dr$v[mm]; U <- dr$U[mm, , drop = FALSE]
     Sc <- matrix(NA_real_, np, D)
     for (T in sort(unique(Tj[jm]))) {
       r <- which(Tj[jm] == T); MU <- mu[ii[r], , drop = FALSE]
       DL <- lapply(seq_len(T), function(t) data$d[off[jm[r]] + t, , drop = FALSE])
       Y <- matrix(0, length(r), T)
-      for (t in seq_len(T)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
-        rowSums(DL[[t]] * (MU + outer(um[r], th$loading))) + s * vm[r]))
+      if (nf == 1L) {
+        for (t in seq_len(T)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
+          rowSums(DL[[t]] * (MU + outer(um[r], th$loading))) + s * vm[r]))
+      } else {
+        BU <- MU + um[r, , drop = FALSE] %*% t(th$loading)          # beta = mu + Lambda u
+        for (t in seq_len(T)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
+          rowSums(DL[[t]] * BU) + s * vm[r]))
+      }
       Sc[r, ] <- .rum_seq_scores(MU, DL, Y, th, quad)
     }
     for (j in seq_len(nr)) {
@@ -123,15 +164,20 @@
 # list(I, M, seconds, cache, hit).
 .rum_model_info_fold <- function(data, mu, th, k, M, quad, seed, cache_net, cache_dir, fin,
                                  cache_write = TRUE, cache_require = FALSE) {
-  n <- data$n; D <- data$p + .rum_th_len(data$p); M <- as.integer(if (is.null(M)) 20L * D else M)
+  nf <- .rum_th_nfac(th)
+  if (NROW(th$loading) != data$p) stop("the loading does not have p rows")
+  quad <- .rum_quad_for(quad, nf, "info")
+  n <- data$n; D <- data$p + .rum_th_len(data$p, nf); M <- as.integer(if (is.null(M)) 20L * D else M)
   sd_k <- as.integer(seed) + as.integer(k)
   f <- NULL; key <- NULL
   if (!is.null(cache_net) && !is.null(cache_dir)) {
     if (requireNamespace("digest", quietly = TRUE)) {
-      key <- digest::digest(list(version = "rum_model_info v2 (common draws)",
+      kl <- list(version = "rum_model_info v2 (common draws)",
         final = fin[c("network", "kappa", "loading", "omega")], mu = unname(mu),
         ids = data$ids, d = data$d, offsets = data$offsets, M = M,
-        quad = unclass(quad)[c("u", "v", "weight")], seed = sd_k))
+        quad = unclass(quad)[c("u", "v", "weight")], seed = sd_k)
+      if (nf > 1L) kl$n_fac <- nf                       # one factor keeps the v2 key
+      key <- digest::digest(kl)
       f <- file.path(cache_dir, sprintf("%s_fold%d_M%d.rds", cache_net, k, M))
     } else message("package 'digest' is not installed; the model information is not cached")
   }
@@ -167,16 +213,78 @@
 # Ic = the average over rows of I_thetatheta - I_thetamu I_mumu^{-1} I_mutheta (the
 # efficient information for theta), floored = the number of floored matrices, and
 # shared = (nrow == 1): one matrix for every respondent.
-.rum_weight_parts <- function(info_of, nrow, p, n_th, eig_floor_rel) {
+# rot (optional, appended last because external scripts call this positionally): the rotation
+# directions of the fold's loading in theta coordinates, .rum_rotation_dirs(Lambda) (n_th x
+# q(q-1)/2). With q > 1 factors the likelihood is flat along them, exactly for the exact integral
+# and up to quadrature error for any rule, so a floor would decide by quadrature error whether
+# they are kept. They are removed before the floor instead (.rum_weight_parts_rot): see there.
+# rot NULL or with no columns (one factor): the code below, unchanged.
+.rum_weight_parts <- function(info_of, nrow, p, n_th, eig_floor_rel, rot = NULL) {
+  if (!is.null(rot) && ncol(rot) > 0L)
+    return(.rum_weight_parts_rot(info_of, nrow, p, n_th, eig_floor_rel, rot, shared = nrow == 1L))
   Li <- array(0, c(nrow, p, p)); Lt <- array(0, c(nrow, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L
   for (i in seq_len(nrow)) {
     L <- info_of(i); e <- eigen(L, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
     if (any(e$values < fl)) { nfl <- nfl + 1L; L <- e$vectors %*% (pmax(e$values, fl) * t(e$vectors)) }
-    li <- solve(L[1:p, 1:p]); lt <- L[1:p, p + seq_len(n_th)]; Li[i, , ] <- li; Lt[i, , ] <- lt
+    li <- solve(L[1:p, 1:p, drop = FALSE]); lt <- L[1:p, p + seq_len(n_th), drop = FALSE]  # drop = FALSE: p = 1
+    Li[i, , ] <- li; Lt[i, , ] <- lt
     Ic <- Ic + L[p + seq_len(n_th), p + seq_len(n_th)] - crossprod(lt, li %*% lt)
   }
   list(Li = Li, Lt = Lt, Ic = Ic / nrow, floored = nfl, shared = nrow == 1L)
 }
+
+# Weight ingredients with the rotation directions removed (build plan D3). B (n_th x (n_th - r))
+# is an orthonormal basis of the complement of the rotation directions (.rum_rotation_complement).
+# Each respondent's information is written in the coordinates (mu, B' theta),
+#   L_red = T' L T,  T = diag(I_p, B),
+# i.e. restricted to the perturbations that change the model; the floor, the inverse of the mu
+# block and the Schur complement are taken there, and the results are mapped back to theta
+# coordinates: Lt = L_red[mu, theta] B' (p x n_th) and the theta block B L_red[theta, theta] B'.
+# So Ic (n_th x n_th) annihilates every rotation direction exactly (to rounding), and
+# .rum_correction() solves J g = r on the complement only: g = B (B' Ic B)^{-1} B' r. The result
+# does not depend on which orthonormal basis B is used, and no eigenvalue cutoff decides whether a
+# rotation direction is kept: they are removed by construction. Why it is exact: Lambda and
+# Lambda A (A orthogonal) give the same law of the data, so every target and the true likelihood
+# are constant along vec(Lambda K), K skew; the efficient influence function lives on the model's
+# tangent space, which is the complement; a finite rule's own score along those directions is
+# pure quadrature error and carries no information.
+# null_zero (the conditional basis's option, .rum_cond_weight_parts): a coordinate whose row of a
+# respondent's information is exactly zero is dropped first; the rotation directions are then
+# restricted to the kept theta coordinates (where the dropped coordinates carry no information,
+# L_KK r_K = L r, so r_K is the same near-null direction of the kept block). Returns
+# .rum_weight_parts()'s list plus B, Ic_red = B' Ic B and null (respondents with a zero row).
+.rum_weight_parts_rot <- function(info_of, nrow, p, n_th, eig_floor_rel, rot, shared = nrow == 1L,
+                                  null_zero = FALSE) {
+  D <- p + n_th; Bg <- .rum_rotation_complement(rot)
+  if (is.null(Bg)) Bg <- diag(n_th)
+  Li <- array(0, c(nrow, p, p)); Lt <- array(0, c(nrow, p, n_th)); Ic <- matrix(0, n_th, n_th)
+  nfl <- 0L; nnull <- 0L
+  for (i in seq_len(nrow)) {
+    L <- info_of(i)
+    keep <- if (null_zero) which(rowSums(abs(L)) > 0) else seq_len(D)
+    if (length(keep) < D) nnull <- nnull + 1L
+    km <- keep[keep <= p]; kt <- keep[keep > p] - p
+    B <- if (length(kt) == n_th) Bg else {
+      b <- .rum_rotation_complement(rot[kt, , drop = FALSE]); if (is.null(b)) diag(length(kt)) else b }
+    nm <- length(km); nb <- ncol(B); im <- seq_len(nm); ir <- nm + seq_len(nb)
+    Lx <- L[km, p + kt, drop = FALSE] %*% B
+    R <- rbind(cbind(L[km, km, drop = FALSE], Lx), cbind(t(Lx), crossprod(B, L[p + kt, p + kt, drop = FALSE] %*% B)))
+    R <- (R + t(R)) / 2
+    e <- eigen(R, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
+    if (any(e$values < fl)) { nfl <- nfl + 1L; R <- e$vectors %*% (pmax(e$values, fl) * t(e$vectors)) }
+    li <- matrix(0, p, p); li[km, km] <- solve(R[im, im, drop = FALSE])
+    lt <- matrix(0, p, n_th); lt[km, kt] <- R[im, ir, drop = FALSE] %*% t(B)
+    tt <- matrix(0, n_th, n_th); tt[kt, kt] <- B %*% R[ir, ir, drop = FALSE] %*% t(B)
+    Li[i, , ] <- li; Lt[i, , ] <- lt
+    Ic <- Ic + tt - crossprod(lt, li %*% lt)
+  }
+  Ic <- Ic / nrow; Ic <- (Ic + t(Ic)) / 2
+  list(Li = Li, Lt = Lt, Ic = Ic, floored = nfl, shared = shared, B = Bg,
+       Ic_red = crossprod(Bg, Ic %*% Bg), null = nnull)
+}
+# The information matrix whose eigenvalues the diagnostics report: Ic, or with the rotation
+# directions removed, Ic on their complement.
+.rum_parts_Ic <- function(parts) if (is.null(parts$B)) parts$Ic else parts$Ic_red
 
 .rum_slice3 <- function(A, rows, j) matrix(A[rows, j, ], nrow = length(rows))
 # Rows (I_thetamu I_mumu^{-1} v_i)' for every respondent (respondent-specific matrices).

@@ -42,12 +42,24 @@
 
 # One fold's fitted state: th, mu (n x p, data$ids order), the evaluator's output, and the
 # full score S = (s_mu, s_theta) (n x D).
+# With q > 1 factors the loading is first rotated to its principal axes
+# (.rum_canonical_loading, the trainer's own rotation): the fold's state, scores, information and
+# corrections are then the same for every rotation of the given loading (Lambda and Lambda A
+# give the same model), and folds are comparable. quad_score: a q-factor rule (the one-factor
+# default is replaced by .rum_score_quadrature(q)); returned as quad. One factor: unchanged.
 .rum_fold_fit <- function(data, Z, fin, quad_score) {
   th <- list(kappa = fin$kappa, loading = fin$loading, omega = fin$omega)
+  nf <- .rum_th_nfac(th)
+  if (nf > 1L) {
+    if (nrow(th$loading) != data$p) stop("the loading does not have p rows")
+    th$loading <- .rum_canonical_loading(th$loading); quad_score <- .rum_quad_for(quad_score, nf, "score")
+  }
   mu <- rum_dnn_gaussian_forward(fin$network, Z[data$ids, , drop = FALSE])
   ev <- rum_dnn_gaussian_evaluate(data, mu, th$kappa, th$loading, th$omega, quad_score)
-  list(th = th, mu = mu, ev = ev, S = cbind(ev$output_score, ev$common_score))
+  list(th = th, mu = mu, ev = ev, S = cbind(ev$output_score, ev$common_score), quad = quad_score)
 }
+# Rotation directions of a state's loading in theta coordinates (NULL at one factor).
+.rum_th_rot <- function(th) if (.rum_th_nfac(th) > 1L) .rum_rotation_dirs(th$loading) else NULL
 
 # One fold's information estimate. Returns parts (.rum_weight_parts), diag (a data frame
 # row: fold, info_heldout_rel_error = relative Frobenius error of the estimate's held-out
@@ -60,9 +72,10 @@
     MI <- if (info_basis == "model") .rum_model_info_fold(data, ff$mu, ff$th, k, model$M, model$quad, model$seed,
                                model$cache_net, model$cache_dir, fin, model$cache_write,
                                model$cache_require) else .rum_cond_info_fold(data, ff$mu, ff$th, k, model$cond, fin)
+    rot <- .rum_th_rot(ff$th)
     W <- if (info_basis == "conditional" && isTRUE(model$cond$null_zero))
-      .rum_cond_weight_parts(MI$I, p, n_th, eig_floor_rel) else
-      .rum_weight_parts(function(i) MI$I[i, , ], n, p, n_th, eig_floor_rel)
+      .rum_cond_weight_parts(MI$I, p, n_th, eig_floor_rel, rot) else
+      .rum_weight_parts(function(i) MI$I[i, , ], n, p, n_th, eig_floor_rel, rot)
     Ite <- apply(MI$I[te, , , drop = FALSE], c(2, 3), mean)
     Ote <- crossprod(S[te, , drop = FALSE]) / sum(te)
     err <- norm(Ite - Ote, "F") / norm(Ote, "F")
@@ -78,27 +91,34 @@
     pen <- if (ncol(Bz) > 1) ridge_rel * mean(diag(BtB)) * diag(c(0, rep(1, ncol(Bz) - 1))) else 0
     coef <- solve(BtB + pen, crossprod(Bz[tr, , drop = FALSE], Y[tr, , drop = FALSE]) / sum(tr))
     W <- .rum_weight_parts(function(i) unpack(drop(Bz[i, , drop = FALSE] %*% coef)),
-                           if (info_basis == "constant") 1L else n, p, n_th, eig_floor_rel)
+                           if (info_basis == "constant") 1L else n, p, n_th, eig_floor_rel, .rum_th_rot(ff$th))
     Lte_pred <- unpack(colMeans(Bz[te, , drop = FALSE] %*% coef))
     Lte_obs <- unpack(colMeans(Y[te, , drop = FALSE]))
     err <- norm(Lte_pred - Lte_obs, "F") / norm(Lte_obs, "F")
     meta <- NULL
   }
   diag <- data.frame(fold = k, info_heldout_rel_error = err, floored = W$floored,
-                     min_eig_Itilde = min(eigen(W$Ic, symmetric = TRUE, only.values = TRUE)$values))
+                     min_eig_Itilde = min(eigen(.rum_parts_Ic(W), symmetric = TRUE, only.values = TRUE)$values))
   list(parts = W, diag = diag, meta = meta)
 }
 
 # The correction weights for one target at one fold's fit: g (length n_th) and a (one row per
 # entry of rows, p columns). v = (w/Wbar) m_mu (n x p); gt_bar = E[(w/Wbar) m_theta].
+# With q > 1 factors (parts from .rum_weight_parts_rot, which carry B, the basis of the
+# complement of the rotation directions): J g = r is solved on that complement,
+# g = B (B' Ic B)^{-1} B' r, so the target derivative's rotation component (zero for exact
+# gradients, rounding for numerical ones) is projected out with the same B, and g has no
+# rotation component. One factor (parts$B NULL): unchanged.
 .rum_correction <- function(parts, v, gt_bar, rows) {
   p <- ncol(v)
+  sol <- if (is.null(parts$B)) function(r) solve(parts$Ic, r) else
+    function(r) drop(parts$B %*% solve(parts$Ic_red, crossprod(parts$B, r)))
   if (parts$shared) {                       # one matrix for everyone: vectorized
     Li <- matrix(parts$Li[1, , ], p, p); Lt <- matrix(parts$Lt[1, , ], p)
-    g <- solve(parts$Ic, gt_bar - colMeans(v %*% (t(Li) %*% Lt)))
+    g <- sol(gt_bar - colMeans(v %*% (t(Li) %*% Lt)))
     a <- (v[rows, , drop = FALSE] - matrix(drop(Lt %*% g), length(rows), p, byrow = TRUE)) %*% t(Li)
   } else {
-    g <- solve(parts$Ic, gt_bar - colMeans(.rum_info_CLv(parts$Li, parts$Lt, v)))
+    g <- sol(gt_bar - colMeans(.rum_info_CLv(parts$Li, parts$Lt, v)))
     a <- .rum_info_a(parts$Li, parts$Lt, v, g, rows)
   }
   list(a = a, g = g)
@@ -117,7 +137,8 @@
 #                     phi) and population reference (phi + (w/Wbar)(m_i - est));
 #                     SE = sd(IF) / sqrt(n) (se_kind "sd");
 #   phi, m            n x nt raw corrections and held-out plug-in values m_i;
-#   diag              fold diagnostics; fold_loadings (folds x p); model_info (model basis);
+#   diag              fold diagnostics; fold_loadings (folds x p; with q > 1 factors folds x p x q,
+#                     each fold's loading on its principal axes); model_info (model basis);
 #   kind, n_group, info_basis, pop_center.
 # The population-reference values for a subgroup (weights w, wr = w / Wbar). The estimate is
 # a ratio of cross-fitted moments, est = nu1 / nu2 with q1_i = w_i m_i + phi_i Wbar and
@@ -144,8 +165,13 @@
   M <- PHI <- matrix(NA_real_, n, nt); diag_fold <- meta <- list()
   loads <- matrix(NA_real_, length(ks), p)
   for (k in ks) {
-    fin <- fold_final(k); loads[match(k, ks), ] <- fin$loading
+    fin <- fold_final(k)
     ff <- .rum_fold_fit(data, Z, fin, quad_score); tr <- fold != k; te <- fold == k
+    nf <- .rum_th_nfac(ff$th)          # q > 1: folds x p x q, each fold on its principal axes
+    if (nf == 1L) loads[match(k, ks), ] <- fin$loading else {
+      if (length(dim(loads)) == 2L) loads <- array(NA_real_, c(length(ks), p, nf))
+      loads[match(k, ks), , ] <- ff$th$loading
+    }
     inf <- .rum_fold_information(info_basis, data, Z, ff, fin, k, tr, te, ridge_rel,
                                  eig_floor_rel, model)
     diag_fold[[length(diag_fold) + 1L]] <- inf$diag
@@ -243,13 +269,14 @@
     inf <- .rum_fold_information(info_basis, data, Z, ff, fin, k, tr, te, ridge_rel,
                                  eig_floor_rel, model)
     FS[[as.character(k)]] <- list(te = which(te), sub = rum_subset(data, ids[te]), mu = ff$mu,
-                                  th = ff$th, parts = inf$parts)
+                                  th = ff$th, parts = inf$parts, quad = ff$quad)
   }
   eval_phi <- function(f, a, g, eps) {               # held-out scores along the path
     nf <- .rum_th_nfac(f$th); ix <- .rum_th_idx(p, nf)
     mu_e <- f$mu[f$te, , drop = FALSE] + eps * a; v <- .rum_th_vec(f$th, nf) + eps * g
     v[ix$omega] <- max(v[ix$omega], 1e-8)
-    ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa], v[ix$loading], v[ix$omega], quad_score)
+    ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa],
+      if (nf == 1L) v[ix$loading] else matrix(v[ix$loading], p, nf), v[ix$omega], f$quad)
     list(phi = rowSums(a * ev$output_score) + drop(ev$common_score %*% g), mu = mu_e,
          th = .rum_th_list(v, p, nf))
   }

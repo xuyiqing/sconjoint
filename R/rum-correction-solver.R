@@ -128,7 +128,8 @@
     nr <- if (is.function(info)) info_n else if (is.matrix(info)) 1L else dim(info)[1L]
     grads <- lapply(targets, function(tg) .rum_target_grad(tg, mu, th))
     cc <- .rum_common_check(io, nr, p, n_th, wmat, grads, tol_rel_common, tol_h,
-                            .rum_th_names(paste0("loading", seq_len(p)), nf))
+                            .rum_th_names(paste0("loading", seq_len(p)), nf),
+                            if (nf > 1L) .rum_rotation_dirs(th$loading) else NULL)
     tab$max_rel_common <- cc$rel_common; tab$common_confounded <- cc$confounded
   }
   nm <- vapply(targets, `[[`, "", "name"); colnames(flag) <- nm
@@ -180,8 +181,24 @@
 # pooled matrix, as the constant basis). wmat: n x targets weights; grads: per target
 # list(gm = n x p, gt = n x n_th) from .rum_target_grad. Returns per target: rel_common and
 # confounded; and null_J (n_th x k), the common null directions, labeled by parameter.
+# rot (q > 1 factors; appended last): the rotation directions of the loading in theta
+# coordinates (.rum_rotation_dirs). They are exact null directions of J for the exact integral
+# (and near-null for any rule), and no target loads on them, so they are removed before the
+# check (the coordinates of .rum_weight_parts_rot: J on the complement basis B): they are never
+# reported as confounded and never appear in null_J. null_J is returned in theta coordinates
+# (B times the reduced null directions); J is the reduced matrix B' J B.
 .rum_common_check <- function(info_of, nrow, p, n_th, wmat, grads, tol_rel = 1e-8, tol_h = 1e-6,
-                              theta_names = NULL) {
+                              theta_names = NULL, rot = NULL) {
+  Bq <- if (!is.null(rot) && ncol(rot) > 0L) .rum_rotation_complement(rot) else NULL
+  if (!is.null(Bq)) {
+    n_full <- n_th; T_of <- function(L) {           # (mu, theta) -> (mu, B' theta)
+      Lx <- L[seq_len(p), p + seq_len(n_full), drop = FALSE] %*% Bq
+      rbind(cbind(L[seq_len(p), seq_len(p), drop = FALSE], Lx),
+            cbind(t(Lx), crossprod(Bq, L[p + seq_len(n_full), p + seq_len(n_full), drop = FALSE] %*% Bq)))
+    }
+    info_full <- info_of; info_of <- function(i) T_of(info_full(i)); n_th <- ncol(Bq)
+    grads <- lapply(grads, function(g) list(gm = g$gm, gt = g$gt %*% Bq))
+  }
   n <- nrow(wmat); J <- matrix(0, n_th, n_th); Lbar <- matrix(0, p + n_th, p + n_th)
   C <- array(0, c(nrow, p, n_th)); ip <- seq_len(p); iq <- p + seq_len(n_th)
   for (i in seq_len(nrow)) {
@@ -195,15 +212,16 @@
   ej <- eigen((J + t(J)) / 2, symmetric = TRUE)
   scale <- max(eigen(Lbar, symmetric = TRUE, only.values = TRUE)$values, 0)
   NJ <- ej$vectors[, ej$values <= tol_rel * scale, drop = FALSE]
+  NJr <- NJ; if (!is.null(Bq)) NJ <- Bq %*% NJ
   if (!is.null(theta_names)) rownames(NJ) <- theta_names
   rel <- vapply(seq_along(grads), function(t) {
-    if (!ncol(NJ)) return(0)
+    if (!ncol(NJr)) return(0)
     w <- wmat[, t]; wr <- w / mean(w); v <- wr * grads[[t]]$gm; gt <- colMeans(wr * grads[[t]]$gt)
     Cv <- if (nrow == 1L) drop(crossprod(matrix(C[1, , ], p, n_th), colMeans(v)))
           else colMeans(t(vapply(seq_len(n), function(i) drop(crossprod(matrix(C[i, , ], p, n_th), v[i, ])), numeric(n_th))))
     r <- gt - Cv
     den <- max(sqrt(sum(r^2)), sqrt(sum(colMeans(v)^2)), sqrt(sum(gt^2)))
-    if (den == 0) 0 else sqrt(sum(crossprod(NJ, r)^2)) / den
+    if (den == 0) 0 else sqrt(sum(crossprod(NJr, r)^2)) / den
   }, 0)
   list(rel_common = rel, confounded = rel > tol_h, null_J = NJ, J = J,
        min_eig_J_rel = if (scale > 0) min(ej$values) / scale else NA_real_)
@@ -231,6 +249,7 @@
     fin <- fold_final(k)
     mu <- rum_dnn_gaussian_forward(fin$network, Z[data$ids, , drop = FALSE])
     th <- list(kappa = fin$kappa, loading = fin$loading, omega = fin$omega)
+    if (.rum_th_nfac(th) > 1L) th$loading <- .rum_canonical_loading(th$loading)
     te <- fold == k
     tk <- lapply(targets, function(tg) { w <- if (is.null(tg$w)) rep(1, n) else as.numeric(tg$w)
       tg$w <- w * te; tg })
@@ -242,7 +261,7 @@
       grads <- lapply(targets, function(tg) .rum_target_grad(tg, ff$mu, ff$th))
       nf <- .rum_th_nfac(ff$th)
       cc <- .rum_common_check(function(i) Ib, 1L, p, .rum_th_len(p, nf), wmat, grads, tol_rel_common, tol_h,
-                              .rum_th_names(paste0("loading:", data$feature_names), nf))
+                              .rum_th_names(paste0("loading:", data$feature_names), nf), .rum_th_rot(ff$th))
       rel_common <- rbind(rel_common, cc$rel_common); null_J[[as.character(k)]] <- cc$null_J
     }
   }
