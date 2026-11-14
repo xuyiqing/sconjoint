@@ -84,10 +84,21 @@
 # data$ids or a superset). Bounds come from the trainer control (kappa_bounds,
 # loading_bounds, omega_bounds). Returns the polished final state and the training
 # log-likelihood (mean per respondent) before and after.
+#
+# Several taste factors (final$loading p x n_fac): L-BFGS-B cannot express the row-length
+# bound, so the loading is optimised through the smooth radial map Lambda_j = R w_j /
+# sqrt(1 + |w_j|^2) (R = the loading bound), which maps each unconstrained row w_j onto
+# the open ball of radius R; kappa and log omega keep their boxes. The result is rotated
+# to principal axes (.rum_canonical_loading). quadrature = NULL: Gauss-Hermite 21 x 21 at
+# one factor (as before), the default Sobol rule (512 nodes) at several.
 .rum_dnn_polish <- function(data, Z, final, bias = TRUE,
-                            quadrature = rum_quadrature(c(21L, 21L)), control = list()) {
+                            quadrature = NULL, control = list()) {
   b <- .rum_dnn_train_control(control, 1L)
   p <- data$p; Zi <- Z[data$ids, , drop = FALSE]
+  n_fac <- .rum_th_nfac(final)
+  if (is.null(quadrature)) quadrature <- if (n_fac == 1L) rum_quadrature(c(21L, 21L)) else
+    rum_quadrature(n_fac = n_fac)
+  if (n_fac > 1L) return(.rum_dnn_polish_q(data, Zi, final, bias, quadrature, b, n_fac))
   if (!bias) {
     mu <- rum_dnn_gaussian_forward(final$network, Zi)
     ix <- .rum_th_idx(p)                       # x = (kappa, loading, log omega): theta's layout
@@ -130,6 +141,75 @@
        message = o$message, iterations = o$counts, bias = bias)
 }
 
+# Radial map of a p x n_fac loading onto rows of length < R, its inverse, and the chain
+# rule from a loading gradient to the unconstrained rows.
+.rum_radial_from <- function(W, R) R * W / sqrt(1 + rowSums(W^2))
+.rum_radial_to <- function(L, R) {
+  len <- sqrt(rowSums(L^2)); L <- L * pmin(1, .999 * R / len)   # start strictly inside
+  L / sqrt(R^2 - rowSums(L^2))
+}
+.rum_radial_grad <- function(W, gL, R) {
+  s <- sqrt(1 + rowSums(W^2))
+  R * (gL / s - W * (rowSums(W * gL) / s^3))
+}
+
+.rum_dnn_polish_q <- function(data, Zi, final, bias, quadrature, b, n_fac) {
+  p <- data$p; nl <- p * n_fac; R <- .rum_loading_radius(b)
+  W0 <- .rum_radial_to(matrix(final$loading, p, n_fac), R)
+  if (!bias) {
+    mu <- rum_dnn_gaussian_forward(final$network, Zi)
+    ix <- .rum_th_idx(p, n_fac)              # x = (kappa, vec(W), log omega)
+    un <- function(x) list(network = final$network, kappa = x[ix$kappa],
+      loading = .rum_radial_from(matrix(x[ix$loading], p, n_fac), R), omega = exp(x[ix$omega]))
+    ev <- function(x) { u <- un(x); rum_dnn_gaussian_evaluate(data, mu, u$kappa, u$loading, u$omega, quadrature) }
+    fn <- function(x) -ev(x)$objective
+    gr <- function(x) { e <- ev(x); g <- colMeans(e$common_score); g[ix$omega] <- g[ix$omega] * exp(x[ix$omega])
+      g[ix$loading] <- .rum_radial_grad(matrix(x[ix$loading], p, n_fac), matrix(g[ix$loading], p, n_fac), R); -g }
+    x0 <- c(final$kappa, W0, log(final$omega))
+    lo <- c(b$kappa_bounds[1], rep(-Inf, nl), log(b$omega_bounds[1])) * .999
+    hi <- c(b$kappa_bounds[2], rep(Inf, nl), log(b$omega_bounds[2])) * .999
+    x0 <- pmin(pmax(x0, lo), hi)
+    o <- stats::optim(x0, fn, gr, method = "L-BFGS-B", lower = lo, upper = hi,
+                      control = list(factr = 1e2, maxit = 2000))
+  } else {
+    net <- final$network; L <- length(net$biases)
+    ix <- .rum_th_idx(p, n_fac, offset = p)  # x = (output bias, kappa, vec(W), log omega)
+    un <- function(x) { nt <- net; nt$biases[[L]] <- x[seq_len(p)]
+      list(network = nt, kappa = x[ix$kappa],
+           loading = .rum_radial_from(matrix(x[ix$loading], p, n_fac), R), omega = exp(x[ix$omega])) }
+    cache <- new.env()
+    ev <- function(x) {
+      if (!is.null(cache$x) && identical(cache$x, x)) return(cache$v)
+      u <- un(x); v <- rum_dnn_gaussian_loss(u$network, data, Zi, u$kappa, u$loading, u$omega, quadrature)
+      cache$x <- x; cache$v <- v; v
+    }
+    fn <- function(x) ev(x)$loss
+    gr <- function(x) { g <- ev(x)$loss_gradient
+      c(g$biases[[L]], g$kappa, .rum_radial_grad(matrix(x[ix$loading], p, n_fac), g$loading, R),
+        g$omega * exp(x[ix$omega])) }
+    x0 <- c(net$biases[[L]], final$kappa, W0, log(final$omega))
+    lo <- c(rep(-Inf, p), b$kappa_bounds[1] * .999, rep(-Inf, nl), log(b$omega_bounds[1]))
+    hi <- c(rep(Inf, p), b$kappa_bounds[2] * .999, rep(Inf, nl), log(b$omega_bounds[2]))
+    x0 <- pmin(pmax(x0, lo), hi)
+    o <- stats::optim(x0, fn, gr, method = "L-BFGS-B", lower = lo, upper = hi,
+                      control = list(factr = 1e2, maxit = 3000))
+  }
+  before <- -fn(x0); after <- -o$value
+  if (after < before - 1e-10) stop("The polish lowered the training log-likelihood.")
+  out <- un(o$par)
+  out <- list(network = out$network, kappa = out$kappa,
+              loading = .rum_canonical_loading(out$loading), omega = out$omega)
+  # the rotation leaves Lambda Lambda' unchanged; the rule integrates the rotated loading
+  # only up to quadrature error, recorded here
+  canonical <- rum_dnn_gaussian_evaluate(data, rum_dnn_gaussian_forward(out$network, Zi),
+    out$kappa, out$loading, out$omega, quadrature)$objective
+  list(final = out, loglik_before = before, loglik_after = after, convergence = o$convergence,
+       message = o$message, iterations = o$counts, bias = bias, n_fac = n_fac,
+       loglik_canonical = canonical, rule = .rum_quad_label(quadrature),
+       max_row_length = max(.rum_loading_row_length(out$loading)),
+       loading_parametrization = "radial: Lambda_j = R w_j / sqrt(1 + |w_j|^2)")
+}
+
 # One fold of the RUM network under fold-internal preprocessing. Reads only the rows of
 # `data` and `Z` that belong to train_ids. validation_ids (a subset of train_ids) are the
 # early-stopping respondents of Avi's trainer. trainers: any of "avi" (Avi's trainer as
@@ -139,7 +219,9 @@
                                 hidden = c(32L, 32L, 16L), seeds = c(42L, 7L, 1609L),
                                 control = list(), impute = "median",
                                 trainers = c("avi", "avipol", "avipolb"),
-                                quadrature = rum_quadrature(c(21L, 21L))) {
+                                quadrature = NULL, n_fac = 1L, train_quadrature = NULL) {
+  # quadrature: the polish rule (NULL: 21 x 21 at one factor, Sobol 512 at several);
+  # train_quadrature: the trainer's rules (rum_dnn_gaussian_train's quadrature argument).
   trainers <- match.arg(trainers, c("avi", "avipol", "avipolb"), several.ok = TRUE)
   if (any(!validation_ids %in% train_ids)) stop("validation_ids must be training respondents.")
   rule <- .rum_preprocess_learn(Z, train_ids, impute = impute)
@@ -147,7 +229,7 @@
   train <- rum_subset(data, train_ids)
   t0 <- proc.time()[["elapsed"]]
   fit <- rum_dnn_gaussian_train(train, Ztr, validation_ids, hidden = hidden, seeds = seeds,
-                                control = control)
+                                control = control, n_fac = n_fac, quadrature = train_quadrature)
   t_train <- proc.time()[["elapsed"]] - t0
   if (is.null(fit$final)) stop("Avi's trainer returned no final state: ", fit$status)
   finals <- list(avi = fit$final); polish <- list(); times <- c(train = t_train)

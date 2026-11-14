@@ -8,7 +8,7 @@
 namespace {
 
 struct Dimensions {
-  int n, m, p, r, h, nodes, pairs, counts;
+  int n, m, p, r, h, nodes, pairs, counts, nf;
 };
 
 inline double logistic(double x) {
@@ -37,7 +37,11 @@ Dimensions validate_common(const Rcpp::NumericMatrix& d,
                            const Rcpp::NumericVector& par,
                            const Rcpp::NumericVector& u,
                            const Rcpp::NumericVector& v,
-                           const Rcpp::NumericVector& weight) {
+                           const Rcpp::NumericVector& weight,
+                           int n_fac = 1) {
+  // n_fac taste factors: par is [kappa, alpha, vec(Lambda) (p x n_fac, column-major),
+  // omega] and u holds the G x n_fac factor nodes column-major (length G * n_fac).
+  if (n_fac == NA_INTEGER || n_fac < 1) Rcpp::stop("n_fac must be a positive integer");
   if (d.nrow() < 1 || d.ncol() < 1)
     Rcpp::stop("d must have at least one task and one feature");
   if (a.nrow() != d.nrow()) Rcpp::stop("a and d must have the same task rows");
@@ -58,11 +62,14 @@ Dimensions validate_common(const Rcpp::NumericMatrix& d,
   if (pair_count > std::numeric_limits<int>::max() ||
       static_cast<double>(d.nrow()) + n > std::numeric_limits<int>::max())
     Rcpp::stop("pair or count rows exceed the supported matrix size");
-  const int h = 2 + a.ncol() + d.ncol();
+  const double h_count = 2.0 + a.ncol() + static_cast<double>(d.ncol()) * n_fac;
+  if (h_count > std::numeric_limits<int>::max())
+    Rcpp::stop("parameter count exceeds the supported size");
+  const int h = static_cast<int>(h_count);
   if (par.size() != h)
     Rcpp::stop("par must be [kappa, alpha, loading, position_variance]");
-  if (u.size() < 1 || u.size() > std::numeric_limits<int>::max() ||
-      u.size() != v.size() || u.size() != weight.size())
+  if (v.size() < 1 || v.size() > std::numeric_limits<int>::max() ||
+      u.size() != v.size() * static_cast<R_xlen_t>(n_fac) || v.size() != weight.size())
     Rcpp::stop("u, v, and weight must have the same positive length");
   require_finite(d, "d");
   require_finite(a, "a");
@@ -79,8 +86,8 @@ Dimensions validate_common(const Rcpp::NumericMatrix& d,
   if (!R_FINITE(sum_weight) || std::fabs(sum_weight - 1.0) > 1e-8)
     Rcpp::stop("quadrature weights must sum to one");
   Dimensions out = {n, d.nrow(), d.ncol(), a.ncol(), h,
-                    static_cast<int>(u.size()), static_cast<int>(pair_count),
-                    d.nrow() + n};
+                    static_cast<int>(v.size()), static_cast<int>(pair_count),
+                    d.nrow() + n, n_fac};
   return out;
 }
 
@@ -100,6 +107,115 @@ void predictor_parts(int start, int tasks, const Dimensions& dim,
   }
 }
 
+// Several taste factors: policy[f * tasks + t] = d_t' Lambda[, f].
+void predictor_parts_q(int start, int tasks, const Dimensions& dim,
+                       const Rcpp::NumericMatrix& d, const Rcpp::NumericMatrix& a,
+                       const Rcpp::NumericVector& par,
+                       std::vector<double>& fixed, std::vector<double>& policy) {
+  for (int t = 0; t < tasks; ++t) {
+    const int row = start + t;
+    fixed[t] = par[0];
+    for (int j = 0; j < dim.r; ++j) fixed[t] += a(row, j) * par[1 + j];
+    if (!R_FINITE(fixed[t]))
+      Rcpp::stop("non-finite linear predictor; check parameter and design scales");
+    for (int f = 0; f < dim.nf; ++f) {
+      double value = 0.0;
+      for (int j = 0; j < dim.p; ++j)
+        value += d(row, j) * par[1 + dim.r + f * dim.p + j];
+      if (!R_FINITE(value))
+        Rcpp::stop("non-finite linear predictor; check parameter and design scales");
+      policy[static_cast<size_t>(f) * tasks + t] = value;
+    }
+  }
+}
+
+// The sequence likelihood and scores with n_fac > 1 taste factors:
+// eta = kappa + a'alpha + sum_f (d'Lambda_f) u_f + sqrt(omega) v. The n_fac = 1 case
+// keeps its own code in rum_sequence_cpp (bitwise parity with the one-factor build).
+Rcpp::List rum_sequence_q(const Dimensions& dim, const Rcpp::NumericVector& y,
+                          const Rcpp::NumericMatrix& d, const Rcpp::NumericMatrix& a,
+                          const Rcpp::IntegerVector& offsets,
+                          const Rcpp::NumericVector& par, const Rcpp::NumericVector& u,
+                          const Rcpp::NumericVector& v, const Rcpp::NumericVector& weight) {
+  const double omega = par[dim.h - 1], scale = std::sqrt(omega);
+  const bool boundary = omega == 0.0;
+  const int G = dim.nodes, nf = dim.nf;
+  Rcpp::NumericVector loglik(dim.n);
+  Rcpp::NumericMatrix score(dim.n, dim.h);
+  for (int i = 0; i < dim.n; ++i) {
+    if (i % 64 == 0) Rcpp::checkUserInterrupt();
+    const int start = offsets[i], tasks = offsets[i + 1] - start;
+    const size_t tq = static_cast<size_t>(tasks) * nf;
+    std::vector<double> fixed(tasks), policy(tq), residual(tasks),
+      posterior_residual(tasks), posterior_policy_residual(tq), node_u(nf);
+    predictor_parts_q(start, tasks, dim, d, a, par, fixed, policy);
+    double log_mass = R_NegInf, posterior_omega = 0.0;
+    for (int k = 0; k < G; ++k) {
+      for (int f = 0; f < nf; ++f) node_u[f] = u[k + static_cast<R_xlen_t>(G) * f];
+      double ll = 0.0, residual_sum = 0.0, curvature = 0.0;
+      for (int t = 0; t < tasks; ++t) {
+        const int row = start + t;
+        double taste = 0.0;
+        for (int f = 0; f < nf; ++f)
+          taste += policy[static_cast<size_t>(f) * tasks + t] * node_u[f];
+        const double eta = fixed[t] + taste + scale * v[k];
+        if (!R_FINITE(eta)) Rcpp::stop("non-finite latent utility index");
+        const double prob = logistic(eta);
+        residual[t] = y[row] - prob;
+        ll -= y[row] == 1.0 ? softplus(-eta) : softplus(eta);
+        residual_sum += residual[t];
+        if (boundary) curvature += prob * (1.0 - prob);
+      }
+      const double node_omega = boundary ?
+        0.5 * (residual_sum * residual_sum - curvature) :
+        v[k] * residual_sum / (2.0 * scale);
+      if (!R_FINITE(node_omega)) Rcpp::stop("non-finite conditional score");
+      const double log_node = std::log(weight[k]) + ll;
+      if (!R_FINITE(log_node)) Rcpp::stop("non-finite sequence log probability");
+      if (k == 0) {
+        log_mass = log_node;
+        for (int t = 0; t < tasks; ++t) {
+          posterior_residual[t] = residual[t];
+          for (int f = 0; f < nf; ++f)
+            posterior_policy_residual[static_cast<size_t>(f) * tasks + t] =
+              node_u[f] * residual[t];
+        }
+        posterior_omega = node_omega;
+      } else {
+        const double next = log_add(log_mass, log_node);
+        const double fraction = std::exp(log_node - next);
+        for (int t = 0; t < tasks; ++t) {
+          posterior_residual[t] += fraction * (residual[t] - posterior_residual[t]);
+          for (int f = 0; f < nf; ++f) {
+            const size_t at = static_cast<size_t>(f) * tasks + t;
+            posterior_policy_residual[at] += fraction *
+              (node_u[f] * residual[t] - posterior_policy_residual[at]);
+          }
+        }
+        posterior_omega += fraction * (node_omega - posterior_omega);
+        log_mass = next;
+      }
+    }
+    loglik[i] = log_mass;
+    // E[r_t | Y] for the mean and E[u_f r_t | Y] for loading column f (p x n_fac).
+    for (int t = 0; t < tasks; ++t) {
+      const int row = start + t;
+      score(i, 0) += posterior_residual[t];
+      for (int j = 0; j < dim.r; ++j)
+        score(i, 1 + j) += a(row, j) * posterior_residual[t];
+      for (int f = 0; f < nf; ++f) {
+        const double pr = posterior_policy_residual[static_cast<size_t>(f) * tasks + t];
+        for (int j = 0; j < dim.p; ++j)
+          score(i, 1 + dim.r + f * dim.p + j) += d(row, j) * pr;
+      }
+    }
+    score(i, dim.h - 1) = posterior_omega;
+  }
+  require_finite(score, "computed sequence scores");
+  return Rcpp::List::create(Rcpp::Named("loglik") = loglik,
+                            Rcpp::Named("score") = score);
+}
+
 void validate_bank_matrix(const Rcpp::NumericMatrix& x, int rows, int columns,
                           const char* name) {
   if (x.nrow() != rows || x.ncol() != columns)
@@ -111,16 +227,20 @@ void validate_bank_matrix(const Rcpp::NumericMatrix& x, int rows, int columns,
 
 // Full sequence probabilities and observed-data scores. At omega = 0 the
 // last score is the right derivative for adding independent Gaussian variance.
+// n_fac > 1 taste factors: par = [kappa, alpha, vec(Lambda), omega] with Lambda
+// p x n_fac column-major, and u the G x n_fac node matrix.
 // [[Rcpp::export]]
 Rcpp::List rum_sequence_cpp(Rcpp::NumericVector y, Rcpp::NumericMatrix d,
                            Rcpp::NumericMatrix a, Rcpp::IntegerVector offsets,
                            Rcpp::NumericVector par, Rcpp::NumericVector u,
-                           Rcpp::NumericVector v, Rcpp::NumericVector weight) {
-  const Dimensions dim = validate_common(d, a, offsets, par, u, v, weight);
+                           Rcpp::NumericVector v, Rcpp::NumericVector weight,
+                           int n_fac = 1) {
+  const Dimensions dim = validate_common(d, a, offsets, par, u, v, weight, n_fac);
   if (y.size() != dim.m) Rcpp::stop("y must have one entry per task");
   for (int t = 0; t < dim.m; ++t)
     if (!R_FINITE(y[t]) || (y[t] != 0.0 && y[t] != 1.0))
       Rcpp::stop("y must contain only zero and one");
+  if (dim.nf != 1) return rum_sequence_q(dim, y, d, a, offsets, par, u, v, weight);
   const double omega = par[dim.h - 1], scale = std::sqrt(omega);
   const bool boundary = omega == 0.0;
   Rcpp::NumericVector loglik(dim.n);
