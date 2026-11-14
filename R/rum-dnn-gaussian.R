@@ -204,9 +204,12 @@ rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
   .rum_dnn_check_normal_rule(quadrature)
   loglik <- numeric(data$n)
   output_score <- matrix(0, data$n, data$p)
-  common_score <- matrix(0, data$n, data$p + 2L)
+  # the native parameter vector is c(kappa, mu_i, loading, omega): theta with the p means
+  # inserted after kappa
+  ix <- .rum_th_idx(data$p)
+  common_score <- matrix(0, data$n, ix$n_th)
   mean_columns <- 1L + seq_len(data$p)
-  common_columns <- c(1L, 1L + data$p + seq_len(data$p), 2L + 2L * data$p)
+  common_columns <- c(ix$kappa, data$p + ix$loading, data$p + ix$omega)
   for (i in seq_len(data$n)) {
     rows <- seq.int(data$offsets[i] + 1L, data$offsets[i + 1L])
     di <- data$d[rows, , drop = FALSE]
@@ -222,12 +225,12 @@ rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
   names(loglik) <- data$ids
   dimnames(output_score) <- list(data$ids, data$feature_names)
   dimnames(common_score) <- list(data$ids,
-    c("kappa", paste0("loading:", data$feature_names), "omega"))
+    .rum_th_names(paste0("loading:", data$feature_names)))
   common_gradient <- colMeans(common_score)
   objective_gradient <- list(mu = output_score / data$n,
-    kappa = unname(common_gradient[1L]),
-    loading = unname(common_gradient[1L + seq_len(data$p)]),
-    omega = unname(tail(common_gradient, 1L)))
+    kappa = unname(common_gradient[ix$kappa]),
+    loading = unname(common_gradient[ix$loading]),
+    omega = unname(common_gradient[ix$omega]))
   list(loglik = loglik, objective = mean(loglik), loss = -mean(loglik),
     mu = mu, output_score = output_score, common_score = common_score,
     objective_gradient = objective_gradient,

@@ -15,7 +15,7 @@
 # No held-out choices are used. Common random numbers: every respondent of a fold uses the
 # same M draws, from a private seed (seed + fold); the caller's random stream is untouched.
 # Inverting an average of M outer products inflates the weights by about M / (M - p - 1),
-# so the default is M = 20 D (D = 2p + 2).
+# so the default is M = 20 D (D = p + n_th = 2p + 2 at one factor).
 #
 # Known limitation, kept on purpose (Codex review of eae4719, finding 1). The synthetic
 # respondents' designs are drawn from the whole bank of ALREADY-CODED sequences (dr$j below),
@@ -63,7 +63,7 @@
 # error checks). Respondents are processed in blocks of at most max_cells score cells.
 .rum_model_info <- function(data, mu, th, M, quad = .rum_info_quadrature(), seed = 20260926L,
                             halves = FALSE, max_cells = 2e7) {
-  n <- nrow(mu); p <- ncol(mu); D <- 2L * p + 2L; G <- length(quad$weight); Tmax <- max(data$T)
+  n <- nrow(mu); p <- ncol(mu); D <- p + .rum_th_len(p); G <- length(quad$weight); Tmax <- max(data$T)
   s <- sqrt(th$omega)
   stopifnot(n == data$n, p == data$p, M >= 2L)
   off <- data$offsets; Tj <- data$T; nb <- max(1L, floor(max_cells / (M * G * Tmax)))
@@ -123,7 +123,7 @@
 # list(I, M, seconds, cache, hit).
 .rum_model_info_fold <- function(data, mu, th, k, M, quad, seed, cache_net, cache_dir, fin,
                                  cache_write = TRUE, cache_require = FALSE) {
-  n <- data$n; D <- 2L * data$p + 2L; M <- as.integer(if (is.null(M)) 20L * D else M)
+  n <- data$n; D <- data$p + .rum_th_len(data$p); M <- as.integer(if (is.null(M)) 20L * D else M)
   sd_k <- as.integer(seed) + as.integer(k)
   f <- NULL; key <- NULL
   if (!is.null(cache_net) && !is.null(cache_dir)) {
@@ -161,19 +161,19 @@
 }
 
 # Ingredients of the correction weights from respondent information matrices. info_of(i)
-# returns respondent row i's D x D information (D = p + q), for i = 1..nrow. Each matrix
+# returns respondent row i's D x D information (D = p + n_th), for i = 1..nrow. Each matrix
 # is made positive definite by an eigenvalue floor (eig_floor_rel times its largest
-# eigenvalue). Returns Li = I_mumu^{-1} (nrow x p x p), Lt = I_mutheta (nrow x p x q),
+# eigenvalue). Returns Li = I_mumu^{-1} (nrow x p x p), Lt = I_mutheta (nrow x p x n_th),
 # Ic = the average over rows of I_thetatheta - I_thetamu I_mumu^{-1} I_mutheta (the
 # efficient information for theta), floored = the number of floored matrices, and
 # shared = (nrow == 1): one matrix for every respondent.
-.rum_weight_parts <- function(info_of, nrow, p, q, eig_floor_rel) {
-  Li <- array(0, c(nrow, p, p)); Lt <- array(0, c(nrow, p, q)); Ic <- matrix(0, q, q); nfl <- 0L
+.rum_weight_parts <- function(info_of, nrow, p, n_th, eig_floor_rel) {
+  Li <- array(0, c(nrow, p, p)); Lt <- array(0, c(nrow, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L
   for (i in seq_len(nrow)) {
     L <- info_of(i); e <- eigen(L, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
     if (any(e$values < fl)) { nfl <- nfl + 1L; L <- e$vectors %*% (pmax(e$values, fl) * t(e$vectors)) }
-    li <- solve(L[1:p, 1:p]); lt <- L[1:p, p + seq_len(q)]; Li[i, , ] <- li; Lt[i, , ] <- lt
-    Ic <- Ic + L[p + seq_len(q), p + seq_len(q)] - crossprod(lt, li %*% lt)
+    li <- solve(L[1:p, 1:p]); lt <- L[1:p, p + seq_len(n_th)]; Li[i, , ] <- li; Lt[i, , ] <- lt
+    Ic <- Ic + L[p + seq_len(n_th), p + seq_len(n_th)] - crossprod(lt, li %*% lt)
   }
   list(Li = Li, Lt = Lt, Ic = Ic / nrow, floored = nfl, shared = nrow == 1L)
 }

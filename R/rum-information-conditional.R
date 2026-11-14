@@ -43,10 +43,12 @@
 }
 
 # A_D: the D x 3T map from c(y) to the score, for one design (T x p) and s = sqrt(omega).
+# Rows: s_mu (1..p), then theta in its layout (.rum_th_idx with offset p).
 .rum_cond_A <- function(Dm, s) {
-  T <- nrow(Dm); p <- ncol(Dm); D <- 2L * p + 2L; A <- matrix(0, D, 3L * T)
-  A[seq_len(p), seq_len(T)] <- t(Dm); A[p + 1L, seq_len(T)] <- 1
-  A[p + 1L + seq_len(p), T + seq_len(T)] <- t(Dm); A[D, 2L * T + seq_len(T)] <- 1 / (2 * s)
+  T <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, offset = p); D <- p + ix$n_th
+  A <- matrix(0, D, 3L * T)
+  A[seq_len(p), seq_len(T)] <- t(Dm); A[ix$kappa, seq_len(T)] <- 1
+  A[ix$loading, T + seq_len(T)] <- t(Dm); A[ix$omega, 2L * T + seq_len(T)] <- 1 / (2 * s)
   A
 }
 
@@ -112,10 +114,10 @@
   Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
   if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
   # posterior mean of the complete-data negative Hessian, sequence by sequence
-  q <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
+  pq <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
   H3p <- matrix(0, 3L * T, 3L * T); t1 <- seq_len(T)
   for (r in 0:2) for (c2 in 0:2) {
-    wrc <- colSums(q * (if (r == 1) quad$u[gg] else if (r == 2) quad$v[gg] else 1) *
+    wrc <- colSums(pq * (if (r == 1) quad$u[gg] else if (r == 2) quad$v[gg] else 1) *
                        (if (c2 == 1) quad$u[gg] else if (c2 == 2) quad$v[gg] else 1))
     H3p[cbind(r * T + t1, c2 * T + t1)] <- wrc / ny
   }
@@ -134,7 +136,8 @@
                            quad = .rum_info_quadrature(), ny = 8L, seed = 20261011L,
                            halves = FALSE, louis_rb = TRUE) {
   method <- match.arg(method)
-  n <- nrow(mu); p <- ncol(mu); D <- 2L * p + 2L; s <- sqrt(th$omega); M <- as.integer(crn$M)
+  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p)$omega; D <- p + .rum_th_len(p)
+  s <- sqrt(th$omega); M <- as.integer(crn$M)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   if (isTRUE(crn$own)) {
     stopifnot(n == data$n, p == data$p, M >= 2L, all(Tj <= crn$T))
@@ -168,7 +171,7 @@
       # X = A_m [K_1 .. K_ng] (D x J ng); then A_m X_j' for all j at once
       X <- Am %*% matrix(KK, J, J * ng)
       Cm <- array(Am %*% matrix(t(X), J, ng * D), c(D, ng, D))
-      if (any(xo != 0)) Cm[D, , D] <- Cm[D, , D] + xo
+      if (any(xo != 0)) Cm[io, , io] <- Cm[io, , io] + xo         # the omega coordinate
       acc <- acc + Cm
       if (halves && m %% 2L == 1L) accA <- accA + Cm
     }
@@ -186,7 +189,8 @@
 # Monte Carlo error of a(z) is shared by every respondent and does not average out in a
 # target; with own draws it does. Respondent i's simulation seed is seed + i.
 .rum_cond_info_own <- function(data, mu, th, crn, method, quad, ny, seed, halves, louis_rb) {
-  n <- nrow(mu); p <- ncol(mu); D <- 2L * p + 2L; s <- sqrt(th$omega); M <- as.integer(crn$M)
+  n <- nrow(mu); p <- ncol(mu); io <- p + .rum_th_idx(p)$omega; D <- p + .rum_th_len(p)
+  s <- sqrt(th$omega); M <- as.integer(crn$M)
   Tj <- as.integer(data$T); G <- length(quad$weight)
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); odd <- seq_len(M) %% 2L == 1L
@@ -206,7 +210,7 @@
       cols <- (m - 1L) * J + seq_len(J); A[, cols] <- Am; X[, cols] <- Am %*% r$K; xo[m] <- r$xo
     }
     acc <- function(sel) { cs <- rep(sel, each = J); R <- X[, cs, drop = FALSE] %*% t(A[, cs, drop = FALSE])
-      R[D, D] <- R[D, D] + sum(xo[sel]); (R + t(R)) / (2 * sum(sel)) }
+      R[io, io] <- R[io, io] + sum(xo[sel]); (R + t(R)) / (2 * sum(sel)) }
     I[i, , ] <- acc(rep(TRUE, M))
     if (halves) { IA[i, , ] <- acc(odd); IB[i, , ] <- acc(!odd) }
   }
@@ -243,9 +247,9 @@
 # a(z) is 0 there and the CV-TMLE path never moves that respondent along it. The default
 # (cond$null_zero FALSE) keeps .rum_weight_parts(), which floors such directions instead.
 # Also returns null = the number of respondents with at least one zero coordinate.
-.rum_cond_weight_parts <- function(I, p, q, eig_floor_rel) {
-  n <- dim(I)[1L]; D <- p + q
-  Li <- array(0, c(n, p, p)); Lt <- array(0, c(n, p, q)); Ic <- matrix(0, q, q); nfl <- 0L; nnull <- 0L
+.rum_cond_weight_parts <- function(I, p, n_th, eig_floor_rel) {
+  n <- dim(I)[1L]; D <- p + n_th
+  Li <- array(0, c(n, p, p)); Lt <- array(0, c(n, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L; nnull <- 0L
   for (i in seq_len(n)) {
     L <- I[i, , ]; keep <- which(rowSums(abs(L)) > 0); if (length(keep) < D) nnull <- nnull + 1L
     Lk <- L[keep, keep, drop = FALSE]; e <- eigen(Lk, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
@@ -253,7 +257,7 @@
     L[keep, keep] <- Lk
     km <- keep[keep <= p]; kt <- keep[keep > p] - p
     li <- matrix(0, p, p); li[km, km] <- solve(L[km, km, drop = FALSE])
-    lt <- L[1:p, p + seq_len(q)]; tt <- L[p + seq_len(q), p + seq_len(q)]
+    lt <- L[1:p, p + seq_len(n_th)]; tt <- L[p + seq_len(n_th), p + seq_len(n_th)]
     Li[i, , ] <- li; Lt[i, , ] <- lt
     Ic <- Ic + tt - crossprod(lt, li %*% lt)
   }
@@ -289,7 +293,7 @@
 # cache, hit, check).
 .rum_cond_info_fold <- function(data, mu, th, k, cond, fin) {
   if (is.null(cond)) stop("info_basis 'conditional' needs cond = .rum_cond_options(...)")
-  n <- data$n; D <- 2L * data$p + 2L; M <- as.integer(if (is.null(cond$crn)) cond$M else cond$crn$M); sd_k <- cond$seed + as.integer(k)
+  n <- data$n; D <- data$p + .rum_th_len(data$p); M <- as.integer(if (is.null(cond$crn)) cond$M else cond$crn$M); sd_k <- cond$seed + as.integer(k)
   spec <- if (is.null(cond$crn)) .rum_spec_arg(cond$spec) else NULL
   key_resp <- if (!is.null(cond$crn)) cond$crn$key else if (spec$uses_resp) spec$key(cond$resp) else rep("all", n)
   stopifnot(length(key_resp) == n)

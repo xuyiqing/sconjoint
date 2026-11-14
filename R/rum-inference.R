@@ -55,14 +55,14 @@
 # (model basis only: M, seconds, cache file, cache hit).
 .rum_fold_information <- function(info_basis, data, Z, ff, fin, k, tr, te, ridge_rel,
                                   eig_floor_rel, model) {
-  n <- data$n; p <- data$p; q <- p + 2L; D <- p + q; S <- ff$S
+  n <- data$n; p <- data$p; n_th <- .rum_th_len(p, .rum_th_nfac(ff$th)); D <- p + n_th; S <- ff$S
   if (info_basis %in% c("model", "conditional")) {
     MI <- if (info_basis == "model") .rum_model_info_fold(data, ff$mu, ff$th, k, model$M, model$quad, model$seed,
                                model$cache_net, model$cache_dir, fin, model$cache_write,
                                model$cache_require) else .rum_cond_info_fold(data, ff$mu, ff$th, k, model$cond, fin)
     W <- if (info_basis == "conditional" && isTRUE(model$cond$null_zero))
-      .rum_cond_weight_parts(MI$I, p, q, eig_floor_rel) else
-      .rum_weight_parts(function(i) MI$I[i, , ], n, p, q, eig_floor_rel)
+      .rum_cond_weight_parts(MI$I, p, n_th, eig_floor_rel) else
+      .rum_weight_parts(function(i) MI$I[i, , ], n, p, n_th, eig_floor_rel)
     Ite <- apply(MI$I[te, , , drop = FALSE], c(2, 3), mean)
     Ote <- crossprod(S[te, , drop = FALSE]) / sum(te)
     err <- norm(Ite - Ote, "F") / norm(Ote, "F")
@@ -78,7 +78,7 @@
     pen <- if (ncol(Bz) > 1) ridge_rel * mean(diag(BtB)) * diag(c(0, rep(1, ncol(Bz) - 1))) else 0
     coef <- solve(BtB + pen, crossprod(Bz[tr, , drop = FALSE], Y[tr, , drop = FALSE]) / sum(tr))
     W <- .rum_weight_parts(function(i) unpack(drop(Bz[i, , drop = FALSE] %*% coef)),
-                           if (info_basis == "constant") 1L else n, p, q, eig_floor_rel)
+                           if (info_basis == "constant") 1L else n, p, n_th, eig_floor_rel)
     Lte_pred <- unpack(colMeans(Bz[te, , drop = FALSE] %*% coef))
     Lte_obs <- unpack(colMeans(Y[te, , drop = FALSE]))
     err <- norm(Lte_pred - Lte_obs, "F") / norm(Lte_obs, "F")
@@ -89,7 +89,7 @@
   list(parts = W, diag = diag, meta = meta)
 }
 
-# The correction weights for one target at one fold's fit: g (length q) and a (one row per
+# The correction weights for one target at one fold's fit: g (length n_th) and a (one row per
 # entry of rows, p columns). v = (w/Wbar) m_mu (n x p); gt_bar = E[(w/Wbar) m_theta].
 .rum_correction <- function(parts, v, gt_bar, rows) {
   p <- ncol(v)
@@ -246,11 +246,12 @@
                                   th = ff$th, parts = inf$parts)
   }
   eval_phi <- function(f, a, g, eps) {               # held-out scores along the path
-    mu_e <- f$mu[f$te, , drop = FALSE] + eps * a; v <- .rum_th_vec(f$th) + eps * g
-    v[p + 2] <- max(v[p + 2], 1e-8)
-    ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[1], v[1 + seq_len(p)], v[p + 2], quad_score)
+    nf <- .rum_th_nfac(f$th); ix <- .rum_th_idx(p, nf)
+    mu_e <- f$mu[f$te, , drop = FALSE] + eps * a; v <- .rum_th_vec(f$th, nf) + eps * g
+    v[ix$omega] <- max(v[ix$omega], 1e-8)
+    ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa], v[ix$loading], v[ix$omega], quad_score)
     list(phi = rowSums(a * ev$output_score) + drop(ev$common_score %*% g), mu = mu_e,
-         th = .rum_th_list(v, p))
+         th = .rum_th_list(v, p, nf))
   }
   res <- lapply(seq_len(nt), function(t) {
     w <- wmat[, t]; wr <- w / mean(w); tg <- targets[[t]]
@@ -364,8 +365,8 @@
     tg <- targets[[t]]; w <- if (is.null(tg$w)) rep(1, n) else as.numeric(tg$w); wr <- w / mean(w)
     gr <- .rum_target_grad(tg, st$mu, th)
     da <- Reduce(`+`, lapply(seq_len(n), function(i) wr[i] * drop(crossprod(basis[[i]], gr$gm[i, ])))) / n
-    dt <- colMeans(wr * gr$gt)
-    grad <- c(dt[1], da, dt[1 + seq_len(p)], dt[p + 2L])
+    dt <- colMeans(wr * gr$gt); ix <- .rum_th_idx(p)          # the formula RUM has one factor
+    grad <- c(dt[ix$kappa], da, dt[ix$loading], dt[ix$omega])
     iff <- drop(Sc %*% (Iinv %*% grad)); plug <- sum(w * gr$m) / sum(w)
     IFF[, t] <- iff; IFP[, t] <- iff + wr * (gr$m - plug); est[t] <- plug
   }

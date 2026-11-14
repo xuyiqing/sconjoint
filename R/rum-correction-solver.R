@@ -123,12 +123,12 @@
   tab <- do.call(rbind, rows)
   cc <- NULL
   if (!is.null(info)) {
-    q <- p + 2L
+    nf <- .rum_th_nfac(th); n_th <- .rum_th_len(p, nf)
     io <- if (is.function(info)) info else if (is.matrix(info)) function(i) info else function(i) info[i, , ]
     nr <- if (is.function(info)) info_n else if (is.matrix(info)) 1L else dim(info)[1L]
     grads <- lapply(targets, function(tg) .rum_target_grad(tg, mu, th))
-    cc <- .rum_common_check(io, nr, p, q, wmat, grads, tol_rel_common, tol_h,
-                            c("kappa", paste0("loading", seq_len(p)), "omega"))
+    cc <- .rum_common_check(io, nr, p, n_th, wmat, grads, tol_rel_common, tol_h,
+                            .rum_th_names(paste0("loading", seq_len(p)), nf))
     tab$max_rel_common <- cc$rel_common; tab$common_confounded <- cc$confounded
   }
   nm <- vapply(targets, `[[`, "", "name"); colnames(flag) <- nm
@@ -176,14 +176,14 @@
 # tol_h times the size of its derivative (max of |r|, |E[h_mu]|, |E[h_theta]|). Null
 # directions of J: eigenvalues at most tol_rel times the largest eigenvalue of the average
 # full information. All of it before any flooring.
-# info_of(i): respondent row i's D x D information (D = p + q) for i = 1..nrow (nrow = 1: one
+# info_of(i): respondent row i's D x D information (D = p + n_th) for i = 1..nrow (nrow = 1: one
 # pooled matrix, as the constant basis). wmat: n x targets weights; grads: per target
-# list(gm = n x p, gt = n x q) from .rum_target_grad. Returns per target: rel_common and
-# confounded; and null_J (q x k), the common null directions, labeled by parameter.
-.rum_common_check <- function(info_of, nrow, p, q, wmat, grads, tol_rel = 1e-8, tol_h = 1e-6,
+# list(gm = n x p, gt = n x n_th) from .rum_target_grad. Returns per target: rel_common and
+# confounded; and null_J (n_th x k), the common null directions, labeled by parameter.
+.rum_common_check <- function(info_of, nrow, p, n_th, wmat, grads, tol_rel = 1e-8, tol_h = 1e-6,
                               theta_names = NULL) {
-  n <- nrow(wmat); J <- matrix(0, q, q); Lbar <- matrix(0, p + q, p + q)
-  C <- array(0, c(nrow, p, q)); ip <- seq_len(p); iq <- p + seq_len(q)
+  n <- nrow(wmat); J <- matrix(0, n_th, n_th); Lbar <- matrix(0, p + n_th, p + n_th)
+  C <- array(0, c(nrow, p, n_th)); ip <- seq_len(p); iq <- p + seq_len(n_th)
   for (i in seq_len(nrow)) {
     L <- info_of(i); L <- (L + t(L)) / 2; Lbar <- Lbar + L / nrow
     e <- eigen(L[ip, ip, drop = FALSE], symmetric = TRUE); mx <- max(e$values, 0)
@@ -199,8 +199,8 @@
   rel <- vapply(seq_along(grads), function(t) {
     if (!ncol(NJ)) return(0)
     w <- wmat[, t]; wr <- w / mean(w); v <- wr * grads[[t]]$gm; gt <- colMeans(wr * grads[[t]]$gt)
-    Cv <- if (nrow == 1L) drop(crossprod(matrix(C[1, , ], p, q), colMeans(v)))
-          else colMeans(t(vapply(seq_len(n), function(i) drop(crossprod(matrix(C[i, , ], p, q), v[i, ])), numeric(q))))
+    Cv <- if (nrow == 1L) drop(crossprod(matrix(C[1, , ], p, n_th), colMeans(v)))
+          else colMeans(t(vapply(seq_len(n), function(i) drop(crossprod(matrix(C[i, , ], p, n_th), v[i, ])), numeric(n_th))))
     r <- gt - Cv
     den <- max(sqrt(sum(r^2)), sqrt(sum(colMeans(v)^2)), sqrt(sum(gt^2)))
     if (den == 0) 0 else sqrt(sum(crossprod(NJ, r)^2)) / den
@@ -223,7 +223,7 @@
 .rum_identification_folds <- function(data, Z, fold, fold_final, targets, null, tol_h = 1e-6,
                                        common = TRUE, quad_score = .rum_score_quadrature(),
                                        tol_rel_common = 1e-8) {
-  n <- data$n; p <- data$p; q <- p + 2L
+  n <- data$n; p <- data$p
   flag <- matrix(FALSE, n, length(targets)); by <- list()
   wmat <- .rum_target_weights(targets, n); rel_common <- matrix(0, 0, length(targets))
   null_J <- list()
@@ -240,8 +240,9 @@
       ff <- .rum_fold_fit(data, Z, fin, quad_score); tr <- fold != k
       Ib <- crossprod(ff$S[tr, , drop = FALSE]) / sum(tr)
       grads <- lapply(targets, function(tg) .rum_target_grad(tg, ff$mu, ff$th))
-      cc <- .rum_common_check(function(i) Ib, 1L, p, q, wmat, grads, tol_rel_common, tol_h,
-                              c("kappa", paste0("loading:", data$feature_names), "omega"))
+      nf <- .rum_th_nfac(ff$th)
+      cc <- .rum_common_check(function(i) Ib, 1L, p, .rum_th_len(p, nf), wmat, grads, tol_rel_common, tol_h,
+                              .rum_th_names(paste0("loading:", data$feature_names), nf))
       rel_common <- rbind(rel_common, cc$rel_common); null_J[[as.character(k)]] <- cc$null_J
     }
   }

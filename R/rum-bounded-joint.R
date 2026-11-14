@@ -76,7 +76,7 @@
   FS
 }
 
-# A target's correction directions at every fold (a: held-out rows x p; g: length q) and
+# A target's correction directions at every fold (a: held-out rows x p; g: length n_th) and
 # its held-out plug-in values.
 .rum_tmle_dirs <- function(FS, tg, w) {
   wr <- w / mean(w)
@@ -106,32 +106,33 @@
   A <- 0; G <- 0
   for (j in seq_along(path)) { A <- A + eps[j] * path[[j]]$a; G <- G + eps[j] * path[[j]]$g }
   mu_e <- f$mu[f$te, , drop = FALSE] + A
-  v0 <- .rum_th_vec(f$th); v <- v0 + G; om0 <- v0[p + 2L]; lin <- v[p + 2L]
+  nf <- .rum_th_nfac(f$th); ix <- .rum_th_idx(p, nf); io <- ix$omega
+  v0 <- .rum_th_vec(f$th, nf); v <- v0 + G; om0 <- v0[io]; lin <- v[io]
   if (omega_path == "auto") omega_path <- if (om0 >= omega_boundary) "log" else "clamp"
   if (omega_path == "log") {
-    if (om0 > 0) { om <- om0 * exp(G[p + 2L] / om0); dom <- om / om0 } else { om <- 0; dom <- 0 }
+    if (om0 > 0) { om <- om0 * exp(G[io] / om0); dom <- om / om0 } else { om <- 0; dom <- 0 }
     hit <- FALSE
   } else if (omega_path == "clamp") {
     om <- max(lin, 0); dom <- if (lin > 0) 1 else 0; hit <- lin <= 0
   } else {
     om <- max(lin, floor); dom <- 1; hit <- lin < floor
   }
-  v[p + 2L] <- om
+  v[io] <- om
   nte <- length(f$te)
   if (!all(is.finite(c(v, mu_e)))) {                 # a trial step too long to evaluate
     na <- matrix(NA_real_, nte, length(score))
-    return(list(phi = na, phi_se = na, ll = -Inf, mu = mu_e, th = .rum_th_list(v, p),
+    return(list(phi = na, phi_se = na, ll = -Inf, mu = mu_e, th = .rum_th_list(v, p, nf),
                 floor_hit = hit, omega = om, omega_linear = lin))
   }
-  ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[1], v[1 + seq_len(p)], om, quad)
+  ev <- rum_dnn_gaussian_evaluate(f$sub, mu_e, v[ix$kappa], v[ix$loading], om, quad)
   base <- vapply(score, function(d) rowSums(d$a * ev$output_score) +
-                   drop(ev$common_score[, -(p + 2L), drop = FALSE] %*% d$g[-(p + 2L)]), numeric(nte))
-  so <- ev$common_score[, p + 2L]
-  gom <- vapply(score, function(d) d$g[p + 2L], 0)
+                   drop(ev$common_score[, -io, drop = FALSE] %*% d$g[-io]), numeric(nte))
+  so <- ev$common_score[, io]
+  gom <- vapply(score, function(d) d$g[io], 0)
   base <- matrix(base, nte)
   phi <- base + outer(so * dom, gom); phi_se <- base + outer(so, gom)
   list(phi = phi, phi_se = phi_se, ll = sum(ev$loglik), mu = mu_e,
-       th = .rum_th_list(v, p), floor_hit = hit, omega = om, omega_linear = lin)
+       th = .rum_th_list(v, p, nf), floor_hit = hit, omega = om, omega_linear = lin)
 }
 
 # All folds at eps: phi and phi_se stacked in respondent order (n x J), total held-out log

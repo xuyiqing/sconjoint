@@ -12,9 +12,10 @@
 #   kind  "mean", "share", "choice", "lincomb", ... (bounded kinds: .rum_bounded_kinds),
 #   w     NULL or respondent weights in data$ids order (a subgroup: 1 inside, 0 outside),
 #   m     function(mu, th) -> the n per-respondent values m_i,
-#   grad  optional function(mu, th) -> list(m, gm = n x p, gt = n x q) with exact gradients.
+#   grad  optional function(mu, th) -> list(m, gm = n x p, gt = n x n_th) with exact gradients.
 # th = list(kappa, loading, omega); the common parameters theta are ordered as the
-# evaluator's common score: kappa, loading[1..p], omega (q = p + 2).
+# evaluator's common score: kappa, loading[1..p], omega (n_th = p + 2 entries). The layout is
+# defined once, by .rum_th_idx() below; code reads theta through it, never by fixed position.
 # A new target type only needs m (central differences are then used) or m and grad.
 
 # Kinds that live in [0, 1]; .rum_bounded_dnn() reports them with the CV-TMLE.
@@ -141,33 +142,61 @@
 # Below this omega, omega derivatives use their boundary forms (no division by sqrt(omega)).
 .rum_omega_small <- 1e-8
 
-.rum_th_vec  <- function(th) c(th$kappa, th$loading, th$omega)
-.rum_th_list <- function(v, p) list(kappa = v[1], loading = v[1 + seq_len(p)], omega = v[p + 2])
+# ---- layout of the common parameters theta ----------------------------------------------
+# theta = (kappa, loading, omega), the order of the evaluator's common score. With n_fac taste
+# factors the loading is p x n_fac and is stored column by column (factor 1's p entries first),
+# so theta has n_th = p n_fac + 2 entries: kappa at 1, the loading at 1 + 1..(p n_fac), omega
+# last. n_fac = 1 (the default everywhere) is the one-factor layout: kappa 1, loading
+# 1 + 1..p, omega p + 2. offset shifts every index (theta placed after offset other entries,
+# e.g. the means s_mu in the full score, or the network parameters in the trainer).
+.rum_th_len <- function(p, n_fac = 1L) as.integer(p * n_fac + 2L)
+.rum_th_idx <- function(p, n_fac = 1L, offset = 0L) {
+  nl <- p * n_fac
+  list(kappa = offset + 1L, loading = offset + 1L + seq_len(nl), omega = offset + nl + 2L,
+       n_th = as.integer(nl + 2L))
+}
+# Number of taste factors of a state th (a loading matrix has one column per factor).
+.rum_th_nfac <- function(th) if (is.matrix(th$loading)) ncol(th$loading) else 1L
+# Names of theta's entries; lab: the p loading labels of one factor (with several factors the
+# factor number is appended).
+.rum_th_names <- function(lab, n_fac = 1L)
+  c("kappa", if (n_fac == 1L) lab else paste0(rep(lab, n_fac), "_f", rep(seq_len(n_fac), each = length(lab))),
+    "omega")
+.rum_th_vec <- function(th, n_fac = .rum_th_nfac(th)) {
+  if (length(th$loading) %% n_fac) stop("the loading does not have n_fac columns")
+  c(th$kappa, th$loading, th$omega)
+}
+.rum_th_list <- function(v, p, n_fac = 1L) {
+  ix <- .rum_th_idx(p, n_fac)
+  list(kappa = v[ix$kappa],
+       loading = if (n_fac == 1L) v[ix$loading] else matrix(v[ix$loading], p, n_fac),
+       omega = v[ix$omega])
+}
 
-# Per-respondent value m_i and gradients m_mu (n x p) and m_theta (n x q). Exact gradients
+# Per-respondent value m_i and gradients m_mu (n x p) and m_theta (n x n_th). Exact gradients
 # when the target supplies them; mean contrasts are analytic; otherwise central differences
 # (m_i depends only on mu_i, so a whole column moves at once). omega >= 0: when omega - h < 0
 # the omega column uses the one-sided second-order difference (-3 m(omega) + 4 m(omega + h)
 # - m(omega + 2 h)) / (2 h), which never evaluates a target at a negative variance (at
 # omega = 0 it is the right derivative).
 .rum_target_grad <- function(tg, mu, th, h = 1e-6) {
-  n <- nrow(mu); p <- ncol(mu); q <- p + 2L
+  n <- nrow(mu); p <- ncol(mu); nf <- .rum_th_nfac(th); ix <- .rum_th_idx(p, nf); n_th <- ix$n_th
   if (!is.null(tg$grad)) return(tg$grad(mu, th))
   if (identical(tg$kind, "mean"))
-    return(list(m = tg$m(mu, th), gm = matrix(tg$c, n, p, byrow = TRUE), gt = matrix(0, n, q)))
+    return(list(m = tg$m(mu, th), gm = matrix(tg$c, n, p, byrow = TRUE), gt = matrix(0, n, n_th)))
   gm <- matrix(0, n, p)
   for (j in seq_len(p)) {
     m1 <- mu; m2 <- mu; m1[, j] <- m1[, j] + h; m2[, j] <- m2[, j] - h
     gm[, j] <- (tg$m(m1, th) - tg$m(m2, th)) / (2 * h)
   }
-  v <- .rum_th_vec(th); gt <- matrix(0, n, q)
-  for (j in seq_len(q)) {
+  v <- .rum_th_vec(th, nf); gt <- matrix(0, n, n_th)
+  for (j in seq_len(n_th)) {
     v1 <- v; v2 <- v; v1[j] <- v1[j] + h; v2[j] <- v2[j] - h
-    if (j == q && v2[j] < 0) {                       # omega: stay in the domain
+    if (j == ix$omega && v2[j] < 0) {                # omega: stay in the domain
       v3 <- v; v3[j] <- v3[j] + 2 * h
-      gt[, j] <- (-3 * tg$m(mu, th) + 4 * tg$m(mu, .rum_th_list(v1, p)) -
-                    tg$m(mu, .rum_th_list(v3, p))) / (2 * h)
-    } else gt[, j] <- (tg$m(mu, .rum_th_list(v1, p)) - tg$m(mu, .rum_th_list(v2, p))) / (2 * h)
+      gt[, j] <- (-3 * tg$m(mu, th) + 4 * tg$m(mu, .rum_th_list(v1, p, nf)) -
+                    tg$m(mu, .rum_th_list(v3, p, nf))) / (2 * h)
+    } else gt[, j] <- (tg$m(mu, .rum_th_list(v1, p, nf)) - tg$m(mu, .rum_th_list(v2, p, nf))) / (2 * h)
   }
   list(m = tg$m(mu, th), gm = gm, gt = gt)
 }

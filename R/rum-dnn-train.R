@@ -32,9 +32,10 @@
     result$network$biases[[j]][] <- par[cursor + seq_len(count)]
     cursor <- cursor + count
   }
-  result$kappa <- par[cursor + 1L]
-  result$loading <- par[cursor + 1L + seq_len(result$network$p)]
-  result$omega <- exp(tail(par, 1L))
+  ix <- .rum_th_idx(result$network$p, offset = cursor)   # theta follows the network parameters
+  result$kappa <- par[ix$kappa]
+  result$loading <- par[ix$loading]
+  result$omega <- exp(par[ix$omega])
   result
 }
 
@@ -150,11 +151,11 @@
 }
 
 .rum_dnn_train_bounds <- function(state, control) {
-  q <- state$network$parameter_count
+  n_net <- state$network$parameter_count
   p <- state$network$p
-  list(lower = c(rep(-Inf, q), control$kappa_bounds[1L],
+  list(lower = c(rep(-Inf, n_net), control$kappa_bounds[1L],
       rep(control$loading_bounds[1L], p), log(control$omega_bounds[1L])),
-    upper = c(rep(Inf, q), control$kappa_bounds[2L],
+    upper = c(rep(Inf, n_net), control$kappa_bounds[2L],
       rep(control$loading_bounds[2L], p), log(control$omega_bounds[2L])))
 }
 

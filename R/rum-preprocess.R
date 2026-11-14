@@ -90,10 +90,11 @@
   p <- data$p; Zi <- Z[data$ids, , drop = FALSE]
   if (!bias) {
     mu <- rum_dnn_gaussian_forward(final$network, Zi)
-    un <- function(x) list(kappa = x[1], loading = x[1 + seq_len(p)], omega = exp(x[p + 2]))
+    ix <- .rum_th_idx(p)                       # x = (kappa, loading, log omega): theta's layout
+    un <- function(x) list(kappa = x[ix$kappa], loading = x[ix$loading], omega = exp(x[ix$omega]))
     ev <- function(x) { u <- un(x); rum_dnn_gaussian_evaluate(data, mu, u$kappa, u$loading, u$omega, quadrature) }
     fn <- function(x) -ev(x)$objective
-    gr <- function(x) { e <- ev(x); g <- colMeans(e$common_score); g[p + 2] <- g[p + 2] * exp(x[p + 2]); -g }
+    gr <- function(x) { e <- ev(x); g <- colMeans(e$common_score); g[ix$omega] <- g[ix$omega] * exp(x[ix$omega]); -g }
     x0 <- c(final$kappa, final$loading, log(final$omega))
     lo <- c(b$kappa_bounds[1], rep(b$loading_bounds[1], p), log(b$omega_bounds[1])) * .999
     hi <- c(b$kappa_bounds[2], rep(b$loading_bounds[2], p), log(b$omega_bounds[2])) * .999
@@ -104,8 +105,9 @@
     out <- list(network = final$network, kappa = u$kappa, loading = u$loading, omega = u$omega)
   } else {
     net <- final$network; L <- length(net$biases)
+    ix <- .rum_th_idx(p, offset = p)           # x = (output bias, kappa, loading, log omega)
     un <- function(x) { nt <- net; nt$biases[[L]] <- x[seq_len(p)]
-      list(network = nt, kappa = x[p + 1], loading = x[p + 1 + seq_len(p)], omega = exp(x[2 * p + 2])) }
+      list(network = nt, kappa = x[ix$kappa], loading = x[ix$loading], omega = exp(x[ix$omega])) }
     cache <- new.env()
     ev <- function(x) {
       if (!is.null(cache$x) && identical(cache$x, x)) return(cache$v)
@@ -113,7 +115,7 @@
       cache$x <- x; cache$v <- v; v
     }
     fn <- function(x) ev(x)$loss
-    gr <- function(x) { g <- ev(x)$loss_gradient; c(g$biases[[L]], g$kappa, g$loading, g$omega * exp(x[2 * p + 2])) }
+    gr <- function(x) { g <- ev(x)$loss_gradient; c(g$biases[[L]], g$kappa, g$loading, g$omega * exp(x[ix$omega])) }
     x0 <- c(net$biases[[L]], final$kappa, final$loading, log(final$omega))
     lo <- c(rep(-Inf, p), b$kappa_bounds[1] * .999, rep(b$loading_bounds[1] * .999, p), log(b$omega_bounds[1]))
     hi <- c(rep(Inf, p), b$kappa_bounds[2] * .999, rep(b$loading_bounds[2] * .999, p), log(b$omega_bounds[2]))
