@@ -222,6 +222,7 @@
 .rum_weight_parts <- function(info_of, nrow, p, n_th, eig_floor_rel, rot = NULL) {
   if (!is.null(rot) && ncol(rot) > 0L)
     return(.rum_weight_parts_rot(info_of, nrow, p, n_th, eig_floor_rel, rot, shared = nrow == 1L))
+  .rum_warn_no_rot(p, n_th, rot)
   Li <- array(0, c(nrow, p, p)); Lt <- array(0, c(nrow, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L
   for (i in seq_len(nrow)) {
     L <- info_of(i); e <- eigen(L, symmetric = TRUE); fl <- eig_floor_rel * max(e$values)
@@ -281,6 +282,15 @@
   Ic <- Ic / nrow; Ic <- (Ic + t(Ic)) / 2
   list(Li = Li, Lt = Lt, Ic = Ic, floored = nfl, shared = shared, B = Bg,
        Ic_red = crossprod(Bg, Ic %*% Bg), null = nnull)
+}
+# A caller that builds weight parts for a q > 1 state (n_th = p q + 2 > p + 2) without passing the
+# rotation directions (scripts that call .rum_weight_parts positionally) gets the unprojected path,
+# where the eigenvalue floor decides by quadrature error: warn. Silent at one factor.
+.rum_warn_no_rot <- function(p, n_th, rot) {
+  if (is.null(rot) && n_th > p + 2L)
+    warning(sprintf(paste0("weight parts for a %d-factor state without the rotation directions: pass ",
+      "rot = .rum_rotation_dirs(loading) so they are removed before the eigenvalue floor"),
+      (n_th - 2L) %/% p), call. = FALSE)
 }
 # The information matrix whose eigenvalues the diagnostics report: Ic, or with the rotation
 # directions removed, Ic on their complement.

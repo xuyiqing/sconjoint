@@ -334,6 +334,7 @@
   if (!is.null(rot) && ncol(rot) > 0L)
     return(.rum_weight_parts_rot(function(i) I[i, , ], dim(I)[1L], p, n_th, eig_floor_rel, rot,
                                  shared = FALSE, null_zero = TRUE))
+  .rum_warn_no_rot(p, n_th, rot)
   n <- dim(I)[1L]; D <- p + n_th
   Li <- array(0, c(n, p, p)); Lt <- array(0, c(n, p, n_th)); Ic <- matrix(0, n_th, n_th); nfl <- 0L; nnull <- 0L
   for (i in seq_len(n)) {

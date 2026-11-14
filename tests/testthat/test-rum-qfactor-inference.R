@@ -188,8 +188,10 @@ test_that("projection: the corrections at Lambda and Lambda A agree up to quadra
   phi_at <- function(L, quad, project = TRUE) {
     th <- list(kappa = fin$kappa, loading = L, omega = fin$omega)
     I <- rq(".rum_cond_info")(X$data, mu, th, crn, "exact", quad)$I
-    W <- rq(".rum_weight_parts")(function(i) I[i, , ], X$n, p, p * q + 2L, 1e-6,
-                                 if (project) rq(".rum_rotation_dirs")(L) else NULL)
+    W <- if (project) rq(".rum_weight_parts")(function(i) I[i, , ], X$n, p, p * q + 2L, 1e-6, rq(".rum_rotation_dirs")(L))
+      else { wn <- ""; r <- withCallingHandlers(rq(".rum_weight_parts")(function(i) I[i, , ], X$n, p, p * q + 2L, 1e-6),
+               warning = function(w) { wn <<- conditionMessage(w); invokeRestart("muffleWarning") })
+             expect_match(wn, "rotation directions"); r }
     gr <- rq(".rum_target_grad")(tg, mu, th)
     cw <- rq(".rum_correction")(W, gr$gm, colMeans(gr$gt), seq_len(X$n))
     ev <- rum_dnn_gaussian_evaluate(X$data, mu, th$kappa, L, th$omega, quad)
