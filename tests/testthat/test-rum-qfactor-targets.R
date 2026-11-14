@@ -91,9 +91,13 @@ for (q in 2:3) {
     X <- qf_setup(q, mu_sd = 2, lam_sd = 0.3, seed = 3L)
     GR <- list(1:2, 3L, 4L)
     for (g in 1:3) {
-      t20 <- rinf(".rum_tgt_importance")("imp", g, GR, centred = TRUE)
+      # the product rule on request converges in its order; the default (randomised QMC with its
+      # standard error at most 1e-4, Codex finding 2) agrees with it to a few standard errors
+      t20 <- rinf(".rum_tgt_importance")("imp", g, GR, centred = TRUE, order_multi = if (q == 2L) 32L else 20L)
       t40 <- rinf(".rum_tgt_importance")("imp", g, GR, centred = TRUE, order_multi = if (q == 2L) 40L else 28L)
       expect_close(t20$m(X$mu, X$th), t40$m(X$mu, X$th), if (q == 2L) 1e-6 else 1e-5)
+      td <- rinf(".rum_tgt_importance")("imp", g, GR, centred = TRUE)
+      expect_close(td$m(X$mu, X$th), t40$m(X$mu, X$th), 4e-4)
     }
     # uncentred (orthonormal coding) and all groups through the set constructor
     set <- rinf(".rum_tgt_importance_set")(GR, centred = FALSE)

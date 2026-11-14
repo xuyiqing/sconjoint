@@ -284,3 +284,113 @@ test_that("finding 1: the model information is the mean outer product of the C++
     }
   }
 })
+
+# ---- finding 2: importance shares near zero mean tastes; convergence-controlled integration -
+test_that("finding 2: importance shares reach the closed form at mu = 0 and report their accuracy", {
+  # Codex's case: mu = 0, Lambda = diag(1, .1), two groups {1}, {2}, uncentred:
+  # share_1 = E[U1^2 / (U1^2 + .01 U2^2)] = 1 / (1 + .1)
+  set1 <- rq(".rum_tgt_importance_set")(list(1L, 2L), centred = FALSE)
+  mu <- matrix(0, 2L, 2L); th <- list(kappa = 0, loading = diag(c(1, .1)), omega = .3)
+  g1 <- rq(".rum_target_grad")(set1[[1]], mu, th)
+  expect_lt(max(abs(g1$m - 1 / 1.1)), 1e-3)
+  se <- attr(set1[[1]]$grad(mu, th), "se")
+  expect_true(all(is.finite(se))); expect_true(all(se <= 1e-4))
+  # rotation of Lambda and swapping the factors change nothing
+  th2 <- th; th2$loading <- diag(c(1, .1)) %*% rbind(c(.6, -.8), c(.8, .6))
+  expect_equal(set1[[1]]$m(mu, th2), g1$m, tolerance = 1e-10)
+  # a cap that is too small is reported, not hidden
+  tight <- rq(".rum_imp_control")(tol = 1e-9, n_start = 64L, n_max = 128L)
+  expect_warning(rq(".rum_imp_sums")(mu, th$loading, list(1L, 2L), FALSE, control = tight),
+                 "did not reach the standard error")
+})
+
+test_that("finding 2: importance shares and gradients match brute-force Monte Carlo (1e7 draws)", {
+  set.seed(21)
+  for (cs in 1:3) {
+    p <- 4L; q <- 2L; n <- 3L
+    mu <- matrix(rnorm(n * p, 0, c(.05, .3, 1)[cs]), n, p)            # near zero to moderate
+    Lam <- matrix(rnorm(p * q, 0, .5), p, q); GR <- list(1:2, 3L, 4L)
+    S <- rq(".rum_imp_sums")(mu, Lam, GR, centred = TRUE)
+    expect_true(all(S$se <= 1e-4))
+    Nd <- 1e7; ch <- 1e6
+    acc <- matrix(0, n, 3L); acc2 <- matrix(0, n, 3L); gacc <- array(0, c(n, p, q))
+    for (b in seq_len(Nd / ch)) {
+      U <- matrix(rnorm(ch * q), ch, q); LU <- U %*% t(Lam)
+      for (i in seq_len(n)) {
+        B <- sweep(LU, 2, mu[i, ], `+`); S1 <- B[, 1] + B[, 2]
+        V1 <- (B[, 1]^2 + B[, 2]^2) / 3 - (S1 / 3)^2; V2 <- B[, 3]^2 / 4; V3 <- B[, 4]^2 / 4
+        Tt <- V1 + V2 + V3; sh <- cbind(V1, V2, V3) / Tt
+        acc[i, ] <- acc[i, ] + colSums(sh); acc2[i, ] <- acc2[i, ] + colSums(sh^2)
+        if (b <= 2L) {                                               # gradient of share 1: 2e6 draws
+          dV <- cbind(2 * B[, 1] / 3 - 2 * S1 / 9, 2 * B[, 2] / 3 - 2 * S1 / 9, B[, 3] / 2, B[, 4] / 2)
+          gr <- -sh[, 1] * dV; gr[, 1:2] <- gr[, 1:2] + dV[, 1:2]; gr <- gr / Tt
+          for (k in seq_len(q)) gacc[i, , k] <- gacc[i, , k] + colSums(gr * U[, k])
+        }
+      }
+    }
+    mc <- acc / Nd; mcse <- sqrt(pmax(acc2 / Nd - mc^2, 0) / Nd)
+    expect_true(all(abs(S$m - mc) < 5 * mcse + 3e-4), label = sprintf("case %d values", cs))
+    expect_lt(max(abs(rowSums(S$m) - 1)), 1e-12)
+    G1 <- matrix(gacc, n) / 2e6                                      # n x (p q), column-major in Lambda
+    gpath <- rq(".rum_rotation_project")(cbind(0, G1, 0), Lam)[, 1L + seq_len(p * q)]
+    # (near b = 0 the pathwise integrand has a heavy tail, so the Monte Carlo check is for cases 2-3)
+    if (cs >= 2L) expect_lt(max(abs(matrix(S$gl[, , 1], n) - gpath)), 0.02, label = sprintf("case %d gradient", cs))
+  }
+})
+
+# ---- finding 6: importance dimensions (q > p; one respondent) --------------------------------
+test_that("finding 6: importance works with q > p and with a single respondent", {
+  set.seed(61)
+  mu <- matrix(c(.8, -.4), 1L, 2L); Lam <- matrix(c(.5, .2, -.3, .4, .1, .6), 2L, 3L)   # p = 2, q = 3
+  st <- rq(".rum_tgt_importance_set")(list(1L, 2L), centred = FALSE)
+  th <- list(kappa = 0, loading = Lam, omega = .2)
+  g <- rq(".rum_target_grad")(st[[1]], mu, th)                    # n = 1 and q > p together
+  expect_identical(dim(g$gt), c(1L, 2L * 3L + 2L)); expect_identical(dim(g$gm), c(1L, 2L))
+  # the same law with a 2-column loading (same Lambda Lambda'): same value
+  L2 <- t(chol(tcrossprod(Lam)))
+  expect_equal(st[[1]]$m(mu, list(kappa = 0, loading = L2, omega = .2)), g$m, tolerance = 5e-4)
+  # Monte Carlo
+  U <- withr::with_seed(62, matrix(rnorm(2e6 * 3), 2e6, 3)); B <- sweep(U %*% t(Lam), 2, mu[1, ], `+`)
+  expect_lt(abs(g$m - mean(B[, 1]^2 / rowSums(B^2))), 1e-3)
+  # pathwise gradient E[(d share / d b) u'] (mapped to Lambda's coordinates, rotations removed). With
+  # Lambda of full rank p the plane mu + span(Lambda) is all of R^p and contains b = 0, where the
+  # gradient integrand is not square integrable; the gradient is checked where it is: q = 3 > p = 2
+  # with Lambda of rank 1 (reduced-rank integration over one axis).
+  Lr <- outer(c(.5, .2), c(1, -.5, .3)); thr <- list(kappa = 0, loading = Lr, omega = .2)
+  gr1 <- rq(".rum_target_grad")(st[[1]], mu, thr)
+  expect_identical(dim(gr1$gt), c(1L, 8L))
+  B <- sweep(U %*% t(Lr), 2, mu[1, ], `+`)
+  sh <- B[, 1]^2 / rowSums(B^2); Tt <- rowSums(B^2)
+  dsh <- cbind(2 * B[, 1] * (1 - sh), -2 * B[, 2] * sh) / Tt
+  expect_lt(abs(gr1$m - mean(sh)), 1e-3)
+  G <- vapply(1:3, function(k) colMeans(dsh * U[, k]), numeric(2))
+  Gse <- vapply(1:3, function(k) apply(dsh * U[, k], 2, stats::sd) / sqrt(nrow(U)), numeric(2))
+  gp <- rq(".rum_rotation_project")(cbind(0, matrix(as.vector(G), 1L), 0), Lr)[, 2:7]
+  expect_true(all(abs(gr1$gt[, 2:7] - gp) < 5 * max(Gse) + 1e-4))
+  expect_true(all(abs(gr1$gm - colMeans(dsh)) < 5 * apply(dsh, 2, stats::sd) / sqrt(nrow(U)) + 1e-4))
+  # one respondent with p = q = 2 (Codex's second trigger) on the product rule and on the default
+  mu2 <- matrix(c(.5, -.2), 1L); L22 <- matrix(c(.4, .1, -.2, .5), 2L)
+  for (tg in list(rq(".rum_tgt_importance")("i", 1L, list(1L, 2L), order_multi = 20L),
+                  rq(".rum_tgt_importance")("i", 1L, list(1L, 2L)))) {
+    gg <- rq(".rum_target_grad")(tg, mu2, list(kappa = 0, loading = L22, omega = .2))
+    expect_identical(dim(gg$gt), c(1L, 6L)); expect_true(all(is.finite(gg$gt)))
+  }
+  # the product rule on request also integrates q > p (reduced rank: 40^2 nodes, not 40^3); here
+  # b = 0 lies in the plane, so it is less accurate than the default (the point of finding 2)
+  tp <- rq(".rum_tgt_importance")("i", 1L, list(1L, 2L), order_multi = 40L)
+  expect_lt(abs(tp$m(mu, th) - g$m), 1e-2)
+})
+
+# ---- finding 7: no unguarded exponential product grid ----------------------------------------
+test_that("finding 7: importance at p = q = 10 uses the default integration; a huge product rule is refused before allocation", {
+  set.seed(71)
+  p <- 10L; mu <- matrix(rnorm(2 * p, 0, 1.5), 2L, p); Lam <- matrix(rnorm(p * p, 0, .2), p, p)
+  GR <- as.list(seq_len(p))
+  t0 <- proc.time()[["elapsed"]]
+  S <- rq(".rum_imp_sums")(mu, Lam, GR, centred = FALSE)
+  expect_lt(proc.time()[["elapsed"]] - t0, 120)
+  expect_lt(max(abs(rowSums(S$m) - 1)), 1e-12); expect_true(all(S$se <= 1e-4))
+  expect_error(rq(".rum_imp_sums")(mu, Lam, GR, centred = FALSE, order_multi = 12L), "more than")
+  # the quadrature constructor keeps its own guard
+  expect_error(rum_quadrature(12L, n_fac = 10L, rule = "product"), "more than 5e6")
+})

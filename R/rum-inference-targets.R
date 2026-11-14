@@ -313,43 +313,165 @@
 # the default rule the arithmetic is the same. groups: list of column indices, one per group;
 # each share's denominator sums every group.
 # Integration. One factor: b = mu + lambda u over the 1-D rule uq (list(u, w); default the
-# u-marginal of rum_quadrature(c(80, 41)), as CV). q > 1 factors: b = mu + Lambda V z over the
-# principal axes Lambda V (.rum_principal_axes) and the product of uq over the q axes (default
-# uq: Gauss-Hermite of order order_multi; NULL: 32 at q = 2, 20 at q = 3, 12 above), nodes with
-# product weight below wmin dropped. The value depends on Lambda only through Lambda Lambda'
-# (rotation invariant). Accuracy: the share is smooth except at b = 0; a respondent whose
-# plane mu_i + span(Lambda) passes near b = 0 needs a higher order (check by raising
-# order_multi; with p >= 8 features this is rare).
+# u-marginal of rum_quadrature(c(80, 41)), as CV). Unchanged.
+# q > 1 factors (Codex review of 829393d, findings 2, 6, 7). b = mu + C z over the canonical
+# axes C = Lambda V_r (.rum_canonical_axes: principal axes, ties resolved by the feature
+# convention, so the coordinates are the same for every rotation of Lambda), restricted to the r
+# axes with nonzero length (reduced rank: q > p, or Lambda of rank below q; the other axes do not
+# move b). The share is bounded but not smooth at b = 0, and a fixed product rule can miss it by
+# several points when the plane mu_i + span(Lambda) passes near 0 (Codex: mu = 0,
+# Lambda = diag(1, .1) gives 0.953 on the old 32 x 32 rule against the exact 1/1.1). The default is
+# therefore convergence-controlled randomised QMC (.rum_imp_sums_rqmc): n_rep independent Owen
+# scramblings of a Sobol set in r dimensions (spacefillr, seeds seed + 1..n_rep; R's random state is
+# not touched), each point z used with its mirror -z, n points per scrambling starting at n_start and
+# doubling, respondent by respondent, until the standard error across the scramblings of every one
+# of the respondent's shares is at most tol (default 1e-4), or n reaches n_max (then a warning).
+# The value is the average over all draws; the attribute-free list element se (n x groups) holds
+# the achieved standard errors and n_points the points per scrambling used. The exact gradient uses
+# the same draws. The old product rule is kept only on request (uq or order_multi given), with a
+# size check before the grid is built (.rum_imp_max_nodes).
 # Exact gradients (as CV): d share_g / d B_j = dV_j (1{j in g} - share_g) / T, T = sum_h V_h;
-# dm/dmu = E[that]; the loading adds the factor u. q > 1: dm/dLambda = G V', G = E[(d share /
-# d B) z'] at the principal axes, then its component along the rotation directions (zero for
-# the exact integral) is removed (.rum_rotation_project). gt = (0, vec(dm/dLambda), 0). A central
-# difference in Lambda also moves V; that extra part is the product rule's lack of rotation
-# invariance, a quadrature error that vanishes as the order grows (the exact gradient is closer
-# to the Monte Carlo pathwise gradient).
+# dm/dmu = E[that]; the loading adds the factor u. q > 1: dm/dLambda = G V_r', G = E[(d share /
+# d B) z'] on the canonical axes (the pathwise gradient E[(d share / d b) u']: the axes left out
+# do not move b and contribute 0), then its component along the rotation directions (zero for the
+# exact integral) is removed (.rum_rotation_project). gt = (0, vec(dm/dLambda), 0).
 .rum_imp_rule <- function() {
   q <- rum_quadrature(c(80L, 41L)); k <- round(q$u, 12); w <- tapply(q$weight, k, sum)
   list(u = as.numeric(names(w)), w = unname(w))
 }
 .rum_imp_order <- function(nf) if (nf == 2L) 32L else if (nf == 3L) 20L else 12L
-.rum_imp_sums <- function(mu, loading, groups, centred, uq = NULL, order_multi = NULL, wmin = 1e-14) {
+.rum_imp_max_nodes <- 2e6
+.rum_imp_control <- function(tol = 1e-4, n_start = 256L, n_max = 16384L, n_rep = 8L, seed = 20261114L)
+  list(tol = tol, n_start = as.integer(n_start), n_max = as.integer(n_max), n_rep = as.integer(n_rep),
+       seed = as.integer(seed))
+# The canonical integration axes of a q > 1 loading: V (q x q), the indices of the axes with
+# nonzero length, and C = Lambda V[, keep] (p x r).
+.rum_imp_axes <- function(loading) {
+  ax <- .rum_canonical_axes(loading); C <- loading %*% ax$V; len <- colSums(C^2)
+  keep <- which(len > .rum_axes_tie_tol * max(len, 0))
+  list(V = ax$V, keep = keep, C = C[, keep, drop = FALSE])
+}
+# Shares and their gradients at the draws OFF (K x p offsets C z) for the respondents' means MU
+# (n x p): returns sh (n x ng sums over the K draws) and, when Zr (K x r draws) is given, the sums
+# gm (n x p x ng) and gz (n x p x r x ng) of d share / d b and of (d share / d b) z_k.
+.rum_imp_block <- function(MU, OFF, Zr, GR, L, cc, grp_of, ing, grad = TRUE) {
+  n <- nrow(MU); pp <- ncol(MU); K <- nrow(OFF); ng <- length(GR); r <- if (is.null(Zr)) 0L else ncol(Zr)
+  ii <- rep(seq_len(n), K); kk <- rep(seq_len(K), each = n)
+  B <- MU[ii, , drop = FALSE] + OFF[kk, , drop = FALSE]
+  Sg <- matrix(vapply(seq_len(ng), function(g) rowSums(B[, GR[[g]], drop = FALSE]), numeric(n * K)), n * K)
+  Vg <- matrix(vapply(seq_len(ng), function(g) rowSums(B[, GR[[g]], drop = FALSE]^2) / L[g], numeric(n * K)), n * K) -
+    cc * (Sg / matrix(L, n * K, ng, byrow = TRUE))^2
+  Tt <- rowSums(Vg); sh <- Vg / Tt
+  sumk <- function(x) matrix(x, n, K) %*% rep(1, K)                         # sum over draws
+  out <- list(sh = matrix(vapply(seq_len(ng), function(g) drop(sumk(sh[, g])), numeric(n)), n))
+  if (!grad) return(out)
+  dV <- matrix(0, n * K, pp)
+  dV[, ing] <- 2 * B[, ing, drop = FALSE] / matrix(L[grp_of[ing]], n * K, length(ing), byrow = TRUE) -
+    cc * 2 * Sg[, grp_of[ing], drop = FALSE] / matrix(L[grp_of[ing]]^2, n * K, length(ing), byrow = TRUE)
+  gm <- array(0, c(n, pp, ng)); gz <- array(0, c(n, pp, max(r, 1L), ng))
+  for (g in seq_len(ng)) {
+    gr <- -sh[, g] * dV; gr[, GR[[g]]] <- gr[, GR[[g]]] + dV[, GR[[g]]]; gr <- gr / Tt
+    for (j in seq_len(pp)) {
+      Gj <- matrix(gr[, j], n, K)
+      gm[, j, g] <- Gj %*% rep(1, K)
+      if (r) gz[, j, , g] <- Gj %*% Zr
+    }
+  }
+  out$gm <- gm; out$gz <- gz
+  out
+}
+# Map the axis block G (n x p x r: E[(d share / d b) z_k]) to the loading's coordinates,
+# dm/dLambda[, l] = sum_k V[l, keep_k] G[, , k], n x (p q) column-major, rotation part removed.
+.rum_imp_gl <- function(G, V, keep, loading) {
+  n <- dim(G)[1L]; pp <- dim(G)[2L]; nf <- ncol(loading); out <- matrix(0, n, pp * nf)
+  for (l in seq_len(nf)) for (k in seq_along(keep))
+    out[, (l - 1L) * pp + seq_len(pp)] <- out[, (l - 1L) * pp + seq_len(pp)] + V[l, keep[k]] * matrix(G[, , k], n, pp)
+  .rum_rotation_project(cbind(0, out, 0), loading)[, 1L + seq_len(pp * nf), drop = FALSE]
+}
+.rum_imp_setup <- function(groups, centred, pp) {
+  GR <- groups; ng <- length(GR); grp_of <- integer(pp)
+  L <- if (centred) vapply(GR, length, 0L) + 1 else rep(1, ng)
+  for (g in seq_len(ng)) grp_of[GR[[g]]] <- g
+  list(GR = GR, ng = ng, L = L, grp_of = grp_of, ing = which(grp_of > 0), cc = as.numeric(centred))
+}
+# Randomised QMC with convergence control (see above).
+.rum_imp_sums_rqmc <- function(mu, loading, groups, centred, control = .rum_imp_control()) {
+  n <- nrow(mu); pp <- ncol(mu); nf <- ncol(loading); S <- .rum_imp_setup(groups, centred, pp); ng <- S$ng
+  ax <- .rum_imp_axes(loading); r <- length(ax$keep)
+  ev <- function(MU, OFF, Zr) .rum_imp_block(MU, OFF, Zr, S$GR, S$L, S$cc, S$grp_of, S$ing)
+  if (!r) {                                     # Lambda = 0: b = mu, no integral
+    e <- ev(mu, matrix(0, 1L, pp), NULL)
+    return(list(m = e$sh, gm = e$gm, gl = array(0, c(n, pp * nf, ng)), se = matrix(0, n, ng),
+                n_points = rep(0L, n)))
+  }
+  R <- control$n_rep; tol <- control$tol
+  M <- matrix(0, n, ng); GM <- array(0, c(n, pp, ng)); GZ <- array(0, c(n, pp, r, ng))
+  SE <- matrix(NA_real_, n, ng); NP <- integer(n)
+  Sr <- array(0, c(n, ng, R)); GMs <- array(0, c(n, pp, ng)); GZs <- array(0, c(n, pp, r, ng))
+  active <- seq_len(n); Ncur <- 0L; Nt <- control$n_start
+  chunk <- max(1L, floor(2e5 / max(1L, n)))
+  repeat {
+    for (rp in seq_len(R)) {
+      z <- stats::qnorm(matrix(spacefillr::generate_sobol_owen_set(Nt, r, seed = control$seed + rp), Nt, r))
+      z <- z[(Ncur + 1L):Nt, , drop = FALSE]; z <- rbind(z, -z)            # each point with its mirror
+      for (cs in split(seq_len(nrow(z)), ceiling(seq_len(nrow(z)) / chunk))) {
+        Zc <- z[cs, , drop = FALSE]; e <- ev(mu[active, , drop = FALSE], Zc %*% t(ax$C), Zc)
+        Sr[active, , rp] <- Sr[active, , rp] + e$sh
+        GMs[active, , ] <- GMs[active, , , drop = FALSE] + e$gm
+        GZs[active, , , ] <- GZs[active, , , , drop = FALSE] + e$gz
+      }
+    }
+    Ncur <- Nt; nd <- 2 * Ncur                   # draws per scrambling
+    est <- Sr[active, , , drop = FALSE] / nd       # active x ng x R
+    se <- matrix(apply(est, c(1L, 2L), stats::sd) / sqrt(R), length(active))
+    done <- apply(se, 1L, max) <= tol
+    if (Nt >= control$n_max) done[] <- TRUE
+    fin <- active[done]
+    if (length(fin)) {
+      M[fin, ] <- matrix(apply(est[done, , , drop = FALSE], c(1L, 2L), mean), length(fin))
+      GM[fin, , ] <- GMs[fin, , , drop = FALSE] / (nd * R); GZ[fin, , , ] <- GZs[fin, , , , drop = FALSE] / (nd * R)
+      SE[fin, ] <- se[done, , drop = FALSE]; NP[fin] <- Ncur
+    }
+    active <- active[!done]
+    if (!length(active)) break
+    Nt <- min(2L * Nt, control$n_max)
+  }
+  bad <- which(apply(SE, 1L, max) > tol)
+  if (length(bad))
+    warning(sprintf(paste0("importance shares: %d respondent(s) did not reach the standard error %g at %d ",
+      "points per scrambling (largest %.2g); the values carry that integration error"),
+      length(bad), tol, control$n_max, max(SE)), call. = FALSE)
+  GL <- array(0, c(n, pp * nf, ng))
+  for (g in seq_len(ng)) GL[, , g] <- .rum_imp_gl(array(GZ[, , , g], c(n, pp, r)), ax$V, ax$keep, loading)
+  list(m = M, gm = GM, gl = GL, se = SE, n_points = NP)
+}
+.rum_imp_sums <- function(mu, loading, groups, centred, uq = NULL, order_multi = NULL, wmin = 1e-14,
+                          control = .rum_imp_control()) {
+  multi <- .rum_multi_fac(loading)
+  if (multi && is.null(uq) && is.null(order_multi))
+    return(.rum_imp_sums_rqmc(mu, loading, groups, centred, control))
   GR <- groups; n <- nrow(mu); pp <- ncol(mu); ng <- length(GR); grp_of <- integer(pp)
   L <- if (centred) vapply(GR, length, 0L) + 1 else rep(1, ng)
   for (g in seq_len(ng)) grp_of[GR[[g]]] <- g
   ing <- which(grp_of > 0); cc <- as.numeric(centred)
-  multi <- .rum_multi_fac(loading)
-  if (multi) {
-    nf <- ncol(loading); pa <- .rum_principal_axes(loading)
+  if (multi) {                                  # product rule, on request only (with a size check)
+    nf <- ncol(loading); ax <- .rum_imp_axes(loading); rk <- length(ax$keep)
     if (is.null(order_multi)) order_multi <- .rum_imp_order(nf)
     r1 <- if (is.null(uq)) { r <- .rum_gh_rule(order_multi); list(u = r$z, w = r$w) } else uq
-    ix <- as.matrix(expand.grid(rep(list(seq_along(r1$u)), nf)))
-    Z <- matrix(r1$u[ix], nrow(ix)); W <- apply(matrix(r1$w[ix], nrow(ix)), 1L, prod)
+    if (length(r1$u)^max(rk, 1L) > .rum_imp_max_nodes)
+      stop(sprintf("the importance product rule would have %.3g nodes (more than %g); use the default integration",
+                   length(r1$u)^max(rk, 1L), .rum_imp_max_nodes), call. = FALSE)
+    if (rk) {
+      ix <- as.matrix(expand.grid(rep(list(seq_along(r1$u)), rk)))
+      Z <- matrix(r1$u[ix], nrow(ix)); W <- apply(matrix(r1$w[ix], nrow(ix)), 1L, prod)
+    } else { Z <- matrix(0, 1L, 0L); W <- 1 }
     keep <- W >= wmin; Z <- Z[keep, , drop = FALSE]; W <- W[keep]
-    OFF <- Z %*% t(pa$L)                                   # node x p offsets Lambda V z
+    OFF <- Z %*% t(ax$C)                                   # node x p offsets C z
   } else {
     nf <- 1L; r1 <- if (is.null(uq)) .rum_imp_rule() else uq; W <- r1$w; Z <- matrix(r1$u)
   }
-  M <- matrix(0, n, ng); GM <- array(0, c(n, pp, ng)); GL <- array(0, c(n, pp * nf, ng))
+  M <- matrix(0, n, ng); GM <- array(0, c(n, pp, ng))
+  GL <- array(0, c(n, pp * (if (multi) max(ncol(Z), 1L) else nf), ng))
   for (x in seq_along(W)) {
     if (W[x] < wmin) next
     B <- if (multi) mu + matrix(OFF[x, ], n, pp, byrow = TRUE) else mu + matrix(loading * Z[x, 1L], n, pp, byrow = TRUE)
@@ -358,52 +480,54 @@
       cc * (Sg / matrix(L, n, ng, byrow = TRUE))^2
     Vg <- matrix(Vg, n); Sg <- matrix(Sg, n)
     Tt <- rowSums(Vg); sh <- Vg / Tt; dV <- matrix(0, n, pp)
-    dV[, ing] <- 2 * B[, ing] / matrix(L[grp_of[ing]], n, length(ing), byrow = TRUE) -
+    dV[, ing] <- 2 * B[, ing, drop = FALSE] / matrix(L[grp_of[ing]], n, length(ing), byrow = TRUE) -
       cc * 2 * Sg[, grp_of[ing], drop = FALSE] / matrix(L[grp_of[ing]]^2, n, length(ing), byrow = TRUE)
     M <- M + W[x] * sh
     for (g in seq_len(ng)) {
       gr <- -sh[, g] * dV; gr[, GR[[g]]] <- gr[, GR[[g]]] + dV[, GR[[g]]]; gr <- gr / Tt
       GM[, , g] <- GM[, , g] + W[x] * gr
-      if (multi) for (k in seq_len(nf)) {
+      if (multi) for (k in seq_len(ncol(Z))) {
         cols <- (k - 1L) * pp + seq_len(pp)
         GL[, cols, g] <- GL[, cols, g] + (W[x] * Z[x, k]) * gr
       } else GL[, , g] <- GL[, , g] + W[x] * Z[x, 1L] * gr
     }
   }
-  if (multi) for (g in seq_len(ng)) {             # principal-axis block G (n x p q) -> G V'
-    Gp <- GL[, , g]; out <- matrix(0, n, pp * nf)
-    for (l in seq_len(nf)) for (k in seq_len(nf))
-      out[, (l - 1L) * pp + seq_len(pp)] <- out[, (l - 1L) * pp + seq_len(pp)] +
-        pa$V[l, k] * Gp[, (k - 1L) * pp + seq_len(pp), drop = FALSE]
-    GL[, , g] <- .rum_rotation_project(cbind(0, out, 0), loading)[, 1L + seq_len(pp * nf), drop = FALSE]
+  if (multi) {                                   # axis block G (n x p r) -> G V_r' (n x p q)
+    GLq <- array(0, c(n, pp * nf, ng))
+    for (g in seq_len(ng))
+      GLq[, , g] <- .rum_imp_gl(array(matrix(GL[, , g], n), c(n, pp, max(ncol(Z), 1L)))[, , seq_len(ncol(Z)), drop = FALSE],
+                                ax$V, ax$keep, loading)
+    GL <- GLq
   }
   list(m = M, gm = GM, gl = GL)
 }
 # All importance-share targets of one set of groups, sharing one computation per (mu, th).
 # names: one per group (default "importance: <group name>"); w: respondent weights.
 .rum_tgt_importance_set <- function(groups, centred = FALSE, names = NULL, w = NULL, uq = NULL,
-                                    order_multi = NULL, wmin = 1e-14) {
-  force(groups); force(centred); force(uq)
+                                    order_multi = NULL, wmin = 1e-14, control = .rum_imp_control()) {
+  force(groups); force(centred); force(uq); force(control)
   if (is.null(names)) names <- paste0("importance: ", if (is.null(base::names(groups)))
     seq_along(groups) else base::names(groups))
   cache <- new.env()
   sums <- function(mu, th) {
     if (!is.null(cache$mu) && identical(cache$mu, mu) && identical(cache$loading, th$loading)) return(cache$val)
-    v <- .rum_imp_sums(mu, th$loading, groups, centred, uq, order_multi, wmin)
+    v <- .rum_imp_sums(mu, th$loading, groups, centred, uq, order_multi, wmin, control)
     cache$mu <- mu; cache$loading <- th$loading; cache$val <- v; v
   }
   lapply(seq_along(groups), function(g) {
     force(g)
     gf <- function(mu, th) {
       s <- sums(mu, th); n <- nrow(mu)
-      list(m = s$m[, g], gm = matrix(s$gm[, , g], n), gt = cbind(0, matrix(s$gl[, , g], n), 0))
+      out <- list(m = s$m[, g], gm = matrix(s$gm[, , g], n), gt = cbind(0, matrix(s$gl[, , g], n), 0))
+      if (!is.null(s$se)) attr(out, "se") <- s$se[, g]      # q > 1: achieved integration SE per respondent
+      out
     }
     list(name = names[g], kind = "importance", w = w, class = "importance",
          m = function(mu, th) gf(mu, th)$m, grad = gf)
   })
 }
 .rum_tgt_importance <- function(name, g, groups, centred = FALSE, w = NULL, uq = NULL,
-                                order_multi = NULL, wmin = 1e-14) {
+                                order_multi = NULL, wmin = 1e-14, control = .rum_imp_control()) {
   nm <- rep(name, length(groups))
-  .rum_tgt_importance_set(groups, centred, nm, w, uq, order_multi, wmin)[[g]]
+  .rum_tgt_importance_set(groups, centred, nm, w, uq, order_multi, wmin, control)[[g]]
 }
