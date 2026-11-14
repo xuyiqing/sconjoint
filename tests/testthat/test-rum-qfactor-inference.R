@@ -259,6 +259,14 @@ test_that("q=2: bounded updates (single shares, joint importance) do not depend 
     expect_lt(relmax(jb$table$se_population, ja$table$se_population), 1e-6)
     expect_lt(abs(sum(ja$table$estimate[ja$table$kind != "total"]) - 1), 1e-12)
   }
+  # the legacy CV-TMLE (.rum_tmle_dnn) and the bounded wrapper evaluate q-factor states too
+  lg <- function(ff) rq(".rum_bounded_dnn")(X$data, X$Z, X$fold, ff, sh, update = "legacy")
+  la <- lg(base); lb <- lg(diff)
+  expect_true(all(is.finite(la$estimate)))
+  expect_lt(relmax(lb$estimate, la$estimate), 1e-6); expect_lt(relmax(lb$se_population, la$se_population), 1e-6)
+  bw <- rq(".rum_bounded_dnn")(X$data, X$Z, X$fold, base, sh, info_basis = "conditional", cond = cond)
+  expect_lt(relmax(bw$estimate, rq(".rum_tmle_path")(X$data, X$Z, X$fold, base, sh, info_basis = "conditional",
+                                                     cond = cond)$estimate), 1e-12)
 })
 
 test_that("q=3: one-step estimates and SEs do not depend on the rotation; parts carry the complement", {
