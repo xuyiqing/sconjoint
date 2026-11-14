@@ -67,3 +67,53 @@ test_that("finding 8: the conditional options keep the one-factor defaults (meth
   expect_identical(co("br", method = "auto")$method, "auto")
   expect_null(co("br", n_fac = 3L)$n_fac)
 })
+
+# ---- finding 5: tied principal axes are fixed by a feature-coordinate convention ------------
+test_that("finding 5: tied and near-tied principal axes do not depend on the rotation of Lambda", {
+  canon <- rq(".rum_canonical_loading"); axes <- function(L) rq(".rum_canonical_axes")(L)
+  Q <- rbind(c(.6, -.8), c(.8, .6))
+  L <- 2 * diag(2); LQ <- L %*% Q
+  expect_equal(canon(LQ), canon(L), tolerance = 1e-12)
+  expect_equal(tcrossprod(canon(LQ)), tcrossprod(L), tolerance = 1e-12)
+  expect_true(axes(L)$near_tie); expect_true(axes(LQ)$near_tie)   # (errors on 829393d: no such helper)
+  # Codex's example: an order-2 product rule integrates the two loadings to the same probability
+  P <- fx_problem(n = 12L, p = 2L, n_fac = 2L, seed = 51L)
+  q2 <- rum_quadrature(c(2L, 2L, 2L), n_fac = 2L, rule = "product")
+  e1 <- rum_dnn_gaussian_evaluate(P$data, P$mu, .7, canon(L), .4, q2)
+  e2 <- rum_dnn_gaussian_evaluate(P$data, P$mu, .7, canon(LQ), .4, q2)
+  expect_equal(e2$loglik, e1$loglik, tolerance = 1e-12)
+  # without the convention the raw loadings give different numbers on this rule (the finding)
+  r1 <- rum_dnn_gaussian_evaluate(P$data, P$mu, .7, L, .4, q2)$loglik
+  r2 <- rum_dnn_gaussian_evaluate(P$data, P$mu, .7, LQ, .4, q2)$loglik
+  expect_gt(max(abs(r1 - r2)), 1e-4)
+  # a near tie (relative eigenvalue gap 1e-9) on a general p x 2 loading, rotated by a random Q
+  set.seed(52)
+  A <- qr.Q(qr(matrix(rnorm(9), 3, 3)))[, 1:2]                      # orthonormal 3 x 2
+  Ln <- A %*% diag(c(1.5, 1.5 * sqrt(1 - 1e-9)))
+  for (r in 1:5) {
+    th <- runif(1, 0, 2 * pi); Rt <- rbind(c(cos(th), -sin(th)), c(sin(th), cos(th)))
+    expect_equal(canon(Ln %*% Rt), canon(Ln), tolerance = 1e-10)
+  }
+  expect_true(axes(Ln)$near_tie); expect_lt(axes(Ln)$min_gap_rel, 1e-6)
+  # convention: lower trapezoidal with a positive diagonal inside the tied cluster
+  C <- canon(Ln); expect_lt(abs(C[1, 2]), 1e-12); expect_gt(C[1, 1], 0); expect_gt(C[2, 2], 0)
+  # three factors with one tied pair: the separated axis keeps its eigenvector, the pair is fixed
+  B <- qr.Q(qr(matrix(rnorm(16), 4, 4)))[, 1:3]
+  L3 <- B %*% diag(c(2, 1, 1))
+  for (r in 1:3) {
+    R3 <- qr.Q(qr(matrix(rnorm(9), 3, 3)))
+    expect_equal(canon(L3 %*% R3), canon(L3), tolerance = 1e-10)
+  }
+  a3 <- axes(L3); expect_identical(a3$clusters, list(2:3))
+  # well separated axes: unchanged rule (no cluster), same as plain principal axes with signs
+  Ls <- matrix(c(1, .2, -.3, .1, .8, .4), 3, 2)
+  e <- eigen(crossprod(Ls), symmetric = TRUE); V <- e$vectors
+  LV <- Ls %*% V; for (k in 1:2) if (LV[which.max(abs(LV[, k])), k] < 0) V[, k] <- -V[, k]
+  expect_identical(canon(Ls), Ls %*% V); expect_false(axes(Ls)$near_tie)
+  # the fold diagnostics record the near tie
+  fx <- readRDS(test_path("fixtures", "rum-inference-fixture.rds"))
+  fin <- fx$fins[[1]]; p <- fx$data$p
+  fin$loading <- cbind(rep(.5, p) * c(1, 0, rep(0, p - 2)), c(0, .5, rep(0, p - 2)))
+  ff <- rq(".rum_fold_fit")(fx$data, fx$Z, fin, rq(".rum_score_quadrature")())
+  expect_true(ff$axes$near_tie); expect_equal(ff$axes$min_gap_rel, 0, tolerance = 1e-12)
+})

@@ -98,16 +98,44 @@
 # column's sign set so that its largest-absolute entry is positive. Lambda Lambda' (and so
 # the model) does not change. One factor (a vector or a p x 1 matrix) is returned as is,
 # sign included, so the one-factor path is untouched.
-.rum_canonical_rotation <- function(L) {
-  if (!is.matrix(L) || ncol(L) == 1L) return(matrix(1, 1L, 1L))
+# Tied and near-tied axes (Codex review of 829393d, finding 5). Within a set of (nearly) equal
+# eigenvalues the eigenvectors are not unique: Lambda and Lambda A could get different axes, and a
+# finite rule integrated on them would give different numbers. Consecutive eigenvalues whose gap
+# is at most tie_tol times the largest eigenvalue form one cluster (default 1e-6: below it the
+# eigenvectors' rounding error, about 1e-16 / gap, would exceed 1e-10). Within a cluster of m
+# axes the basis is fixed by the feature coordinates: with the cluster's columns C = Lambda V_c
+# (p x m), take the LQ factorisation C = R' Q' (QR of C', features in their order) and use C Q
+# = R', lower trapezoidal with a positive diagonal (the first feature that loads on the cluster
+# defines its first axis, and so on). R' does not depend on which orthonormal basis of the cluster
+# eigen() returned, so tied axes are the same for every rotation of Lambda. Without ties the
+# result is the one above, unchanged. .rum_canonical_axes() also returns the smallest relative
+# gap between consecutive eigenvalues (min_gap_rel) and whether a cluster was resolved (near_tie).
+.rum_axes_tie_tol <- 1e-6
+.rum_canonical_axes <- function(L, tie_tol = .rum_axes_tie_tol) {
+  if (!is.matrix(L) || ncol(L) == 1L)
+    return(list(V = matrix(1, 1L, 1L), near_tie = FALSE, min_gap_rel = NA_real_, clusters = list()))
   e <- eigen(crossprod(L), symmetric = TRUE)
-  V <- e$vectors[, order(e$values, decreasing = TRUE), drop = FALSE]
+  o <- order(e$values, decreasing = TRUE); V <- e$vectors[, o, drop = FALSE]; ev <- pmax(e$values[o], 0)
   LV <- L %*% V
   for (k in seq_len(ncol(V))) {
     if (LV[which.max(abs(LV[, k])), k] < 0) V[, k] <- -V[, k]
   }
-  V
+  q <- ncol(V); top <- ev[1L]
+  gap <- if (top > 0) -diff(ev) / top else rep(0, q - 1L)
+  cl <- split(seq_len(q), cumsum(c(TRUE, gap > tie_tol)))
+  cl <- cl[lengths(cl) > 1L]
+  for (ix in cl) {
+    if (ev[ix[1L]] <= tie_tol * top) next          # a cluster of null axes: Lambda V_c = 0, nothing to fix
+    C <- L %*% V[, ix, drop = FALSE]; m <- length(ix)
+    qc <- qr(t(C)); Q <- qr.Q(qc, complete = TRUE); R <- qr.R(qc)   # t(C) = Q R: C Q = R' (lower trapezoidal)
+    sg <- rep(1, m); dg <- diag(R)[seq_len(min(m, nrow(R), ncol(R)))]; sg[seq_along(dg)] <- sign(dg)
+    sg[sg == 0] <- 1
+    V[, ix] <- V[, ix, drop = FALSE] %*% (Q %*% diag(sg, m))
+  }
+  list(V = V, near_tie = length(cl) > 0L, min_gap_rel = if (q > 1L) min(gap) else NA_real_,
+       clusters = unname(cl))
 }
+.rum_canonical_rotation <- function(L) .rum_canonical_axes(L)$V
 .rum_canonical_loading <- function(L) {
   if (!is.matrix(L) || ncol(L) == 1L) return(L)
   out <- L %*% .rum_canonical_rotation(L)

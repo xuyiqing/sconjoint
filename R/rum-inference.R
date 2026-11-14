@@ -50,13 +50,16 @@
 .rum_fold_fit <- function(data, Z, fin, quad_score) {
   th <- list(kappa = fin$kappa, loading = fin$loading, omega = fin$omega)
   nf <- .rum_th_nfac(th)
+  axes <- NULL
   if (nf > 1L) {
     if (nrow(th$loading) != data$p) stop("the loading does not have p rows")
+    axes <- .rum_canonical_axes(th$loading)          # near_tie, min_gap_rel: reported per fold
     th$loading <- .rum_canonical_loading(th$loading); quad_score <- .rum_quad_for(quad_score, nf, "score")
   }
   mu <- rum_dnn_gaussian_forward(fin$network, Z[data$ids, , drop = FALSE])
   ev <- rum_dnn_gaussian_evaluate(data, mu, th$kappa, th$loading, th$omega, quad_score)
-  list(th = th, mu = mu, ev = ev, S = cbind(ev$output_score, ev$common_score), quad = quad_score)
+  list(th = th, mu = mu, ev = ev, S = cbind(ev$output_score, ev$common_score), quad = quad_score,
+       axes = axes)
 }
 # Rotation directions of a state's loading in theta coordinates (NULL at one factor).
 .rum_th_rot <- function(th) if (.rum_th_nfac(th) > 1L) .rum_rotation_dirs(th$loading) else NULL
@@ -99,6 +102,9 @@
   }
   diag <- data.frame(fold = k, info_heldout_rel_error = err, floored = W$floored,
                      min_eig_Itilde = min(eigen(.rum_parts_Ic(W), symmetric = TRUE, only.values = TRUE)$values))
+  if (!is.null(ff$axes)) {                 # q > 1: the fold's principal axes (Codex finding 5)
+    diag$axes_min_gap_rel <- ff$axes$min_gap_rel; diag$axes_near_tie <- ff$axes$near_tie
+  }
   list(parts = W, diag = diag, meta = meta)
 }
 
