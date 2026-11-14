@@ -115,10 +115,40 @@
 # g = B (B' Ic B)^{-1} B' r, so the target derivative's rotation component (zero for exact
 # gradients, rounding for numerical ones) is projected out with the same B, and g has no
 # rotation component. One factor (parts$B NULL): unchanged.
+# Rank-deficient reduced information (Codex review of 829393d, finding 4). Removing the rotations
+# is not always enough: with Lambda of rank below q, or a loading column that no design moves
+# (null_zero drops its rows), B' Ic B keeps further null directions that are not rotations.
+# .rum_solve_red() solves on the estimable range of B' Ic B instead: eigenvalues above
+# .rum_solve_tol_rel (1e-10) times the largest span the range; the rest is the null space N. A
+# full-rank system is solved as before (solve(), the same numbers). Otherwise the target's
+# reduced right-hand side r_red = B' r is checked against N: if |N' r_red| <= .rum_solve_compat_tol
+# (1e-6) times |r_red| the system is compatible and g = B pinv(B' Ic B) r_red (the minimum-norm
+# solution; status "rank_deficient_compatible"); if not, the target derivative loads on a direction
+# the choices carry no information about, there is no solution, and g and a are NA (status
+# "not_identified": the estimate is NA, as the identification check reports such targets).
+# At q > 1 the returned list also has status, rank, null_dim and resid_rel.
+.rum_solve_tol_rel <- 1e-10
+.rum_solve_compat_tol <- 1e-6
+.rum_solve_red <- function(parts, r) {
+  rr <- drop(crossprod(parts$B, r)); Ir <- (parts$Ic_red + t(parts$Ic_red)) / 2; nb <- length(rr)
+  if (!nb) return(list(g = drop(parts$B %*% rr), status = "ok", rank = 0L, null_dim = 0L, resid_rel = 0))
+  e <- eigen(Ir, symmetric = TRUE); mx <- max(e$values, 0)
+  k <- e$values > .rum_solve_tol_rel * mx
+  if (all(k)) return(list(g = drop(parts$B %*% solve(parts$Ic_red, rr)), status = "ok", rank = nb,
+                          null_dim = 0L, resid_rel = 0))
+  N <- e$vectors[, !k, drop = FALSE]; den <- sqrt(sum(rr^2))
+  res <- if (den > 0) sqrt(sum(crossprod(N, rr)^2)) / den else 0
+  if (res > .rum_solve_compat_tol)
+    return(list(g = rep(NA_real_, nrow(parts$B)), status = "not_identified", rank = sum(k),
+                null_dim = sum(!k), resid_rel = res))
+  Vk <- e$vectors[, k, drop = FALSE]
+  list(g = drop(parts$B %*% (Vk %*% (crossprod(Vk, rr) / e$values[k]))), status = "rank_deficient_compatible",
+       rank = sum(k), null_dim = sum(!k), resid_rel = res)
+}
 .rum_correction <- function(parts, v, gt_bar, rows) {
-  p <- ncol(v)
+  p <- ncol(v); info <- NULL
   sol <- if (is.null(parts$B)) function(r) solve(parts$Ic, r) else
-    function(r) drop(parts$B %*% solve(parts$Ic_red, crossprod(parts$B, r)))
+    function(r) { o <- .rum_solve_red(parts, r); info <<- o[c("status", "rank", "null_dim", "resid_rel")]; o$g }
   if (parts$shared) {                       # one matrix for everyone: vectorized
     Li <- matrix(parts$Li[1, , ], p, p); Lt <- matrix(parts$Lt[1, , ], p)
     g <- sol(gt_bar - colMeans(v %*% (t(Li) %*% Lt)))
@@ -127,7 +157,7 @@
     g <- sol(gt_bar - colMeans(.rum_info_CLv(parts$Li, parts$Lt, v)))
     a <- .rum_info_a(parts$Li, parts$Lt, v, g, rows)
   }
-  list(a = a, g = g)
+  if (is.null(info)) list(a = a, g = g) else c(list(a = a, g = g), info)
 }
 
 # Options of the model-based information (see .rum_model_info_fold).
@@ -168,7 +198,7 @@
                               cache_write, cache_require)
   model$cond <- cond                     # conditional basis: .rum_cond_options() (rum-information-conditional.R)
   wmat <- .rum_target_weights(targets, n)
-  M <- PHI <- matrix(NA_real_, n, nt); diag_fold <- meta <- list()
+  M <- PHI <- matrix(NA_real_, n, nt); diag_fold <- meta <- solve_diag <- list()
   loads <- matrix(NA_real_, length(ks), p)
   for (k in ks) {
     fin <- fold_final(k)
@@ -185,6 +215,10 @@
     for (t in seq_len(nt)) {
       w <- wmat[, t]; wr <- w / mean(w); gr <- .rum_target_grad(targets[[t]], ff$mu, ff$th)
       cw <- .rum_correction(inf$parts, wr * gr$gm, colMeans(wr * gr$gt), which(te))
+      if (!is.null(cw$status) && cw$status != "ok")        # q > 1: Codex finding 4
+        solve_diag[[length(solve_diag) + 1L]] <- data.frame(fold = k, target = targets[[t]]$name,
+          status = cw$status, rank = cw$rank, null_dim = cw$null_dim, resid_rel = cw$resid_rel,
+          stringsAsFactors = FALSE)
       PHI[te, t] <- rowSums(cw$a * ff$ev$output_score[te, , drop = FALSE]) +
         drop(ff$ev$common_score[te, , drop = FALSE] %*% cw$g)
       M[te, t] <- gr$m[te]
@@ -200,11 +234,13 @@
   }
   nm <- vapply(targets, `[[`, "", "name")
   names(est) <- names(plug) <- colnames(IFF) <- colnames(IFP) <- colnames(PHI) <- colnames(M) <- nm
-  list(est = est, plug = plug, IFF = IFF, IFP = IFP, se_kind = "sd",
+  c(list(est = est, plug = plug, IFF = IFF, IFP = IFP, se_kind = "sd",
        diag = do.call(rbind, diag_fold), fold_loadings = loads,
        kind = stats::setNames(vapply(targets, `[[`, "", "kind"), nm),
        n_group = stats::setNames(colSums(wmat > 0), nm), info_basis = info_basis,
-       pop_center = pop_center, phi = PHI, m = M, model_info = if (length(meta)) do.call(rbind, meta) else NULL)
+       pop_center = pop_center, phi = PHI, m = M, model_info = if (length(meta)) do.call(rbind, meta) else NULL),
+    # q > 1 only (the one-factor list is unchanged): folds whose correction system was rank deficient
+    if (length(solve_diag)) list(solve = do.call(rbind, solve_diag)) else NULL)
 }
 
 # The one-step as a table (the columns of the reproduction's debias_dnn()), with attributes

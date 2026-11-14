@@ -77,6 +77,10 @@
   FS
 }
 
+# TRUE when a fold's correction system had no solution for the target (q > 1: .rum_solve_red()
+# status "not_identified", g NA); the bounded updates then report status "not_identified".
+.rum_dirs_unsolved <- function(d) any(vapply(d, function(x) anyNA(x$g), TRUE))
+
 # A target's correction directions at every fold (a: held-out rows x p; g: length n_th) and
 # its held-out plug-in values.
 .rum_tmle_dirs <- function(FS, tg, w) {
@@ -326,6 +330,7 @@
       sol <- .rum_tmle_rounds(FS, dirs, dirs, 1L, n, p, quad_score, path_kind, omega_boundary,
                               max_iter, tol, max_halving, max_rounds = max_rounds, if_tol = if_tol)
     }
+    if (.rum_dirs_unsolved(dirs[[1]])) sol$status <- "not_identified"    # Codex finding 4
     ev0 <- eval(0); phi0 <- ev0$phi[, 1]
     m0 <- numeric(n); for (k in names(FS)) m0[FS[[k]]$te] <- dirs[[1]][[k]]$plug
     plug <- sum(w * m0) / sum(w); onestep <- plug + mean(phi0)
@@ -413,6 +418,7 @@
   sol <- .rum_tmle_rounds(FS, dirs[keep], dirs, keep, n, p, quad_score, omega_path,
                           omega_boundary, max_iter, tol, max_halving, max_rounds = max_rounds,
                           if_tol = if_tol)
+  if (any(vapply(dirs, .rum_dirs_unsolved, TRUE))) sol$status <- "not_identified"
   ok <- identical(sol$status, "converged")
   nm <- vapply(targets, `[[`, "", "name")
   if (ok) {

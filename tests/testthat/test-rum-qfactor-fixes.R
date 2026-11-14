@@ -117,3 +117,44 @@ test_that("finding 5: tied and near-tied principal axes do not depend on the rot
   ff <- rq(".rum_fold_fit")(fx$data, fx$Z, fin, rq(".rum_score_quadrature")())
   expect_true(ff$axes$near_tie); expect_equal(ff$axes$min_gap_rel, 0, tolerance = 1e-12)
 })
+
+# ---- finding 4: rank-deficient reduced information after the rotations are removed ----------
+test_that("finding 4: the correction solves on the estimable range and flags incompatible targets", {
+  p <- 3L; q <- 2L; n_th <- p * q + 2L; D <- p + n_th
+  Lam <- cbind(c(1, 0, 0), c(0, 0, 0))
+  rot <- rq(".rum_rotation_dirs")(Lam)
+  n <- 6L; I <- array(0, c(n, D, D))
+  for (i in seq_len(n)) I[i, , ] <- diag(c(rep(1, 7), rep(0, 3), 1)) * (1 + i / 10)
+  W <- rq(".rum_cond_weight_parts")(I, p, n_th, 1e-6, rot)
+  expect_identical(dim(W$Ic_red), c(7L, 7L))
+  expect_identical(qr(W$Ic_red)$rank, 5L)                          # Codex's reproducer: rank 5 of 7
+  set.seed(41); v <- matrix(rnorm(n * p), n, p)
+  ix <- rq(".rum_th_idx")(p, q)
+  # a target whose theta derivative stays off the second loading column: compatible
+  gt <- numeric(n_th); gt[ix$kappa] <- .3; gt[ix$loading[1:3]] <- c(.2, -.1, .4); gt[ix$omega] <- .1
+  cw <- rq(".rum_correction")(W, v, gt, seq_len(n))
+  expect_true(all(is.finite(cw$g))); expect_true(all(is.finite(cw$a)))
+  expect_identical(cw$status, "rank_deficient_compatible"); expect_identical(cw$null_dim, 2L)
+  # it solves J g = r on the estimable range: the residual is zero there
+  r <- gt - colMeans(rq(".rum_info_CLv")(W$Li, W$Lt, v))
+  expect_lt(max(abs(drop(W$Ic %*% cw$g) - r)), 1e-12)
+  expect_lt(max(abs(cw$g[ix$loading[5:6]])), 1e-14)                # no weight on the null directions
+  # a target that loads on the uninformative second column: no solution, NA with a reason
+  gt2 <- gt; gt2[ix$loading[5]] <- .5
+  cw2 <- rq(".rum_correction")(W, v, gt2, seq_len(n))
+  expect_identical(cw2$status, "not_identified"); expect_true(all(is.na(cw2$g))); expect_true(all(is.na(cw2$a)))
+  expect_gt(cw2$resid_rel, 1e-6)
+  # the shared (constant-basis) path
+  Ws <- rq(".rum_weight_parts")(function(i) diag(c(rep(1, 7), rep(0, 3), 1)), 1L, p, n_th, 0, rot)
+  cws <- rq(".rum_correction")(Ws, v, gt, seq_len(n))
+  expect_true(all(is.finite(cws$g)))
+  # a full-rank reduced system: solve() as before, status ok
+  I2 <- I; for (i in seq_len(n)) I2[i, , ] <- diag(D) * (1 + i / 10)
+  W2 <- rq(".rum_cond_weight_parts")(I2, p, n_th, 1e-6, rq(".rum_rotation_dirs")(cbind(c(1, 0, 0), c(0, 1, 0))))
+  cw3 <- rq(".rum_correction")(W2, v, gt2, seq_len(n))
+  expect_identical(cw3$status, "ok")
+  expect_identical(cw3$g, drop(W2$B %*% solve(W2$Ic_red, crossprod(W2$B, gt2 - colMeans(rq(".rum_info_CLv")(W2$Li, W2$Lt, v))))))
+  # the bounded updates recognise unsolved directions
+  expect_true(rq(".rum_dirs_unsolved")(list(f1 = list(g = cw$g), f2 = list(g = cw2$g))))
+  expect_false(rq(".rum_dirs_unsolved")(list(f1 = list(g = cw$g))))
+})
