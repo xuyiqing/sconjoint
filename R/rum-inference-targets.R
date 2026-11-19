@@ -548,7 +548,7 @@
 # probability that the swap flips the choice. Respondents are weighted equally after averaging over
 # their own tasks (the engine's mean over m_i). Position terms: side = "zero" leaves kappa and the side
 # preference out of the context (Jens's convention, decision E2); side = "fitted" adds
-# kappa + sqrt(omega) v, v ~ N(0, 1), integrated by a Gauss-Hermite rule of n_v nodes.
+# kappa + sqrt(omega) v, v ~ N(0, 1), integrated as one more normal term of the context (below).
 # allowed: per group NULL (any two levels), a logical vector over the levels (a swap may pair two
 # levels when at least one is TRUE: Jens's GS governance rule with TRUE for the baseline and the
 # generic levels), or a symmetric L x L logical matrix. pairs: per group a two-column matrix (or a
@@ -578,12 +578,18 @@
 #   dm/dmu = E[d psi / d b] and dm/dLambda = E[(d psi / d b) u'] (q > 1 named swap: E[k u] =
 #   w1 E[k z1] + w2_t E[k z2] with z = W u, W's rows orthonormal; best-worst: on the canonical axes,
 #   mapped back with .rum_imp_gl). The loading block's rotation component is removed
-#   (.rum_rotation_project). side = "fitted": dm/dkappa = E[psi_c]; dm/domega = E[psi_c v] / (2
-#   sqrt(omega)), or E[psi_cc] / 2 (Stein) below .rum_omega_small.
+#   (.rum_rotation_project). side = "fitted": the side term sqrt(omega) v is normal and enters the
+#   context linearly, so it is integrated with the context (Codex review of 23cfc1c, finding 3: a
+#   separate 21-node rule in v overstated the target at large omega): at q = 1 and for the named swap
+#   inside the inner integral of .rum_dec_inner (for the named swap combined with the z2 part, sd
+#   sqrt(s_t^2 + omega)); for best-worst at q > 1 as one more RQMC dimension. dm/dkappa = E[psi_c];
+#   dm/domega = E[psi_cc] / 2 (Stein's identity) at every omega.
 # The kind "decisiveness" is not in .rum_bounded_kinds (that waits for the coverage check, Stage D3).
 .rum_dec_control <- function(width = 1, n_gl = 16L, u_max = 9, n_gh = 48L, n_lg = 48L, s_switch = 2,
                              ladder = c(.5, 1, 2, 4, 8, 16, 32), tol = 1e-9, max_refine = 8L,
                              n_v = 21L, swap = c("2d", "rqmc"), rqmc = .rum_imp_control())
+  # n_v: unused since the fix round (the side term is no longer integrated by its own node rule); kept
+  # so that existing calls still run
   list(width = width, n_gl = as.integer(n_gl), u_max = u_max, n_gh = as.integer(n_gh), n_lg = as.integer(n_lg),
        s_switch = s_switch, ladder = ladder, tol = tol, max_refine = as.integer(max_refine),
        n_v = as.integer(n_v), swap = match.arg(swap), rqmc = rqmc)
@@ -849,23 +855,22 @@
 # canonical axes (.rum_dec_axes), the scheme of .rum_imp_sums_rqmc. Returns m, gm, gl, gs, gss, se, n_points.
 # V (tests only): hold the integration axes fixed at V (q x q, full rank) instead of Lambda's canonical
 # axes, so that a finite difference in Lambda does not also rotate the draws.
-.rum_dec_rqmc <- function(mu, Lam, sp, lay, shift, ctrl, need2 = FALSE, V = NULL) {
+# sv > 0 (side = "fitted"): the side term sv v enters the context, v one more Sobol dimension (Codex
+# finding 3); dm/domega then comes from gss = E[psi_cc] (Stein), so need2 is set by the caller.
+.rum_dec_rqmc <- function(mu, Lam, sp, lay, shift, ctrl, need2 = FALSE, V = NULL, sv = 0) {
   n <- lay$n; p <- lay$p; nf <- ncol(Lam); owner <- lay$owner; Tn <- lay$Tn; N <- length(owner)
   control <- ctrl$rqmc; Xt <- lay$X; Xt[, sp$cols] <- 0
   c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; b <- mu %*% t(sp$Dl); nP <- nrow(sp$Dl)
   ax <- if (is.null(V)) .rum_dec_axes(Lam) else list(V = V, keep = seq_len(ncol(V)), C = Lam %*% V)
   r <- length(ax$keep)
-  if (!r) {                                  # Lambda = 0: no integral
-    pr <- max.col(b, ties.method = "first"); S <- b[cbind(seq_len(n), pr)]
-    ps <- .rum_dec_psi(c0, S[owner], need2)
-    om <- drop(rowsum(ps$pS, owner, reorder = TRUE)) / Tn
-    return(list(m = drop(rowsum(ps$psi, owner, reorder = TRUE)) / Tn,
-                gm = unname(rowsum(ps$pc * Xt, owner, reorder = TRUE) / Tn + om * sp$Dl[pr, , drop = FALSE]),
-                gl = matrix(0, n, p * nf), gs = drop(rowsum(ps$pc, owner, reorder = TRUE)) / Tn,
-                gss = if (need2) drop(rowsum(ps$pcc, owner, reorder = TRUE)) / Tn else NULL,
-                se = numeric(n), n_points = rep(0L, n)))
+  if (!r) {                                  # Lambda = 0: no taste integral; the side term by the line rule
+    A <- .rum_dec_line(b, numeric(nP), owner, c0, numeric(N), rep(sv, N), ctrl, need2)
+    rs <- function(x) rowsum(x, owner, reorder = TRUE) / Tn
+    return(list(m = drop(rs(A$E0)), gm = unname(rs(A$Ec * Xt + A$ES %*% sp$Dl)), gl = matrix(0, n, p * nf),
+                gs = drop(rs(A$Ec)), gss = if (need2) drop(rs(A$Ecc)) else NULL, se = numeric(n),
+                n_points = rep(0L, n)))
   }
-  Ht <- Xt %*% ax$C; DC <- sp$Dl %*% ax$C
+  Ht <- Xt %*% ax$C; DC <- sp$Dl %*% ax$C; dd <- r + (sv > 0)
   R <- control$n_rep; tol <- control$tol
   Sr <- matrix(0, n, R); Ec <- numeric(N); EcZ <- matrix(0, N, r); Ecc <- numeric(N)
   Wp <- matrix(0, n, nP); WpZ <- array(0, c(n, nP, r))
@@ -875,16 +880,17 @@
     ta <- which(owner %in% active); oa <- match(owner[ta], active); Ta <- Tn[active]; na <- length(active)
     chunk <- max(1L, floor(2e6 / max(1L, length(ta))))
     for (rp in seq_len(R)) {
-      z <- stats::qnorm(matrix(spacefillr::generate_sobol_owen_set(Nt, r, seed = control$seed + rp), Nt, r))
+      z <- stats::qnorm(matrix(spacefillr::generate_sobol_owen_set(Nt, dd, seed = control$seed + rp), Nt, dd))
       z <- z[(Ncur + 1L):Nt, , drop = FALSE]; z <- rbind(z, -z)
       for (cs in split(seq_len(nrow(z)), ceiling(seq_len(nrow(z)) / chunk))) {
-        Zc <- z[cs, , drop = FALSE]; Kc <- nrow(Zc)
+        Zc <- z[cs, seq_len(r), drop = FALSE]; Kc <- nrow(Zc)
         S <- NULL; arg <- NULL
         for (pi in seq_len(nP)) {
           v <- b[active, pi] + matrix(drop(Zc %*% DC[pi, ]), na, Kc, byrow = TRUE)
           if (is.null(S)) { S <- v; arg <- matrix(1L, na, Kc) } else { up <- v > S; S[up] <- v[up]; arg[up] <- pi }
         }
         cm <- c0[ta] + Ht[ta, , drop = FALSE] %*% t(Zc)
+        if (dd > r) cm <- cm + matrix(sv * z[cs, dd], length(ta), Kc, byrow = TRUE)
         ps <- .rum_dec_psi(cm, S[oa, , drop = FALSE], need2)
         Sr[active, rp] <- Sr[active, rp] + rowSums(rowsum(ps$psi, oa, reorder = TRUE)) / Ta
         Ec[ta] <- Ec[ta] + rowSums(ps$pc); EcZ[ta, ] <- EcZ[ta, ] + ps$pc %*% Zc
@@ -934,22 +940,13 @@
     return(out)
   }
   fn <- if (!multi) .rum_dec_q1 else if (sp$type == "swap" && ctrl$swap == "2d") .rum_dec_swap2 else .rum_dec_rqmc
-  if (side == "zero") {
-    e <- fn(mu, lam, sp, lay, 0, ctrl)
-    out <- list(m = e$m, gm = e$gm, gt = cbind(0, e$gl, 0))
-    if (!is.null(e$se)) attr(out, "se") <- e$se
-    return(out)
-  }
-  s <- sqrt(th$omega); vr <- .rum_normal_rule(ctrl$n_v); small <- th$omega < .rum_omega_small
-  m <- 0; gm <- 0; gl <- 0; gk <- 0; go <- 0; se <- 0
-  for (l in seq_along(vr$nodes)) {
-    e <- fn(mu, lam, sp, lay, th$kappa + s * vr$nodes[l], ctrl, need2 = small); wl <- vr$weights[l]
-    m <- m + wl * e$m; gm <- gm + wl * e$gm; gl <- gl + wl * e$gl; gk <- gk + wl * e$gs
-    go <- go + wl * (if (small) e$gss / 2 else e$gs * vr$nodes[l] / (2 * s))
-    if (!is.null(e$se)) se <- se + wl * e$se
-  }
-  out <- list(m = m, gm = gm, gt = cbind(gk, gl, go))
-  if (!is.null(e$se)) attr(out, "se") <- se
+  # side = "fitted": kappa shifts the context and sqrt(omega) v is one more normal term in it,
+  # integrated with the rest (Codex finding 3; no separate node rule in v). dm/dkappa = E[psi_c] and
+  # dm/domega = E[psi_cc] / 2 (Stein's identity, at every omega).
+  fit <- side == "fitted"
+  e <- fn(mu, lam, sp, lay, if (fit) th$kappa else 0, ctrl, need2 = fit, sv = if (fit) sqrt(th$omega) else 0)
+  out <- list(m = e$m, gm = e$gm, gt = if (fit) cbind(e$gs, e$gl, e$gss / 2) else cbind(0, e$gl, 0))
+  if (!is.null(e$se)) attr(out, "se") <- e$se
   out
 }
 # All decisiveness targets of one design, sharing one layout and a cache per (mu, th). data: the

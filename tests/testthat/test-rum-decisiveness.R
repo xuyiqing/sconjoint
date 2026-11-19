@@ -417,3 +417,72 @@ test_that("Codex finding 2: narrow context transitions (large loadings) are reso
   gb <- TB[[1]]$grad(mu, th); gs <- TB[[2]]$grad(mu, th)
   expect_lt(max(abs(gb$m - gs$m)), 1e-3); expect_lt(abs(mean(gb$m - gs$m)), 2e-4)
 })
+
+test_that("Codex finding 3: side = fitted integrates the side term with the context (large omega)", {
+  # the Codex trigger: swing 1 (mu1 = 1, zero loading), zero context, kappa 0, omega 1e4.
+  # m = E[G(1 + 100 v) - G(-1 + 100 v)] (23cfc1c: 0.124892 against 0.00797740)
+  vf <- seq(-12, 12, length.out = 4000001L); wf <- stats::dnorm(vf) * (vf[2] - vf[1]); cc <- 100 * vf
+  pc <- stats::dlogis(cc + 1) - stats::dlogis(cc - 1); pS <- stats::dlogis(cc + 1) + stats::dlogis(cc - 1)
+  ref <- c(sum(wf * (stats::plogis(cc + 1) - stats::plogis(cc - 1))), sum(wf * pS), sum(wf * pc), sum(wf * pc * vf) / 200)
+  TG <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 0)), list(a = 1L), side = "fitted")
+  g <- TG[[1]]$grad(matrix(c(1, 0), 1), list(kappa = 0, omega = 1e4, loading = c(0, 0)))
+  expect_lt(abs(g$m - ref[1]), 1e-9); expect_lt(abs(g$gm[1, 1] - ref[2]), 1e-9)
+  expect_lt(abs(g$gt[1, 1] - ref[3]), 1e-12); expect_lt(abs(g$gt[1, 4] - ref[4]), 1e-12)
+
+  # q = 1 design, omega 1e2 and 1e4, every target type, against an independent computation: the side
+  # term written through the logistic shock, E_v[G(a + s v)] = E_eps[Phi((a + eps) / s)], on a
+  # trapezoid grid in eps (201 points on [-40, 40]) times a grid in u (8,001 points on [-8, 8]; its own
+  # error, from the swing's kinks, is below 2e-8 here: 2.4e-7 at 2,001 points)
+  X <- dec_setup(1L, seed = 51L, n = 4L, Tmax = 3L); TF <- dec_set(X, side = "fitted")
+  ug <- seq(-8, 8, length.out = 8001L); wu <- stats::dnorm(ug) * (ug[2] - ug[1])
+  eg <- seq(-40, 40, length.out = 201L); we <- stats::dlogis(eg) * (eg[2] - eg[1])
+  indep <- function(cols, menu, P, kappa, s) {
+    d <- X$data; own <- rep(seq_len(d$n), d$T)
+    vapply(seq_len(d$n), function(i) {
+      rows <- which(own == i); Xt <- d$d[rows, , drop = FALSE]; Xt[, cols] <- 0
+      B <- sweep(outer(ug, drop(X$Lam)), 2, X$mu[i, ], `+`)
+      ctx <- B %*% t(Xt) + kappa; lv <- B[, cols, drop = FALSE] %*% t(menu)
+      S <- do.call(pmax, unname(as.data.frame(lv[, P[, 1], drop = FALSE] - lv[, P[, 2], drop = FALSE])))
+      mean(vapply(seq_along(rows), function(t) {
+        Ep <- stats::pnorm(outer(ctx[, t] + S, eg, `+`) / s) %*% we; Em <- stats::pnorm(outer(ctx[, t] - S, eg, `+`) / s) %*% we
+        sum(wu * (Ep - Em)) }, 0))
+    }, 0)
+  }
+  SP <- dec_spec_pairs(X$menus)
+  for (om in c(1e2, 1e4)) {
+    th <- X$th; th$omega <- om
+    for (k in seq_along(SP)) {
+      g <- dec_spec_group[k]
+      expect_lt(max(abs(TF[[k]]$m(X$mu, th) - indep(dec_groups[[g]], X$menus[[g]], SP[[k]], th$kappa, sqrt(om)))), 3e-8)
+    }
+  }
+  # gradients against central differences at omega = 1e4 (q = 1, all types; q = 2 named swaps)
+  for (q in 1:2) {
+    Xq <- dec_setup(q, seed = 52L, n = 4L); Tq <- dec_set(Xq, side = "fitted"); th <- Xq$th; th$omega <- 1e4
+    for (k in if (q == 1L) seq_along(Tq) else c(2L, 4L)) {
+      ga <- rinf(".rum_target_grad")(Tq[[k]], Xq$mu, th)
+      tn <- Tq[[k]]; tn$grad <- NULL; gn <- rinf(".rum_target_grad")(tn, Xq$mu, th, h = 1e-4)
+      expect_lt(max(abs(ga$gm - gn$gm)) / max(abs(ga$gm)), 1e-6)
+      expect_lt(max(abs(ga$gt - gn$gt)) / max(abs(ga$gt)), 1e-6)
+    }
+  }
+  # q = 2 with a zero second loading column is the q = 1 model: the named swap (2-D rule) matches the
+  # q = 1 rule to rounding, and best-worst by RQMC (the side term as one more Sobol dimension) agrees
+  # to its sampling error, values and the kappa and omega derivatives (at omega = 1e4 these derivatives
+  # are near 1e-8 and the RQMC estimate carries sampling noise near 5e-5: an absolute bound there)
+  X <- dec_setup(1L, seed = 53L, n = 6L); T1 <- dec_set(X, side = "fitted"); T2 <- dec_set(X, side = "fitted")
+  for (om in c(.3, 1e4)) {
+    th1 <- X$th; th1$omega <- om; th2 <- th1; th2$loading <- cbind(X$th$loading, 0)
+    for (k in seq_along(T1)) {
+      a <- T1[[k]]$grad(X$mu, th1); b <- T2[[k]]$grad(X$mu, th2); p <- X$p
+      if (T1[[k]]$type == "swap") {
+        expect_lt(max(abs(a$m - b$m)), 1e-12); expect_lt(max(abs(a$gm - b$gm)), 1e-12)
+        expect_lt(max(abs(a$gt[, c(1L, 1L + seq_len(p), p + 2L)] - b$gt[, c(1L, 1L + seq_len(p), 2L * p + 2L)])), 1e-12)
+      } else {
+        expect_lt(max(abs(a$m - b$m)), 1e-3); expect_lt(abs(mean(a$m - b$m)), 3e-4)
+        dg <- max(abs(a$gt[, c(1L, p + 2L)] - b$gt[, c(1L, 2L * p + 2L)]))
+        if (om < 1) expect_lt(dg, 0.02 * max(abs(a$gt[, c(1L, p + 2L)]))) else expect_lt(dg, 2e-4)
+      }
+    }
+  }
+})
