@@ -353,3 +353,67 @@ test_that("Codex finding 1: a small nonzero loading axis is kept (values and gra
   expect_identical(length(rinf(".rum_imp_axes")(diag(c(1e-4, 1)))$keep), 1L)
   expect_identical(rinf(".rum_dec_axes")(cbind(c(1, 2), 0))$keep, 1L)
 })
+
+test_that("Codex finding 2: narrow context transitions (large loadings) are resolved, q = 1 and q > 1", {
+  zf <- seq(-1, 2, length.out = 3000001L); wf <- stats::dnorm(zf) * (zf[2] - zf[1])
+  # the Codex trigger: q = 1, mu = (1, -50), loading (0, 100), task (0, 1): G(100u - 49) - G(100u - 51)
+  # (23cfc1c: 0.00131915 against 0.00704035)
+  cc <- -50 + 100 * zf; pc <- stats::dlogis(cc + 1) - stats::dlogis(cc - 1); pS <- stats::dlogis(cc + 1) + stats::dlogis(cc - 1)
+  ref <- c(sum(wf * (stats::plogis(cc + 1) - stats::plogis(cc - 1))), sum(wf * pS), sum(wf * pc), sum(wf * pS * zf), sum(wf * pc * zf))
+  TG <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L))
+  g <- TG[[1]]$grad(matrix(c(1, -50), 1), list(kappa = 0, omega = 0, loading = c(0, 100)))
+  expect_lt(abs(g$m - ref[1]), 1e-9)
+  expect_lt(max(abs(c(g$gm, g$gt[1, 2:3]) - ref[c(2, 3, 4, 5)])), 1e-9)
+  # the same transition in a q = 2 named swap whose context loads on the swap's direction:
+  # D = 0.5 + z1, c = -50 + 100 z1 (the 2-D rule's z1 direction; 23cfc1c: 0.0013186 against 0.0070395)
+  zf <- seq(-12, 12, length.out = 4000001L); wf <- stats::dnorm(zf) * (zf[2] - zf[1])
+  cc <- -50 + 100 * zf; S <- abs(.5 + zf); ref2 <- sum(wf * (stats::plogis(cc + S) - stats::plogis(cc - S)))
+  TS <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)), best_worst = FALSE)
+  th2 <- list(kappa = 0, omega = 0, loading = rbind(c(1, 0), c(100, 0)))
+  expect_lt(abs(TS[[1]]$m(matrix(c(.5, -50), 1), th2) - ref2), 1e-9)
+  # q > 1 best-worst (RQMC) on the trigger: no panels to miss; its error is sampling error
+  T2 <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L))
+  g2 <- T2[[1]]$grad(matrix(c(1, -50), 1), list(kappa = 0, omega = 0, loading = rbind(c(0, 0), c(100, 0))))
+  expect_lt(abs(g2$m - ref[1]), max(4 * attr(g2, "se"), 1e-6))
+
+  # large context scale on the simulated design (loadings sd 25, means sd 3), q = 1: every target type
+  # against the independent fine-grid computation (200,001 points on [-10, 10])
+  X <- dec_setup(1L, seed = 41L, n = 6L, mu_sd = 3, lam_sd = 25); TG <- dec_set(X)
+  xg <- seq(-10, 10, length.out = 200001L); wg <- stats::dnorm(xg) / sum(stats::dnorm(xg))
+  SP <- dec_spec_pairs(X$menus)
+  for (k in seq_along(SP)) {
+    g <- dec_spec_group[k]
+    ind <- dec_independent(X, dec_groups[[g]], X$menus[[g]], SP[[k]], matrix(xg), wg)
+    expect_lt(max(abs(TG[[k]]$m(X$mu, X$th) - ind)), 1e-7)
+  }
+  # ... and the gradients against central differences (1e-5 relative: with slopes near 100 the
+  # difference quotient has an error near 1e-6 of its own, h^2 f''' / 6), and a refined rule (1e-8)
+  fine <- dec_set(X, control = rinf(".rum_dec_control")(width = .25, n_gl = 32L, tol = 1e-12))
+  for (k in seq_along(TG)) {
+    ga <- rinf(".rum_target_grad")(TG[[k]], X$mu, X$th)
+    tn <- TG[[k]]; tn$grad <- NULL; gn <- rinf(".rum_target_grad")(tn, X$mu, X$th, h = 1e-6)
+    expect_lt(max(abs(ga$gm - gn$gm)) / max(abs(ga$gm)), 1e-5)
+    expect_lt(max(abs(ga$gt - gn$gt)) / max(abs(ga$gt)), 1e-5)
+    gf <- fine[[k]]$grad(X$mu, X$th)
+    expect_lt(max(abs(gf$m - ga$m)), 1e-9)
+    expect_lt(max(abs(gf$gm - ga$gm), abs(gf$gt - ga$gt)), 1e-8)
+  }
+  # q = 2 at large scale: the named swaps (2-D rule) converge (refined rule) and their gradients match
+  # central differences; for a binary group, best-worst by RQMC (a different engine) agrees
+  X2 <- dec_setup(2L, seed = 42L, n = 6L, mu_sd = 3, lam_sd = 25); T2 <- dec_set(X2)
+  F2 <- dec_set(X2, control = rinf(".rum_dec_control")(width = .25, n_gl = 32L, tol = 1e-12, n_gh = 80L, n_lg = 64L))
+  for (k in c(2L, 4L)) {
+    ga <- rinf(".rum_target_grad")(T2[[k]], X2$mu, X2$th); gf <- F2[[k]]$grad(X2$mu, X2$th)
+    expect_lt(max(abs(gf$m - ga$m)), 1e-8)
+    tn <- T2[[k]]; tn$grad <- NULL; gn <- rinf(".rum_target_grad")(tn, X2$mu, X2$th, h = 1e-6)
+    expect_lt(max(abs(ga$gm - gn$gm)) / max(abs(ga$gm)), 1e-5)
+    expect_lt(max(abs(ga$gt - gn$gt)) / max(abs(ga$gt)), 1e-5)
+  }
+  set.seed(43); n <- 5L; Tn <- rep(3L, n); Xd <- matrix(stats::rnorm(sum(Tn) * 4), sum(Tn), 4)
+  db <- list(d = Xd, offsets = c(0L, cumsum(Tn)), T = Tn, n = n, p = 4L, ids = letters[1:n])
+  mu <- matrix(stats::rnorm(n * 4, sd = 3), n); th <- list(kappa = 0, omega = 0, loading = matrix(stats::rnorm(8, sd = 25), 4))
+  TB <- rinf(".rum_tgt_decisiveness_set")(db, list(a = 1L), pairs = list(a = c(2, 1)),
+          control = rinf(".rum_dec_control")(rqmc = rinf(".rum_imp_control")(tol = 2e-5, n_max = 65536L)))
+  gb <- TB[[1]]$grad(mu, th); gs <- TB[[2]]$grad(mu, th)
+  expect_lt(max(abs(gb$m - gs$m)), 1e-3); expect_lt(abs(mean(gb$m - gs$m)), 2e-4)
+})
