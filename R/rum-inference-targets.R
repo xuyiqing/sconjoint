@@ -601,9 +601,14 @@
   e <- eigen(J, symmetric = TRUE); o <- order(e$values)
   list(x = e$values[o], w = 2 * e$vectors[1L, o]^2)
 }
-# Breakpoints in (lo, hi) of the upper envelope of the lines b + s u (one respondent).
+# Breakpoints in (lo, hi) of the upper envelope of the lines b + s u (one respondent). The start is
+# the exact maximiser at lo (ties to the steepest line), with no absolute tie tolerance (Codex
+# re-review of 2bdf96a, item 5: a tolerance of 1e-12 on the unit scale treated the two lines of a
+# tiny swing, e.g. +/- 1e-14 (u - 0.3), as tied and dropped their kink). If rounding at lo picks a
+# line that is in fact just below a steeper one, that steeper line's crossing lies at or before lo,
+# so the first step below switches to it without a breakpoint.
 .rum_dec_envelope <- function(b, s, lo, hi) {
-  v <- b + s * lo; top <- which(v >= max(v) - 1e-12 * max(1, abs(max(v))))
+  v <- b + s * lo; top <- which(v == max(v))
   cur <- top[which.max(s[top])]; u0 <- lo; out <- numeric(0)
   repeat {
     up <- which(s > s[cur]); if (!length(up)) break
@@ -629,9 +634,16 @@
 # up to max_refine times (a warning if a task still differs). Returns per task (N rows): E0 = E[psi],
 # Ec = E[psi_c], Ect = E[psi_c t], Ecw = E[psi_c w], Ecc = E[psi_cc] (need2), and per task and pair
 # (N x P): ES = E[psi_S 1{p*}], ESt = E[psi_S t 1{p*}], ESw = E[psi_S w 1{p*}], p* the maximising pair.
-.rum_dec_line <- function(b, s, owner, c0, r, sw, ctrl, need2 = FALSE) {
+# kinks (optional, length n): one more known breakpoint per respondent (NA for none), added to the
+# envelope's; a named swap passes its zero of the swing, -D0 / sf, so that its kink is split whatever
+# the swing's scale (Codex re-review of 2bdf96a, item 5).
+.rum_dec_line <- function(b, s, owner, c0, r, sw, ctrl, need2 = FALSE, kinks = NULL) {
   n <- nrow(b); P <- ncol(b); N <- length(owner); U <- ctrl$u_max
-  kn <- lapply(seq_len(n), function(i) { k <- .rum_dec_envelope(b[i, ], s, -U, U); k[k > -U & k < U] })
+  kn <- lapply(seq_len(n), function(i) {
+    k <- .rum_dec_envelope(b[i, ], s, -U, U)
+    if (!is.null(kinks) && is.finite(kinks[i])) { k <- sort(c(k, kinks[i])); k <- k[c(TRUE, diff(k) > 1e-12)] }
+    k[k > -U & k < U]
+  })
   e <- lapply(kn, function(k) c(-U, k, U)); ns <- lengths(e) - 1L
   sr <- rep.int(seq_len(n), ns)
   slo <- unlist(lapply(e, function(x) x[-length(x)]), use.names = FALSE)
@@ -775,7 +787,10 @@
   owner <- lay$owner; Tn <- lay$Tn
   Xt <- lay$X; Xt[, sp$cols] <- 0
   c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; c1 <- drop(Xt %*% lam)
-  A <- .rum_dec_line(mu %*% t(sp$Dl), drop(sp$Dl %*% lam), owner, c0, c1, rep(sv, length(owner)), ctrl, need2)
+  b <- mu %*% t(sp$Dl); s <- drop(sp$Dl %*% lam)
+  # a named swap: split at the swing's zero -b1 / s1 whenever s1 != 0 (Codex re-review, item 5)
+  kz <- if (sp$type == "swap" && s[1L] != 0) -b[, 1L] / s[1L] else NULL
+  A <- .rum_dec_line(b, s, owner, c0, c1, rep(sv, length(owner)), ctrl, need2, kinks = kz)
   rs <- function(x) rowsum(x, owner, reorder = TRUE) / Tn
   list(m = drop(rs(A$E0)), gm = unname(rs(A$Ec * Xt + A$ES %*% sp$Dl)),
        gl = unname(rs(A$Ect * Xt + A$ESt %*% sp$Dl)), gs = drop(rs(A$Ec)),
@@ -831,7 +846,9 @@
   # orthogonal to the swap direction is formed directly (no cancellation in |H|^2 - r^2)
   w1 <- if (sf > 0) f / sf else numeric(q); rr <- drop(H %*% w1)
   Hp <- H - outer(rr, w1); sp2 <- sqrt(rowSums(Hp^2)); sw <- sqrt(sp2^2 + sv^2)
-  A <- .rum_dec_line(cbind(D0, -D0), c(sf, -sf), owner, c0, rr, sw, ctrl, need2)
+  # split at the swing's zero -D0 / sf whenever sf > 0 (Codex re-review of 2bdf96a, item 5)
+  A <- .rum_dec_line(cbind(D0, -D0), c(sf, -sf), owner, c0, rr, sw, ctrl, need2,
+                     kinks = if (sf > 0) -D0 / sf else NULL)
   # E[k z2] = (sp2 / sw) E[k w] (w the combined normal), so E[k u] = w1 E[k z1] + (Hp / sw) E[k w]
   Dl2 <- rbind(del, -del); Wt <- Hp / ifelse(sw > 0, sw, 1)
   rs <- function(x) rowsum(x, owner, reorder = TRUE) / Tn

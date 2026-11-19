@@ -486,3 +486,49 @@ test_that("Codex finding 3: side = fitted integrates the side term with the cont
     }
   }
 })
+
+test_that("Codex re-review item 5: a tiny swing's kink away from 0 is split (named swaps and the envelope)", {
+  # the Codex trigger: one respondent, zero task context, binary group column 1, named swap (2, 1),
+  # mu = (-3e-15, 0), Lambda = diag(1e-14, 1), side zero. The swing is |1e-14 (z1 - 0.3)| and psi = 2 G(S) - 1.
+  # Closed forms (S -> 0, so psi_S = 1/2): m = 0.5e-14 E|z1 - 0.3|; dm/dmu1 = (1 - 2 Phi(0.3)) / 2;
+  # dm/dLambda11 = E[sign(z1 - 0.3) z1] / 2 = phi(0.3); every other derivative 0.
+  # (2bdf96a: dm/dmu1 = 0 and dm/dLambda11 = 0.3989423 = phi(0): the kink at 0.3 was not split.)
+  a <- .3; ea <- 2 * stats::dnorm(a) + a * (2 * stats::pnorm(a) - 1)
+  TS <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 0)), list(a = 1L), pairs = list(a = c(2, 1)), best_worst = FALSE)
+  g <- TS[[1]]$grad(matrix(c(-3e-15, 0), 1), list(kappa = 0, omega = 0, loading = diag(c(1e-14, 1))))
+  expect_lt(abs(g$m - .5e-14 * ea), 1e-16)                            # rounding of 2 G(S) - 1 at S ~ 1e-14
+  expect_lt(abs(g$gm[1, 1] - (1 - 2 * stats::pnorm(a)) / 2), 1e-12)
+  expect_lt(abs(g$gt[1, 2] - stats::dnorm(a)), 1e-12)
+  expect_lt(max(abs(g$gm[1, 2]), abs(g$gt[1, -2])), 1e-12)
+  # with context, task (0, 1), mu2 = 0.5: c = 0.5 + z2 independent of z1 (q = 2), so psi_S = 2 g(c) and
+  # dm/dmu1 = E[2 g(c)] (1 - 2 Phi(0.3)), dm/dLambda11 = E[2 g(c)] 2 phi(0.3), dm/dLambda12 (attribute 1 on
+  # factor 2) = E[2 g(c) z2] (1 - 2 Phi(0.3)); the expectations in z2 by integrate()
+  e2g <- stats::integrate(function(z) 2 * stats::dlogis(.5 + z) * stats::dnorm(z), -Inf, Inf, rel.tol = 1e-12)$value
+  e2gz <- stats::integrate(function(z) 2 * stats::dlogis(.5 + z) * stats::dnorm(z) * z, -Inf, Inf, rel.tol = 1e-12)$value
+  mu <- matrix(c(-3e-15, .5), 1); thq2 <- list(kappa = 0, omega = 0, loading = diag(c(1e-14, 1)))
+  TS2 <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)), best_worst = FALSE)
+  g <- TS2[[1]]$grad(mu, thq2)
+  expect_lt(abs(g$gm[1, 1] - e2g * (1 - 2 * stats::pnorm(a))), 1e-9)
+  expect_lt(abs(g$gt[1, 2] - e2g * 2 * stats::dnorm(a)), 1e-9)
+  expect_lt(abs(g$gt[1, 4] - e2gz * (1 - 2 * stats::pnorm(a))), 1e-9)
+  expect_lt(max(abs(g$gm[1, 2]), abs(g$gt[1, c(3, 5)])), 1e-12)      # O(S) terms
+  # q = 1, loading (1e-14, 1): D = -3e-15 + 1e-14 u and c = 0.5 + u share u. dm/dmu1 = E[2 g(c) sign(u - 0.3)],
+  # dm/dlambda1 = E[2 g(c) sign(u - 0.3) u], by integrate() split at 0.3. Both the named swap (explicit
+  # split) and best-worst of the binary group (the same two lines; the envelope alone) are checked.
+  ig <- function(f) stats::integrate(f, -Inf, a, rel.tol = 1e-12)$value + stats::integrate(f, a, Inf, rel.tol = 1e-12)$value
+  h <- function(u) 2 * stats::dlogis(.5 + u) * stats::dnorm(u) * sign(u - a)
+  r_mu <- ig(h); r_l <- ig(function(u) h(u) * u)
+  th1 <- list(kappa = 0, omega = 0, loading = c(1e-14, 1))
+  TB <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)))
+  for (k in 1:2) {                                                    # best-worst, named swap
+    g <- TB[[k]]$grad(mu, th1)
+    expect_lt(abs(g$gm[1, 1] - r_mu), 1e-9); expect_lt(abs(g$gt[1, 2] - r_l), 1e-9)
+    expect_lt(max(abs(g$gm[1, 2]), abs(g$gt[1, 3])), 1e-12)
+  }
+  # the envelope is scale-free: the same breakpoints for lines scaled by 1e-14 ... 1e3 (no absolute tie tolerance)
+  env <- rinf(".rum_dec_envelope")
+  expect_lt(abs(env(c(-3e-15, 3e-15), c(1e-14, -1e-14), -9, 9) - a), 1e-12)
+  set.seed(51); bb <- stats::rnorm(6); ss <- stats::rnorm(6); k1 <- env(bb, ss, -9, 9)
+  expect_gt(length(k1), 0L)
+  for (sc in c(1e-14, 1e-8, 1e3)) expect_lt(max(abs(env(sc * bb, sc * ss, -9, 9) - k1)), 1e-12)
+})
