@@ -546,3 +546,38 @@ test_that("Codex re-review item 6: the control helper keeps the positional order
   expect_identical(ctl(.5, 24L, 8, 40L, 40L, 3, 11L, "rqmc", rq, 1:2, 1e-8, 3L)[c("ladder", "tol", "max_refine")],
                    list(ladder = 1:2, tol = 1e-8, max_refine = 3L))
 })
+
+test_that("Codex re-review item 7: the adaptive rule's cap path warns and returns the latest estimate", {
+  ctl <- rinf(".rum_dec_control"); line <- rinf(".rum_dec_line")
+  # two tasks (one each of two respondents), zero task context except a mild slope r = 0.15 for task 1.
+  # Task 1: swing |0.3 u| (kink at 0, a grid point; no ladder at widths 1 or 0.25). Task 2: swing 1000,
+  # psi = 1 exactly. With 4 and 2 Gauss-Legendre nodes, task 2 meets tol = 1e-9 after one halving and
+  # task 1 does not after two.
+  b <- cbind(c(0, 1000), -c(0, 1000)); s <- c(.3, -.3)
+  L <- function(own, cl, i = own) line(b[i, , drop = FALSE], s, seq_along(own), numeric(length(own)), c(.15, 0)[i],
+                                     numeric(length(own)), cl)
+  expect_warning(A <- L(1:2, ctl(n_gl = 4L, tol = 1e-9, max_refine = 2L)),
+                 "1 task\\(s\\) did not reach the integration tolerance 1e-09 after 2 refinements")
+  expect_identical(A$refinements, 2L)
+  for (x in A[c("E0", "Ec", "Ect", "Ecw", "Ecc", "ES", "ESt", "ESw")]) expect_true(all(is.finite(x)))
+  # task 1 returns the latest high-order estimate: the 4-node rule on the width-1 panels halved twice,
+  # i.e. on width-0.25 panels (no check)
+  B <- L(1L, ctl(width = .25, n_gl = 4L, tol = Inf))
+  for (k in c("E0", "Ec", "Ect", "Ecw", "ES", "ESt", "ESw"))
+    expect_lt(max(abs(as.matrix(A[[k]])[1, ] - as.matrix(B[[k]])[1, ])), 1e-15)
+  # task 2, done after one halving, keeps that result: the same as task 2 alone (which stops there)
+  C <- L(2L, ctl(n_gl = 4L, tol = 1e-9, max_refine = 2L))
+  expect_identical(C$refinements, 1L)
+  for (k in c("E0", "Ec", "Ect", "Ecw", "ES", "ESt", "ESw"))
+    expect_lt(max(abs(as.matrix(A[[k]])[2, ] - as.matrix(C[[k]])[1, ])), 1e-15)
+  # with room to refine, no warning, and the default rule is within 1e-9 of the capped estimate's limit
+  expect_silent(D <- L(1:2, ctl(n_gl = 4L, tol = 1e-9, max_refine = 8L)))
+  expect_lt(max(abs(D$E0 - L(1:2, ctl())$E0)), 1e-9)
+  # through the target: the warning reaches the caller and the value is returned
+  TG <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)),
+          control = ctl(n_gl = 4L, tol = 1e-12, max_refine = 0L))
+  th <- list(kappa = 0, omega = 0, loading = c(.3, .15))
+  expect_warning(g <- TG[[1]]$grad(matrix(c(0, 0), 1), th), "did not reach the integration tolerance")
+  expect_true(is.finite(g$m) && all(is.finite(g$gm)) && all(is.finite(g$gt)))
+  expect_lt(abs(g$m - rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L))[[1]]$m(matrix(c(0, 0), 1), th)), 1e-6)
+})
