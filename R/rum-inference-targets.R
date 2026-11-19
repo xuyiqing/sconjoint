@@ -750,16 +750,18 @@
   Xt <- lay$X; Xt[, sp$cols] <- 0; del <- sp$Dl[1L, ]
   c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; H <- Xt %*% Lam
   f <- drop(crossprod(Lam, del)); sf <- sqrt(sum(f^2)); D0 <- drop(mu %*% del)
-  hh <- rowSums(H^2); tiny <- 1e-12 * max(1, sqrt(max(hh)), sf)
-  if (sf > tiny) {
-    rr <- drop(H %*% f) / sf; sp2 <- sqrt(pmax(hh - rr^2, 0)); w1 <- f / sf
+  # no relative thresholds (Codex finding 1): D moves with u whenever sf > 0, and the context's part
+  # orthogonal to the swap direction is formed directly (no cancellation in hh - rr^2)
+  if (sf > 0) {
+    w1 <- f / sf; rr <- drop(H %*% w1)
     nd <- .rum_dec_nodes(as.list(-D0 / sf), ctrl)
   } else {                                   # D does not move with u: no z1 integral
-    rr <- numeric(N); sp2 <- sqrt(hh); w1 <- numeric(q)
+    w1 <- numeric(q); rr <- numeric(N)
     nd <- list(resp = seq_len(n), x = numeric(n), w = rep(1, n))
   }
-  W2 <- matrix(0, N, q); ok2 <- sp2 > tiny
-  W2[ok2, ] <- (H[ok2, , drop = FALSE] - outer(rr[ok2], if (sf > tiny) f / sf else numeric(q))) / sp2[ok2]
+  Hp <- H - outer(rr, w1); sp2 <- sqrt(rowSums(Hp^2))
+  W2 <- matrix(0, N, q); ok2 <- sp2 > 0
+  W2[ok2, ] <- Hp[ok2, , drop = FALSE] / sp2[ok2]
   rz <- .rum_normal_rule(ctrl$n_gh); rz <- list(x = rz$nodes, w = rz$weights); re <- .rum_logis_rule(ctrl$n_lg)
   K <- tabulate(nd$resp, n); st <- c(0L, cumsum(K))[seq_len(n)]
   te <- rep.int(seq_len(N), K[owner]); ne <- sequence(K[owner], from = st[owner] + 1L)
@@ -790,15 +792,24 @@
   gss <- if (need2) drop(rowsum(acc[, 8L], owner, reorder = TRUE)) / Tn else NULL
   list(m = m, gm = unname(gm), gl = unname(gl), gs = gs, gss = gss)
 }
+# Integration axes of the decisiveness RQMC: Lambda's canonical axes (.rum_canonical_axes), keeping
+# every axis of nonzero length. .rum_imp_axes (importance) drops axes shorter than a relative
+# threshold, which here would drop a small but nonzero swing (Codex review of 23cfc1c, finding 1).
+# An axis of length exactly 0 leaves the integrand unchanged along it, so dropping it changes neither
+# the value nor the gradient (E[(d psi / d b) z_k] = 0 when psi does not depend on z_k).
+.rum_dec_axes <- function(Lam) {
+  ax <- .rum_canonical_axes(Lam); C <- Lam %*% ax$V; keep <- which(colSums(C^2) > 0)
+  list(V = ax$V, keep = keep, C = C[, keep, drop = FALSE])
+}
 # q > 1, best-worst (or a named swap by request): randomised QMC with convergence control on the
-# canonical axes, the scheme of .rum_imp_sums_rqmc. Returns m, gm, gl, gs, gss, se, n_points.
+# canonical axes (.rum_dec_axes), the scheme of .rum_imp_sums_rqmc. Returns m, gm, gl, gs, gss, se, n_points.
 # V (tests only): hold the integration axes fixed at V (q x q, full rank) instead of Lambda's canonical
 # axes, so that a finite difference in Lambda does not also rotate the draws.
 .rum_dec_rqmc <- function(mu, Lam, sp, lay, shift, ctrl, need2 = FALSE, V = NULL) {
   n <- lay$n; p <- lay$p; nf <- ncol(Lam); owner <- lay$owner; Tn <- lay$Tn; N <- length(owner)
   control <- ctrl$rqmc; Xt <- lay$X; Xt[, sp$cols] <- 0
   c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; b <- mu %*% t(sp$Dl); nP <- nrow(sp$Dl)
-  ax <- if (is.null(V)) .rum_imp_axes(Lam) else list(V = V, keep = seq_len(ncol(V)), C = Lam %*% V)
+  ax <- if (is.null(V)) .rum_dec_axes(Lam) else list(V = V, keep = seq_len(ncol(V)), C = Lam %*% V)
   r <- length(ax$keep)
   if (!r) {                                  # Lambda = 0: no integral
     pr <- max.col(b, ties.method = "first"); S <- b[cbind(seq_len(n), pr)]

@@ -315,3 +315,41 @@ test_that("Codex finding 4: a one-level attribute is a constant-zero target with
   expect_error(rinf(".rum_tgt_decisiveness_set")(dec_one(c(1, 1)), list(a = 1L), menus = list(a = matrix(0, 1, 1)),
                  pairs = list(a = c(1, 2))), "two different levels")
 })
+
+test_that("Codex finding 1: a small nonzero loading axis is kept (values and gradients)", {
+  gh <- rinf(".rum_normal_rule")(80L)
+  zf <- seq(-12, 12, length.out = 240001L); wf <- stats::dnorm(zf) * (zf[2] - zf[1])
+  # RQMC at a fixed 32,768 points per scrambling, so that its error is far below the tolerances
+  ctl <- rinf(".rum_dec_control")(rqmc = rinf(".rum_imp_control")(n_start = 32768L, n_max = 32768L))
+  # the Codex trigger: best-worst, mu = 0, Lambda = diag(1e-4, 1), binary group column 1, zero context.
+  # m = E[2 G(1e-4 |z1|) - 1]; dm/dmu1 = 0 (symmetry); dm/dLambda11 = E[2 g(1e-4 |z1|) |z1|]
+  TG <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 0)), list(a = 1L), control = ctl)
+  g <- TG[[1]]$grad(matrix(0, 1, 2), list(kappa = 0, omega = 0, loading = diag(c(1e-4, 1))))
+  ref_m <- sum(wf * (2 * stats::plogis(1e-4 * abs(zf)) - 1)); ref_l <- sum(wf * 2 * stats::dlogis(1e-4 * abs(zf)) * abs(zf))
+  expect_lt(abs(g$m - ref_m), 1e-4 * ref_m)                           # 23cfc1c: 0 (ref 3.99e-5)
+  expect_lt(abs(g$gm[1, 1]), 1e-9)                                    # 23cfc1c: 0.5
+  expect_lt(abs(g$gt[1, 2] - ref_l), 1e-4 * ref_l)                    # 23cfc1c: 0 (ref 0.399)
+  # with context (mu = (0, 0.3), task (0, 1)): a two-dimensional reference (fine grid x Gauss-Hermite);
+  # the swing l1 |z1| is first order in l1, so dropping the axis would give 0 and a zero gradient
+  ref2 <- function(l1) { S <- abs(l1 * zf)
+    sum(vapply(seq_along(gh$nodes), function(k) gh$weights[k] *
+      sum(wf * (stats::plogis(.3 + gh$nodes[k] + S) - stats::plogis(.3 + gh$nodes[k] - S))), 0)) }
+  TG <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)), control = ctl)
+  for (l1 in c(1e-4, 1e-7)) {
+    th <- list(kappa = 0, omega = 0, loading = diag(c(l1, 1))); mu <- matrix(c(0, .3), 1)
+    r0 <- ref2(l1); rl <- (ref2(l1 * 1.01) - ref2(l1 * .99)) / (.02 * l1)
+    for (k in 1:2) {                                                    # best-worst (RQMC), named swap (2-D)
+      g <- TG[[k]]$grad(mu, th); tl <- if (k == 1L) 1e-4 else 1e-7
+      expect_lt(abs(g$m - r0), tl * r0); expect_lt(abs(g$gt[1, 2] - rl), tl * rl)
+    }
+  }
+  # the named swap at a near-zero swing direction with D0 = 0: dm/dLambda11 = E[2 g(c) |z1|] (23cfc1c: 0)
+  TS <- rinf(".rum_tgt_decisiveness_set")(dec_one(c(0, 1)), list(a = 1L), pairs = list(a = c(2, 1)), best_worst = FALSE)
+  g <- TS[[1]]$grad(matrix(c(0, .3), 1), list(kappa = 0, omega = 0, loading = diag(c(1e-13, 1))))
+  ref <- 2 * sqrt(2 / pi) * sum(gh$weights * stats::dlogis(.3 + gh$nodes))
+  expect_lt(abs(g$gt[1, 2] - ref), 1e-8)
+  # the decisiveness axes keep every nonzero axis; the importance axes are unchanged
+  expect_identical(rinf(".rum_dec_axes")(diag(c(1e-4, 1)))$keep, 1:2)
+  expect_identical(length(rinf(".rum_imp_axes")(diag(c(1e-4, 1)))$keep), 1L)
+  expect_identical(rinf(".rum_dec_axes")(cbind(c(1, 2), 0))$keep, 1L)
+})
