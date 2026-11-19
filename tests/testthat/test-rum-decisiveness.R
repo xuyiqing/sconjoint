@@ -532,3 +532,17 @@ test_that("Codex re-review item 5: a tiny swing's kink away from 0 is split (nam
   expect_gt(length(k1), 0L)
   for (sc in c(1e-14, 1e-8, 1e3)) expect_lt(max(abs(env(sc * bb, sc * ss, -9, 9) - k1)), 1e-12)
 })
+
+test_that("Codex re-review item 6: the control helper keeps the positional order of 23cfc1c", {
+  ctl <- rinf(".rum_dec_control")
+  # 23cfc1c: (width, n_gl, u_max, n_gh, n_lg, s_switch, n_v, swap, rqmc); new arguments come after
+  expect_identical(names(formals(ctl))[1:9],
+                   c("width", "n_gl", "u_max", "n_gh", "n_lg", "s_switch", "n_v", "swap", "rqmc"))
+  rq <- rinf(".rum_imp_control")(tol = 2e-5)
+  a <- ctl(.5, 24L, 8, 40L, 40L, 3, 11L, "rqmc", rq)
+  b <- ctl(width = .5, n_gl = 24L, u_max = 8, n_gh = 40L, n_lg = 40L, s_switch = 3, n_v = 11L, swap = "rqmc", rqmc = rq)
+  expect_identical(a, b)
+  expect_identical(a[c("ladder", "tol", "max_refine")], ctl()[c("ladder", "tol", "max_refine")])
+  expect_identical(ctl(.5, 24L, 8, 40L, 40L, 3, 11L, "rqmc", rq, 1:2, 1e-8, 3L)[c("ladder", "tol", "max_refine")],
+                   list(ladder = 1:2, tol = 1e-8, max_refine = 3L))
+})

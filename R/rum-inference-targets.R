@@ -586,10 +586,11 @@
 #   dm/domega = E[psi_cc] / 2 (Stein's identity) at every omega.
 # The kind "decisiveness" is not in .rum_bounded_kinds (that waits for the coverage check, Stage D3).
 .rum_dec_control <- function(width = 1, n_gl = 16L, u_max = 9, n_gh = 48L, n_lg = 48L, s_switch = 2,
-                             ladder = c(.5, 1, 2, 4, 8, 16, 32), tol = 1e-9, max_refine = 8L,
-                             n_v = 21L, swap = c("2d", "rqmc"), rqmc = .rum_imp_control())
+                             n_v = 21L, swap = c("2d", "rqmc"), rqmc = .rum_imp_control(),
+                             ladder = c(.5, 1, 2, 4, 8, 16, 32), tol = 1e-9, max_refine = 8L)
   # n_v: unused since the fix round (the side term is no longer integrated by its own node rule); kept
-  # so that existing calls still run
+  # so that existing calls still run. The arguments of 23cfc1c keep their positions; those added in
+  # the fix round (ladder, tol, max_refine) come after them (Codex re-review of 2bdf96a, item 6).
   list(width = width, n_gl = as.integer(n_gl), u_max = u_max, n_gh = as.integer(n_gh), n_lg = as.integer(n_lg),
        s_switch = s_switch, ladder = ladder, tol = tol, max_refine = as.integer(max_refine),
        n_v = as.integer(n_v), swap = match.arg(swap), rqmc = rqmc)
