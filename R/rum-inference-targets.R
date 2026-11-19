@@ -553,7 +553,9 @@
 # levels when at least one is TRUE: Jens's GS governance rule with TRUE for the baseline and the
 # generic levels), or a symmetric L x L logical matrix. pairs: per group a two-column matrix (or a
 # length-2 vector) of levels (j, k); each row adds a named-swap target. best_worst: add the best-worst
-# target of every group.
+# target of every group. A group whose menu has one level has swing 0 for every taste: its best-worst
+# target is the constant 0 with zero gradient (const0); a multilevel menu whose restrictions leave no
+# allowed pair is an error.
 # Integration. Every integrand is smooth except where the maximising level pair changes (the swing's
 # kinks; for a named swap, D = 0). q = 1: a one-dimensional composite Gauss-Legendre rule in u on
 # [-u_max, u_max], panels of length `width` split at each respondent's kinks (the breakpoints of the
@@ -648,8 +650,13 @@
     }
     if (best_worst) {
       P <- which(ok, arr.ind = TRUE); P <- P[order(P[, 2L], P[, 1L]), , drop = FALSE]; colnames(P) <- c("hi", "lo")
-      if (!nrow(P)) stop(sprintf("decisiveness: group %s has no allowed level pair", gn[g]))
-      specs[[length(specs) + 1L]] <- mk(P, "best_worst", paste0("decisiveness: ", gn[g]))
+      if (L == 1L) {                          # one level: max(a) - min(a) = 0, a constant-zero target
+        s0 <- mk(P, "best_worst", paste0("decisiveness: ", gn[g])); s0$const0 <- TRUE
+        specs[[length(specs) + 1L]] <- s0
+      } else {
+        if (!nrow(P)) stop(sprintf("decisiveness: group %s has no allowed level pair", gn[g]))
+        specs[[length(specs) + 1L]] <- mk(P, "best_worst", paste0("decisiveness: ", gn[g]))
+      }
     }
     pr <- if (is.null(pairs)) NULL else if (!is.null(base::names(pairs))) pairs[[gn[g]]] else pairs[[g]]
     if (!is.null(pr)) {
@@ -865,6 +872,12 @@
 .rum_dec_eval <- function(sp, mu, th, lay, side, ctrl) {
   multi <- .rum_multi_fac(th$loading)
   lam <- if (multi) th$loading else as.vector(th$loading)
+  if (isTRUE(sp$const0)) {                   # one-level attribute: value and every derivative are 0
+    n <- lay$n; q <- if (multi) ncol(lam) else 1L
+    out <- list(m = numeric(n), gm = matrix(0, n, lay$p), gt = matrix(0, n, lay$p * q + 2L))
+    if (multi) attr(out, "se") <- numeric(n)
+    return(out)
+  }
   fn <- if (!multi) .rum_dec_q1 else if (sp$type == "swap" && ctrl$swap == "2d") .rum_dec_swap2 else .rum_dec_rqmc
   if (side == "zero") {
     e <- fn(mu, lam, sp, lay, 0, ctrl)

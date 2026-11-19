@@ -287,3 +287,31 @@ test_that("decisiveness targets run through the one-step (finite estimates and S
   expect_true(all(r$plug > 0 & r$plug < 1))
   expect_true(all(r$kind == "decisiveness"))
 })
+
+# ---- fix round on the Codex review of 23cfc1c (report/codex_d1.md), one block per finding ----
+dec_one <- function(x) list(d = matrix(x, 1L), offsets = c(0L, 1L), T = 1L, n = 1L, p = length(x), ids = "r1")
+
+test_that("Codex finding 4: a one-level attribute is a constant-zero target with zero gradient", {
+  # the Codex trigger: a valid one-row menu with best_worst = TRUE (crashed at 23cfc1c)
+  mk <- function(L) rinf(".rum_tgt_decisiveness_set")(dec_one(c(1, 1)), list(a = 1L, b = 2L),
+                                                        menus = list(a = matrix(0, 1, 1), b = NULL))
+  TG <- mk()
+  expect_identical(vapply(TG, `[[`, "", "name"), c("decisiveness: a", "decisiveness: b"))
+  for (lo in list(c(.5, .4), cbind(c(.5, .4), c(-.2, .3)))) {
+    th <- list(kappa = .1, omega = .2, loading = lo); g <- TG[[1]]$grad(matrix(c(.3, .2), 1), th)
+    q <- NCOL(lo)
+    expect_identical(g$m, 0); expect_identical(g$gm, matrix(0, 1, 2)); expect_identical(g$gt, matrix(0, 1, 2 * q + 2))
+    expect_gt(TG[[2]]$m(matrix(c(.3, .2), 1), th), 0)                  # the other group is unaffected
+  }
+  # the same at several respondents, through the simulated design (a one-level rev menu)
+  X <- dec_setup(1L, seed = 31L); mn <- X$menus; mn$rev <- matrix(c(.2, -.1, .4), 1)
+  T1 <- rinf(".rum_tgt_decisiveness_set")(X$data, dec_groups, menus = mn, side = "fitted")
+  g <- T1[[3]]$grad(X$mu, X$th)
+  expect_identical(g$m, numeric(X$n)); expect_true(all(g$gm == 0) && all(g$gt == 0))
+  # genuinely invalid restrictions on a multilevel menu still fail
+  expect_error(rinf(".rum_tgt_decisiveness_set")(X$data, dec_groups, menus = X$menus,
+                 allowed = list(rate = NULL, dummy = rep(FALSE, 4), rev = NULL)), "no allowed level pair")
+  # a named swap needs two different levels of a one-level menu: still an error
+  expect_error(rinf(".rum_tgt_decisiveness_set")(dec_one(c(1, 1)), list(a = 1L), menus = list(a = matrix(0, 1, 1)),
+                 pairs = list(a = c(1, 2))), "two different levels")
+})
