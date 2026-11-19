@@ -531,3 +531,383 @@
   nm <- rep(name, length(groups))
   .rum_tgt_importance_set(groups, centred, nm, w, uq, order_multi, wmin, control)[[g]]
 }
+
+# ---- decisiveness (APNS / MAPNS) -------------------------------------------------------------
+# Model-implied decisiveness of an attribute group g (decisiveness build plan, 2026-11-16; Stage D1).
+# For respondent i with taste b = mu_i + Lambda u (u ~ N(0, I_q)) and recorded task t (row x_t of
+# data$d, profile 1 minus profile 2), the context is c_t(b) = x~_t' b, x~_t = x_t with the group's
+# columns set to 0 (the other attributes as recorded; for BR a rate swap leaves the displayed revenue
+# as recorded, since revenue is its own group), and the level utilities are a_l(b) = A_l' b_g over the
+# group's menu A (L levels x |g| columns; default the baseline plus one dummy per column). Then
+#   named swap (APNS, levels j vs k):  m_i = (1/T_i) sum_t E_u[ G(c_t + |D|) - G(c_t - |D|) ],
+#                                      D = a_j(b) - a_k(b);
+#   best-worst (MAPNS):                the same with |D| replaced by S = max over allowed ordered level
+#                                      pairs (j, k) of a_j(b) - a_k(b), found within each taste draw
+#                                      (without restrictions, the best minus the worst level),
+# G the logistic cdf. The task shock is held fixed across the swap, so G(c + S) - G(c - S) is the
+# probability that the swap flips the choice. Respondents are weighted equally after averaging over
+# their own tasks (the engine's mean over m_i). Position terms: side = "zero" leaves kappa and the side
+# preference out of the context (Jens's convention, decision E2); side = "fitted" adds
+# kappa + sqrt(omega) v, v ~ N(0, 1), integrated by a Gauss-Hermite rule of n_v nodes.
+# allowed: per group NULL (any two levels), a logical vector over the levels (a swap may pair two
+# levels when at least one is TRUE: Jens's GS governance rule with TRUE for the baseline and the
+# generic levels), or a symmetric L x L logical matrix. pairs: per group a two-column matrix (or a
+# length-2 vector) of levels (j, k); each row adds a named-swap target. best_worst: add the best-worst
+# target of every group.
+# Integration. Every integrand is smooth except where the maximising level pair changes (the swing's
+# kinks; for a named swap, D = 0). q = 1: a one-dimensional composite Gauss-Legendre rule in u on
+# [-u_max, u_max], panels of length `width` split at each respondent's kinks (the breakpoints of the
+# upper envelope of the lines a_j - a_k in u), n_gl nodes per panel, weights dnorm(u). q > 1, named
+# swap: (c_t, D) is bivariate normal; D = D0 + s_D z1 with the same composite rule in z1 (split at
+# D = 0) and c_t = c0 + r_t z1 + s_t z2 with a Gauss-Hermite rule of n_gh nodes in z2 (no kink in
+# that direction; where s_t > s_switch the logistic is steep in z2 and the c-integrals are taken over
+# the logistic shock with a logistic-weight Gauss rule of n_lg nodes instead, .rum_dec_inner). Values
+# depend on Lambda only through Lambda' x~_t and Lambda' (A_j - A_k), so they
+# are the same for every rotation of Lambda. q > 1, best-worst: randomised QMC with convergence
+# control, as the importance shares (.rum_imp_sums_rqmc: Owen-scrambled Sobol on the canonical axes,
+# mirrored, n_rep scramblings, doubling per respondent until the standard error is at most tol).
+# Exact gradients, pathwise in u (valid almost everywhere; the integral smooths the kinks):
+#   d psi = psi_c (x~_t' db) + psi_S (A_{j*} - A_{k*})' db_g,  psi_c = g(c + S) - g(c - S),
+#   psi_S = g(c + S) + g(c - S), (j*, k*) the maximising pair at the draw, db = dmu + dLambda u, so
+#   dm/dmu = E[d psi / d b] and dm/dLambda = E[(d psi / d b) u'] (q > 1 named swap: E[k u] =
+#   w1 E[k z1] + w2_t E[k z2] with z = W u, W's rows orthonormal; best-worst: on the canonical axes,
+#   mapped back with .rum_imp_gl). The loading block's rotation component is removed
+#   (.rum_rotation_project). side = "fitted": dm/dkappa = E[psi_c]; dm/domega = E[psi_c v] / (2
+#   sqrt(omega)), or E[psi_cc] / 2 (Stein) below .rum_omega_small.
+# The kind "decisiveness" is not in .rum_bounded_kinds (that waits for the coverage check, Stage D3).
+.rum_dec_control <- function(width = 1, n_gl = 16L, u_max = 9, n_gh = 48L, n_lg = 48L, s_switch = 2,
+                             n_v = 21L, swap = c("2d", "rqmc"), rqmc = .rum_imp_control())
+  list(width = width, n_gl = as.integer(n_gl), u_max = u_max, n_gh = as.integer(n_gh), n_lg = as.integer(n_lg),
+       s_switch = s_switch, n_v = as.integer(n_v), swap = match.arg(swap), rqmc = rqmc)
+# Gauss-Legendre rule on [-1, 1] (Golub-Welsch).
+.rum_gl_rule <- function(n) {
+  if (n == 1L) return(list(x = 0, w = 2))
+  k <- seq_len(n - 1L); b <- k / sqrt(4 * k^2 - 1)
+  J <- matrix(0, n, n); J[cbind(k, k + 1L)] <- b; J[cbind(k + 1L, k)] <- b
+  e <- eigen(J, symmetric = TRUE); o <- order(e$values)
+  list(x = e$values[o], w = 2 * e$vectors[1L, o]^2)
+}
+# Breakpoints in (lo, hi) of the upper envelope of the lines b + s u (one respondent).
+.rum_dec_envelope <- function(b, s, lo, hi) {
+  v <- b + s * lo; top <- which(v >= max(v) - 1e-12 * max(1, abs(max(v))))
+  cur <- top[which.max(s[top])]; u0 <- lo; out <- numeric(0)
+  repeat {
+    up <- which(s > s[cur]); if (!length(up)) break
+    x <- pmax((b[cur] - b[up]) / (s[up] - s[cur]), u0)
+    nx <- min(x); if (!(nx < hi)) break
+    cand <- up[x <= nx]; cur <- cand[which.max(s[cand])]
+    if (nx > u0) out <- c(out, nx)
+    u0 <- nx
+  }
+  out
+}
+# Composite Gauss-Legendre nodes in u for each respondent: panels of length width on [-u_max, u_max],
+# split at the respondent's breakpoints bp[[i]]. Returns node vectors (resp, x, w = GL weight x dnorm)
+# and panel vectors (resp, mid).
+.rum_dec_nodes <- function(bp, ctrl) {
+  U <- ctrl$u_max; g0 <- seq(-U, U, by = ctrl$width); if (g0[length(g0)] < U) g0 <- c(g0, U)
+  gl <- .rum_gl_rule(ctrl$n_gl); n <- length(bp)
+  ed <- lapply(seq_len(n), function(i) {
+    e <- sort(unique(c(g0, bp[[i]][bp[[i]] > -U & bp[[i]] < U])))
+    e[c(TRUE, diff(e) > 1e-12)]
+  })
+  np <- lengths(ed) - 1L
+  pr <- rep.int(seq_len(n), np)
+  pa <- unlist(lapply(ed, function(e) e[-length(e)])); pb <- unlist(lapply(ed, function(e) e[-1L]))
+  mid <- (pa + pb) / 2; half <- (pb - pa) / 2; G <- length(gl$x)
+  x <- rep(mid, each = G) + rep(half, each = G) * gl$x
+  w <- rep(half, each = G) * gl$w * stats::dnorm(x)
+  list(resp = rep(pr, each = G), x = x, w = w, panel = rep(seq_along(pr), each = G), p_resp = pr, p_mid = mid)
+}
+# Task layout of the data: rows of data$d by respondent, owner, T, and the context design per group.
+.rum_dec_layout <- function(data) {
+  n <- data$n; Tn <- as.integer(data$T)
+  if (any(Tn < 1L)) stop("decisiveness: every respondent needs at least one recorded task")
+  rows <- unlist(lapply(seq_len(n), function(i) data$offsets[i] + seq_len(Tn[i])))
+  list(n = n, p = data$p, Tn = Tn, owner = rep.int(seq_len(n), Tn), X = data$d[rows, , drop = FALSE])
+}
+# Specification of every target: group columns, menu, ordered level pairs P (hi, lo) and their
+# feature-space differences Dl (one row per pair, p columns).
+.rum_dec_specs <- function(p, groups, menus, pairs, allowed, best_worst, names) {
+  gn <- if (is.null(base::names(groups))) as.character(seq_along(groups)) else base::names(groups)
+  specs <- list()
+  for (g in seq_along(groups)) {
+    cc <- as.integer(groups[[g]])
+    A <- if (!is.null(menus) && !is.null(menus[[g]])) as.matrix(menus[[g]]) else rbind(0, diag(length(cc)))
+    if (ncol(A) != length(cc)) stop(sprintf("decisiveness: the menu of group %s needs %d columns", gn[g], length(cc)))
+    L <- nrow(A); lab <- if (!is.null(rownames(A))) rownames(A) else as.character(seq_len(L))
+    al <- if (is.null(allowed)) NULL else allowed[[g]]
+    ok <- if (is.null(al)) matrix(TRUE, L, L) else if (is.matrix(al)) {
+      if (!all(dim(al) == L)) stop("decisiveness: an allowed matrix must be L x L"); al | t(al)
+    } else { if (length(al) != L) stop("decisiveness: an allowed vector needs one entry per level")
+      outer(as.logical(al), as.logical(al), `|`) }
+    diag(ok) <- FALSE
+    mk <- function(P, type, name) {
+      Dl <- matrix(0, nrow(P), p); Dl[, cc] <- A[P[, 1L], , drop = FALSE] - A[P[, 2L], , drop = FALSE]
+      list(name = name, group = gn[g], cols = cc, menu = A, P = P, Dl = Dl, type = type)
+    }
+    if (best_worst) {
+      P <- which(ok, arr.ind = TRUE); P <- P[order(P[, 2L], P[, 1L]), , drop = FALSE]; colnames(P) <- c("hi", "lo")
+      if (!nrow(P)) stop(sprintf("decisiveness: group %s has no allowed level pair", gn[g]))
+      specs[[length(specs) + 1L]] <- mk(P, "best_worst", paste0("decisiveness: ", gn[g]))
+    }
+    pr <- if (is.null(pairs)) NULL else if (!is.null(base::names(pairs))) pairs[[gn[g]]] else pairs[[g]]
+    if (!is.null(pr)) {
+      pr <- matrix(as.integer(pr), ncol = 2L)
+      for (r in seq_len(nrow(pr))) {
+        j <- pr[r, 1L]; k <- pr[r, 2L]
+        if (j == k || min(j, k) < 1L || max(j, k) > L) stop("decisiveness: a named swap needs two different levels")
+        specs[[length(specs) + 1L]] <- mk(rbind(c(j, k), c(k, j)), "swap",
+                                          sprintf("decisiveness: %s %s vs %s", gn[g], lab[j], lab[k]))
+      }
+    }
+  }
+  if (!is.null(names)) {
+    if (length(names) != length(specs)) stop("decisiveness: names needs one entry per target")
+    for (s in seq_along(specs)) specs[[s]]$name <- names[s]
+  }
+  specs
+}
+# Flip terms at (c, S): psi, psi_c, psi_S (and psi_cc when need2).
+.rum_dec_psi <- function(c, S, need2 = FALSE) {
+  Gp <- stats::plogis(c + S); Gm <- stats::plogis(c - S); gp <- Gp * (1 - Gp); gm <- Gm * (1 - Gm)
+  out <- list(psi = Gp - Gm, pc = gp - gm, pS = gp + gm)
+  if (need2) out$pcc <- gp * (1 - 2 * Gp) - gm * (1 - 2 * Gm)
+  out
+}
+# q = 1, any spec: composite Gauss-Legendre in u. Returns m, gm (n x p), gl (n x p), gs = dm/dshift,
+# gss = d2m/dshift2 (need2).
+.rum_dec_q1 <- function(mu, lam, sp, lay, shift, ctrl, need2 = FALSE) {
+  n <- lay$n; p <- lay$p; owner <- lay$owner; Tn <- lay$Tn
+  Xt <- lay$X; Xt[, sp$cols] <- 0
+  c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; c1 <- drop(Xt %*% lam)
+  b <- mu %*% t(sp$Dl); s <- drop(sp$Dl %*% lam)
+  bp <- lapply(seq_len(n), function(i) .rum_dec_envelope(b[i, ], s, -ctrl$u_max, ctrl$u_max))
+  nd <- .rum_dec_nodes(bp, ctrl)
+  pv <- b[nd$p_resp, , drop = FALSE] + outer(nd$p_mid, s)          # panel x pair, at panel midpoints
+  ppair <- max.col(pv, ties.method = "first"); pair <- ppair[nd$panel]
+  Sk <- b[cbind(nd$resp, pair)] + s[pair] * nd$x                     # swing at each node
+  K <- tabulate(nd$resp, n); st <- c(0L, cumsum(K))[seq_len(n)]
+  te <- rep.int(seq_along(owner), K[owner]); ne <- sequence(K[owner], from = st[owner] + 1L)
+  ps <- .rum_dec_psi(c0[te] + c1[te] * nd$x[ne], Sk[ne], need2)
+  w <- nd$w[ne]; oe <- owner[te]; u <- nd$x[ne]
+  m <- drop(rowsum(ps$psi * w, oe, reorder = TRUE)) / Tn
+  Ec <- drop(rowsum(ps$pc * w, te, reorder = TRUE)); Ecu <- drop(rowsum(ps$pc * w * u, te, reorder = TRUE))
+  om <- drop(rowsum(ps$pS * w, ne, reorder = TRUE)) / Tn[nd$resp]   # per node: sum_t psi_S w / T
+  Dk <- sp$Dl[pair, , drop = FALSE]
+  gm <- rowsum(Ec * Xt, owner, reorder = TRUE) / Tn + rowsum(om * Dk, nd$resp, reorder = TRUE)
+  gl <- rowsum(Ecu * Xt, owner, reorder = TRUE) / Tn + rowsum((om * nd$x) * Dk, nd$resp, reorder = TRUE)
+  gs <- drop(rowsum(Ec, owner, reorder = TRUE)) / Tn
+  gss <- if (need2) drop(rowsum(ps$pcc * w, oe, reorder = TRUE)) / Tn else NULL
+  list(m = m, gm = unname(gm), gl = unname(gl), gs = gs, gss = gss)
+}
+# Gauss rule for the logistic density (n nodes), by the discretised Stieltjes procedure on a trapezoid
+# grid of M points on [-L, L] (the grid integrates the rule's polynomials to rounding).
+.rum_logis_rule <- function(n, M = 40001L, L = 60) {
+  x <- seq(-L, L, length.out = M); w <- stats::dlogis(x); w <- w / sum(w)
+  a <- b <- numeric(n); p0 <- rep(0, M); p1 <- rep(1, M); nrm0 <- 1
+  for (k in seq_len(n)) {
+    nrm <- sum(w * p1^2); a[k] <- sum(w * x * p1^2) / nrm; b[k] <- if (k == 1L) 1 else nrm / nrm0
+    p2 <- (x - a[k]) * p1 - (if (k == 1L) 0 else b[k]) * p0
+    sc <- sqrt(sum(w * p2^2)); p0 <- p1 / sc; p1 <- p2 / sc; nrm0 <- nrm / sc^2
+  }
+  J <- diag(a, n); if (n > 1L) { k <- seq_len(n - 1L); J[cbind(k, k + 1L)] <- J[cbind(k + 1L, k)] <- sqrt(b[k + 1L]) }
+  e <- eigen(J, symmetric = TRUE); o <- order(e$values)
+  list(x = e$values[o], w = e$vectors[1L, o]^2)
+}
+# The c-direction integrals of the named swap, z ~ N(0, 1), for vectors a and s >= 0:
+#   I0 = E[G(a + s z)], I1 = E[g(a + s z)], Iz = E[g(a + s z) z], I2 = E[g'(a + s z)] (need2).
+# s <= s_switch: Gauss-Hermite in z (rz). Larger s: the logistic is steep in z, so the same integrals
+# are taken over the logistic shock instead, E[G(a + s z)] = E_eps[Phi((a + eps) / s)], with the
+# logistic-weight Gauss rule re (I1, Iz and I2 are its a- and s-derivatives). Both rules reach about
+# 1e-9 at s = 2 with 48 nodes and better on either side.
+.rum_dec_inner <- function(a, s, rz, re, s_switch, need2 = FALSE) {
+  n <- length(a); I0 <- I1 <- Iz <- I2 <- numeric(n); lo <- s <= s_switch
+  if (any(lo)) {
+    i <- which(lo); G <- stats::plogis(a[i] + outer(s[i], rz$x)); g <- G * (1 - G)
+    I0[i] <- drop(G %*% rz$w); I1[i] <- drop(g %*% rz$w); Iz[i] <- drop(g %*% (rz$w * rz$x))
+    if (need2) I2[i] <- drop((g * (1 - 2 * G)) %*% rz$w)
+  }
+  if (any(!lo)) {
+    i <- which(!lo); si <- s[i]; tt <- (a[i] + outer(rep(1, length(i)), re$x)) / si; ph <- stats::dnorm(tt)
+    I0[i] <- drop(stats::pnorm(tt) %*% re$w); I1[i] <- drop(ph %*% re$w) / si
+    pt <- drop((ph * tt) %*% re$w); Iz[i] <- -pt / si
+    if (need2) I2[i] <- -pt / si^2
+  }
+  list(I0 = I0, I1 = I1, Iz = Iz, I2 = if (need2) I2 else NULL)
+}
+# q > 1, named swap: composite Gauss-Legendre in z1 (the D direction, split at D = 0) times
+# Gauss-Hermite in z2. Returns m, gm, gl (n x p q, rotation part removed), gs, gss.
+.rum_dec_swap2 <- function(mu, Lam, sp, lay, shift, ctrl, need2 = FALSE) {
+  n <- lay$n; p <- lay$p; q <- ncol(Lam); owner <- lay$owner; Tn <- lay$Tn; N <- length(owner)
+  Xt <- lay$X; Xt[, sp$cols] <- 0; del <- sp$Dl[1L, ]
+  c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; H <- Xt %*% Lam
+  f <- drop(crossprod(Lam, del)); sf <- sqrt(sum(f^2)); D0 <- drop(mu %*% del)
+  hh <- rowSums(H^2); tiny <- 1e-12 * max(1, sqrt(max(hh)), sf)
+  if (sf > tiny) {
+    rr <- drop(H %*% f) / sf; sp2 <- sqrt(pmax(hh - rr^2, 0)); w1 <- f / sf
+    nd <- .rum_dec_nodes(as.list(-D0 / sf), ctrl)
+  } else {                                   # D does not move with u: no z1 integral
+    rr <- numeric(N); sp2 <- sqrt(hh); w1 <- numeric(q)
+    nd <- list(resp = seq_len(n), x = numeric(n), w = rep(1, n))
+  }
+  W2 <- matrix(0, N, q); ok2 <- sp2 > tiny
+  W2[ok2, ] <- (H[ok2, , drop = FALSE] - outer(rr[ok2], if (sf > tiny) f / sf else numeric(q))) / sp2[ok2]
+  rz <- .rum_normal_rule(ctrl$n_gh); rz <- list(x = rz$nodes, w = rz$weights); re <- .rum_logis_rule(ctrl$n_lg)
+  K <- tabulate(nd$resp, n); st <- c(0L, cumsum(K))[seq_len(n)]
+  te <- rep.int(seq_len(N), K[owner]); ne <- sequence(K[owner], from = st[owner] + 1L)
+  E <- length(te); acc <- matrix(0, N, 7L + need2)
+  blk <- max(1L, floor(2e6 / max(ctrl$n_gh, ctrl$n_lg)))
+  for (bs in split(seq_len(E), ceiling(seq_len(E) / blk))) {
+    t1 <- te[bs]; z1 <- nd$x[ne[bs]]; wz <- nd$w[ne[bs]]
+    D <- D0[owner[t1]] + sf * z1; aD <- abs(D); sg <- sign(D); cc <- c0[t1] + rr[t1] * z1; s2 <- sp2[t1]
+    Ip <- .rum_dec_inner(cc + aD, s2, rz, re, ctrl$s_switch, need2)
+    Im <- .rum_dec_inner(cc - aD, s2, rz, re, ctrl$s_switch, need2)
+    e_c <- Ip$I1 - Im$I1; e_D <- sg * (Ip$I1 + Im$I1)
+    blkv <- cbind(wz * (Ip$I0 - Im$I0), wz * e_c, wz * z1 * e_c, wz * (Ip$Iz - Im$Iz), wz * e_D, wz * z1 * e_D,
+                  wz * sg * (Ip$Iz + Im$Iz))
+    if (need2) blkv <- cbind(blkv, wz * (Ip$I2 - Im$I2))
+    r <- rowsum(blkv, t1, reorder = TRUE); ix <- as.integer(rownames(r)); acc[ix, ] <- acc[ix, ] + r
+  }
+  # E[k u] = w1 E[k z1] + W2_t E[k z2] (q-vectors per task)
+  EcU <- outer(acc[, 3L], w1) + acc[, 4L] * W2; EDU <- outer(acc[, 6L], w1) + acc[, 7L] * W2
+  m <- drop(rowsum(acc[, 1L], owner, reorder = TRUE)) / Tn
+  eD <- drop(rowsum(acc[, 5L], owner, reorder = TRUE)) / Tn
+  gm <- rowsum(acc[, 2L] * Xt, owner, reorder = TRUE) / Tn + outer(eD, del)
+  gl <- matrix(0, n, p * q)
+  for (l in seq_len(q))
+    gl[, (l - 1L) * p + seq_len(p)] <- rowsum(EcU[, l] * Xt, owner, reorder = TRUE) / Tn +
+      outer(drop(rowsum(EDU[, l], owner, reorder = TRUE)) / Tn, del)
+  gl <- .rum_rotation_project(cbind(0, gl, 0), Lam)[, 1L + seq_len(p * q), drop = FALSE]
+  gs <- drop(rowsum(acc[, 2L], owner, reorder = TRUE)) / Tn
+  gss <- if (need2) drop(rowsum(acc[, 8L], owner, reorder = TRUE)) / Tn else NULL
+  list(m = m, gm = unname(gm), gl = unname(gl), gs = gs, gss = gss)
+}
+# q > 1, best-worst (or a named swap by request): randomised QMC with convergence control on the
+# canonical axes, the scheme of .rum_imp_sums_rqmc. Returns m, gm, gl, gs, gss, se, n_points.
+# V (tests only): hold the integration axes fixed at V (q x q, full rank) instead of Lambda's canonical
+# axes, so that a finite difference in Lambda does not also rotate the draws.
+.rum_dec_rqmc <- function(mu, Lam, sp, lay, shift, ctrl, need2 = FALSE, V = NULL) {
+  n <- lay$n; p <- lay$p; nf <- ncol(Lam); owner <- lay$owner; Tn <- lay$Tn; N <- length(owner)
+  control <- ctrl$rqmc; Xt <- lay$X; Xt[, sp$cols] <- 0
+  c0 <- rowSums(Xt * mu[owner, , drop = FALSE]) + shift; b <- mu %*% t(sp$Dl); nP <- nrow(sp$Dl)
+  ax <- if (is.null(V)) .rum_imp_axes(Lam) else list(V = V, keep = seq_len(ncol(V)), C = Lam %*% V)
+  r <- length(ax$keep)
+  if (!r) {                                  # Lambda = 0: no integral
+    pr <- max.col(b, ties.method = "first"); S <- b[cbind(seq_len(n), pr)]
+    ps <- .rum_dec_psi(c0, S[owner], need2)
+    om <- drop(rowsum(ps$pS, owner, reorder = TRUE)) / Tn
+    return(list(m = drop(rowsum(ps$psi, owner, reorder = TRUE)) / Tn,
+                gm = unname(rowsum(ps$pc * Xt, owner, reorder = TRUE) / Tn + om * sp$Dl[pr, , drop = FALSE]),
+                gl = matrix(0, n, p * nf), gs = drop(rowsum(ps$pc, owner, reorder = TRUE)) / Tn,
+                gss = if (need2) drop(rowsum(ps$pcc, owner, reorder = TRUE)) / Tn else NULL,
+                se = numeric(n), n_points = rep(0L, n)))
+  }
+  Ht <- Xt %*% ax$C; DC <- sp$Dl %*% ax$C
+  R <- control$n_rep; tol <- control$tol
+  Sr <- matrix(0, n, R); Ec <- numeric(N); EcZ <- matrix(0, N, r); Ecc <- numeric(N)
+  Wp <- matrix(0, n, nP); WpZ <- array(0, c(n, nP, r))
+  M <- SE <- rep(NA_real_, n); NP <- integer(n)
+  active <- seq_len(n); Ncur <- 0L; Nt <- control$n_start
+  repeat {
+    ta <- which(owner %in% active); oa <- match(owner[ta], active); Ta <- Tn[active]; na <- length(active)
+    chunk <- max(1L, floor(2e6 / max(1L, length(ta))))
+    for (rp in seq_len(R)) {
+      z <- stats::qnorm(matrix(spacefillr::generate_sobol_owen_set(Nt, r, seed = control$seed + rp), Nt, r))
+      z <- z[(Ncur + 1L):Nt, , drop = FALSE]; z <- rbind(z, -z)
+      for (cs in split(seq_len(nrow(z)), ceiling(seq_len(nrow(z)) / chunk))) {
+        Zc <- z[cs, , drop = FALSE]; Kc <- nrow(Zc)
+        S <- NULL; arg <- NULL
+        for (pi in seq_len(nP)) {
+          v <- b[active, pi] + matrix(drop(Zc %*% DC[pi, ]), na, Kc, byrow = TRUE)
+          if (is.null(S)) { S <- v; arg <- matrix(1L, na, Kc) } else { up <- v > S; S[up] <- v[up]; arg[up] <- pi }
+        }
+        cm <- c0[ta] + Ht[ta, , drop = FALSE] %*% t(Zc)
+        ps <- .rum_dec_psi(cm, S[oa, , drop = FALSE], need2)
+        Sr[active, rp] <- Sr[active, rp] + rowSums(rowsum(ps$psi, oa, reorder = TRUE)) / Ta
+        Ec[ta] <- Ec[ta] + rowSums(ps$pc); EcZ[ta, ] <- EcZ[ta, ] + ps$pc %*% Zc
+        if (need2) Ecc[ta] <- Ecc[ta] + rowSums(ps$pcc)
+        sS <- rowsum(ps$pS, oa, reorder = TRUE) / Ta                   # na x Kc
+        for (pi in unique(as.vector(arg))) {
+          sm <- sS * (arg == pi)
+          Wp[active, pi] <- Wp[active, pi] + rowSums(sm)
+          WpZ[active, pi, ] <- WpZ[active, pi, ] + sm %*% Zc
+        }
+      }
+    }
+    Ncur <- Nt; nd <- 2 * Ncur
+    est <- Sr[active, , drop = FALSE] / nd
+    se <- apply(est, 1L, stats::sd) / sqrt(R)
+    done <- se <= tol; if (Nt >= control$n_max) done[] <- TRUE
+    fin <- active[done]
+    if (length(fin)) { M[fin] <- rowMeans(est[done, , drop = FALSE]); SE[fin] <- se[done]; NP[fin] <- Ncur }
+    active <- active[!done]
+    if (!length(active)) break
+    Nt <- min(2L * Nt, control$n_max)
+  }
+  bad <- which(SE > tol)
+  if (length(bad))
+    warning(sprintf(paste0("decisiveness: %d respondent(s) did not reach the standard error %g at %d ",
+      "points per scrambling (largest %.2g); the values carry that integration error"),
+      length(bad), tol, control$n_max, max(SE)), call. = FALSE)
+  tot <- 2 * NP * R                                   # draws per respondent
+  Ec <- Ec / tot[owner]; EcZ <- EcZ / tot[owner]; Ecc <- Ecc / tot[owner]; Wp <- Wp / tot; WpZ <- WpZ / tot
+  gm <- rowsum(Ec * Xt, owner, reorder = TRUE) / Tn + Wp %*% sp$Dl
+  G <- array(0, c(n, p, r))
+  for (k in seq_len(r))
+    G[, , k] <- rowsum(EcZ[, k] * Xt, owner, reorder = TRUE) / Tn + matrix(WpZ[, , k], n, nP) %*% sp$Dl
+  list(m = M, gm = unname(gm), gl = .rum_imp_gl(G, ax$V, ax$keep, Lam),
+       gs = drop(rowsum(Ec, owner, reorder = TRUE)) / Tn,
+       gss = if (need2) drop(rowsum(Ecc, owner, reorder = TRUE)) / Tn else NULL, se = SE, n_points = NP)
+}
+# One spec at (mu, th): dispatch on q and the spec type, integrate the side term when fitted, and
+# return list(m, gm, gt) (gt = (dm/dkappa, dm/dLambda, dm/domega)) with the attribute "se" for RQMC.
+.rum_dec_eval <- function(sp, mu, th, lay, side, ctrl) {
+  multi <- .rum_multi_fac(th$loading)
+  lam <- if (multi) th$loading else as.vector(th$loading)
+  fn <- if (!multi) .rum_dec_q1 else if (sp$type == "swap" && ctrl$swap == "2d") .rum_dec_swap2 else .rum_dec_rqmc
+  if (side == "zero") {
+    e <- fn(mu, lam, sp, lay, 0, ctrl)
+    out <- list(m = e$m, gm = e$gm, gt = cbind(0, e$gl, 0))
+    if (!is.null(e$se)) attr(out, "se") <- e$se
+    return(out)
+  }
+  s <- sqrt(th$omega); vr <- .rum_normal_rule(ctrl$n_v); small <- th$omega < .rum_omega_small
+  m <- 0; gm <- 0; gl <- 0; gk <- 0; go <- 0; se <- 0
+  for (l in seq_along(vr$nodes)) {
+    e <- fn(mu, lam, sp, lay, th$kappa + s * vr$nodes[l], ctrl, need2 = small); wl <- vr$weights[l]
+    m <- m + wl * e$m; gm <- gm + wl * e$gm; gl <- gl + wl * e$gl; gk <- gk + wl * e$gs
+    go <- go + wl * (if (small) e$gss / 2 else e$gs * vr$nodes[l] / (2 * s))
+    if (!is.null(e$se)) se <- se + wl * e$se
+  }
+  out <- list(m = m, gm = gm, gt = cbind(gk, gl, go))
+  if (!is.null(e$se)) attr(out, "se") <- se
+  out
+}
+# All decisiveness targets of one design, sharing one layout and a cache per (mu, th). data: the
+# rum_data the fitted states belong to (rows of mu in data$ids order). groups: named list of column
+# indices; menus, pairs, allowed: per group (see above). Each target: list(name, kind
+# "decisiveness", w, class, group, type, m, grad). The cache key holds mu, the loading WITH its shape
+# (dim), and kappa and omega when side = "fitted"; a different key empties the cache.
+.rum_tgt_decisiveness_set <- function(data, groups, menus = NULL, pairs = NULL, allowed = NULL,
+                                      side = c("zero", "fitted"), best_worst = TRUE, names = NULL,
+                                      w = NULL, control = .rum_dec_control()) {
+  side <- match.arg(side); lay <- .rum_dec_layout(data)
+  specs <- .rum_dec_specs(lay$p, groups, menus, pairs, allowed, best_worst, names)
+  force(control); ns <- length(specs); cache <- new.env(); cache$key <- NULL; cache$val <- vector("list", ns)
+  value <- function(s, mu, th) {
+    if (!is.matrix(mu) || nrow(mu) != lay$n || ncol(mu) != lay$p)
+      stop(sprintf("decisiveness: mu must be %d x %d (data$ids order)", lay$n, lay$p))
+    key <- list(mu = mu, loading = th$loading, dim = dim(th$loading),
+                side = if (side == "fitted") c(th$kappa, th$omega) else NULL)
+    if (!identical(cache$key, key)) { cache$key <- key; cache$val <- vector("list", ns) }
+    if (is.null(cache$val[[s]])) cache$val[[s]] <- .rum_dec_eval(specs[[s]], mu, th, lay, side, control)
+    cache$val[[s]]
+  }
+  lapply(seq_along(specs), function(s) {
+    force(s); sp <- specs[[s]]
+    gf <- function(mu, th) value(s, mu, th)
+    list(name = sp$name, kind = "decisiveness", w = w, class = "decisiveness", group = sp$group,
+         type = sp$type, m = function(mu, th) gf(mu, th)$m, grad = gf)
+  })
+}
