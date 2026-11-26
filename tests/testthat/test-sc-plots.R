@@ -204,3 +204,152 @@ test_that("sc_table formats cells, markdown and LaTeX", {
   expect_error(sc_table(est, format = "html"))
   expect_error(sc_table(A = est, A = est), "column names must differ")
 })
+
+# Regression tests for the review of the plotting code (2026-11-26). They use small hand-made
+# tables, so they need no fit.
+
+# Draw with the display list on and return the graphics calls made on the last page: a list of
+# (name, args), where name is the C routine (e.g. "C_segments") and args its arguments.
+drawn <- function(expr) {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  grDevices::dev.control("enable")
+  force(expr)
+  lapply(grDevices::recordPlot()[[1L]], function(e) {
+    f <- e[[2L]][[1L]]
+    list(name = if (is.list(f) && !is.null(f$name)) f$name else "", args = as.list(e[[2L]])[-1L])
+  })
+}
+calls_named <- function(calls, name) Filter(function(cl) identical(cl$name, name), calls)
+
+test_that("sc_plot_preferences reorders unnamed laws with the rows", {
+  m <- data.frame(name = c("a", "b"), estimate = c(-2, 2))
+  s <- data.frame(name = c("a", "b"), estimate = c(.2, .8))
+  laws <- lapply(c(-2, 2), function(mu) data.frame(mean = mu, sd = 1, weight = 1))
+  seen <- numeric(0)
+  ridge <- sconjoint:::.scp_ridge
+  local_mocked_bindings(.scp_ridge = function(law, y, ...) {
+    seen[y] <<- law$mean[1L]
+    ridge(law, y, ...)
+  })
+  # order permutes the rows without dropping any: row b (on top) must get b's law
+  out <- draw(sc_plot_preferences(m, laws, s, order = c("b", "a")))
+  expect_equal(out$rows$name, c("b", "a"))
+  expect_equal(seen[out$rows$y], out$rows$mean)
+  # order drops a row: laws in the order of means are still matched to their rows
+  m3 <- data.frame(name = c("a", "b", "c"), estimate = c(-2, 2, 4))
+  laws3 <- lapply(m3$estimate, function(mu) data.frame(mean = mu, sd = 1, weight = 1))
+  seen <- numeric(0)
+  out3 <- draw(sc_plot_preferences(m3, laws3, m3, order = c("c", "a")))
+  expect_equal(seen[out3$rows$y], out3$rows$mean)
+  # named laws are matched by name, whatever their order
+  seen <- numeric(0)
+  out4 <- draw(sc_plot_preferences(m, stats::setNames(laws[2:1], c("b", "a")), s, order = c("b", "a")))
+  expect_equal(seen[out4$rows$y], out4$rows$mean)
+})
+
+test_that("tables with the same name stay separate groups", {
+  a <- data.frame(name = c("a", "b"), estimate = c(1, 2))
+  b <- data.frame(name = c("a", "b"), estimate = c(3, 4))
+  # sc_plot_lines: one line per table, each with its own values
+  cl <- drawn(sc_plot_lines(Model = a, Model = b, x = 1:2, xlab = "Setting"))
+  ys <- lapply(calls_named(cl, "C_plotXY"), function(z) z$args[[1L]]$y)
+  expect_true(any(vapply(ys, identical, TRUE, c(1, 2))))
+  expect_true(any(vapply(ys, identical, TRUE, c(3, 4))))
+  pd <- draw(sc_plot_lines(Model = a, Model = b, x = 1:2, xlab = "Setting"))
+  expect_equal(pd$estimate, c(1, 2, 3, 4))
+  # sc_plot_estimates: each group draws only its own points
+  ce <- drawn(sc_plot_estimates(Model = a, Model = b))
+  xs <- lapply(calls_named(ce, "C_plotXY"), function(z) z$args[[1L]]$x)
+  expect_true(any(vapply(xs, identical, TRUE, c(1, 2))))
+  expect_true(any(vapply(xs, identical, TRUE, c(3, 4))))
+  expect_false(any(vapply(xs, function(v) length(v) == 4L, TRUE)))   # no group draws all four
+  pe <- draw(sc_plot_estimates(Model = a, Model = b))
+  expect_equal(nrow(pe), 4L)
+  expect_true(all(pe$y[1:2] > pe$y[3:4]))
+})
+
+test_that("sc_plot_lines sets probability limits and the reference line from scale", {
+  e <- data.frame(name = c("a", "b"), kind = "choice", estimate = c(.4, .6))
+  usr <- NULL
+  cl <- drawn({
+    sc_plot_lines(e, x = 1:2, xlab = "Setting", scale = 10)
+    usr <- graphics::par("usr")
+  })
+  expect_equal(usr[3:4], c(0, 10))
+  dashed <- Filter(function(z) identical(z$args[[7L]], 2), calls_named(cl, "C_abline"))   # lty = 2
+  expect_length(dashed, 1L)
+  expect_equal(dashed[[1L]]$args[[3L]], 5)            # h = 0.5 * scale
+  usr1 <- NULL
+  drawn({
+    sc_plot_lines(e, x = 1:2, xlab = "Setting")
+    usr1 <- graphics::par("usr")
+  })
+  expect_equal(usr1[3:4], c(0, 1))
+})
+
+test_that("a point-mass law (sd 0) is drawn as a bar at its value", {
+  law <- data.frame(mean = 0, sd = 0, weight = 1)
+  for (lay in c("panels", "ridges")) {
+    p <- NULL
+    expect_no_warning(p <- draw(sc_plot_laws(law, layout = lay)))
+    bw <- diff(p$x[1:2])
+    expect_true(all(is.finite(p$density)))
+    expect_true(min(p$x) < -10 * bw && max(p$x) > 10 * bw)           # limits padded around 0
+    expect_equal(sum(p$density) * bw, 1, tolerance = 1e-6)
+    expect_lt(abs(sum(p$x * p$density) / sum(p$density)), bw)         # centred on 0
+    expect_gt(sum(sort(p$density, decreasing = TRUE)[1:3]) / sum(p$density), .99)   # a narrow bar
+  }
+  # a mixture with a point mass and a normal component
+  mix <- data.frame(mean = c(0, 2), sd = c(0, .5), weight = c(1, 1))
+  for (lay in c("panels", "ridges")) {
+    p <- NULL
+    expect_no_warning(p <- draw(sc_plot_laws(list(mix, law), layout = lay)))
+    expect_true(all(is.finite(p$density)))
+    bw <- diff(p$x[1:2])
+    expect_equal(sum(p$density[p$law == 1]) * bw, 1, tolerance = .01)
+  }
+  # Panel B of sc_plot_preferences
+  o <- NULL
+  expect_no_warning(o <- draw(sc_plot_preferences(data.frame(name = "a", estimate = 0), list(law),
+                                                  data.frame(name = "a", estimate = .5))))
+  expect_true(o$xlim$B[1L] < 0 && o$xlim$B[2L] > 0)
+  expect_error(sc_plot_laws(data.frame(mean = 0, sd = -1, weight = 1)), "non-negative")
+})
+
+test_that("sc_plot_lines draws a lone interval as a vertical line", {
+  e <- data.frame(name = letters[1:3], estimate = c(1, 2, 3), lower = c(NA, 1, NA), upper = c(NA, 3, NA))
+  cl <- drawn(sc_plot_lines(e, x = 1:3, xlab = "Setting"))
+  seg <- calls_named(cl, "C_segments")
+  expect_length(seg, 1L)
+  expect_equal(unname(unlist(seg[[1L]]$args[1:4])), c(2, 1, 2, 3))
+  expect_length(calls_named(cl, "C_polygon"), 0L)
+  # a single row
+  c1 <- NULL
+  expect_no_warning(c1 <- drawn(sc_plot_lines(e[2, ], x = 5, xlab = "Setting")))
+  expect_equal(unname(unlist(calls_named(c1, "C_segments")[[1L]]$args[1:4])), c(5, 1, 5, 3))
+  # two neighbouring intervals still make a band, the lone one a line
+  e2 <- e; e2$lower <- c(0, 1, NA); e2$upper <- c(2, 3, NA)
+  e2 <- rbind(e2, data.frame(name = "d", estimate = 4, lower = 3, upper = 5))
+  c2 <- drawn(sc_plot_lines(e2, x = 1:4, xlab = "Setting"))
+  expect_length(calls_named(c2, "C_polygon"), 1L)
+  expect_length(calls_named(c2, "C_segments"), 1L)
+})
+
+test_that("the page-filling plots end with one figure per page and restore other settings", {
+  law <- data.frame(mean = 0, sd = 1, weight = 1)
+  tab <- data.frame(name = "a", estimate = 0, lower = -1, upper = 1)
+  for (f in list(function() sc_plot_laws(law, layout = "panels"),
+                 function() sc_plot_preferences(tab, list(law), tab))) {
+    grDevices::pdf(NULL)
+    graphics::layout(matrix(c(1, 1, 2, 3), 2, byrow = TRUE), widths = c(1, 3))
+    graphics::par(mar = c(4, 4, 1, 1), oma = c(0, 0, 0, 0), las = 0)
+    keep <- graphics::par("mar", "oma", "las", "cex")
+    f()
+    expect_equal(graphics::par("mfrow"), c(1L, 1L))
+    expect_equal(graphics::par("mar", "oma", "las", "cex"), keep)
+    graphics::plot(1)
+    expect_equal(graphics::par("mfg"), c(1L, 1L, 1L, 1L))
+    grDevices::dev.off()
+  }
+})

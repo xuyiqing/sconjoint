@@ -20,7 +20,9 @@ sc_plot_lines(
 }
 \arguments{
 \item{...}{One or more estimate tables from \code{\link[=sc_estimate]{sc_estimate()}} (or one list of
-them), each with one row per value of \code{x}. Several tables must be named.}
+them), each with one row per value of \code{x}. Several tables must be named.
+Series are kept apart by their position, so two tables may share a name
+(each keeps its own line, color and legend entry).}
 
 \item{x}{Numeric settings, one per row of each table.}
 
@@ -32,14 +34,16 @@ them), each with one row per value of \code{x}. Several tables must be named.}
 
 \item{colors}{Colors of the series (default house blue, red, green, ...).}
 
-\item{ylim}{Optional vertical limits, on the scaled values.}
+\item{ylim}{Optional vertical limits, on the scaled values. Default 0 to
+\code{scale} for probabilities and shares, else from the data.}
 
 \item{main}{Optional panel title.}
 
 \item{xlabels}{Optional tick labels at \code{x}.}
 
 \item{hline}{Optional reference value on the unscaled scale, drawn as a
-dashed line; default 0.5 for probabilities and shares, else 0.}
+dashed line at \code{scale * hline}; default 0.5 for probabilities and shares,
+else 0.}
 
 \item{legend}{If \code{TRUE} and there are several series, a legend at the
 bottom of the panel.}
@@ -53,8 +57,11 @@ Estimates against an ordered setting (for example a policy position or an
 income bracket): one line with points per table and a shaded band for the
 95\% intervals, one legend at the bottom. Each table holds one row per
 setting, in the order of \code{x}. Points are hollow where an interval is
-missing. One call draws one panel, so a figure with several panels loops
-over \code{par(mfrow = )} (pass \code{legend = FALSE} to all but one panel).
+missing. The band covers each run of two or more neighbouring settings with
+intervals; an interval whose neighbours have none (or the only setting) is
+drawn as a vertical line. One call draws one panel, so a figure with several
+panels loops over \code{par(mfrow = )} (pass \code{legend = FALSE} to all but one
+panel).
 }
 \examples{
 fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
