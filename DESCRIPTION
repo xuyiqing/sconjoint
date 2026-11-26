@@ -24,6 +24,8 @@ Depends:
     R (>= 4.1)
 Imports:
     Rcpp,
+    graphics,
+    grDevices,
     stats,
     utils,
     withr,
