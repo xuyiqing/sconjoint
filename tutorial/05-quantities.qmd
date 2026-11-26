@@ -5,6 +5,11 @@ the rule for its interval. The examples use the small toy fit that ships with th
 simulated respondents under the tax-plan design, one taste factor and two folds. Its estimates mean
 nothing. It only shows the calls and the output.
 
+Targets that average over the experiment's randomization (`sc_ame_switch()`, and the information
+behind every standard error) need the design. The package knows the two applications' designs (`"gs"`,
+`"br"`) and, through `sc_design()`, the common case where each attribute is drawn on its own. The
+simulated experiment in @sec-quickstart uses `sc_design()`.
+
 ```{r}
 #| label: q-setup
 library(sconjoint)
