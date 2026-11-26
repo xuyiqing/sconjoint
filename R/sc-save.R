@@ -4,13 +4,24 @@
 # and the weight parts (Li, Lt, Ic, B, Ic_red, shared, floored, null). Added for predictions, posteriors
 # and provenance: the fold's network weights and preprocessing rule, its held-out log scores and
 # validation respondents, the fold diagnostics and fit_sha (the package revision that trained the fit).
-# The data are stored as packed tasks (y, d, task counts, ids, feature names, orientation) with the
+# The data are stored as packed tasks (y, d, task counts, ids, feature names, orientation, and the mean
+# basis, mean names and metadata of the internal data object) with the
 # covariates Z, the grouping variables, the folds and the design name; the internal data object is
 # rebuilt at load time. The score rule of the bounded updates is rebuilt from (q, points, seed).
 # A checksum of the stored numbers is verified at load.
 
 .sc_format <- "sconjoint compact fit"
 .sc_format_version <- 1L
+
+# The data's mean basis for the file: NULL when it is the default identity (rebuilt at load), one matrix
+# when every respondent shares it, otherwise the list.
+.sc_pack_basis <- function(basis, p) {
+  if (is.matrix(basis)) basis <- list(basis)
+  b1 <- basis[[1L]]
+  same <- all(vapply(basis, identical, TRUE, b1))
+  if (same && identical(unname(b1), diag(p)) && is.null(colnames(b1))) return(NULL)
+  if (same) b1 else basis
+}
 
 .sc_fold_core <- function(f) f[c("k", "te", "mu", "th", "output_score", "common_score", "parts")]
 
@@ -45,7 +56,8 @@ sc_save <- function(object, file, compress = "xz") {
   x <- object$data; d <- x$data
   data <- list(y = d$y, d = unname(d$d), T = as.integer(d$T), ids = d$ids, feature_names = d$feature_names,
                orientation = d$metadata$orientation, Z = x$Z, groups = x$groups, fold = x$fold,
-               validation = x$validation, design = x$design)
+               validation = x$validation, design = x$design,
+               mean_basis = .sc_pack_basis(d$basis, d$p), mean_names = d$mean_names, metadata = d$metadata)
   fits <- object$fits$folds
   folds <- lapply(names(object$folds), function(k) {
     f <- object$folds[[k]]; core <- .sc_fold_core(f)
@@ -84,8 +96,11 @@ sc_load <- function(file, check = TRUE) {
   dd <- z$data
   off <- c(0L, cumsum(dd$T))
   rows <- lapply(seq_along(dd$ids), function(i) seq.int(off[i] + 1L, off[i + 1L]))
+  # files written before the mean basis, mean names and full metadata were stored: the defaults
+  meta <- if (is.null(dd$metadata)) list(orientation = dd$orientation) else dd$metadata
   rd <- rum_data(lapply(rows, function(r) dd$y[r]), lapply(rows, function(r) dd$d[r, , drop = FALSE]),
-                 ids = dd$ids, feature_names = dd$feature_names, metadata = list(orientation = dd$orientation))
+                 mean_basis = dd$mean_basis, ids = dd$ids, feature_names = dd$feature_names,
+                 mean_names = dd$mean_names, metadata = meta)
   x <- sc_data(data = rd, Z = dd$Z, groups = dd$groups, fold = dd$fold, validation = dd$validation, design = dd$design)
   hidden <- z$settings$hidden
   folds <- lapply(z$folds, function(f) {

@@ -92,15 +92,17 @@ sc_fit <- function(x, q = 1L, folds = NULL, K = 5L, fold_seed = 20261125L, hidde
   if (is.null(x$Z)) stop("sc_fit() needs respondent covariates Z (see sc_data())", call. = FALSE)
   D <- x$data; Z <- x$Z; IDS <- D$ids; q <- as.integer(q)
   if (is.null(x$fold)) x$fold <- withr::with_seed(fold_seed, sample(rep(seq_len(K), length.out = D$n)))
-  FOLD <- x$fold; ks <- sort(unique(FOLD)); if (!is.null(folds)) ks <- intersect(ks, folds)
+  FOLD <- x$fold; all_folds <- sort(unique(FOLD)); ks <- all_folds; if (!is.null(folds)) ks <- intersect(ks, folds)
+  .sc_fold_validation(x$validation, all_folds, NULL)          # check the list against the folds once
   ctl <- utils::modifyList(.sc_paper_control(), control)
   QT <- .sc_sobol(q, nodes, quad_seed); QC <- .sc_sobol(q, check_nodes, quad_seed); Q8 <- .sc_sobol(q, heldout_nodes, quad_seed)
   out <- list()
   for (k in ks) {
     t0 <- proc.time()[["elapsed"]]
     te <- which(FOLD == k); tr <- which(FOLD != k)
-    val_ids <- if (!is.null(x$validation) && length(x$validation) >= k && length(x$validation[[k]]))
-      x$validation[[k]] else IDS[withr::with_seed(validation_seed + k, sort(sample(tr, floor(validation_share * length(tr)))))]
+    given <- .sc_fold_validation(x$validation, all_folds, k)
+    val_ids <- if (length(given)) given else
+      IDS[withr::with_seed(validation_seed + k, sort(sample(tr, floor(validation_share * length(tr)))))]
     val <- which(IDS %in% val_ids)
     if (!all(val %in% tr)) stop(sprintf("fold %d: validation respondents must be training respondents", k), call. = FALSE)
     rule_pp <- .rum_preprocess_learn(Z, IDS[tr], impute = "median")
@@ -132,6 +134,27 @@ sc_fit <- function(x, q = 1L, folds = NULL, K = 5L, fold_seed = 20261125L, hidde
                               nodes = as.integer(nodes), check_nodes = as.integer(check_nodes),
                               heldout_nodes = as.integer(heldout_nodes), quad_seed = as.integer(quad_seed),
                               heldout_rule = paste0("sobol", heldout_nodes)))
+}
+
+# The validation ids given for fold k. A named list is matched by fold label (names must be fold labels);
+# an unnamed list by position over the sorted fold labels (element j for the j-th smallest label). NULL or
+# an empty element: none given (sc_fit() draws them). k = NULL only checks the list.
+.sc_fold_validation <- function(validation, folds, k) {
+  if (is.null(validation)) return(NULL)
+  nm <- names(validation)
+  if (!is.null(nm) && any(nzchar(nm))) {
+    bad <- setdiff(nm, as.character(folds))
+    if (length(bad) || anyDuplicated(nm))
+      stop("validation is named by fold, but these names are not distinct fold labels: ",
+           paste(unique(c(bad, nm[duplicated(nm)])), collapse = ", "), call. = FALSE)
+    return(if (is.null(k)) NULL else validation[[as.character(k)]])
+  }
+  if (length(validation) > length(folds))
+    stop(sprintf("validation has %d elements but the data have %d folds; name the elements by fold label",
+                 length(validation), length(folds)), call. = FALSE)
+  if (is.null(k)) return(NULL)
+  j <- match(k, folds)
+  if (j <= length(validation)) validation[[j]] else NULL
 }
 
 # Cross-fitted held-out log score per respondent (NA for respondents of folds not fitted).
@@ -183,6 +206,9 @@ print.summary.sc_fit <- function(x, ...) {
 #'
 #' @param fits A list of fits from [sc_fit()] at different q (all folds), or a
 #'   list of numeric vectors of per-respondent held-out log scores named by q.
+#'   Scores are paired by respondent: fits must cover the same respondents
+#'   (matched by id), and vectors must have equal lengths (matched by name
+#'   when named by respondent id, otherwise by position).
 #' @param threshold The z threshold (default 2).
 #' @return A data frame with one row per q: `q`, `n`, `mean_heldout`,
 #'   `diff_to_prev`, `se_diff`, `z`, `moves`, `selected`.
@@ -194,11 +220,31 @@ print.summary.sc_fit <- function(x, ...) {
 sc_select_rank <- function(fits, threshold = 2) {
   if (!is.list(fits) || !length(fits)) stop("fits must be a nonempty list", call. = FALSE)
   if (all(vapply(fits, inherits, TRUE, "sc_fit"))) {
-    qs <- vapply(fits, `[[`, 0L, "q"); H <- lapply(fits, .sc_heldout)
+    qs <- vapply(fits, `[[`, 0L, "q")
+    H <- lapply(fits, function(f) stats::setNames(.sc_heldout(f), f$data$data$ids))
   } else {
     if (is.null(names(fits))) stop("name the score vectors by q", call. = FALSE)
-    qs <- as.integer(names(fits)); H <- lapply(fits, as.numeric)
+    if (!all(vapply(fits, is.numeric, TRUE))) stop("fits must be fits from sc_fit() or numeric score vectors", call. = FALSE)
+    qs <- as.integer(names(fits)); H <- fits
   }
+  if (anyNA(qs) || anyDuplicated(qs)) stop("every fit needs a distinct number of factors q", call. = FALSE)
+  # Pair the scores by respondent: equal lengths, and (when named, as fits always are) the same respondents,
+  # aligned by id to the first fit's order.
+  len <- lengths(H)
+  if (length(unique(len)) != 1L) stop("the score vectors have different lengths (", paste(len, collapse = ", "),
+                                      "): every fit must score the same respondents", call. = FALSE)
+  nms <- lapply(H, names); named <- !vapply(nms, is.null, TRUE)
+  if (any(named)) {
+    if (!all(named)) stop("name every score vector by respondent, or none", call. = FALSE)
+    ref <- nms[[1L]]
+    if (anyNA(ref) || anyDuplicated(ref)) stop("respondent ids of the scores must be unique", call. = FALSE)
+    for (i in seq_along(H)) {
+      j <- match(ref, nms[[i]])
+      if (anyNA(j) || anyDuplicated(nms[[i]])) stop("the fits do not score the same respondents", call. = FALSE)
+      H[[i]] <- H[[i]][j]
+    }
+  }
+  H <- lapply(H, function(h) unname(as.numeric(h)))
   o <- order(qs); qs <- qs[o]; H <- H[o]
   if (any(vapply(H, anyNA, TRUE))) stop("every fit needs held-out scores for all respondents (fit all folds)", call. = FALSE)
   sel <- qs[1L]; moving <- TRUE

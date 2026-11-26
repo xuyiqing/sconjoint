@@ -9,8 +9,20 @@
   out
 }
 
-.sc_states_check <- function(object) {
+# population = TRUE (sc_estimate(), sc_fitted_law()): the states must hold every respondent's held-out
+# fold, each respondent in exactly one fold. States built with sc_states(respondents = ) are for checks.
+.sc_states_check <- function(object, population = FALSE) {
   if (!inherits(object, "sc_states")) stop("expected fold states from sc_states() or sc_load()", call. = FALSE)
+  if (!population) return(object)
+  if (isTRUE(object$info$partial))
+    stop("these fold states were built for the first held-out respondents only (sc_states(respondents = )): ",
+         "they are for checks, not for population quantities. Build them without respondents.", call. = FALSE)
+  n <- object$data$data$n
+  cover <- tabulate(unlist(lapply(object$folds, `[[`, "te"), use.names = FALSE), nbins = n)
+  if (any(cover != 1L))
+    stop(sprintf(paste0("population quantities need every respondent held out in exactly one fold: %d of %d respondents ",
+                        "are held out in no fold and %d in more than one. Fit and build states for all folds."),
+                 sum(cover == 0L), n, sum(cover > 1L)), call. = FALSE)
   object
 }
 # The bounded updates' score rule (rebuilt from the stored settings; the paper's rule by default).
@@ -39,7 +51,8 @@
 #' bounded update does not converge keeps its one-step estimate and SE, with
 #' no interval; its `status` says why.
 #'
-#' @param object Fold states from [sc_states()] or [sc_load()].
+#' @param object Fold states from [sc_states()] or [sc_load()], covering every
+#'   respondent (all folds; not built with `respondents`).
 #' @param targets A target or a list of targets (from [sc_mean()],
 #'   [sc_share()], [sc_contest()], [sc_ame_switch()], [sc_ame_rows()],
 #'   [sc_importance()], [sc_decisiveness()], [sc_ratio()], [sc_difference()]
@@ -60,7 +73,7 @@
 #' }
 #' @export
 sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L) {
-  object <- .sc_states_check(object)
+  object <- .sc_states_check(object, population = TRUE)
   ctx <- .sc_context(object$data); data <- ctx$data; n <- data$n; FS <- object$folds
   tl <- .sc_flatten_targets(targets)
   # internal targets: one-step list (unique names), shares, joint sets, derived
@@ -74,12 +87,22 @@ sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_ite
     for (tg in b) add_internal(tg)
     vapply(b, `[[`, "", "name")
   }
+  # A component of a ratio or difference reuses a target of the same name only when both define the
+  # same mean contrast (same coefficients and weights); a different definition under that name stops.
+  same_mean <- function(a, b) identical(a$kind, "mean") && identical(b$kind, "mean") &&
+    identical(as.numeric(a$c), as.numeric(b$c)) && identical(a$w, b$w)
   for (st in tl) {
     if (identical(st$estimator, "derived")) {
       comp <- character(0)
       for (pt in st$parts) {
         nm <- pt$name
         if (is.null(internal[[nm]])) build_one(pt)
+        else {
+          b <- pt$build(ctx)
+          if (length(b) != 1L || !same_mean(internal[[nm]], b[[1L]]))
+            stop("'", st$name, "' uses a component named '", nm, "' that differs from another target of that name; ",
+                 "give the two targets different names", call. = FALSE)
+        }
         comp <- c(comp, nm)
       }
       rows[[length(rows) + 1L]] <- list(type = "derived", spec = st, names = st$name, parts = comp)
@@ -174,11 +197,14 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #' `||Lambda' c||`; the population law is the mixture of these normals (paper
 #' eq. partworth_distribution).
 #'
-#' @param object Fold states from [sc_states()] or [sc_load()].
+#' @param object Fold states from [sc_states()] or [sc_load()], covering every
+#'   respondent (all folds; not built with `respondents`).
 #' @inheritParams sc_mean
-#' @return A data frame with one row per held-out respondent (fold order):
-#'   `id`, `fold`, `mean`, `sd`. Its attribute `"summary"` gives the mixture's
-#'   mean, standard deviation and the share above zero.
+#' @return A data frame with one row per held-out respondent with positive
+#'   weight (fold order): `id`, `fold`, `mean`, `sd` and `weight` (the
+#'   respondent's weight, normalized to sum to one; equal without `w`). Its
+#'   attribute `"summary"` gives the weighted mixture's mean, standard
+#'   deviation and the share above zero.
 #' @examples
 #' \donttest{
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
@@ -186,16 +212,19 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #' }
 #' @export
 sc_fitted_law <- function(object, c, w = NULL) {
-  object <- .sc_states_check(object); ctx <- .sc_context(object$data)
+  object <- .sc_states_check(object, population = TRUE); ctx <- .sc_context(object$data)
   cc <- .sc_resolve_cvec(c, ctx); ww <- .sc_resolve_w(w, ctx)
   people <- if (is.null(ww)) NULL else which(ww > 0)
   out <- do.call(rbind, lapply(names(object$folds), function(k) {
     f <- object$folds[[k]]
     ii <- if (is.null(people)) f$te else intersect(f$te, people)
-    data.frame(id = ctx$data$ids[ii], fold = as.integer(k), mean = drop(f$mu[ii, , drop = FALSE] %*% cc),
-               sd = rep(sqrt(sum(drop(t(f$th$loading) %*% cc)^2)), length(ii)), stringsAsFactors = FALSE)
+    if (!length(ii)) return(NULL)                     # no respondent of this fold has positive weight
+    data.frame(id = ctx$data$ids[ii], fold = rep(as.integer(k), length(ii)), mean = drop(f$mu[ii, , drop = FALSE] %*% cc),
+               sd = rep(sqrt(sum(drop(t(f$th$loading) %*% cc)^2)), length(ii)),
+               weight = if (is.null(ww)) rep(1, length(ii)) else ww[ii], stringsAsFactors = FALSE)
   }))
   rownames(out) <- NULL
+  out$weight <- out$weight / sum(out$weight)
   attr(out, "summary") <- .sc_law_summary(out)
   class(out) <- c("sc_fitted_law", "data.frame")
   out
@@ -205,10 +234,20 @@ sc_fitted_law <- function(object, c, w = NULL) {
 print.sc_fitted_law <- function(x, ...) {
   if (!all(c("mean", "sd") %in% names(x))) { print(as.data.frame(x), ...); return(invisible(x)) }
   s <- .sc_law_summary(x)
-  cat(sprintf("Fitted law of a taste contrast over %d held-out respondents: mean %.4f, sd %.4f, share above zero %.4f\n",
-              nrow(x), s[["mean"]], s[["sd"]], s[["share_positive"]]))
+  cat(sprintf("Fitted law of a taste contrast over %d held-out respondents%s: mean %.4f, sd %.4f, share above zero %.4f\n",
+              nrow(x), if (.sc_law_equal_weights(x)) "" else " (weighted)", s[["mean"]], s[["sd"]], s[["share_positive"]]))
   invisible(x)
 }
-.sc_law_summary <- function(out)
-  c(mean = mean(out$mean), sd = sqrt(mean(out$sd^2) + mean((out$mean - mean(out$mean))^2)),
-    share_positive = mean(stats::pnorm(out$mean / out$sd)))
+# Share of a normal law above zero; a degenerate law (sd 0) puts its mass at the mean.
+.sc_share_positive <- function(mean, sd) ifelse(sd > 0, stats::pnorm(mean / sd), as.numeric(mean > 0))
+.sc_law_equal_weights <- function(out) is.null(out$weight) || length(unique(out$weight)) <= 1L
+# Mixture summaries with the respondents' weights (renormalized, so a subset of rows still works). With
+# equal weights the plain means are used, as before weights were kept.
+.sc_law_summary <- function(out) {
+  if (.sc_law_equal_weights(out))
+    return(c(mean = mean(out$mean), sd = sqrt(mean(out$sd^2) + mean((out$mean - mean(out$mean))^2)),
+             share_positive = mean(.sc_share_positive(out$mean, out$sd))))
+  w <- out$weight / sum(out$weight); m <- sum(w * out$mean)
+  c(mean = m, sd = sqrt(sum(w * out$sd^2) + sum(w * (out$mean - m)^2)),
+    share_positive = sum(w * .sc_share_positive(out$mean, out$sd)))
+}

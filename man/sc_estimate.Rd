@@ -7,7 +7,8 @@
 sc_estimate(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L)
 }
 \arguments{
-\item{object}{Fold states from \code{\link[=sc_states]{sc_states()}} or \code{\link[=sc_load]{sc_load()}}.}
+\item{object}{Fold states from \code{\link[=sc_states]{sc_states()}} or \code{\link[=sc_load]{sc_load()}}, covering every
+respondent (all folds; not built with \code{respondents}).}
 
 \item{targets}{A target or a list of targets (from \code{\link[=sc_mean]{sc_mean()}},
 \code{\link[=sc_share]{sc_share()}}, \code{\link[=sc_contest]{sc_contest()}}, \code{\link[=sc_ame_switch]{sc_ame_switch()}}, \code{\link[=sc_ame_rows]{sc_ame_rows()}},

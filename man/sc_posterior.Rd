@@ -76,8 +76,9 @@ respondents' coded tasks and choices.}
 \item{contrasts}{Optional utility contrasts \eqn{c}. A matrix with one contrast per row and
 one column per feature (row names name the contrasts), a single vector of length p, or a
 named vector or matrix whose names are a subset of \code{data$feature_names} (missing
-features get 0). A matrix with p rows and a different number of columns is read with one
-contrast per column.}
+features get 0; any other name is an error). A matrix whose rows are named by features,
+or a matrix with p unnamed rows and a different number of columns, is read with one
+contrast per column (its column names then name the contrasts).}
 
 \item{newtasks}{Optional tasks to predict: a matrix of coded task differences (p columns)
 used for every respondent, a list with one such matrix per selected respondent (named by

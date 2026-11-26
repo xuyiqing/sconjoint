@@ -44,9 +44,12 @@
 #' @param info_nodes,score_nodes Sobol nodes of the information and score rules (2048, 4096).
 #' @param seed Base seed (default 20261114).
 #' @param eig_floor Relative eigenvalue floor of each respondent's information.
-#' @param folds Which folds (default all fitted folds).
+#' @param folds Which folds (default all fitted folds). States for some folds
+#'   only do not cover every respondent, so [sc_estimate()] and
+#'   [sc_fitted_law()] refuse them.
 #' @param respondents If given, only the first `respondents` held-out
-#'   respondents of each fold (for checks; the states are then not for estimation).
+#'   respondents of each fold, for checks: [sc_estimate()] and
+#'   [sc_fitted_law()] refuse such partial states.
 #' @return An object of class `sc_states`.
 #' @examples
 #' \donttest{
@@ -66,6 +69,7 @@ sc_states <- function(fit, M = NULL, ny = NULL, info_nodes = 2048L, score_nodes 
   design <- x$design
   if (is.null(design)) stop("sc_states() needs the experiment's design law: sc_data(design = 'gs' or 'br'). ",
                             "Only these built-in designs are supported.", call. = FALSE)
+  .sc_check_design_features(d$feature_names, design)
   def <- .sc_info_defaults(design)
   if (is.null(M)) M <- def$M
   if (is.null(ny)) ny <- def$ny

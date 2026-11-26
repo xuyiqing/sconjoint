@@ -60,6 +60,12 @@ print.sc_target <- function(x, ...) {
   if (length(c) != p) stop(sprintf("a contrast needs %d coefficients (one per feature)", p), call. = FALSE)
   unname(as.numeric(c))
 }
+# Column names of a contest matrix, when given, must be the data's features in order (no reordering).
+.sc_check_columns <- function(cn, ctx, what) {
+  if (is.null(cn) || identical(cn, ctx$feature_names)) return(invisible(TRUE))
+  stop(sprintf("the columns of %s are named, but not by the data's features in order (%s, ...)", what,
+               paste(utils::head(ctx$feature_names, 3L), collapse = ", ")), call. = FALSE)
+}
 # Feature columns of a group: indices or names.
 .sc_resolve_cols <- function(g, ctx) {
   if (is.character(g)) {
@@ -108,7 +114,13 @@ sc_mean <- function(name, c, w = NULL) {
 #' @export
 sc_share <- function(name, c, w = NULL) {
   force(c); force(w)
-  .sc_target(name, "share", "bounded", function(ctx) list(.rum_tgt_share(name, .sc_resolve_cvec(c, ctx), .sc_resolve_w(w, ctx))))
+  .sc_target(name, "share", "bounded", function(ctx) {
+    cc <- .sc_resolve_cvec(c, ctx)
+    if (!all(is.finite(cc))) stop("the contrast of '", name, "' must be finite", call. = FALSE)
+    if (all(cc == 0)) stop("the contrast of '", name, "' is zero: its share above zero is 0 for everyone, ",
+                           "so there is nothing to estimate", call. = FALSE)
+    list(.rum_tgt_share(name, cc, .sc_resolve_w(w, ctx)))
+  })
 }
 
 #' Win probability in a hypothetical contest
@@ -122,7 +134,8 @@ sc_share <- function(name, c, w = NULL) {
 #' @inheritParams sc_mean
 #' @param D The contest(s): a numeric vector (one contest) or a matrix with one
 #'   row per contest, columns = coded features; or feature names for one contest.
-#' @param coef Weights of the rows (default equal; they should sum to one).
+#' @param coef Weights of the rows: finite, nonnegative and summing to one
+#'   (default equal).
 #' @param order Nodes of the Gauss-Hermite rule in each of the two dimensions
 #'   (default 41, the paper's rule).
 #' @return A target for [sc_estimate()].
@@ -134,10 +147,16 @@ sc_contest <- function(name, D, coef = NULL, w = NULL, order = 41L) {
   .sc_target(name, "choice", "onestep", function(ctx) {
     DD <- if (is.matrix(D)) {
       if (ncol(D) != ctx$p) stop(sprintf("contest rows need %d columns", ctx$p), call. = FALSE)
+      .sc_check_columns(colnames(D), ctx, "contest")
       unname(D)
     } else rbind(.sc_resolve_cvec(D, ctx))
     cf <- if (is.null(coef)) rep(1 / nrow(DD), nrow(DD)) else as.numeric(coef)
     if (length(cf) != nrow(DD)) stop("coef needs one weight per contest row", call. = FALSE)
+    # a probability: a mixture of contests (finite nonnegative weights summing to one)
+    if (!all(is.finite(cf)) || any(cf < 0) || abs(sum(cf) - 1) > 1e-8)
+      stop("coef must be finite nonnegative weights summing to one (a mixture of contests); sum is ",
+           format(sum(cf), digits = 6), call. = FALSE)
+    if (!all(is.finite(DD))) stop("contest rows must be finite numbers", call. = FALSE)
     quad <- if (order == 41L) .rum_law_quadrature() else rum_quadrature(c(order, order))
     list(.rum_tgt_choice_set_pref(name, DD, cf, w = .sc_resolve_w(w, ctx), quad = quad))
   })
@@ -180,6 +199,7 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
     des <- if (is.null(design)) ctx$design else design
     if (is.null(des)) stop("sc_ame_switch() needs a design law: give design = 'gs' or 'br', or set it in sc_data()", call. = FALSE)
     spec <- .rum_spec_arg(des)
+    .sc_check_design_features(ctx$feature_names, des)
     keys <- NULL
     if (spec$uses_resp) {
       if (is.null(ctx$groups$pid7)) stop("the GS design codes the co-partisan feature by party: the data's groups need pid7", call. = FALSE)
@@ -244,9 +264,11 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
 sc_ame_rows <- function(name, D, coef, side, w = NULL, position = TRUE, order = 31L, chunk = NULL) {
   D <- as.matrix(D); force(coef); force(side); force(w); force(position); force(order); force(chunk)
   if (length(coef) != nrow(D) || length(side) != nrow(D)) stop("coef and side need one entry per row of D", call. = FALSE)
+  cols <- colnames(D)
   rows <- list(D = unname(D), coef = as.numeric(coef), side = as.numeric(side))
   .sc_target(name, "ame", "onestep", function(ctx) {
     if (ncol(rows$D) != ctx$p) stop(sprintf("D needs %d columns", ctx$p), call. = FALSE)
+    .sc_check_columns(cols, ctx, "D")
     list(.sc_tgt_rows_chunked(name, rows, .sc_resolve_w(w, ctx), position, order, chunk))
   })
 }
@@ -310,8 +332,9 @@ sc_difference <- function(name, a, b) {
 #'   each attribute. Every attribute that enters utility should be listed.
 #' @param menus Optional named list of menus, one matrix per group (levels x
 #'   the group's columns). Default: a zero row plus the identity.
-#' @param level_weights Optional named list of level probabilities per group
-#'   (default equal).
+#' @param level_weights Optional named list of level probabilities per group:
+#'   one finite nonnegative weight per row of the group's menu, with a positive
+#'   sum (normalized; default equal).
 #' @param w Optional respondent weights (see [sc_mean()]).
 #' @param names Labels of the shares (default the group names).
 #' @param control Integration settings (`tol`, `n_start`, `n_max`, `n_rep`,
@@ -331,7 +354,11 @@ sc_importance <- function(groups, menus = NULL, level_weights = NULL, w = NULL, 
     QL <- lapply(base::names(cols), function(g) {
       A <- if (!is.null(menus[[g]])) as.matrix(menus[[g]]) else rbind(0, diag(length(cols[[g]])))
       if (ncol(A) != length(cols[[g]])) stop("the menu of '", g, "' needs one column per coded feature", call. = FALSE)
+      if (!is.numeric(A) || !all(is.finite(A))) stop("the menu of '", g, "' must be finite numbers", call. = FALSE)
       pi <- if (!is.null(level_weights[[g]])) level_weights[[g]] else rep(1, nrow(A))
+      if (!is.numeric(pi) || length(pi) != nrow(A) || !all(is.finite(pi)) || any(pi < 0) || !(sum(pi) > 0))
+        stop(sprintf(paste0("the level weights of '%s' must be %d finite nonnegative numbers (one per level of its menu) ",
+                            "with a positive sum"), g, nrow(A)), call. = FALSE)
       .sc_Qlev(ctx$p, cols[[g]], A, pi)
     })
     .sc_imp_targets(QL, names, ctx$p, .sc_resolve_w(w, ctx), ctl)
@@ -366,7 +393,7 @@ sc_importance <- function(groups, menus = NULL, level_weights = NULL, w = NULL, 
 #' @export
 sc_decisiveness <- function(groups, pairs = NULL, menus = NULL, allowed = NULL, best_worst = FALSE,
                             side = c("zero", "fitted"), names = NULL, w = NULL, control = list()) {
-  side <- match.arg(side); force(groups); force(pairs); force(menus); force(allowed); force(w)
+  side <- match.arg(side); force(groups); force(pairs); force(menus); force(allowed); force(best_worst); force(w)
   ctl <- do.call(.rum_dec_control, control)
   .sc_target(if (is.null(names)) "decisiveness" else names, "decisiveness", "onestep", function(ctx) {
     cols <- lapply(groups, .sc_resolve_cols, ctx = ctx)
