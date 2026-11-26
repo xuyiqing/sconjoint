@@ -74,7 +74,7 @@ mean_taste <- function(age, ideology, female) {
   out
 }
 environment(mean_taste) <- baseenv()
-loading <- cbind(factor1 = c(0.5, 0, 0, 0.3, 0.6, 0),       # ideological intensity: party and policy
+loading <- cbind(factor1 = c(0.7, 0, 0, 0.3, 0.6, 0),       # ideological intensity: party and policy
                  factor2 = c(0, 0.4, 0.8, 0, -0.2, 0.6))    # experience and gender
 rownames(loading) <- features
 kappa <- 0.2

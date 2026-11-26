@@ -78,7 +78,7 @@ conservative position (against a liberal one) \verb{g (1 + 2 s)} and \verb{g 4 s
 with \verb{g = 0.25 + 0.25 s^2}, which is a quadratic loss around the
 respondent's own position that weighs more for those at the extremes; and
 for a woman candidate \verb{0.15 + 0.35 female - 0.15 a}. The first taste factor
-moves party and policy together (loadings 0.5 on party, 0.3 and 0.6 on the
+moves party and policy together (loadings 0.7 on party, 0.3 and 0.6 on the
 moderate and conservative positions); the second moves experience and
 gender (0.4 and 0.8 on some and long experience, -0.2 on the conservative
 position, 0.6 on a woman candidate).
