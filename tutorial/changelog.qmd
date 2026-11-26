@@ -52,4 +52,4 @@ $10^{-8}$.
 
 **Book.** Rewritten for the new model. The application chapters start from the paper's saved fits,
 which are a separate download. The simulation chapter runs live on `simconjoint` and compares
-every estimate with the truth. Every figure is drawn with the package's plot functions, which @sec-plots describes.
+every estimate with the truth. The figures are drawn with the package's plot functions (@sec-plots), except the tax-plan contest figure, which has its own code.
