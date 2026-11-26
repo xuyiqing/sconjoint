@@ -19,6 +19,9 @@ the structural random-utility model with a neural-network mean and $q$ taste fac
   candidate first, so its position effect is a screen-side effect.
 - `br2017` gains the raw covariates `resp_age`, `resp_educ` and `resp_income` and the indicator
   `valid_income` for the 1,991 respondents in the paper's sample.
+- `simconjoint`, a simulated candidate-choice conjoint (800 respondents, 10 tasks, four attributes,
+  two taste factors), and `simconjoint_truth`, its true parameters, each respondent's tastes and the
+  exact population values of the quantities the simulation chapter estimates.
 - `sc_example_data("gs")` and `sc_example_data("br")` build the paper's exact model inputs, folds
   and validation respondents from the bundled data.
 
@@ -26,6 +29,11 @@ the structural random-utility model with a neural-network mean and $q$ taste fac
 
 - Data and fit: `sc_data()`, `sc_example_data()`, `sc_fit()`, `sc_select_rank()`, `sc_states()`,
   `sc_save()`, `sc_load()`.
+- Designs: `sc_design()` describes the most common conjoint design (each attribute drawn on its
+  own, two profiles per task, a fixed number of tasks) and how profiles are coded; `sc_code()`
+  codes recorded profiles with it. `sc_data()`, `sc_states()`, `sc_ame_switch()` and
+  `sc_importance()` accept such a design, so the whole workflow runs on experiments other than the
+  paper's two.
 - Targets: `sc_mean()`, `sc_share()`, `sc_ratio()`, `sc_difference()`, `sc_contest()`,
   `sc_ame_switch()`, `sc_ame_rows()`, `sc_importance()`, `sc_decisiveness()`, and the tax-plan
   helpers `sc_br_revenue_contrast()`, `sc_br_plan_contest()` and `sc_br_endpoint_ame()`.
@@ -39,4 +47,5 @@ applications: estimates, standard errors and intervals to $10^{-10}$, and bounde
 $10^{-8}$.
 
 **Book.** Rewritten for the new model. The application chapters start from the paper's saved fits,
-which are a separate download.
+which are a separate download. The simulation chapter runs live on `simconjoint` and compares
+every estimate with the truth.
