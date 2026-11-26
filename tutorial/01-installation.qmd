@@ -41,9 +41,9 @@ are saved in two files:
 | `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | about 21 MB |
 
 The files are too large for the package. They are a separate download, to be published with the
-package release. Each file holds what `sc_estimate()` needs from each of the five folds, each
-fold's network and covariate scaling, the respondent ids, groups, folds and validation respondents,
-and a checksum that `sc_load()` verifies.
+package release. For each of the five folds, a file holds what `sc_estimate()` needs and the fold's
+network and covariate scaling. It also holds the respondent ids, groups, folds, the validation
+respondents (used to stop training early), and a checksum that `sc_load()` verifies.
 
 @sec-gs, @sec-br, @sec-inference and @sec-respondents read the files from the folder in the option
 `sconjoint.fits`. The default is `fits` in the working directory. For another folder, set the
@@ -67,5 +67,5 @@ gs
 ```
 
 The printout gives the rank $q$, the number of folds, respondents and coded features, and the
-settings of the information and score rules. `sc_load()` returns `NULL` with a message when the
+integration settings used for the information and the scores. `sc_load()` returns `NULL` with a message when the
 file is missing. It stops when the checksum does not match.

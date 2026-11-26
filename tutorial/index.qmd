@@ -9,8 +9,8 @@ In the democracy experiment of @graham2020democracy, respondents chose between t
 state legislative candidates in up to thirteen matchups. The average marginal component effect
 (AMCE) [@hainmueller2014causal] of a co-partisan candidate, the change in the chance of being
 chosen, is about 14 percentage points. It does not say how many respondents prefer a co-partisan.
-It fits almost everyone mildly preferring their own party, and also a minority who care a great deal
-while the rest do not care.
+The same AMCE fits two cases: almost everyone mildly prefers their own party, or a minority cares a
+great deal while the rest do not care.
 
 The structural model separates the two cases. Among the 1,377 partisans and leaners, the paper
 estimates that 82.5% prefer a co-partisan candidate, other attributes held fixed (95% interval

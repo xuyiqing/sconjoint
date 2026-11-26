@@ -4,8 +4,8 @@ This chapter lists every target constructor, what it estimates, and its interval
 use the package's toy fit: 40 simulated respondents under the tax-plan design, one taste factor and
 two folds. Its estimates mean nothing.
 
-Targets that average over the experiment's randomization (`sc_ame_switch()`, and the information
-behind every standard error) need the design. The package knows the two applications' designs
+`sc_ame_switch()` averages over the experiment's randomization, and so does the information
+behind every standard error. Both need the design. The package knows the two applications' designs
 (`"gs"`, `"br"`) and, through `sc_design()`, designs that draw each attribute on its own, as in
 @sec-quickstart.
 

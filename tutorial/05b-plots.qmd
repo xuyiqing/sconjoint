@@ -45,7 +45,7 @@ sc_plot_estimates(All = means, Democrats = means_dem)
 the laws share one panel, one row each, scaled to the same height. With `layout = "panels"` each law
 gets its own panel, and `means` adds the corrected mean as a red line with its 95% interval as a red
 bar. `truth` takes true density functions in a simulation. The curves are fitted values before the
-score correction, so a corrected mean need not sit at a curve's center. (In the toy fit the
+one-step correction, so a corrected mean need not sit at a curve's center. (In the toy fit the
 corrected means fall outside the curves, so the example leaves them out.)
 
 ```{r}
@@ -103,8 +103,8 @@ sc_plot_importance(All = imp_all, Democrats = imp_dem,
 `sc_plot_lines()` draws estimates against an ordered setting `x`, such as an income bracket: a line
 with points for each table and a shaded band for the 95% intervals. Each table has one row per value
 of `x`. `xlab` is required. `hline` sets the dashed reference line (default 0.5 for probabilities
-and shares). One call draws one panel. For several panels, loop over `layout()` with
-`legend = FALSE` and draw one legend.
+and shares). One call draws one panel. For several panels, set up `layout()`, call the
+function once per panel with `legend = FALSE`, and draw one legend.
 
 ```{r}
 #| label: p-lines

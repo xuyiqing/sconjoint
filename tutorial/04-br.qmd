@@ -37,8 +37,8 @@ The chapter uses the helpers of @sec-gs in `_figs-helpers.R`, such as `estimate_
 ## Data and fit
 
 `sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data: the 1,991
-respondents who answered the income question, 15,928 tasks, and 16 coded features. Plan A comes
-first. Each rate enters utility through a linear and a quadratic term, and the revenue category
+respondents who answered the income question, 15,928 tasks, and 16 coded features. Plan A is the
+first profile. Each rate enters utility through a linear and a quadratic term, and the revenue category
 through four contrasts. The network uses age, sex, education, race, income and party ID, coded in
 sixteen columns.
 
@@ -50,8 +50,8 @@ table(x$groups$party, useNA = "ifany")
 ```
 
 The party groups are Democrats (`party == "Dem"`, 885), Republicans (`party == "Rep"`, 643) and
-independents (`pid7 == 4`, 389). The 74 respondents who answered "not sure" are in
-`party == "Ind"` but in no party group, so the book selects independents by `pid7`.
+independents (`pid7 == 4`, 389). `party == "Ind"` also holds the 74 respondents who answered "not
+sure". They belong to no party group, so the book selects independents by `pid7`.
 
 The fit selected four taste factors. Reproducing it takes several hours:
 
@@ -72,7 +72,7 @@ sc_save(br, file.path(fits, "br_q4.rds"))
 | 4 (selected) | -4.742 | 0.0203 | 3.59 |
 | 5 | -4.746 | -0.0047 | -0.75 |
 
-## Recorded design
+## Recorded plans
 
 The displayed revenue category was generated from the six rates, with noise, so raising a rate also
 changes the revenue a plan is likely to show. The BR helpers therefore need the plans respondents
@@ -190,7 +190,8 @@ sc_plot_estimates(Democrat = by_party("Democrats"), Independent = by_party("inde
 
 Bars are 95% log-odds intervals. Party groups include leaners.
 
-Before the score correction (`plug_in`), the top-rate shares are 76.8% and 63.8%, a smaller gap.
+Before the one-step correction (`plug_in`), the top-rate shares of Democrats and Republicans are
+76.8% and 63.8%, a smaller gap.
 The difference between the two party means has its own interval:
 
 ```{r}
@@ -212,7 +213,7 @@ bn <- c("Below $10k", "$10-35k", "$35-85k", "$85-175k", "$175-375k", "Above $375
 ```
 
 The top bracket's law is narrower than the bottom one's, with about 30% of its mass below zero. As
-in @sec-gs, the curves come before the score correction, so the red corrected mean and interval need
+in @sec-gs, the curves come before the one-step correction, so the red corrected mean and interval need
 not sit at a curve's center.
 
 ```{r}
@@ -388,9 +389,9 @@ sc_table("Mean per point" = means, "Share favoring" = shares, "Choice effect" = 
 
 `sc_decisiveness()` gives how often exchanging two plans' rates in one bracket would reverse the
 choice, with the other rates, the displayed revenue and the task shock as recorded. It takes each
-bracket's two coded columns and a menu with one row per rate: the rate part of
-`sc_br_revenue_contrast()` (`follow_revenue = FALSE`) relative to the lowest rate. A common shift of
-the menu does not change the swaps.
+bracket's two coded columns and a menu with one row per rate. Each row is the rate part of
+`sc_br_revenue_contrast()` (`follow_revenue = FALSE`) for a move from the lowest rate to that rate.
+Adding the same vector to every row does not change the swaps.
 
 ```{r}
 #| label: br-decisiveness

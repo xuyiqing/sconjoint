@@ -17,7 +17,7 @@ being chosen by `r round(100 * tv("AME: long vs no experience"), 1)` percentage 
 This chapter runs the whole workflow on these data and compares the estimates with the truth.
 
 The chapter runs live, in about five minutes on a recent laptop. It uses a small network and
-modest integration rules. The paper's larger settings would give somewhat tighter answers.
+fewer integration nodes than the paper. The paper's larger settings would give somewhat tighter answers.
 
 ## Experiment
 
@@ -68,7 +68,8 @@ The choices follow the package's model (@sec-intro): tastes $\beta_i = \mu(Z_i) 
 with two taste factors, and a pull $a_i = \sqrt{\omega}\, v_i$ toward the left candidate on top of
 the average pull $\kappa$. Here $\kappa = 0.2$ and $\omega = 0.3$. The taste for a Republican
 rises with ideology and flattens out for strong partisans. Older respondents value experience
-more. Policy tastes follow a loss around the respondent's own position. The first taste factor
+more. Policy tastes follow a quadratic loss around the respondent's own position: a candidate loses
+utility the farther its position is from the respondent's. The first taste factor
 moves party and policy, the second experience and gender. `?simconjoint` gives every formula.
 
 ```{r}
@@ -77,8 +78,9 @@ simconjoint_truth$parameters[c("kappa", "omega")]
 simconjoint_truth$parameters$loading
 ```
 
-`simconjoint_truth$population` holds the population values, exact sums over the finite set of
-characteristic values with inner integrals computed by quadrature to about $10^{-6}$ or better.
+`simconjoint_truth$population` holds the population values. Each is an exact sum over the finite
+set of characteristic values. The integrals inside the sum are computed by quadrature, accurate to
+about $10^{-6}$ or better.
 
 ## Fits
 
@@ -243,12 +245,13 @@ sc_plot_laws(lapply(sf, function(f) sc_fitted_law(st, f)),
 The true taste for a Republican has two humps, liberals below zero and conservatives above. The
 fitted distribution has the right width, from about $-3$ to $3$, but blurs the humps into a
 plateau. The 8-unit network learns a mean taste almost linear in ideology, while the truth,
-$2 \tanh(3s)$ with $s$ the ideology divided by 3, levels off away from the centre. The fit makes
+$2 \tanh(3s)$ with $s$ the ideology divided by 3, levels off away from the center. The fit makes
 up for this with a larger spread (the table below). A network with two hidden layers (16 and 8
 units) found the humps in our trials but predicted held-out choices worse, so the held-out score
-prefers the smoother fit. The shares and means are
-still right, because they depend only on the mass above zero and the centre. The taste for long
-experience has one hump, recovered almost exactly, about three quarters of it above zero.
+prefers the smoother fit. The shares and means are still right, because they depend only on the
+mass above zero and the center. The taste for long
+experience has one hump, with about three quarters of it above zero, and the fit recovers it almost
+exactly.
 
 The loading $\Lambda$ itself is not identified: any rotation of its columns gives the same model.
 The spread of tastes among respondents with the same characteristics, $\Lambda\Lambda^\top$, is
