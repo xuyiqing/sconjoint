@@ -68,3 +68,31 @@ test_that("3: rank selection pairs scores by respondent and rejects unequal leng
   f3 <- mk(2L, c("a", "b", "c", "z"), unname(h2))
   expect_error(sc_select_rank(list(f1, f3)), "same respondents")
 })
+
+test_that("4: fitted-law summaries use the weights' magnitudes", {
+  st <- sc_test_states(); n <- st$data$data$n
+  l <- sc_fitted_law(st, "f1", w = seq_len(n)); s <- attr(l, "summary")
+  ww <- match(l$id, st$data$data$ids); ww <- ww / sum(ww)
+  expect_equal(l$weight, ww, tolerance = 1e-15)
+  m <- sum(ww * l$mean)
+  expect_equal(s[["mean"]], m, tolerance = 1e-14)
+  expect_equal(s[["sd"]], sqrt(sum(ww * l$sd^2) + sum(ww * (l$mean - m)^2)), tolerance = 1e-14)
+  expect_equal(s[["share_positive"]], sum(ww * stats::pnorm(l$mean / l$sd)), tolerance = 1e-14)
+  expect_output(print(l), "\\(weighted\\)")
+  # 0/1 weights and no weights: equal weights, plain means (unchanged summaries)
+  l0 <- sc_fitted_law(st, "f1", w = "g"); s0 <- attr(l0, "summary")
+  expect_identical(s0[["mean"]], mean(l0$mean))
+  expect_identical(nrow(l0), sum(st$data$groups$g > 0))
+  la <- sc_fitted_law(st, "f1")
+  expect_identical(attr(la, "summary")[["mean"]], mean(la$mean)); expect_equal(sum(la$weight), 1)
+  expect_output(print(la), "over 30 held-out respondents: mean")
+})
+
+test_that("6: fitted laws skip folds without subgroup members", {
+  st <- sc_test_states()
+  l <- sc_fitted_law(st, "f1", w = as.numeric(st$data$fold == 1))
+  expect_identical(nrow(l), sum(st$data$fold == 1)); expect_true(all(l$fold == 1L))
+  one <- which(st$data$fold == 2)[1]
+  l1 <- sc_fitted_law(st, "f1", w = as.numeric(seq_len(st$data$data$n) == one))
+  expect_identical(l1$id, st$data$data$ids[one]); expect_identical(l1$fold, 2L)
+})

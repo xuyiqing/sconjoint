@@ -186,9 +186,11 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #'
 #' @param object Fold states from [sc_states()] or [sc_load()].
 #' @inheritParams sc_mean
-#' @return A data frame with one row per held-out respondent (fold order):
-#'   `id`, `fold`, `mean`, `sd`. Its attribute `"summary"` gives the mixture's
-#'   mean, standard deviation and the share above zero.
+#' @return A data frame with one row per held-out respondent with positive
+#'   weight (fold order): `id`, `fold`, `mean`, `sd` and `weight` (the
+#'   respondent's weight, normalized to sum to one; equal without `w`). Its
+#'   attribute `"summary"` gives the weighted mixture's mean, standard
+#'   deviation and the share above zero.
 #' @examples
 #' \donttest{
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
@@ -202,10 +204,13 @@ sc_fitted_law <- function(object, c, w = NULL) {
   out <- do.call(rbind, lapply(names(object$folds), function(k) {
     f <- object$folds[[k]]
     ii <- if (is.null(people)) f$te else intersect(f$te, people)
-    data.frame(id = ctx$data$ids[ii], fold = as.integer(k), mean = drop(f$mu[ii, , drop = FALSE] %*% cc),
-               sd = rep(sqrt(sum(drop(t(f$th$loading) %*% cc)^2)), length(ii)), stringsAsFactors = FALSE)
+    if (!length(ii)) return(NULL)                     # no respondent of this fold has positive weight
+    data.frame(id = ctx$data$ids[ii], fold = rep(as.integer(k), length(ii)), mean = drop(f$mu[ii, , drop = FALSE] %*% cc),
+               sd = rep(sqrt(sum(drop(t(f$th$loading) %*% cc)^2)), length(ii)),
+               weight = if (is.null(ww)) rep(1, length(ii)) else ww[ii], stringsAsFactors = FALSE)
   }))
   rownames(out) <- NULL
+  out$weight <- out$weight / sum(out$weight)
   attr(out, "summary") <- .sc_law_summary(out)
   class(out) <- c("sc_fitted_law", "data.frame")
   out
@@ -215,10 +220,20 @@ sc_fitted_law <- function(object, c, w = NULL) {
 print.sc_fitted_law <- function(x, ...) {
   if (!all(c("mean", "sd") %in% names(x))) { print(as.data.frame(x), ...); return(invisible(x)) }
   s <- .sc_law_summary(x)
-  cat(sprintf("Fitted law of a taste contrast over %d held-out respondents: mean %.4f, sd %.4f, share above zero %.4f\n",
-              nrow(x), s[["mean"]], s[["sd"]], s[["share_positive"]]))
+  cat(sprintf("Fitted law of a taste contrast over %d held-out respondents%s: mean %.4f, sd %.4f, share above zero %.4f\n",
+              nrow(x), if (.sc_law_equal_weights(x)) "" else " (weighted)", s[["mean"]], s[["sd"]], s[["share_positive"]]))
   invisible(x)
 }
-.sc_law_summary <- function(out)
-  c(mean = mean(out$mean), sd = sqrt(mean(out$sd^2) + mean((out$mean - mean(out$mean))^2)),
-    share_positive = mean(stats::pnorm(out$mean / out$sd)))
+# Share of a normal law above zero; a degenerate law (sd 0) puts its mass at the mean.
+.sc_share_positive <- function(mean, sd) ifelse(sd > 0, stats::pnorm(mean / sd), as.numeric(mean > 0))
+.sc_law_equal_weights <- function(out) is.null(out$weight) || length(unique(out$weight)) <= 1L
+# Mixture summaries with the respondents' weights (renormalized, so a subset of rows still works). With
+# equal weights the plain means are used, as before weights were kept.
+.sc_law_summary <- function(out) {
+  if (.sc_law_equal_weights(out))
+    return(c(mean = mean(out$mean), sd = sqrt(mean(out$sd^2) + mean((out$mean - mean(out$mean))^2)),
+             share_positive = mean(.sc_share_positive(out$mean, out$sd))))
+  w <- out$weight / sum(out$weight); m <- sum(w * out$mean)
+  c(mean = m, sd = sqrt(sum(w * out$sd^2) + sum(w * (out$mean - m)^2)),
+    share_positive = sum(w * .sc_share_positive(out$mean, out$sd)))
+}
