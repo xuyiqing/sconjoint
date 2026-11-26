@@ -33,3 +33,4 @@ applications/*/results/
 src/*.o
 src/*.so
 src/*.dll
+!inst/extdata/toy_fit.rds

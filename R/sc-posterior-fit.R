@@ -34,6 +34,7 @@ sc_posterior.sc_fit <- function(object, data = NULL, respondents = NULL, contras
 
 .sc_posterior_crossfit <- function(parts, fitted_data, data, respondents, newtasks, ...) {
   if (is.null(data)) data <- fitted_data
+  if (inherits(data, "sc_data")) data <- data$data
   if (!identical(data$ids, fitted_data$ids))
     stop("data must have the same respondents, in the same order, as the fitted object.")
   sel <- .sc_post_respondents(data, respondents)

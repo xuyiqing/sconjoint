@@ -68,7 +68,8 @@ sc_posterior(
 length-p vector when q = 1) and \code{omega} (the variance of the position effect). Methods
 for fitted model objects can be added.}
 
-\item{data}{A \code{rum_data} object with the respondents' coded tasks and choices.}
+\item{data}{An \code{\link[=sc_data]{sc_data()}} object (or the lower-level \code{rum_data} object it holds) with the
+respondents' coded tasks and choices.}
 
 \item{respondents}{Respondents to summarize, by index or ID. \code{NULL} (the default) takes all.}
 
@@ -157,15 +158,20 @@ result is reproducible and does not use or change R's random-number state. The
 \examples{
 set.seed(1)
 n <- 20; p <- 3; Tn <- 12
-d <- replicate(n, matrix(sample(c(-1, 0, 1), Tn * p, TRUE), Tn, p), simplify = FALSE)
+X <- matrix(sample(c(-1, 0, 1), n * Tn * p, TRUE), n * Tn, p,
+            dimnames = list(NULL, c("a", "b", "c")))
+id <- rep(seq_len(n), each = Tn)
 mu <- matrix(rnorm(n * p, 0, .5), n, p)
 L <- matrix(c(.8, -.4, .3), p, 1)
-y <- lapply(seq_len(n), function(i)
-  rbinom(Tn, 1, plogis(.1 + d[[i]] \%*\% (mu[i, ] + L * rnorm(1)) + sqrt(.3) * rnorm(1))))
-dat <- rum_data(y, d, feature_names = c("a", "b", "c"),
-  metadata = list(orientation = "y = 1: first profile chosen"))
+beta <- mu + rnorm(n) \%o\% L[, 1]
+y <- rbinom(n * Tn, 1, plogis(.1 + rowSums(X * beta[id, ]) + sqrt(.3) * rnorm(n)[id]))
+dat <- sc_data(y, X, id)
 post <- sc_posterior(list(mu = mu, kappa = .1, loading = L, omega = .3), dat,
   respondents = 1:3, contrasts = c(a = 1, b = -1), nodes = 1024)
 post$contrasts
 post$diagnostics
+
+# A fitted object: each respondent at the fold that held it out
+toy <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
+sc_posterior(toy, respondents = 1:2, nodes = 1024)
 }
