@@ -25,7 +25,9 @@ sc_plot_estimates(
 }
 \arguments{
 \item{...}{One or more estimate tables from \code{\link[=sc_estimate]{sc_estimate()}} (or one list of
-them). Several tables must be named; the names label the legend.}
+them). Several tables must be named; the names label the legend. Groups
+are kept apart by their position, so two tables may share a name (each
+keeps its own color and legend entry).}
 
 \item{labels}{Row labels: a character vector named by target name, or one
 label per row in order. Default the target names.}

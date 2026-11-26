@@ -66,11 +66,18 @@ spans at least 95 percentage points (\code{hide_wide}).
 Rows follow \code{order} or the names of \code{means}. The other tables are matched to
 the rows by target name when they have every row's name, otherwise by
 position (one row per row of the figure). \code{laws} is matched by name when
-named by target, otherwise by position: one law per row of the figure, or
-one per row of \code{means}.
+named by target. Otherwise it is matched by position: one law per row of
+\code{means}, in the order of \code{means} (reordered with the rows when \code{order}
+permutes or drops them), or, when \code{order} shows fewer rows than \code{means} has,
+one law per row of the figure, in the figure's order. A law with standard
+deviation 0 (a point mass) is drawn in Panel B as a narrow bar at its value.
 
 The function draws on the current device and does not set its size; the
-book's version is 9.2 by 5.5 inches at 11 points.
+book's version is 9.2 by 5.5 inches at 11 points. It uses the whole device
+page, like \code{\link[=pairs]{pairs()}}: it sets its own \code{\link[=layout]{layout()}} of panels, so it cannot be
+placed in one panel of your own \code{layout()} or \code{par(mfrow = )}. Afterwards
+the device has one figure per page (an earlier layout is not restored) and
+the other graphics settings are as they were.
 }
 \examples{
 fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))

@@ -57,6 +57,16 @@ vertical axis; \code{means} adds the estimated mean taste as a red line with its
 \details{
 The curves are fitted values before the score correction, so a corrected
 mean need not sit at the curve's centre.
+
+A law or mixture component with standard deviation 0 is a point mass (for
+example the law of a zero contrast). It is drawn as a narrow bar, about one
+bin wide, at its value, and the automatic limits leave a margin around it.
+
+\code{"panels"} uses the whole device page, like \code{\link[=pairs]{pairs()}}: it sets its own
+grid of panels, so it cannot be placed in one panel of your own
+\code{\link[=layout]{layout()}} or \code{par(mfrow = )}. Afterwards the device has one figure per
+page (an earlier layout is not restored) and the other graphics settings
+are as they were. \code{"ridges"} draws one panel and can go in a layout.
 }
 \examples{
 fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))

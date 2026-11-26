@@ -148,6 +148,18 @@
 .scp_par_keep <- function() graphics::par(c("las", "tcl", "mgp", "xaxs", "yaxs", "mar", "xpd", "cex.axis"))
 .scp_paper_par <- function() graphics::par(las = 1, tcl = -.2, mgp = c(1.7, .45, 0), xaxs = "i", yaxs = "i")
 
+# For the functions that use the whole page (their own layout() or mfrow): every setting but
+# the layout. A layout cannot be read back from par(), so it is not restored; on exit the device
+# is left with one figure per page and the other settings as they were.
+.scp_page_keep <- function() {
+  op <- graphics::par(no.readonly = TRUE)
+  op[setdiff(names(op), c("mfrow", "mfcol", "mfg", "fig", "fin", "pin", "plt"))]
+}
+.scp_page_restore <- function(op) {
+  graphics::par(mfrow = c(1L, 1L))
+  graphics::par(op)
+}
+
 # Margins in lines, with the left margin in inches (to fit row labels).
 .scp_set_margins <- function(bottom, left_in, top, right) {
   graphics::par(mar = c(bottom, 1, top, right))
@@ -210,16 +222,44 @@
       stop(sprintf("%s(): law %d is not a table from sc_fitted_law() (columns mean, sd and weight)", fun, k),
            call. = FALSE)
     if (is.null(l$weight)) l$weight <- rep(1, nrow(l))
+    if (!is.numeric(l$mean) || !is.numeric(l$sd) || !all(is.finite(l$mean)) || !all(is.finite(l$sd) & l$sd >= 0))
+      stop(sprintf("%s(): law %d needs finite means and finite, non-negative sds", fun, k), call. = FALSE)
+    if (!is.numeric(l$weight) || !all(is.finite(l$weight) & l$weight >= 0) || sum(l$weight) <= 0)
+      stop(sprintf("%s(): law %d needs finite, non-negative weights with a positive sum", fun, k), call. = FALSE)
     laws[[k]] <- as.data.frame(l)[, c("mean", "sd", "weight")]
   }
   laws
 }
 
-# Probability mass of a fitted law (a mixture of normals) in the bins between `edges`.
+# Probability mass of a fitted law (a mixture of normals) in the bins between `edges`. A point
+# mass (a component with sd 0, as for a zero contrast) is spread as a normal with a quarter of
+# the bin width, so it shows as a bar about one bin wide centred on its value (two half bins when
+# the value is on a bin edge).
 .scp_law_mass <- function(law, edges) {
   w <- law$weight / sum(law$weight)
-  cdf <- vapply(edges, function(x) sum(w * stats::pnorm(x, law$mean, law$sd)), numeric(1))
+  sd <- law$sd; sd[sd == 0] <- (edges[2L] - edges[1L]) / 4
+  cdf <- vapply(edges, function(x) sum(w * stats::pnorm(x, law$mean, sd)), numeric(1))
   diff(cdf)
+}
+
+# Horizontal range for laws: zero, and each law's mean plus or minus three standard deviations
+# (of the mixture with `mixture`, else of each component). A point mass (a component with sd 0)
+# keeps a margin of 5% of that range on each side (1 when the range is a single point), so it
+# never sits on an edge.
+.scp_laws_range <- function(laws, mixture = TRUE) {
+  ends <- unlist(lapply(laws, function(l) {
+    if (!mixture) return(c(l$mean - 3 * l$sd, l$mean + 3 * l$sd))
+    w <- l$weight / sum(l$weight); m <- sum(w * l$mean)
+    s <- sqrt(sum(w * l$sd^2) + sum(w * (l$mean - m)^2)); c(m - 3 * s, m + 3 * s)
+  }))
+  r <- range(0, ends)
+  pts <- unlist(lapply(laws, function(l) l$mean[l$sd == 0]))
+  if (length(pts)) {
+    r <- range(r, pts)
+    h <- if (diff(r) > 0) .05 * diff(r) else max(1, .1 * abs(r[1L]))
+    r <- range(r, pts - h, pts + h)
+  }
+  r
 }
 
 # Mass of a true density function in the same bins (midpoint rule on 4 points per bin).
@@ -244,19 +284,17 @@
 
 # A fitted law as a ridge (a step outline of its mass in 150 bins) centred on row y.
 .scp_ridge <- function(law, y, limits, height = .63, color = .scp_blue, truth = NULL) {
-  edges <- seq(limits[1L], limits[2L], length.out = 151L)
+  edges <- seq(limits[1L], limits[2L], length.out = 151L); bw <- edges[2L] - edges[1L]
   h <- .scp_law_mass(law, edges)
   tm <- if (is.function(truth)) .scp_truth_mass(truth, edges) else NULL
-  s <- height / max(h, tm); h <- s * h
+  top <- max(h, tm, na.rm = TRUE)
+  s <- if (is.finite(top) && top > 0) height / top else 0   # no mass inside the limits: a flat ridge
   x <- .scp_step_x(edges)
-  graphics::polygon(c(limits[1L], x, limits[2L]), c(y - .3, y - .3 + rep(h, each = 2L), y - .3),
+  graphics::polygon(c(limits[1L], x, limits[2L]), c(y - .3, y - .3 + rep(s * h, each = 2L), y - .3),
                     col = grDevices::adjustcolor(color, .20), border = color, lwd = .7)
-  if (!is.null(tm)) {
-    tm <- s * tm
-    graphics::lines(x, y - .3 + rep(tm, each = 2L), col = "black", lwd = 1)
-  }
+  if (!is.null(tm)) graphics::lines(x, y - .3 + rep(s * tm, each = 2L), col = "black", lwd = 1)
   data.frame(x = (utils::head(edges, -1L) + utils::tail(edges, -1L)) / 2,
-             density = h / s / diff(edges)[1L], truth = if (is.null(tm)) NA_real_ else tm / s / diff(edges)[1L])
+             density = h / bw, truth = if (is.null(tm)) NA_real_ else tm / bw)
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -273,7 +311,9 @@
 #' legend labels).
 #'
 #' @param ... One or more estimate tables from [sc_estimate()] (or one list of
-#'   them). Several tables must be named; the names label the legend.
+#'   them). Several tables must be named; the names label the legend. Groups
+#'   are kept apart by their position, so two tables may share a name (each
+#'   keeps its own color and legend entry).
 #' @param labels Row labels: a character vector named by target name, or one
 #'   label per row in order. Default the target names.
 #' @param order Optional character vector of target names: the rows shown, in
@@ -329,14 +369,16 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
   nr <- length(rows); yy <- rev(seq_len(nr))
   diamond <- !is.null(ref) && reference_style == "diamond"
   off <- .scp_offsets(k + diamond)
-  pd <- do.call(rbind, lapply(seq_len(k), function(g) {
+  # one data frame per group, kept apart by position (group names are only labels and may repeat)
+  pdl <- lapply(seq_len(k), function(g) {
     x <- tabs[[g]]; i <- match(rows, x$name)
-    data.frame(group = gn[g], name = rows, label = if (is.character(labs)) labs else rows, y = yy + off[g],
-               estimate = scale * x$estimate[i], lower = scale * x$lower[i], upper = scale * x$upper[i],
-               shown = .scp_shown(x$lower[i], x$upper[i], hide_wide),
-               reference = if (is.null(ref)) NA_real_ else scale * ref, stringsAsFactors = FALSE)
-  }))
-  pd <- pd[!is.na(pd$estimate), , drop = FALSE]
+    z <- data.frame(group = gn[g], name = rows, label = if (is.character(labs)) labs else rows, y = yy + off[g],
+                    estimate = scale * x$estimate[i], lower = scale * x$lower[i], upper = scale * x$upper[i],
+                    shown = .scp_shown(x$lower[i], x$upper[i], hide_wide),
+                    reference = if (is.null(ref)) NA_real_ else scale * ref, stringsAsFactors = FALSE)
+    z[!is.na(z$estimate), , drop = FALSE]
+  })
+  pd <- do.call(rbind, pdl)
   if (is.null(xlim)) {
     ax <- .scp_axis(.scp_pad(c(pd$estimate, pd$lower[pd$shown], pd$upper[pd$shown], scale * ref), pad = .04))
     xlim <- ax$lim; ticks <- ax$ticks
@@ -355,7 +397,7 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
   graphics::axis(2, at = yy, labels = labs, tick = FALSE, cex.axis = lab_cex)
   if (!is.null(main)) graphics::mtext(main, 3, .7, cex = .95, font = 2)
   for (g in seq_len(k)) {
-    z <- pd[pd$group == gn[g], , drop = FALSE]
+    z <- pdl[[g]]
     .scp_ci(z$estimate, z$lower, z$upper, z$y, z$shown, colors[g])
   }
   if (!is.null(ref)) {
@@ -396,6 +438,16 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #'
 #' The curves are fitted values before the score correction, so a corrected
 #' mean need not sit at the curve's centre.
+#'
+#' A law or mixture component with standard deviation 0 is a point mass (for
+#' example the law of a zero contrast). It is drawn as a narrow bar, about one
+#' bin wide, at its value, and the automatic limits leave a margin around it.
+#'
+#' `"panels"` uses the whole device page, like [pairs()]: it sets its own
+#' grid of panels, so it cannot be placed in one panel of your own
+#' [layout()] or `par(mfrow = )`. Afterwards the device has one figure per
+#' page (an earlier layout is not restored) and the other graphics settings
+#' are as they were. `"ridges"` draws one panel and can go in a layout.
 #'
 #' @param laws A table from [sc_fitted_law()], or a list of them.
 #' @param labels Labels of the laws: one per law in order, or named by the
@@ -445,13 +497,7 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
   if (!is.numeric(ncol) || length(ncol) != 1L || ncol < 1) stop("sc_plot_laws(): ncol must be a positive number", call. = FALSE)
   has_truth <- any(!vapply(truth, is.null, TRUE))
   if (layout == "ridges") {
-    if (is.null(xlim)) {
-      ends <- unlist(lapply(laws, function(l) {
-        w <- l$weight / sum(l$weight); m <- sum(w * l$mean)
-        s <- sqrt(sum(w * l$sd^2) + sum(w * (l$mean - m)^2)); c(m - 3 * s, m + 3 * s)
-      }))
-      xlim <- range(pretty(range(0, ends), n = 4))
-    }
+    if (is.null(xlim)) xlim <- range(pretty(.scp_laws_range(laws), n = 4))
     ticks <- .scp_ticks(xlim)
     op <- .scp_par_keep(); on.exit(graphics::par(op))
     .scp_paper_par()
@@ -475,18 +521,19 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
   }
   # panels
   nc <- min(as.integer(ncol), k); nrw <- ceiling(k / nc)
-  op <- graphics::par(no.readonly = TRUE); on.exit(graphics::par(op))
+  op <- .scp_page_keep(); on.exit(.scp_page_restore(op))
   has_leg <- has_truth || !is.null(means)
   graphics::par(mfrow = c(nrw, nc), mar = c(1.9, 2.9, 1.9, .5), oma = c(1.2 + 1.6 * has_leg, .2, .2, .2),
                 las = 1, tcl = -.2, mgp = c(1.9, .45, 0), xaxs = "i", yaxs = "i")
   out <- vector("list", k)
   for (j in seq_len(k)) {
     l <- laws[[j]]
-    lim <- if (is.null(xlim)) range(0, l$mean - 3 * l$sd, l$mean + 3 * l$sd) else xlim
+    lim <- if (is.null(xlim)) .scp_laws_range(list(l), mixture = FALSE) else xlim
     edges <- seq(lim[1L], lim[2L], length.out = 151L); bw <- diff(edges)[1L]
     dens <- .scp_law_mass(l, edges) / bw
     td <- if (is.function(truth[[j]])) .scp_truth_mass(truth[[j]], edges) / bw else NULL
-    top <- 1.12 * max(dens, td)
+    top <- 1.12 * max(dens, td, na.rm = TRUE)
+    if (!is.finite(top) || top <= 0) top <- 1   # no mass inside the limits
     graphics::plot(NA, xlim = lim, ylim = c(0, top), axes = FALSE, xlab = "", ylab = "Density", cex.lab = .8)
     yt <- .scp_ticks(c(0, top), n = 3)
     graphics::abline(h = yt, col = .scp_grid, lwd = .6)
@@ -537,11 +584,18 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
 #' Rows follow `order` or the names of `means`. The other tables are matched to
 #' the rows by target name when they have every row's name, otherwise by
 #' position (one row per row of the figure). `laws` is matched by name when
-#' named by target, otherwise by position: one law per row of the figure, or
-#' one per row of `means`.
+#' named by target. Otherwise it is matched by position: one law per row of
+#' `means`, in the order of `means` (reordered with the rows when `order`
+#' permutes or drops them), or, when `order` shows fewer rows than `means` has,
+#' one law per row of the figure, in the figure's order. A law with standard
+#' deviation 0 (a point mass) is drawn in Panel B as a narrow bar at its value.
 #'
 #' The function draws on the current device and does not set its size; the
-#' book's version is 9.2 by 5.5 inches at 11 points.
+#' book's version is 9.2 by 5.5 inches at 11 points. It uses the whole device
+#' page, like [pairs()]: it sets its own [layout()] of panels, so it cannot be
+#' placed in one panel of your own `layout()` or `par(mfrow = )`. Afterwards
+#' the device has one figure per page (an earlier layout is not restored) and
+#' the other graphics settings are as they were.
 #'
 #' @param means Estimate table of mean tastes ([sc_mean()] targets).
 #' @param laws Fitted laws ([sc_fitted_law()]), a list, one per feature.
@@ -584,7 +638,7 @@ sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL,
   lnames <- if (is.data.frame(laws)) NULL else names(laws)
   laws <- .scp_laws(laws, fun)
   if (!is.null(lnames) && all(rows %in% lnames)) laws <- laws[match(rows, lnames)]
-  else if (length(laws) == nrow(means) && length(laws) != nr) laws <- laws[match(rows, means$name)]
+  else if (length(laws) == nrow(means)) laws <- laws[match(rows, means$name)]   # in the order of means
   else if (length(laws) != nr)
     stop(sprintf("sc_plot_preferences(): %d laws for %d rows; give one law per row (or per row of means), or name them by target",
                  length(laws), nr), call. = FALSE)
@@ -604,13 +658,7 @@ sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL,
   lim <- list(); tk <- list()
   auto <- list(
     A = function() .scp_pad(c(m$estimate, m$lower, m$upper)),
-    B = function() {
-      ends <- unlist(lapply(laws, function(l) {
-        w <- l$weight / sum(l$weight); mm <- sum(w * l$mean)
-        sd <- sqrt(sum(w * l$sd^2) + sum(w * (l$mean - mm)^2)); c(mm - 3 * sd, mm + 3 * sd)
-      }))
-      range(pretty(range(0, ends), n = 2))
-    },
+    B = function() range(pretty(.scp_laws_range(laws), n = 2)),
     C = function() c(0, 100),
     D = function() .scp_pad(100 * c(a$estimate, a$lower, a$upper, ref)))
   for (p in panels) {
@@ -626,9 +674,9 @@ sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL,
   if (!is.numeric(rel) || length(rel) != length(panels) + 1L || !all(is.finite(rel) & rel > 0))
     stop(sprintf("sc_plot_preferences(): widths needs %d positive numbers (labels and %d panels)",
                  length(panels) + 1L, length(panels)), call. = FALSE)
-  op <- graphics::par(no.readonly = TRUE); on.exit(graphics::par(op))
+  op <- .scp_page_keep(); on.exit(.scp_page_restore(op))
   .scp_paper_par()
-  need <- max(graphics::strwidth(labs, "inches", cex = .93)) + .25
+  need <-max(graphics::strwidth(labs, "inches", cex = .93)) + .25
   have <- rel[1L] / sum(rel) * graphics::par("din")[1L]
   if (is.null(widths) && need > have) {
     lw <- graphics::lcm(2.54 * need); graphics::layout(matrix(seq_len(length(panels) + 1L), 1), widths = c(lw, rel[-1L]))
@@ -795,21 +843,28 @@ sc_plot_importance <- function(..., combine = NULL, labels = NULL, colors = NULL
 #' income bracket): one line with points per table and a shaded band for the
 #' 95% intervals, one legend at the bottom. Each table holds one row per
 #' setting, in the order of `x`. Points are hollow where an interval is
-#' missing. One call draws one panel, so a figure with several panels loops
-#' over `par(mfrow = )` (pass `legend = FALSE` to all but one panel).
+#' missing. The band covers each run of two or more neighbouring settings with
+#' intervals; an interval whose neighbours have none (or the only setting) is
+#' drawn as a vertical line. One call draws one panel, so a figure with several
+#' panels loops over `par(mfrow = )` (pass `legend = FALSE` to all but one
+#' panel).
 #'
 #' @param ... One or more estimate tables from [sc_estimate()] (or one list of
 #'   them), each with one row per value of `x`. Several tables must be named.
+#'   Series are kept apart by their position, so two tables may share a name
+#'   (each keeps its own line, color and legend entry).
 #' @param x Numeric settings, one per row of each table.
 #' @param xlab Label of the horizontal axis (required: say what `x` is).
 #' @param ylab Label of the vertical axis. Default from the target kinds.
 #' @param scale Multiplier of estimates and intervals (100 for percent).
 #' @param colors Colors of the series (default house blue, red, green, ...).
-#' @param ylim Optional vertical limits, on the scaled values.
+#' @param ylim Optional vertical limits, on the scaled values. Default 0 to
+#'   `scale` for probabilities and shares, else from the data.
 #' @param main Optional panel title.
 #' @param xlabels Optional tick labels at `x`.
 #' @param hline Optional reference value on the unscaled scale, drawn as a
-#'   dashed line; default 0.5 for probabilities and shares, else 0.
+#'   dashed line at `scale * hline`; default 0.5 for probabilities and shares,
+#'   else 0.
 #' @param legend If `TRUE` and there are several series, a legend at the
 #'   bottom of the panel.
 #' @return Invisibly, the plotting data: a data frame with one row per series
@@ -849,12 +904,14 @@ sc_plot_lines <- function(..., x, xlab, ylab, scale = 1, colors = NULL, ylim = N
   if (is.null(colors) && k > length(.scp_palette))
     stop(sprintf("sc_plot_lines(): %d series need %d colors; pass colors", k, k), call. = FALSE)
   colors <- if (is.null(colors)) .scp_palette[c(1L, 3L, 2L, 4L, 5L, 6L)][seq_len(k)] else .scp_colors(colors, k, fun)
-  pd <- do.call(rbind, lapply(seq_len(k), function(g) {
+  # one data frame per series, kept apart by position (series names are only labels and may repeat)
+  pdl <- lapply(seq_len(k), function(g) {
     z <- tabs[[g]]
     data.frame(series = gn[g], x = x, estimate = scale * z$estimate, lower = scale * z$lower, upper = scale * z$upper,
                stringsAsFactors = FALSE)
-  }))
-  if (is.null(ylim)) ylim <- if (prob && scale == 100) c(0, 100) else if (prob) c(0, 1)
+  })
+  pd <- do.call(rbind, pdl)
+  if (is.null(ylim)) ylim <- if (prob) c(0, scale)
                              else .scp_axis(.scp_pad(c(pd$estimate, pd$lower, pd$upper, scale * hline), zero = FALSE), n = 4)$lim
   yt <- .scp_ticks(ylim, n = 4)
   show_leg <- isTRUE(legend) && k > 1L
@@ -872,13 +929,17 @@ sc_plot_lines <- function(..., x, xlab, ylab, scale = 1, colors = NULL, ylim = N
   if (!is.null(main)) graphics::title(main, line = .8, cex.main = 1)
   ox <- order(x)
   for (g in seq_len(k)) {
-    z <- pd[pd$series == gn[g], , drop = FALSE][ox, , drop = FALSE]
+    z <- pdl[[g]][ox, , drop = FALSE]
     ok <- is.finite(z$lower) & is.finite(z$upper)
     run <- cumsum(c(TRUE, diff(ok) != 0))
     for (r in unique(run[ok])) {
       i <- which(run == r)
-      graphics::polygon(c(z$x[i], rev(z$x[i])), c(z$lower[i], rev(z$upper[i])),
-                        col = grDevices::adjustcolor(colors[g], .12), border = NA)
+      # a band over two or more neighbouring intervals; a lone interval (a band would have no
+      # width) as a vertical line
+      if (length(unique(z$x[i])) > 1L)
+        graphics::polygon(c(z$x[i], rev(z$x[i])), c(z$lower[i], rev(z$upper[i])),
+                          col = grDevices::adjustcolor(colors[g], .12), border = NA)
+      else graphics::segments(z$x[i], z$lower[i], z$x[i], z$upper[i], col = colors[g], lwd = 1.2)
     }
     graphics::lines(z$x, z$estimate, col = colors[g], lwd = 1.5, lty = g)
     graphics::points(z$x, z$estimate, col = colors[g], pch = ifelse(ok, 16, 1), cex = .7)
