@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/assessment.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 .rum_bank_design <- function(data) list(ids = data$ids, offsets = data$offsets,
                                        d = data$d, a = data$a, basis = data$basis)
@@ -37,7 +37,6 @@
 # Pair rows use t first, then s > t within each respondent. Count rows use
 # k=0,...,T. Stored design bounds describe these records, not unknown future
 # designs, and do not supply a superpopulation Hoeffding bound.
-#' @export
 rum_moment_bank <- function(data, marginal_weights = NULL, pair_weights = NULL,
                             count_weights = NULL, names = NULL) {
   .rum_check_data(data)
@@ -159,7 +158,6 @@ rum_moment_bank <- function(data, marginal_weights = NULL, pair_weights = NULL,
 # r-A I^{-1}S and requires an interior numerical candidate from the same data.
 # Gaussian p-values and bands are model-null approximations, not robust
 # discrepancy intervals, exact Monte Carlo tests or coverage certificates.
-#' @export
 rum_assess <- function(data, par = NULL, bank, quadrature = NULL, estimated = FALSE,
                        fit = NULL, alpha = .05, nsim = 1999L, seed = 1L) {
   .rum_check_inference_options(alpha, nsim, seed)
@@ -213,7 +211,6 @@ rum_assess <- function(data, par = NULL, bank, quadrature = NULL, estimated = FA
 # Independence of training and iid test sampling are user-maintained
 # conditions, not established from these arguments. Hoeffding bounds require
 # a declared J-by-2 residual range valid beyond the observed sample.
-#' @export
 rum_holdout_assess <- function(data, par, bank, quadrature, alpha = .05,
                                nsim = 1999L, seed = 1L,
                                method = c("gaussian", "hoeffding"),
@@ -254,7 +251,6 @@ rum_holdout_assess <- function(data, par, bank, quadrature, alpha = .05,
 }
 
 # Paired respondent log-score comparison on an independent test sample
-#' @export
 rum_score_compare <- function(data, par_a, par_b, quadrature, alpha = .05,
                               quadrature_b = quadrature) {
   if (length(alpha) != 1L || !is.finite(alpha) || alpha <= 0 || alpha >= 1) stop("invalid alpha")

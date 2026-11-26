@@ -1,9 +1,8 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/data.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 # Complete respondent records; numerical feature coding is supplied by an adapter.
-#' @export
 rum_data <- function(y, d, mean_basis = NULL, ids = NULL,
                      feature_names = NULL, mean_names = NULL, metadata = list()) {
   if (!is.list(y) || !is.list(d) || !length(y) || length(y) != length(d))
@@ -56,7 +55,6 @@ rum_data <- function(y, d, mean_basis = NULL, ids = NULL,
     class = "rum_data")
 }
 
-#' @export
 rum_mean_basis <- function(z, feature_names) {
   z <- as.matrix(z)
   if (!is.numeric(z) || !nrow(z) || !ncol(z) || any(!is.finite(z)))
@@ -80,7 +78,6 @@ rum_mean_basis <- function(z, feature_names) {
   invisible(data)
 }
 
-#' @export
 rum_parameters <- function(data, kappa = 0, alpha = rep(0, data$r),
                            loading = rep(0, data$p), position_variance = .25) {
   .rum_check_data(data)
@@ -102,7 +99,6 @@ rum_parameters <- function(data, kappa = 0, alpha = rep(0, data$r),
   invisible(par)
 }
 
-#' @export
 rum_subset <- function(data, respondents) {
   .rum_check_data(data)
   if (is.character(respondents)) respondents <- match(respondents, data$ids)
@@ -116,7 +112,6 @@ rum_subset <- function(data, respondents) {
     data$ids[respondents], data$feature_names, data$mean_names, data$metadata)
 }
 
-#' @export
 rum_scale_features <- function(data, scales) {
   .rum_check_data(data)
   if (!is.numeric(scales) || length(scales) != data$p ||
@@ -129,7 +124,6 @@ rum_scale_features <- function(data, scales) {
   result
 }
 
-#' @export
 rum_scale_parameters <- function(data, par, scales, inverse = FALSE) {
   .rum_check_data(data); .rum_check_par(data, par)
   if (!is.numeric(scales) || length(scales) != data$p ||
@@ -150,7 +144,6 @@ rum_scale_parameters <- function(data, par, scales, inverse = FALSE) {
   force(expr)
 }
 
-#' @export
 rum_simulate <- function(data, par, seed = NULL, policy_law = "normal") {
   .rum_check_data(data); .rum_check_par(data, par)
   policy_law <- match.arg(policy_law, c("normal", "three_point"))

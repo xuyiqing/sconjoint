@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/targets.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 .rum_cov_rows <- function(x) {
   x <- as.matrix(x)
@@ -70,7 +70,6 @@
 # reference, omitting its population sampling term. Neither mode verifies its
 # sampling, model, regularity or numerical assumptions. Fixed-loading variance
 # intervals map the entire signed-loading interval through squaring.
-#' @export
 rum_targets <- function(fit, contrasts, reference = c("population", "fixed"),
                         alpha = .05, infer = TRUE,
                         hz_interval = c("wald", "fixed_rank_one_projection")) {

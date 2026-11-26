@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/quadrature.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 .rum_normal_rule <- function(order) {
   if (length(order) != 1L || !is.finite(order) || order != as.integer(order) ||
@@ -33,7 +33,6 @@
 #   `nodes` points at n_fac > 1.
 # With n_fac = 1 and the product rule the object is the original one (u a length-G vector);
 # otherwise u is a G x n_fac matrix and the object also records n_fac, rule, nodes and seed.
-#' @export
 rum_quadrature <- function(order = c(11L, 11L), policy_law = c("normal", "three_point"),
                            n_fac = 1L, rule = c("auto", "product", "sobol"),
                            nodes = 512L, seed = 20261114L, symmetric = c("v", "uv", "none")) {
@@ -124,7 +123,6 @@ rum_quadrature <- function(order = c(11L, 11L), policy_law = c("normal", "three_
            if (sym == "none") "" else sym)
   } else paste(quadrature$order, collapse = "x")
 
-#' @export
 rum_loglik <- function(data, par, quadrature = rum_quadrature()) {
   .rum_check_data(data); .rum_check_par(data, par)
   if (!inherits(quadrature, "rum_quadrature")) stop("Expected a rum_quadrature object.")
@@ -139,7 +137,6 @@ rum_loglik <- function(data, par, quadrature = rum_quadrature()) {
   out
 }
 
-#' @export
 rum_information <- function(data, par, quadrature = rum_quadrature(), step = 1e-4) {
   .rum_check_data(data); .rum_check_par(data, par)
   .rum_information(data, par, quadrature, step,

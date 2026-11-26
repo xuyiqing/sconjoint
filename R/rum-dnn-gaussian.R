@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/dnn-gaussian.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 # Numeric reference implementation of the structured Gaussian DNN likelihood.
 # No optimization, penalty, posterior summaries, or inferential calibration is
@@ -101,7 +101,6 @@
 # @param hidden Hidden-layer widths; integer(0) gives an affine network.
 # @param seed Private base-R initialization seed; caller RNG is restored.
 # @return A numeric network with input-by-output weights and bias vectors.
-#' @export
 rum_dnn_gaussian <- function(p_z = 16L, p = 16L,
                              hidden = c(32L, 32L, 16L), seed = 1L) {
   p_z <- .rum_dnn_integer(p_z, "p_z")
@@ -137,7 +136,6 @@ rum_dnn_gaussian <- function(p_z = 16L, p = 16L,
 # @param network A network returned by rum_dnn_gaussian().
 # @param Z Finite respondent-by-input matrix, in the data respondent order.
 # @return rum_dnn_gaussian_forward() returns a respondent-by-p matrix.
-#' @export
 rum_dnn_gaussian_forward <- function(network, Z) {
   .rum_dnn_forward_cache(network, Z)$mu
 }
@@ -204,7 +202,6 @@ rum_dnn_gaussian_forward <- function(network, Z) {
 # @param quadrature Gaussian tensor-product rule from rum_quadrature().
 # @return The evaluator returns sequence log likelihoods, output/common scores,
 #   and signed mean-log-likelihood and negative-mean-log-likelihood gradients.
-#' @export
 rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
                                       quadrature = rum_quadrature()) {
   .rum_dnn_check_sequence_data(data)
@@ -262,7 +259,6 @@ rum_dnn_gaussian_evaluate <- function(data, mu, kappa, loading, omega,
 # @rdname rum_dnn_gaussian
 # @return The loss wrapper additionally backpropagates output derivatives to
 #   network weights and biases; it does not run an optimizer.
-#' @export
 rum_dnn_gaussian_loss <- function(network, data, Z, kappa, loading, omega,
                                   quadrature = rum_quadrature()) {
   .rum_dnn_check_sequence_data(data)

@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/dnn-train.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 # Bounded Gaussian trainer. Checkpoint selection is internal to each declared
 # training bank; final refitting starts again from the original selected state.
@@ -378,7 +378,6 @@
 }
 
 # Bounded Gaussian Structured-Network Training
-#' @export
 # n_fac: number of taste factors (loading p x n_fac; a vector at n_fac = 1).
 # quadrature: NULL (one factor: the Gauss-Hermite orders control$train_order and
 #   control$check_orders, as before; several factors: Sobol, 512 training nodes and a 2,048

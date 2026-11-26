@@ -1,6 +1,6 @@
 # Ported from conjointRUM 0.1.3 (Avidit Acharya), R/fit.R, unchanged except that
 # roxygen-style comments are plain comments (the help pages are the hand-written Rd
-# files in man/) and each export carries a roxygen @export tag.
+# files in man/). Internal since the paper-v4 public layer (sc_*, R/sc-*.R).
 
 .rum_sign_align <- function(data, par, anchor = NULL) {
   j <- 1L + data$r + seq_len(data$p)
@@ -15,7 +15,6 @@
            error = function(e) Inf)
 }
 
-#' @export
 rum_fit <- function(data, starts = NULL, orders = c(9L, 15L, 21L),
                     control = list(), policy_law = "normal", policy_rank = 1L) {
   .rum_check_data(data)
