@@ -47,3 +47,24 @@ test_that("2: ratio and difference components with a reused name must have the s
   e2 <- sc_estimate(st, sc_difference("d", sc_mean("x", "f2"), sc_mean("y", "f1")), bounded = FALSE)
   expect_identical(e2$estimate, e$estimate[3]); expect_identical(e2$se, e$se[3])
 })
+
+test_that("3: rank selection pairs scores by respondent and rejects unequal lengths", {
+  expect_error(sc_select_rank(list("1" = c(-2, -1), "2" = c(-1.9, -.9, -1.8, -.8))), "different lengths")
+  h1 <- c(a = -2, b = -1, c = -3, d = -2.5); h2 <- c(c = -2.9, a = -1.9, d = -2.2, b = -.95)
+  tab <- sc_select_rank(list("1" = h1, "2" = h2))
+  expect_equal(tab$diff_to_prev[2], mean(h2[names(h1)] - h1), tolerance = 1e-15)
+  expect_identical(sc_select_rank(list("1" = h1, "2" = h2[names(h1)])), tab)
+  expect_error(sc_select_rank(list("1" = h1, "2" = setNames(h2, c("a", "b", "c", "x")))), "same respondents")
+  expect_error(sc_select_rank(list("1" = h1, "2" = unname(h2))), "or none")
+  expect_error(sc_select_rank(list("1" = h1, "1" = h1)), "distinct number")
+  # fits: scores aligned by respondent id even when the fits list respondents in different orders
+  mk <- function(q, ids, h) {
+    x <- list(data = list(n = length(ids), ids = ids))
+    structure(list(data = x, q = q, folds = list(list(te = seq_along(ids), heldout = list(r = h))),
+                   settings = list(heldout_rule = "r")), class = "sc_fit")
+  }
+  f1 <- mk(1L, names(h1), unname(h1)); f2 <- mk(2L, names(h2), unname(h2))
+  expect_equal(sc_select_rank(list(f1, f2))$diff_to_prev[2], tab$diff_to_prev[2], tolerance = 1e-15)
+  f3 <- mk(2L, c("a", "b", "c", "z"), unname(h2))
+  expect_error(sc_select_rank(list(f1, f3)), "same respondents")
+})
