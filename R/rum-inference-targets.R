@@ -103,10 +103,12 @@
 
 # Position-neutral win probability for one contest d, side preference integrated
 # (gradients by central differences).
-.rum_tgt_choice <- function(name, d, w = NULL, quad = .rum_law_quadrature())
+.rum_tgt_choice <- function(name, d, w = NULL, quad = .rum_law_quadrature()) {
+  force(quad)
   list(name = name, kind = "choice", d = d, w = w,
        m = function(mu, th) .rum_choice_fitted(list(mu = mu, kappa = th$kappa,
          loading = th$loading, omega = th$omega), d, quad, TRUE))
+}
 
 # Fixed linear combination of per-respondent values (e.g. an AME over a frozen draw set).
 .rum_tgt_lincomb <- function(name, parts, coefs, w = NULL)
@@ -130,7 +132,7 @@
 # s < 1e-4); above it the division form is kept (unchanged numbers).
 .rum_tgt_choice_set <- function(name, D, coef = rep(1 / nrow(rbind(D)), nrow(rbind(D))),
                                 w = NULL, quad = .rum_law_quadrature()) {
-  D <- rbind(D)
+  D <- rbind(D); force(coef); force(w); force(quad)   # built in a loop, lazy coef took the last weights
   vg <- function(mu, th) {
     n <- nrow(mu); p <- ncol(mu); G <- length(quad$weight); s <- sqrt(th$omega)
     multi <- .rum_multi_fac(th$loading)
@@ -162,14 +164,18 @@
 # Gradients: dm/dmu = sum_r a_r E[G'(eta)] d_r; dm/dlambda = sum_r a_r E[G'(eta) u] d_r;
 # dm/dkappa = dm/domega = 0. The (u, v) quadrature is reused; v does not enter. q > 1 factors:
 # as .rum_tgt_choice_set (scale ||Lambda' d_r||, loading block through .rum_ld_grad).
-.rum_tgt_choice_pref <- function(name, d, w = NULL, quad = .rum_law_quadrature())
+.rum_tgt_choice_pref <- function(name, d, w = NULL, quad = .rum_law_quadrature()) {
+  force(quad)
   list(name = name, kind = "choice", d = d, w = w,
        m = function(mu, th) .rum_choice_fitted(list(mu = mu, kappa = 0, loading = th$loading,
          omega = th$omega), d, quad, FALSE))
+}
 
 .rum_tgt_choice_set_pref <- function(name, D, coef = rep(1 / nrow(rbind(D)), nrow(rbind(D))),
                                      w = NULL, quad = .rum_law_quadrature()) {
-  D <- rbind(D)
+  # Force every argument: a contest built in a loop otherwise reads coef, w and quad when it is
+  # first evaluated, i.e. the last iteration's values (paper-v4 spec 5.1 item 1).
+  D <- rbind(D); force(coef); force(w); force(quad)
   vg <- function(mu, th) {
     n <- nrow(mu); p <- ncol(mu); G <- length(quad$weight); multi <- .rum_multi_fac(th$loading)
     val <- numeric(n); gm <- matrix(0, n, p); glv <- matrix(0, n, if (multi) length(th$loading) else p)

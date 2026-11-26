@@ -278,6 +278,10 @@
 }
 
 # ---- scalar targeted update ---------------------------------------------------------------
+# dirs_fun, path_m_fun (both updates; appended last, defaults unchanged): the routines that give a
+# target's correction directions and its plug-in values at the moved states. The defaults build the
+# directions from information on all rows; the paper's held-out calibration passes
+# .sc_heldout_dirs and .sc_heldout_path_m (R/sc-engine.R).
 # For each target separately. omega_path "auto" (default: the log path, with "clamp" in folds
 # whose fitted omega is below omega_boundary), "log", "clamp", or
 # "legacy": the old .rum_tmle_dnn() iteration exactly (linear omega with the 1e-8 floor, no
@@ -297,7 +301,7 @@
                            model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                            cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
                            cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol,
-                           cond = NULL) {
+                           cond = NULL, dirs_fun = .rum_tmle_dirs, path_m_fun = .rum_path_m) {
   omega_path <- match.arg(omega_path); on_fail <- match.arg(on_fail)
   info_basis <- match.arg(info_basis)
   n <- data$n; p <- data$p
@@ -310,7 +314,7 @@
   path_kind <- if (omega_path == "legacy") "linear_floor" else omega_path
   res <- lapply(seq_along(targets), function(t) {
     w <- wmat[, t]; wr <- w / mean(w); tg <- targets[[t]]
-    dirs <- list(.rum_tmle_dirs(FS, tg, w))
+    dirs <- list(dirs_fun(FS, tg, w))
     eval <- function(eps) .rum_path_all(FS, dirs, eps, n, p, quad_score, path_kind,
                                         omega_boundary = omega_boundary)
     hit_any <- FALSE
@@ -336,7 +340,7 @@
     plug <- sum(w * m0) / sum(w); onestep <- plug + mean(phi0)
     ok <- identical(sol$status, "converged") || on_fail == "last"
     if (ok) {
-      m_star <- .rum_path_m(sol$FS, sol$cur, tg, n); phi <- sol$cur$phi_se[, 1]
+      m_star <- path_m_fun(sol$FS, sol$cur, tg, n); phi <- sol$cur$phi_se[, 1]
       est <- sum(w * m_star) / sum(w)
       iff <- phi - mean(phi); ifp <- iff + wr * (m_star - est)
       sef <- stats::sd(iff) / sqrt(n); sep <- stats::sd(ifp) / sqrt(n)
@@ -392,7 +396,7 @@
                             model_quad = .rum_info_quadrature(), model_seed = 20260926L,
                             cache_net = NULL, cache_dir = NULL, cache_write = TRUE,
                             cache_require = FALSE, FS = NULL, max_rounds = 5L, if_tol = tol,
-                            cond = NULL) {
+                            cond = NULL, dirs_fun = .rum_tmle_dirs, path_m_fun = .rum_path_m) {
   info_basis <- match.arg(info_basis); omega_path <- match.arg(omega_path)
   n <- data$n; p <- data$p; G <- length(targets)
   if (G < 2L) stop("a joint update needs at least two shares")
@@ -404,7 +408,7 @@
   w <- wmat[, 1]; wr <- w / mean(w)
   if (is.null(FS)) FS <- .rum_tmle_folds(data, Z, fold, fold_final, quad_score, info_basis,
                                          ridge_rel, eig_floor_rel, model)
-  dirs <- lapply(targets, function(tg) .rum_tmle_dirs(FS, tg, w))
+  dirs <- lapply(targets, function(tg) dirs_fun(FS, tg, w))
   m0 <- matrix(0, n, G)
   for (g in seq_len(G)) for (k in names(FS)) m0[FS[[k]]$te, g] <- dirs[[g]][[k]]$plug
   sum_check <- max(abs(rowSums(m0[w > 0, , drop = FALSE]) - 1))
@@ -423,7 +427,7 @@
   nm <- vapply(targets, `[[`, "", "name")
   if (ok) {
     full <- sol$cur; m_star <- matrix(0, n, G)
-    for (g in seq_len(G)) m_star[, g] <- .rum_path_m(sol$FS, full, targets[[g]], n)
+    for (g in seq_len(G)) m_star[, g] <- path_m_fun(sol$FS, full, targets[[g]], n)
     est <- colSums(w * m_star) / sum(w); phi <- full$phi_se
     IFF <- sweep(phi, 2, colMeans(phi)); IFP <- IFF + wr * sweep(m_star, 2, est)
   } else {

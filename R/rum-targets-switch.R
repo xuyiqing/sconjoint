@@ -47,6 +47,7 @@
 .rum_tgt_choice_rows <- function(name, rows, group = NULL, w = NULL, position = TRUE,
                                  order = 31L, kind = "ame") {
   if (!is.null(rows$D)) rows <- list(rows)
+  force(group); force(w); force(position); force(kind)      # loop-safe (see .rum_tgt_choice_set_pref)
   gh <- .rum_gh_rule(order)
   vg <- function(mu, th) {
     n <- nrow(mu); p <- ncol(mu); grp <- if (is.null(group)) rep(1L, n) else group
