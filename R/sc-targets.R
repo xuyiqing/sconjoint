@@ -326,8 +326,9 @@ sc_difference <- function(name, a, b) {
 #'   each attribute. Every attribute that enters utility should be listed.
 #' @param menus Optional named list of menus, one matrix per group (levels x
 #'   the group's columns). Default: a zero row plus the identity.
-#' @param level_weights Optional named list of level probabilities per group
-#'   (default equal).
+#' @param level_weights Optional named list of level probabilities per group:
+#'   one finite nonnegative weight per row of the group's menu, with a positive
+#'   sum (normalized; default equal).
 #' @param w Optional respondent weights (see [sc_mean()]).
 #' @param names Labels of the shares (default the group names).
 #' @param control Integration settings (`tol`, `n_start`, `n_max`, `n_rep`,
@@ -347,7 +348,11 @@ sc_importance <- function(groups, menus = NULL, level_weights = NULL, w = NULL, 
     QL <- lapply(base::names(cols), function(g) {
       A <- if (!is.null(menus[[g]])) as.matrix(menus[[g]]) else rbind(0, diag(length(cols[[g]])))
       if (ncol(A) != length(cols[[g]])) stop("the menu of '", g, "' needs one column per coded feature", call. = FALSE)
+      if (!is.numeric(A) || !all(is.finite(A))) stop("the menu of '", g, "' must be finite numbers", call. = FALSE)
       pi <- if (!is.null(level_weights[[g]])) level_weights[[g]] else rep(1, nrow(A))
+      if (!is.numeric(pi) || length(pi) != nrow(A) || !all(is.finite(pi)) || any(pi < 0) || !(sum(pi) > 0))
+        stop(sprintf(paste0("the level weights of '%s' must be %d finite nonnegative numbers (one per level of its menu) ",
+                            "with a positive sum"), g, nrow(A)), call. = FALSE)
       .sc_Qlev(ctx$p, cols[[g]], A, pi)
     })
     .sc_imp_targets(QL, names, ctx$p, .sc_resolve_w(w, ctx), ctl)

@@ -222,3 +222,20 @@ test_that("12: named posterior contrasts must use unique feature names", {
   expect_equal(post(matrix(c(1, 0, -1), 3, 1))$mean, ref$mean, tolerance = 0)
   expect_equal(post(rbind(f1 = c(1, 0, -1)))$mean, ref$mean, tolerance = 0)   # a label that is a feature name
 })
+
+test_that("13: importance level weights need one nonnegative weight per menu level", {
+  st <- sc_test_states(); ctx <- .sc_context(st$data)
+  b <- function(...) sc_importance(list(a = 1, b = 2:3), ...)$build(ctx)
+  expect_error(b(level_weights = list(a = 1, b = 1)), "'a' must be 2 finite nonnegative numbers")
+  expect_error(b(level_weights = list(b = c(1, 1))), "'b' must be 3")
+  expect_error(b(level_weights = list(a = c(1, -1))), "'a' must be 2")
+  expect_error(b(level_weights = list(a = c(0, 0))), "positive sum")
+  expect_error(b(level_weights = list(a = c(1, NA))), "'a' must be 2")
+  expect_error(b(menus = list(a = matrix(c(0, Inf)))), "finite numbers")
+  # valid weights: the same targets as equal weights when they are equal, finite shares otherwise
+  e1 <- b(); e2 <- b(level_weights = list(a = c(2, 2), b = c(1, 1, 1)))
+  mu <- st$folds[[1]]$mu; th <- st$folds[[1]]$th
+  expect_equal(e2[[1]]$m(mu, th), e1[[1]]$m(mu, th), tolerance = 1e-14)
+  e3 <- b(level_weights = list(a = c(1, 3)))
+  expect_true(all(is.finite(e3[[1]]$m(mu, th))))
+})
