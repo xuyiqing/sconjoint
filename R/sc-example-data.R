@@ -24,35 +24,31 @@
 #' @param app `"gs"` (Graham and Svolik 2020) or `"br"` (Ballard-Rosa, Martin
 #'   and Scheve 2017).
 #'
-#' @return A list with
+#' @return An `sc_data` object (see [sc_data()]) ready for [sc_fit()] and
+#'   [sc_states()]:
 #' \describe{
-#'   \item{data}{A `rum_data` object: one record per
-#'     respondent, with choices `y` and contrasts `d`.}
+#'   \item{data}{One record per respondent, with choices `y` and contrasts `d`.}
 #'   \item{Z}{Respondent covariates, one row per respondent (row names are
 #'     the respondent ids), as the paper passed them to the network (it
 #'     centres and scales them on each fold's training respondents).}
-#'   \item{ids}{Respondent ids, in the order of `data` and `Z`.}
 #'   \item{fold}{Cross-fitting fold of each respondent (1 to 5).}
-#'   \item{validation}{A list with one integer vector per fold: positions in
-#'     `ids` of the training respondents held out to choose the number of
-#'     training epochs.}
-#'   \item{pid7}{Party ID. GS: -3 (strong Democrat) to 3 (strong
-#'     Republican), 0 = pure independent. BR: 1 (strong Democrat) to 7
-#'     (strong Republican), 4 = independent, 8 = not sure.}
-#'   \item{party}{`"Dem"`, `"Ind"` or `"Rep"`. GS: the sign of `pid7`. BR:
-#'     `pid7` 1-3, 5-7, and the rest; BR `"Ind"` includes the 74 "not sure"
-#'     respondents, while the paper's independents are `pid7 == 4`.}
-#'   \item{ideology}{GS only (`NULL` for BR): `"lib"` (ideology 1-3),
-#'     `"mod"` (4) or `"con"` (5-7).}
-#'   \item{PL}{GS only (`NULL` for BR): 1 for partisans and leaners
-#'     (`pid7 != 0`), 0 for pure independents.}
-#'   \item{app}{The application, `"gs"` or `"br"`.}
+#'   \item{validation}{A list with one element per fold: the ids of the
+#'     training respondents held out to choose the number of training epochs.}
+#'   \item{groups}{A data frame, one row per respondent, with `pid7` (party
+#'     ID; GS: -3 strong Democrat to 3 strong Republican, 0 pure independent;
+#'     BR: 1 strong Democrat to 7 strong Republican, 4 independent, 8 not
+#'     sure) and `party` (`"Dem"`, `"Ind"`, `"Rep"`; BR `"Ind"` includes the
+#'     74 "not sure" respondents, while the paper's independents are
+#'     `pid7 == 4`). GS adds `ideology` (`"lib"` 1-3, `"mod"` 4, `"con"`
+#'     5-7) and `PL` (1 for partisans and leaners, 0 for pure independents).}
+#'   \item{design}{`"gs"` or `"br"`, the built-in design law used by
+#'     [sc_states()].}
 #' }
 #'
 #' @seealso [gs2020], [br2017].
 #' @examples
 #' ex <- sc_example_data("br")
-#' ex$data
+#' ex
 #' dim(ex$Z)
 #' table(ex$fold)
 #' @export
@@ -62,10 +58,13 @@ sc_example_data <- function(app = c("gs", "br")) {
   out <- if (app == "gs") .sc_example_gs() else .sc_example_br()
   if (!identical(out$ids, splits$ids))
     stop("The bundled data do not match the paper's respondent list.")
-  out$fold <- splits$fold
-  out$validation <- splits$validation
-  out[c("data", "Z", "ids", "fold", "validation", "pid7", "party",
-        "ideology", "PL", "app")]
+  groups <- data.frame(pid7 = out$pid7, party = out$party, stringsAsFactors = FALSE)
+  if (app == "gs") {
+    groups$ideology <- out$ideology
+    groups$PL <- out$PL
+  }
+  sc_data(data = out$data, Z = out$Z, groups = groups, fold = splits$fold,
+          validation = lapply(splits$validation, function(pos) out$ids[pos]), design = app)
 }
 
 # Split task rows into one block per respondent, keeping row order.

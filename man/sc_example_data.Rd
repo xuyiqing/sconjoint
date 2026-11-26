@@ -11,29 +11,25 @@ sc_example_data(app = c("gs", "br"))
 and Scheve 2017).}
 }
 \value{
-A list with
+An \code{sc_data} object (see \code{\link[=sc_data]{sc_data()}}) ready for \code{\link[=sc_fit]{sc_fit()}} and
+\code{\link[=sc_states]{sc_states()}}:
 \describe{
-\item{data}{A \code{rum_data} object: one record per
-respondent, with choices \code{y} and contrasts \code{d}.}
+\item{data}{One record per respondent, with choices \code{y} and contrasts \code{d}.}
 \item{Z}{Respondent covariates, one row per respondent (row names are
 the respondent ids), as the paper passed them to the network (it
 centres and scales them on each fold's training respondents).}
-\item{ids}{Respondent ids, in the order of \code{data} and \code{Z}.}
 \item{fold}{Cross-fitting fold of each respondent (1 to 5).}
-\item{validation}{A list with one integer vector per fold: positions in
-\code{ids} of the training respondents held out to choose the number of
-training epochs.}
-\item{pid7}{Party ID. GS: -3 (strong Democrat) to 3 (strong
-Republican), 0 = pure independent. BR: 1 (strong Democrat) to 7
-(strong Republican), 4 = independent, 8 = not sure.}
-\item{party}{\code{"Dem"}, \code{"Ind"} or \code{"Rep"}. GS: the sign of \code{pid7}. BR:
-\code{pid7} 1-3, 5-7, and the rest; BR \code{"Ind"} includes the 74 "not sure"
-respondents, while the paper's independents are \code{pid7 == 4}.}
-\item{ideology}{GS only (\code{NULL} for BR): \code{"lib"} (ideology 1-3),
-\code{"mod"} (4) or \code{"con"} (5-7).}
-\item{PL}{GS only (\code{NULL} for BR): 1 for partisans and leaners
-(\code{pid7 != 0}), 0 for pure independents.}
-\item{app}{The application, \code{"gs"} or \code{"br"}.}
+\item{validation}{A list with one element per fold: the ids of the
+training respondents held out to choose the number of training epochs.}
+\item{groups}{A data frame, one row per respondent, with \code{pid7} (party
+ID; GS: -3 strong Democrat to 3 strong Republican, 0 pure independent;
+BR: 1 strong Democrat to 7 strong Republican, 4 independent, 8 not
+sure) and \code{party} (\code{"Dem"}, \code{"Ind"}, \code{"Rep"}; BR \code{"Ind"} includes the
+74 "not sure" respondents, while the paper's independents are
+\code{pid7 == 4}). GS adds \code{ideology} (\code{"lib"} 1-3, \code{"mod"} 4, \code{"con"}
+5-7) and \code{PL} (1 for partisans and leaners, 0 for pure independents).}
+\item{design}{\code{"gs"} or \code{"br"}, the built-in design law used by
+\code{\link[=sc_states]{sc_states()}}.}
 }
 }
 \description{
@@ -61,7 +57,7 @@ dummies.
 }
 \examples{
 ex <- sc_example_data("br")
-ex$data
+ex
 dim(ex$Z)
 table(ex$fold)
 }
