@@ -204,3 +204,19 @@ test_that("inputs are parsed and checked", {
   expect_equal(as_mat(o$beta, 5L), unname(s$par$mu))
   expect_true(all(o$beta$sd == 0))
 })
+
+test_that("unnamed contrasts are labelled by their terms", {
+  f <- sconjoint:::.sc_post_contrasts
+  fe <- c("a", "b", "c")
+  expect_identical(rownames(f(c(a = 1), fe)), "a")
+  expect_identical(rownames(f(c(a = 1, b = -1), fe)), "a - b")
+  expect_identical(rownames(f(rbind(c(0, 2, -.5), c(1, 1, 1)), fe)), c("2*b - 0.5*c", "a + b + c"))
+  expect_identical(rownames(f(list(mine = c(a = 1)), fe)), "mine")
+})
+
+test_that("the seed helper restores the caller's random stream", {
+  set.seed(5); a0 <- stats::runif(1)
+  set.seed(5); x <- sconjoint:::.rum_with_seed(42, stats::runif(3)); a1 <- stats::runif(1)
+  set.seed(42); expect_identical(x, stats::runif(3))
+  expect_identical(a0, a1)
+})

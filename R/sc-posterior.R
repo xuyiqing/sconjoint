@@ -404,11 +404,23 @@ sc_posterior.default <- function(object, data, respondents = NULL, contrasts = N
     stop("contrasts need one column per feature, or names from data$feature_names.")
   }
   rn <- rownames(contrasts)
-  if (is.null(rn)) rn <- paste0("contrast", seq_len(nrow(contrasts)))
-  rn[!nzchar(rn) | is.na(rn)] <- paste0("contrast", which(!nzchar(rn) | is.na(rn)))
+  if (is.null(rn)) rn <- rep(NA_character_, nrow(contrasts))
+  unnamed <- which(!nzchar(rn) | is.na(rn))
+  # An unnamed contrast is labelled by its terms, e.g. "diff_respParty" or "a - b".
+  for (k in unnamed) rn[k] <- .sc_post_label(contrasts[k, ], features, k)
   if (anyDuplicated(rn)) rn <- make.unique(rn)
   dimnames(contrasts) <- list(rn, features)
   contrasts
+}
+
+.sc_post_label <- function(x, features, k) {
+  nz <- which(x != 0)
+  if (!length(nz) || length(nz) > 4L) return(paste0("contrast", k))
+  coef <- x[nz]
+  term <- ifelse(abs(coef) == 1, features[nz], paste0(vapply(abs(coef), function(v) format(v, digits = 3), ""), "*", features[nz]))
+  out <- paste0(ifelse(coef[1L] < 0, "-", ""), term[1L])
+  if (length(nz) > 1L) out <- paste0(out, paste0(ifelse(coef[-1L] < 0, " - ", " + "), term[-1L], collapse = ""))
+  out
 }
 
 .sc_post_newtasks <- function(newtasks, data, sel, hist) {

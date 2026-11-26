@@ -133,15 +133,14 @@ rum_scale_parameters <- function(data, par, scales, inverse = FALSE) {
   par
 }
 
+# Evaluate expr after set.seed(seed) under the current RNG kind, then restore the caller's RNG state
+# (withr::with_preserve_seed; the package never writes .Random.seed itself).
 .rum_with_seed <- function(seed, expr) {
   if (is.null(seed)) return(force(expr))
-  had <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  if (had) prior <- get(".Random.seed", envir = .GlobalEnv)
-  on.exit(if (had) assign(".Random.seed", prior, envir = .GlobalEnv)
-          else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
-            rm(".Random.seed", envir = .GlobalEnv), add = TRUE)
-  set.seed(seed)
-  force(expr)
+  withr::with_preserve_seed({
+    set.seed(seed)
+    force(expr)
+  })
 }
 
 rum_simulate <- function(data, par, seed = NULL, policy_law = "normal") {
