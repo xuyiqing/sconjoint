@@ -4,29 +4,19 @@
 \name{sconjoint-package}
 \alias{sconjoint}
 \alias{sconjoint-package}
-\title{sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments}
+\title{sconjoint: Structural Random-Utility Estimation for Conjoint Experiments}
 \description{
-Implements a respondent-sequence low-rank normal mixed-logit model for
-forced-choice conjoint experiments. A deep neural-network sieve represents
-the covariate-dependent conditional mean of preferences, and a jointly
-estimated low-rank covariance represents persistent residual heterogeneity.
+Fits the structural random-utility model of Acharya, Hainmueller and Xu
+to forced-choice conjoint data. Each respondent's tastes for the
+attributes are persistent across tasks and follow a normal law whose mean
+depends on respondent characteristics through a neural network and whose
+covariance has q taste factors. Task-level shocks are logistic, and each
+respondent has a persistent preference for one side of the screen.
 }
 \details{
-The paper-aligned workflow separates the full-sample structural fit from
-respondent-level cross-fitted one-step inference for supported regular
-rowwise primitives and named smooth transformations, and from specification
-assessment. With bounded task counts,
-respondent posterior summaries are predictions rather than consistently
-recovered realized preferences. The package does not automatically verify
-normality, rank, neural-network rates, optimization error, or numerical
-integration accuracy.
-
-The \verb{rum_*} functions are the repeated-choice random utility model ported
-unchanged from \code{conjointRUM} 0.1.3 (Avidit Acharya): a one-factor mixed logit
-whose side preference varies across respondents. It has a formula version of
-the preference mean, fit by maximum likelihood with regular-inference targets
-(\code{\link[=rum_fit]{rum_fit()}}, \code{\link[=rum_targets]{rum_targets()}}), and an experimental neural-network version
-without network inference (\code{\link[=rum_dnn_gaussian_train]{rum_dnn_gaussian_train()}}).
+Estimation is cross-fitted over respondents. Population quantities come
+with one-step corrected standard errors. Start with the package book at
+\url{https://yiqingxu.org/packages/sconjoint/}.
 }
 \seealso{
 Useful links:

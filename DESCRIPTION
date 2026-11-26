@@ -1,28 +1,22 @@
 Package: sconjoint
-Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.3.2.9001
-Date: 2026-09-24
+Title: Structural Random-Utility Estimation for Conjoint Experiments
+Version: 0.4.0.9000
+Date: 2026-11-25
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
     person("Yiqing", "Xu", , "yiqingxu@stanford.edu", role = c("aut", "cre")))
-Description: Implements a respondent-sequence low-rank normal mixed-logit
-    model for forced-choice conjoint experiments. A deep neural-network
-    sieve represents the covariate-dependent conditional mean of latent
-    preferences, while a jointly estimated low-rank covariance represents
-    persistent residual heterogeneity. The package separates full-sample
-    structural plug-in estimation, respondent-level cross-fitted one-step
-    inference for prespecified regular rowwise-expectation primitives and
-    named smooth transformations under explicit high-level conditions, and
-    design/specification assessment. It does not claim
-    recovery of realized respondent preferences with bounded task counts or
-    automatic verification of normality, rank, neural-network rates, or
-    numerical-integration error rates. Builds on 'torch' for the
-    deep-learning backend. Also includes the repeated-choice random utility
-    model of 'conjointRUM' 0.1.3: a one-factor mixed logit with a persistent
-    respondent-specific side (position) preference, with a formula version of
-    the preference mean and an experimental neural-network version without
-    neural-network inference.
+Description: Estimates a structural random-utility model for forced-choice
+    conjoint experiments. Repeated choices by the same respondent separate
+    persistent tastes from task-level shocks and a respondent-specific
+    position (side) preference. Tastes follow a normal law with a low-rank
+    covariance (q taste factors); a neural network links mean tastes to
+    respondent characteristics. Estimation is cross-fitted, with one-step
+    corrected standard errors for population quantities: preference
+    distributions and shares, compensating differentials, choice and win
+    probabilities in hypothetical matchups, average marginal effects,
+    attribute importance, the decisiveness of named attribute swaps, and
+    respondent-level posterior summaries.
 License: MIT + file LICENSE
 URL: https://yiqingxu.org/packages/sconjoint/
 BugReports: https://github.com/xuyiqing/sconjoint/issues
@@ -30,33 +24,16 @@ Depends:
     R (>= 4.1)
 Imports:
     Rcpp,
-    torch (>= 0.13.0),
     stats,
     utils,
-    parallel,
-    future,
-    future.apply,
-    parallelly,
     withr,
-    ggplot2,
-    ggridges,
+    digest,
     spacefillr
 LinkingTo:
     Rcpp
 Suggests:
     testthat (>= 3.0.0),
-    covr,
-    glmnet,
-    grf,
-    gridExtra,
-    lme4,
-    patchwork,
-    pkgload,
-    qrng,
-    quarto,
-    randtoolbox,
-    scales,
-    viridisLite
+    quarto
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
