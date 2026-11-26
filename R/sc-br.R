@@ -104,6 +104,7 @@ sc_br_revenue_contrast <- function(bracket, high = NULL, low = NULL, profiles, f
   p <- length(.RUM_BR_RECIPE$features)
   D <- t(vapply(seq_len(nrow(mix)), function(i)
     drop(.sc_br_features(rates[1L, ], mix$a[i]) - .sc_br_features(rates[2L, ], mix$b[i])), numeric(p)))
+  colnames(D) <- .RUM_BR_RECIPE$features           # sc_contest() checks them against the data's features
   list(D = D, coef = unname(coef))
 }
 
@@ -132,7 +133,8 @@ sc_br_revenue_contrast <- function(bracket, high = NULL, low = NULL, profiles, f
         side = rep(if (side == 1L) 1 else -1, sum(keep)))
     }
   }
-  list(D = do.call(rbind, lapply(blocks, `[[`, "D")),
+  D <- do.call(rbind, lapply(blocks, `[[`, "D")); colnames(D) <- .RUM_BR_RECIPE$features
+  list(D = D,
        coef = unlist(lapply(blocks, `[[`, "coef"), use.names = FALSE),
        side = unlist(lapply(blocks, `[[`, "side"), use.names = FALSE),
        low = lo, high = hi, omitted = omitted)

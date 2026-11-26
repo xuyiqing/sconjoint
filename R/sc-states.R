@@ -66,6 +66,7 @@ sc_states <- function(fit, M = NULL, ny = NULL, info_nodes = 2048L, score_nodes 
   design <- x$design
   if (is.null(design)) stop("sc_states() needs the experiment's design law: sc_data(design = 'gs' or 'br'). ",
                             "Only these built-in designs are supported.", call. = FALSE)
+  .sc_check_design_features(d$feature_names, design)
   def <- .sc_info_defaults(design)
   if (is.null(M)) M <- def$M
   if (is.null(ny)) ny <- def$ny

@@ -85,7 +85,10 @@ sc_data <- function(y, X, id, Z = NULL, groups = NULL, fold = NULL, validation =
     if (!is.list(validation)) stop("validation must be a list of respondent ids, one element per fold", call. = FALSE)
     validation <- lapply(validation, as.character)
   }
-  if (!is.null(design)) design <- match.arg(design, c("gs", "br"))
+  if (!is.null(design)) {
+    design <- match.arg(design, c("gs", "br"))
+    .sc_check_design_features(data$feature_names, design)
+  }
   structure(list(data = data, Z = Z, groups = groups, fold = fold, validation = validation,
                  design = design), class = "sc_data")
 }
@@ -100,6 +103,20 @@ print.sc_data <- function(x, ...) {
   if (!is.null(x$fold)) cat("  folds:", paste(sprintf("%d (%d)", sort(unique(x$fold)), tabulate(x$fold)[sort(unique(x$fold))]), collapse = ", "), "\n")
   cat("  design:", if (is.null(x$design)) "not given" else x$design, "\n")
   invisible(x)
+}
+
+# A built-in design law codes its features in a fixed order (.rum_design_spec(design)$features). The
+# information and the design-generated targets use that order, so the data must have the same features
+# in the same order; they are not reordered.
+.sc_check_design_features <- function(feature_names, design) {
+  want <- .rum_design_spec(design)$features
+  if (identical(as.character(feature_names), want)) return(invisible(TRUE))
+  detail <- if (length(feature_names) != length(want)) sprintf("the data have %d features, the design %d", length(feature_names), length(want))
+    else if (setequal(feature_names, want)) "the data have the same features in another order"
+    else paste0("features not in the design: ", paste(utils::head(setdiff(feature_names, want), 5L), collapse = ", "))
+  stop(sprintf("the '%s' design codes its %d features in a fixed order (%s, ...), and the data must match it: %s. ",
+               design, length(want), paste(utils::head(want, 3L), collapse = ", "), detail),
+       "Reorder the columns of X to the design's order (.rum_design_spec(design)$features) or drop design.", call. = FALSE)
 }
 
 .sc_check_data <- function(x) {

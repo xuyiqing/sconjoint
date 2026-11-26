@@ -60,6 +60,12 @@ print.sc_target <- function(x, ...) {
   if (length(c) != p) stop(sprintf("a contrast needs %d coefficients (one per feature)", p), call. = FALSE)
   unname(as.numeric(c))
 }
+# Column names of a contest matrix, when given, must be the data's features in order (no reordering).
+.sc_check_columns <- function(cn, ctx, what) {
+  if (is.null(cn) || identical(cn, ctx$feature_names)) return(invisible(TRUE))
+  stop(sprintf("the columns of %s are named, but not by the data's features in order (%s, ...)", what,
+               paste(utils::head(ctx$feature_names, 3L), collapse = ", ")), call. = FALSE)
+}
 # Feature columns of a group: indices or names.
 .sc_resolve_cols <- function(g, ctx) {
   if (is.character(g)) {
@@ -134,6 +140,7 @@ sc_contest <- function(name, D, coef = NULL, w = NULL, order = 41L) {
   .sc_target(name, "choice", "onestep", function(ctx) {
     DD <- if (is.matrix(D)) {
       if (ncol(D) != ctx$p) stop(sprintf("contest rows need %d columns", ctx$p), call. = FALSE)
+      .sc_check_columns(colnames(D), ctx, "contest")
       unname(D)
     } else rbind(.sc_resolve_cvec(D, ctx))
     cf <- if (is.null(coef)) rep(1 / nrow(DD), nrow(DD)) else as.numeric(coef)
@@ -180,6 +187,7 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
     des <- if (is.null(design)) ctx$design else design
     if (is.null(des)) stop("sc_ame_switch() needs a design law: give design = 'gs' or 'br', or set it in sc_data()", call. = FALSE)
     spec <- .rum_spec_arg(des)
+    .sc_check_design_features(ctx$feature_names, des)
     keys <- NULL
     if (spec$uses_resp) {
       if (is.null(ctx$groups$pid7)) stop("the GS design codes the co-partisan feature by party: the data's groups need pid7", call. = FALSE)
@@ -244,9 +252,11 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
 sc_ame_rows <- function(name, D, coef, side, w = NULL, position = TRUE, order = 31L, chunk = NULL) {
   D <- as.matrix(D); force(coef); force(side); force(w); force(position); force(order); force(chunk)
   if (length(coef) != nrow(D) || length(side) != nrow(D)) stop("coef and side need one entry per row of D", call. = FALSE)
+  cols <- colnames(D)
   rows <- list(D = unname(D), coef = as.numeric(coef), side = as.numeric(side))
   .sc_target(name, "ame", "onestep", function(ctx) {
     if (ncol(rows$D) != ctx$p) stop(sprintf("D needs %d columns", ctx$p), call. = FALSE)
+    .sc_check_columns(cols, ctx, "D")
     list(.sc_tgt_rows_chunked(name, rows, .sc_resolve_w(w, ctx), position, order, chunk))
   })
 }
