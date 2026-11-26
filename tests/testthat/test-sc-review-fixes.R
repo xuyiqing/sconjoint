@@ -239,3 +239,23 @@ test_that("13: importance level weights need one nonnegative weight per menu lev
   e3 <- b(level_weights = list(a = c(1, 3)))
   expect_true(all(is.finite(e3[[1]]$m(mu, th))))
 })
+
+test_that("14: contest coefficients are a mixture: finite, nonnegative, summing to one", {
+  st <- sc_test_states(); ctx <- .sc_context(st$data)
+  expect_error(sc_contest("bad", matrix(0, 1, 3), coef = 3)$build(ctx), "summing to one.*sum is 3")
+  expect_error(sc_contest("bad", matrix(0, 2, 3), coef = c(1.5, -.5))$build(ctx), "nonnegative")
+  expect_error(sc_contest("bad", matrix(0, 2, 3), coef = c(.5, NA))$build(ctx), "finite")
+  expect_error(sc_contest("bad", matrix(c(0, Inf, 0), 1, 3))$build(ctx), "finite numbers")
+  expect_length(sc_contest("ok", matrix(.1, 3, 3), coef = c(.2, .3, .5))$build(ctx), 1L)
+  e <- sc_estimate(st, sc_contest("tie", matrix(0, 1, 3)))
+  expect_equal(e$estimate, .5, tolerance = 1e-12)
+})
+
+test_that("15: tax plans must be six finite rates each, without recycling", {
+  expect_error(sc_br_plan_contest("x", c(0, 5, 15, 25, 35, 45), opponent = 15), "six finite tax rates.*got 1 value")
+  expect_error(sc_br_plan_contest("x", c(0, 5, 15, 25, 35, 45), opponent = c(15, 25)), "got 2")
+  expect_error(sc_br_plan_contest("x", c(0, 5, 15), opponent = rep(15, 6)), "got 3")
+  expect_error(sc_br_plan_contest("x", c(0, 5, 15, 25, 35, NA), rep(15, 6)), "six finite")
+  expect_error(sc_br_plan_contest("x", as.character(c(0, 5, 15, 25, 35, 45)), rep(15, 6)), "six finite")
+  expect_s3_class(sc_br_plan_contest("x", c(0, 5, 15, 25, 35, 45), rep(15, 6)), "sc_target")
+})

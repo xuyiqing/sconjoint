@@ -134,7 +134,8 @@ sc_share <- function(name, c, w = NULL) {
 #' @inheritParams sc_mean
 #' @param D The contest(s): a numeric vector (one contest) or a matrix with one
 #'   row per contest, columns = coded features; or feature names for one contest.
-#' @param coef Weights of the rows (default equal; they should sum to one).
+#' @param coef Weights of the rows: finite, nonnegative and summing to one
+#'   (default equal).
 #' @param order Nodes of the Gauss-Hermite rule in each of the two dimensions
 #'   (default 41, the paper's rule).
 #' @return A target for [sc_estimate()].
@@ -151,6 +152,11 @@ sc_contest <- function(name, D, coef = NULL, w = NULL, order = 41L) {
     } else rbind(.sc_resolve_cvec(D, ctx))
     cf <- if (is.null(coef)) rep(1 / nrow(DD), nrow(DD)) else as.numeric(coef)
     if (length(cf) != nrow(DD)) stop("coef needs one weight per contest row", call. = FALSE)
+    # a probability: a mixture of contests (finite nonnegative weights summing to one)
+    if (!all(is.finite(cf)) || any(cf < 0) || abs(sum(cf) - 1) > 1e-8)
+      stop("coef must be finite nonnegative weights summing to one (a mixture of contests); sum is ",
+           format(sum(cf), digits = 6), call. = FALSE)
+    if (!all(is.finite(DD))) stop("contest rows must be finite numbers", call. = FALSE)
     quad <- if (order == 41L) .rum_law_quadrature() else rum_quadrature(c(order, order))
     list(.rum_tgt_choice_set_pref(name, DD, cf, w = .sc_resolve_w(w, ctx), quad = quad))
   })
