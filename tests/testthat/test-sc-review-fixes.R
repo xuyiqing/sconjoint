@@ -171,3 +171,11 @@ test_that("9: save/load keeps the mean basis, mean names and metadata", {
   s9$data$data <- rl; sc_save(s9, f)
   expect_identical(sc_load(f)$data$data, rl)
 })
+
+test_that("10: sc_decisiveness() fixes best_worst when it is called", {
+  st <- sc_test_states(); ctx <- .sc_context(st$data)
+  bw <- FALSE; t1 <- sc_decisiveness(list(a = 1), pairs = list(a = c(2, 1)), best_worst = bw); bw <- TRUE
+  expect_length(t1$build(ctx), 1L)
+  t2 <- sc_decisiveness(list(a = 1), pairs = list(a = c(2, 1)), best_worst = bw)
+  expect_length(t2$build(ctx), 2L)
+})

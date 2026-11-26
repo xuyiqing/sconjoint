@@ -382,7 +382,7 @@ sc_importance <- function(groups, menus = NULL, level_weights = NULL, w = NULL, 
 #' @export
 sc_decisiveness <- function(groups, pairs = NULL, menus = NULL, allowed = NULL, best_worst = FALSE,
                             side = c("zero", "fitted"), names = NULL, w = NULL, control = list()) {
-  side <- match.arg(side); force(groups); force(pairs); force(menus); force(allowed); force(w)
+  side <- match.arg(side); force(groups); force(pairs); force(menus); force(allowed); force(best_worst); force(w)
   ctl <- do.call(.rum_dec_control, control)
   .sc_target(if (is.null(names)) "decisiveness" else names, "decisiveness", "onestep", function(ctx) {
     cols <- lapply(groups, .sc_resolve_cols, ctx = ctx)
