@@ -31,7 +31,9 @@
 #' @param fold Optional integer vector of cross-fitting folds, one per
 #'   respondent. [sc_fit()] draws folds when it is `NULL`.
 #' @param validation Optional list, one element per fold, of the respondent ids
-#'   used for early stopping when that fold is held out.
+#'   used for early stopping when that fold is held out. Elements are matched
+#'   to folds by name (the fold label) when named, otherwise by position over
+#'   the sorted fold labels.
 #' @param design Name of the experiment's randomization law: `"gs"` (Graham
 #'   and Svolik 2020), `"br"` (Ballard-Rosa, Martin and Scheve 2017) or `NULL`.
 #'   [sc_states()] needs it.

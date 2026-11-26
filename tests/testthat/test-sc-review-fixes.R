@@ -126,3 +126,22 @@ test_that("7: zero and degenerate share contrasts give no NaN", {
   th$loading <- c(.4, .3, -.2); cc <- c(1, -1, .5)
   expect_identical(.rum_tgt_share("s", cc)$m(mu, th), stats::pnorm(drop(mu %*% cc) / abs(sum(th$loading * cc))))
 })
+
+test_that("8: validation sets are matched by fold label or by position over sorted labels", {
+  skip_on_cran()
+  x <- .sc_toy_data(n = 24L); x$fold <- ifelse(x$fold == 1L, 10L, 20L); ids <- x$data$ids
+  v10 <- ids[x$fold == 20L][1:3]; v20 <- ids[x$fold == 10L][1:3]
+  fit <- function(x) sc_fit(x, q = 1L, hidden = 3L, seeds = 1L, control = list(max_epochs = 3L), nodes = 32L,
+                            check_nodes = 64L, heldout_nodes = 64L, verbose = FALSE)
+  x$validation <- list("20" = v20, "10" = v10)
+  f <- fit(x)
+  expect_setequal(f$folds[["10"]]$validation, v10); expect_setequal(f$folds[["20"]]$validation, v20)
+  x$validation <- list(v10, v20)
+  f <- fit(x)
+  expect_setequal(f$folds[["10"]]$validation, v10); expect_setequal(f$folds[["20"]]$validation, v20)
+  expect_identical(.sc_fold_validation(list(v10), c(10L, 20L), 20L), NULL)   # not given: drawn
+  x$validation <- list("1" = v10, "2" = v20)
+  expect_error(fit(x), "not distinct fold labels: 1, 2")
+  x$validation <- list(v10, v20, v10)
+  expect_error(fit(x), "3 elements but the data have 2 folds")
+})
