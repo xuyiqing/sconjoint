@@ -219,7 +219,8 @@ taste (C), and AME with the regression AMCE as a grey diamond (D).
 lab <- setNames(labels, fn)
 sc_plot_preferences(means, setNames(laws, fn), shares, ames, labels = lab, reference = amce,
                     order = fig_features,
-                    xlim = list(A = c(-1.55, 1.05), B = c(-4, 4), D = c(-26, 17)),
+                    xlim = list(A = c(-1.55, 1.2), B = c(-4.6, 4.6), C = c(-6, 106), D = c(-26, 18)),
+                    # ticks off the panels' edges, so neighbouring labels do not touch
                     ticks = list(A = c(-1, 0, 1), B = c(-4, 0, 4), D = c(-20, 0, 15)))
 ```
 

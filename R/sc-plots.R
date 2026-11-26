@@ -681,6 +681,9 @@ sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL,
                else if (p == "C" && !given) c(0, 50, 100)
                else if (p == "B" && !given) sort(unique(c(lim[[p]], if (lim[[p]][1L] < 0 && lim[[p]][2L] > 0) 0)))
                else { t3 <- .scp_ticks(lim[[p]], n = 3); if (lim[[p]][1L] < 0 && lim[[p]][2L] > 0) sort(unique(c(t3, 0))) else t3 }
+    # Automatic limits: pull the end ticks in from the panel edges, so the end labels of
+    # neighbouring panels do not run into each other.
+    if (!given) lim[[p]] <- lim[[p]] + c(-1, 1) * .07 * diff(lim[[p]])
   }
   rel <- if (!is.null(widths)) widths else c(2.3, 1.45, 1.65, 1.6, if (!is.null(a)) 1.75)
   if (!is.numeric(rel) || length(rel) != length(panels) + 1L || !all(is.finite(rel) & rel > 0))
