@@ -94,8 +94,11 @@ sc_br_revenue_contrast <- function(bracket, high = NULL, low = NULL, profiles, f
 # Rows of a plan contest: every pair of revenue categories with probability > 0 under the revenue rule,
 # weighted by the product of the two plans' category probabilities.
 .sc_br_plan_rows <- function(plan, opponent) {
+  for (x in list(plan = plan, opponent = opponent))       # check each plan before binding (no recycling)
+    if (!is.numeric(x) || length(x) != 6L || !all(is.finite(x)))
+      stop("a plan is six finite tax rates (percent, bracket 1 = lowest income); got ", length(x), " value(s)",
+           call. = FALSE)
   rates <- rbind(as.numeric(plan), as.numeric(opponent))
-  if (ncol(rates) != 6L) stop("a plan is six tax rates (percent, bracket 1 = lowest income)", call. = FALSE)
   probs <- .rum_br_revenue_probs(rates)
   mix <- expand.grid(a = 1:5, b = 1:5)
   coef <- probs[1L, mix$a] * probs[2L, mix$b]
