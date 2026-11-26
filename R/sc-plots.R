@@ -290,8 +290,12 @@
   top <- max(h, tm, na.rm = TRUE)
   s <- if (is.finite(top) && top > 0) height / top else 0   # no mass inside the limits: a flat ridge
   x <- .scp_step_x(edges)
+  # Fill without a border, then one outline and one baseline, so the baseline has the same weight
+  # along its whole length (a polygon border doubles it only where the mass is exactly zero).
   graphics::polygon(c(limits[1L], x, limits[2L]), c(y - .3, y - .3 + rep(s * h, each = 2L), y - .3),
-                    col = grDevices::adjustcolor(color, .20), border = color, lwd = .7)
+                    col = grDevices::adjustcolor(color, .20), border = NA)
+  graphics::lines(x, y - .3 + rep(s * h, each = 2L), col = color, lwd = .7)
+  graphics::segments(limits[1L], y - .3, limits[2L], y - .3, col = color, lwd = .7)
   if (!is.null(tm)) graphics::lines(x, y - .3 + rep(s * tm, each = 2L), col = "black", lwd = 1)
   data.frame(x = (utils::head(edges, -1L) + utils::tail(edges, -1L)) / 2,
              density = h / bw, truth = if (is.null(tm)) NA_real_ else tm / bw)
@@ -529,6 +533,14 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
   for (j in seq_len(k)) {
     l <- laws[[j]]
     lim <- if (is.null(xlim)) .scp_laws_range(list(l), mixture = FALSE) else xlim
+    if (is.null(xlim) && !is.null(means)) {   # keep the corrected mean and its interval in view
+      mv <- unlist(means[j, intersect(c("estimate", "lower", "upper"), names(means))])
+      mv <- mv[is.finite(mv)]
+      if (length(mv)) {
+        pad <- .05 * diff(range(lim, mv))
+        lim <- range(lim, min(mv) - pad, max(mv) + pad)
+      }
+    }
     edges <- seq(lim[1L], lim[2L], length.out = 151L); bw <- diff(edges)[1L]
     dens <- .scp_law_mass(l, edges) / bw
     td <- if (is.function(truth[[j]])) .scp_truth_mass(truth[[j]], edges) / bw else NULL
@@ -1132,7 +1144,7 @@ sc_table <- function(..., digits = 2, scale = 1, style = c("ci", "se"), labels =
     if (!is.null(caption)) txt <- c(txt, "", paste0("Table: ", caption))
     return(structure(paste(txt, collapse = "\n"), class = "sc_table_text"))
   }
-  esc <- function(s) gsub("([%&_#])", "\\\\\\1", s)
+  esc <- function(s) gsub("([%&_#$])", "\\\\\\1", s)
   neg <- function(s) gsub("(^|[ \\[(])-([0-9])", "\\1$-$\\2", s)
   m <- as.matrix(out); m[, 1L] <- esc(m[, 1L]); m[, -1L] <- neg(m[, -1L])
   if (isTRUE(n)) m[nrow(m), -1L] <- gsub("-", "--", as.matrix(out)[nrow(m), -1L], fixed = TRUE)

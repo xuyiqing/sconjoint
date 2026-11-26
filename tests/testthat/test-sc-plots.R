@@ -200,6 +200,7 @@ test_that("sc_table formats cells, markdown and LaTeX", {
   expect_match(tx, "\\caption{A\\_b}", fixed = TRUE)
   expect_match(tx, "bottom\\_share", fixed = TRUE)
   expect_false(grepl("[^\\\\]_", tx))
+  expect_match(sc_table(est, format = "latex", labels = c(top = "Below $10k")), "Below \\$10k", fixed = TRUE)
   expect_error(sc_table(est, digits = -1), "digits")
   expect_error(sc_table(est, format = "html"))
   expect_error(sc_table(A = est, A = est), "column names must differ")
@@ -352,4 +353,12 @@ test_that("the page-filling plots end with one figure per page and restore other
     expect_equal(graphics::par("mfg"), c(1L, 1L, 1L, 1L))
     grDevices::dev.off()
   }
+})
+
+test_that("a panel's limits include the corrected mean and its interval", {
+  law <- data.frame(mean = 0, sd = 1, weight = 1)
+  m <- data.frame(name = "a", estimate = 5, lower = 4.5, upper = 5.5)
+  grDevices::pdf(NULL); on.exit(grDevices::dev.off())
+  d <- sc_plot_laws(law, means = m, layout = "panels")
+  expect_gte(max(d$x), 5.5)
 })
