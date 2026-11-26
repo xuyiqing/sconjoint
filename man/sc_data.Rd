@@ -39,7 +39,9 @@ respondent order. Targets can name these columns as weights.}
 respondent. \code{\link[=sc_fit]{sc_fit()}} draws folds when it is \code{NULL}.}
 
 \item{validation}{Optional list, one element per fold, of the respondent ids
-used for early stopping when that fold is held out.}
+used for early stopping when that fold is held out. Elements are matched
+to folds by name (the fold label) when named, otherwise by position over
+the sorted fold labels.}
 
 \item{design}{Name of the experiment's randomization law: \code{"gs"} (Graham
 and Svolik 2020), \code{"br"} (Ballard-Rosa, Martin and Scheve 2017) or \code{NULL}.

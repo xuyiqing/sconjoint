@@ -28,10 +28,13 @@ sc_states(
 
 \item{eig_floor}{Relative eigenvalue floor of each respondent's information.}
 
-\item{folds}{Which folds (default all fitted folds).}
+\item{folds}{Which folds (default all fitted folds). States for some folds
+only do not cover every respondent, so \code{\link[=sc_estimate]{sc_estimate()}} and
+\code{\link[=sc_fitted_law]{sc_fitted_law()}} refuse them.}
 
 \item{respondents}{If given, only the first \code{respondents} held-out
-respondents of each fold (for checks; the states are then not for estimation).}
+respondents of each fold, for checks: \code{\link[=sc_estimate]{sc_estimate()}} and
+\code{\link[=sc_fitted_law]{sc_fitted_law()}} refuse such partial states.}
 }
 \value{
 An object of class \code{sc_states}.

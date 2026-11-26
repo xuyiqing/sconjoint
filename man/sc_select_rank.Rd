@@ -8,7 +8,10 @@ sc_select_rank(fits, threshold = 2)
 }
 \arguments{
 \item{fits}{A list of fits from \code{\link[=sc_fit]{sc_fit()}} at different q (all folds), or a
-list of numeric vectors of per-respondent held-out log scores named by q.}
+list of numeric vectors of per-respondent held-out log scores named by q.
+Scores are paired by respondent: fits must cover the same respondents
+(matched by id), and vectors must have equal lengths (matched by name
+when named by respondent id, otherwise by position).}
 
 \item{threshold}{The z threshold (default 2).}
 }

@@ -7,7 +7,8 @@
 sc_fitted_law(object, c, w = NULL)
 }
 \arguments{
-\item{object}{Fold states from \code{\link[=sc_states]{sc_states()}} or \code{\link[=sc_load]{sc_load()}}.}
+\item{object}{Fold states from \code{\link[=sc_states]{sc_states()}} or \code{\link[=sc_load]{sc_load()}}, covering every
+respondent (all folds; not built with \code{respondents}).}
 
 \item{c}{The contrast: feature name(s) (their unit vectors are added) or a
 numeric vector with one coefficient per coded feature (named vectors are
@@ -18,9 +19,11 @@ of the data, a vector with one weight per respondent, or a function of the
 data's \code{groups} returning such a vector.}
 }
 \value{
-A data frame with one row per held-out respondent (fold order):
-\code{id}, \code{fold}, \code{mean}, \code{sd}. Its attribute \code{"summary"} gives the mixture's
-mean, standard deviation and the share above zero.
+A data frame with one row per held-out respondent with positive
+weight (fold order): \code{id}, \code{fold}, \code{mean}, \code{sd} and \code{weight} (the
+respondent's weight, normalized to sum to one; equal without \code{w}). Its
+attribute \code{"summary"} gives the weighted mixture's mean, standard
+deviation and the share above zero.
 }
 \description{
 The model's distribution of a taste contrast \verb{c' beta} across the

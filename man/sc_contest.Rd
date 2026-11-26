@@ -12,7 +12,8 @@ sc_contest(name, D, coef = NULL, w = NULL, order = 41L)
 \item{D}{The contest(s): a numeric vector (one contest) or a matrix with one
 row per contest, columns = coded features; or feature names for one contest.}
 
-\item{coef}{Weights of the rows (default equal; they should sum to one).}
+\item{coef}{Weights of the rows: finite, nonnegative and summing to one
+(default equal).}
 
 \item{w}{Optional respondent weights: the name of a 0/1 grouping variable
 of the data, a vector with one weight per respondent, or a function of the

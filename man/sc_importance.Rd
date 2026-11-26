@@ -20,8 +20,9 @@ each attribute. Every attribute that enters utility should be listed.}
 \item{menus}{Optional named list of menus, one matrix per group (levels x
 the group's columns). Default: a zero row plus the identity.}
 
-\item{level_weights}{Optional named list of level probabilities per group
-(default equal).}
+\item{level_weights}{Optional named list of level probabilities per group:
+one finite nonnegative weight per row of the group's menu, with a positive
+sum (normalized; default equal).}
 
 \item{w}{Optional respondent weights (see \code{\link[=sc_mean]{sc_mean()}}).}
 
