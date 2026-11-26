@@ -1,0 +1,72 @@
+# Installation and the saved fits {#sec-install}
+
+## The package
+
+`sconjoint` is installed from GitHub. It contains C++ code, so a compiler is needed: Xcode
+command-line tools on macOS, Rtools on Windows, and a standard build toolchain on Linux.
+
+```{r}
+#| label: install
+#| eval: false
+install.packages("remotes")
+remotes::install_github("xuyiqing/sconjoint")
+```
+
+The package needs R 4.1 or later and four other packages: `Rcpp`, `withr`, `digest`, and
+`spacefillr` (scrambled Sobol points for numerical integration). The book draws its figures with
+base R graphics, so it needs nothing else.
+
+```{r}
+#| label: load
+library(sconjoint)
+packageVersion("sconjoint")
+```
+
+Two datasets ship with the package: `gs2020` [@graham2020democracy] and `br2017`
+[@ballard2017structure]. `sc_example_data()` turns each into the exact model inputs of the paper.
+
+```{r}
+#| label: data-list
+data(package = "sconjoint")$results[, c("Item", "Title")]
+```
+
+## The saved fits
+
+Fitting the model at the paper's settings takes hours. The slow part is not training the network
+but computing each held-out respondent's information (@sec-inference). The paper's fold states for
+both applications are therefore saved as two files:
+
+| File | Application | Taste factors | Size |
+|---|---|---|---|
+| `gs_q3.rds` | Graham and Svolik (2020) | 3 | about 43 MB |
+| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | about 21 MB |
+
+The files are too large for the package itself. They are a separate download, to be published with
+the package release. Each file holds what `sc_estimate()` needs from each of the five folds, each
+fold's network and covariate scaling, the respondent ids, groups, folds and validation respondents,
+and a checksum that `sc_load()` verifies.
+
+The application chapters (@sec-gs, @sec-br), @sec-inference and @sec-respondents read the
+files from one folder, given by the option `sconjoint.fits`. The default is a folder `fits` in the current working directory. To use a copy
+elsewhere, set the option before running the code:
+
+```{r}
+#| label: fits-option
+#| eval: false
+options(sconjoint.fits = "~/Downloads/sconjoint-fits")
+```
+
+To render this book with the fits in another folder, put that line in an `.Rprofile` file in the
+book's folder, because each chapter runs in its own R session.
+
+```{r}
+#| label: fits-check
+fits <- getOption("sconjoint.fits", "fits")
+file.exists(file.path(fits, c("gs_q3.rds", "br_q4.rds")))
+gs <- sc_load(file.path(fits, "gs_q3.rds"))
+gs
+```
+
+The printout gives the rank $q$, the number of folds, respondents and coded features, and the
+settings of the information and score rules. `sc_load()` returns `NULL` with a message when the
+file is missing, and stops when the checksum does not match.

@@ -1,170 +1,83 @@
-# Welcome {.unnumbered}
+# What sconjoint estimates {#sec-intro}
 
-`sconjoint` is an R package implementing the *structural deep learning*
-estimator for forced-choice conjoint experiments developed by @acharya2026structural
-([paper](https://arxiv.org/abs/2604.10845)). The estimator embeds a deep neural network
-inside a random-utility logit so that each respondent's preference
-vector $\hat{\boldsymbol\beta}(\mathbf Z_i) \in \mathbb{R}^p$ varies
-smoothly and flexibly with her observed covariates $\mathbf Z$. Double /
-debiased machine learning [DML; @chernozhukov2018double] inference provides honest
-respondent-clustered standard errors on all population-level quantities.
+`sconjoint` fits the structural random-utility model of @acharya2026structural to forced-choice
+conjoint experiments. It estimates what respondents prefer, how many of them prefer it, and how
+strongly. This book shows how to fit the model, how to compute each quantity, and how to read the
+results.
 
-The key advance over the standard AMCE framework
-[@hainmueller2014causal] is that $\hat{\boldsymbol\beta}(\mathbf Z_i)$ gives the *joint*
-distribution of preferences across attributes for each respondent,
-enabling structural quantities --- marginal rates of substitution,
-counterfactual choice probabilities, preference polarization,
-willingness to pay --- that require the full preference vector rather
-than one-attribute-at-a-time marginal effects.
+## One example
 
-This book is the primary user documentation for the package. It walks
-from installation through four complete worked examples, a simulation
-sanity check, a reference catalog of the structural estimands, and
-visualization options.
+In the democracy experiment of @graham2020democracy, respondents chose between two hypothetical
+state legislative candidates in up to thirteen matchups. The candidates differed in party, policy,
+their record on democratic practices, and personal traits. A standard analysis reports the average
+marginal component effect (AMCE) of each attribute [@hainmueller2014causal]: how much a candidate's
+chance of being chosen changes when the attribute changes. For a co-partisan candidate, that effect
+is about 14 percentage points.
 
-```{r}
-#| label: welcome-load
-#| message: false
-library(sconjoint)
-data(package = "sconjoint")$results[, c("Item", "Title")]
-```
+The AMCE does not say how many respondents prefer a co-partisan. A 14-point average is consistent
+with almost everyone mildly preferring their own party. It is also consistent with a minority who
+care a great deal while the rest do not care. The structural model separates these two cases. Among
+the 1,377 partisans and leaners in the study, the paper estimates that 82.5% prefer a co-partisan
+candidate, other attributes held fixed (95% interval 79.7% to 84.9%). The average strength of that
+preference is 0.81 on the logit utility scale. @sec-gs computes both numbers from the saved fit.
 
-## Bundled datasets
+## The model in a few lines
 
-The package ships four conjoint datasets from published replication
-materials, covering democratic norms, tax preferences, candidate choice,
-and climate treaties.
+Each respondent $i$ has a vector of tastes $\beta_i$, one weight per coded feature of a profile.
+The tastes stay the same across that respondent's tasks. In task $t$, respondent $i$ sees two
+profiles whose coded features differ by $d_{it}$ (first profile minus second) and chooses the first
+profile with probability
 
-::: {.callout-note}
-### These are the paper's analysis datasets
+$$
+\Pr(Y_{it} = 1) = G(\kappa + a_i + d_{it}^\top \beta_i), \qquad G(s) = \frac{e^s}{1 + e^s}.
+$$
 
-The bundled `gs2020`, `br2017`, and `sw2022` datasets are the full
-analysis frames used in @acharya2026structural, carrying the paper's
-complete respondent-moderator set $\mathbf Z$ (22, 23, and 19 covariates).
-The worked examples fit the paper's production configuration --- `K = 10`
-cross-fitting folds, the default 1,000 Adam epochs, and the
-per-application Stage-2 prior --- so the structural quantities they report
-reproduce the manuscript's empirical results. These fits are heavier than
-a quick demo, so each example chunk is cached and the book reuses the
-saved fit on re-render. (`bs2013` is a lightweight teaching example, not
-one of the paper's applications.)
-:::
+Here $\kappa$ is the average pull toward the first profile (the position effect) and $a_i$ is the
+respondent's own persistent deviation from it. Tastes vary in two ways:
 
-### `gs2020` --- @graham2020democracy: democratic norms
+$$
+\beta_i = \mu(Z_i) + \Lambda u_i, \qquad u_i \sim N(0, I_q), \qquad a_i = \sqrt{\omega}\, v_i, \qquad v_i \sim N(0, 1).
+$$
 
-1,605 respondents $\times$ $\sim$13 matchups $\times$ 2 profiles = 41,314 rows.
-Thirty attribute contrasts (the `diff_` columns: party, two policy
-dimensions, the 16-level democracy code, candidate sex, race, and
-profession) and the paper's **22 respondent moderators** ($\mathbf Z$):
-ideology, party, Trump approval, demographics, authoritarianism, political
-knowledge, issue ideal points, and six direct democracy-attitude items.
-The paper's main specification holds out the six direct items and fits on
-the remaining 16. Raw `ideo7`, `pid7`, and the survey `weight` are carried
-as convenience columns for subgroup and weighting analyses.
+A neural network $\mu(\cdot)$ maps the respondent's characteristics $Z_i$, measured before the
+tasks, to mean tastes. The loading matrix $\Lambda$ with $q$ columns (the *taste factors*) lets
+tastes vary among respondents who share the same characteristics. Because every task of a
+respondent uses the same $\beta_i$ and $a_i$, repeated choices separate persistent tastes from
+task-level noise. The model is a mixed logit for repeated choices [@mcfadden1974conditional;
+@revelt1998mixed; @train2009discrete], with a neural network for the mean tastes.
 
-### `br2017` --- @ballard2017structure: tax preferences
+## The workflow
 
-2,000 respondents $\times$ 8 tasks $\times$ 2 profiles = 32,000 rows.
-Seven numeric attributes (six bracket rates plus a revenue-impact
-indicator) and the paper's **23 respondent moderators** ($\mathbf Z$):
-demographics, partisanship, ideology, and economic attitudes and beliefs.
-Bracket rates are rebuilt from the source file's coded variables and value
-labels; the distributed file's derived rate column stores the 45% level of
-the \$175--375k bracket as 5, which affected bundled copies before
-0.2.0.9004 (see `?br2017`). Raw seven-point `resp_pid7` is carried as a
-convenience column for the by-party analyses.
+The package has one path from data to estimates:
 
-### `sw2022` --- @saha2022ambitious: candidate choice
+| Step | Function | What it does |
+|---|---|---|
+| 1. Data | `sc_data()`, `sc_example_data()` | Collect choices, coded differences, covariates, groups and folds |
+| 2. Fit | `sc_fit()` | Train the model by cross-fitting: one fit per fold, each on the other folds |
+| 3. Rank | `sc_select_rank()` | Choose the number of taste factors $q$ by held-out fit |
+| 4. Fold states | `sc_states()` | Compute what the estimator needs from each fold's fit |
+| 5. Save | `sc_save()`, `sc_load()` | Store the fold states compactly and read them back |
+| 6. Targets | `sc_mean()`, `sc_share()`, `sc_contest()`, ... | Describe each quantity of interest |
+| 7. Estimate | `sc_estimate()` | Compute estimates, standard errors and intervals |
 
-1,191 respondents $\times$ 3 tasks $\times$ 2 profiles = 7,146 rows.
-Thirteen candidate-attribute dummies (gender, prior run, talent, agenda,
-children) and the paper's full set of **19 respondent moderators**
-($\mathbf Z$): gender, age, income, education, party, region, employment
-status, ideology, vote choice, and a gender-attitudes scale. A
-convenience factor `resp_party` (Democrat / Independent / Republican) is
-carried for subgroup labelling and is not part of $\mathbf Z$.
+Steps 2 and 4 are slow at the paper's settings (hours for an application). Steps 6 and 7 take
+seconds for most quantities. The book therefore ships the paper's fold states as saved fits
+(@sec-install), and the application chapters start from step 5.
 
-### `bs2013` --- @bechtel_scheve_2013: climate treaties
+## How this book is organized
 
-2,500 respondents $\times$ 4 tasks $\times$ 2 profiles = 20,000 rows. Five
-categorical treaty attributes (burden distribution, emissions target,
-monitoring body, participation, and sanctions) plus a numeric monthly
-`cost_usd` attribute, and three respondent moderators (`resp_female`,
-`resp_age`, and 0--10 `resp_ideo`). The numeric cost supports dollar-scale
-willingness-to-pay analysis. This is a lightweight teaching example, not
-one of the paper's applications.
+@sec-install installs the package and the saved fits. @sec-quickstart runs every step on simulated
+data in about a minute. @sec-gs and @sec-br reproduce the paper's two applications from the saved
+fits. @sec-quantities lists every quantity and its interval rule, @sec-inference explains how the
+standard errors are computed and what they do not cover, and @sec-respondents summarizes individual
+respondents.
 
-## Organization
+## Citation
 
-The user guide is structured into the following chapters:
+Please cite the paper when you use the package:
 
--   [Chapter @sec-start]\
-    Installation instructions for `torch` and `sconjoint`.
+> Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026. "Learning Preferences from Conjoint
+> Data: A Structural Deep Learning Approach." Working paper, Stanford University.
 
--   [Chapter @sec-sanity]\
-    Full workflow on simulated data with known ground truth, verifying
-    each step against the true DGP.
-
--   [Chapter @sec-gs]\
-    @graham2020democracy democratic-norms conjoint, emphasizing
-    heterogeneity testing, partisan subgroup analysis, and preference
-    clustering.
-
--   [Chapter @sec-br]\
-    @ballard2017structure tax-plan conjoint, showcasing all-numeric
-    (continuous) attributes and partisan tax-schedule preferences.
-
--   [Chapter @sec-sw]\
-    Full walk-through of the @saha2022ambitious candidate-choice conjoint.
-
--   [Chapter @sec-bs]\
-    @bechtel_scheve_2013 climate-treaty conjoint (tutorial example),
-    showcasing willingness-to-pay analysis with a numeric cost attribute.
-
--   [Chapter @sec-estimands]\
-    Reference catalog of the structural estimands --- which quantity to
-    use, what it targets, and how its inference is computed.
-
--   [Chapter @sec-plots]\
-    Customizing plots with `dummies`, `labels`, `groups`, and `ggplot2`.
-
--   [Chapter @sec-advanced]\
-    Reference for `scfit()` arguments and defaults: Stage-2 options,
-    reproducibility, training hyperparameters, and parallel execution.
-
-## Authors
-
--   [Avidit Acharya](https://aviditacharya.humsci.stanford.edu/)
--   [Jens Hainmueller](https://j-hai.github.io/)
--   [Yiqing Xu](https://yiqingxu.org/)
--   [StatsClaw](https://statsclaw.ai/) (Agentic System for Statistical Software Development)
-
-## How to Cite
-
-> Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
-> *sconjoint: Structural Deep-Learning Estimation for Conjoint
-> Experiments --- User Manual (v0.2.2).*
-> <https://github.com/xuyiqing/sconjoint>
-
-```bibtex
-@manual{sconjoint2026,
-  title = {sconjoint: Structural Deep-Learning Estimation for Conjoint Experiments --- User Manual},
-  author = {Acharya, Avidit and Hainmueller, Jens and Xu, Yiqing},
-  year = {2026},
-  note = {R package version 0.2.2},
-  url = {https://github.com/xuyiqing/sconjoint}
-}
-```
-
-## Report Bugs
-
-Please report any bugs by submitting an issue on
-[GitHub](https://github.com/xuyiqing/sconjoint/issues) or emailing
-Yiqing Xu (yiqingxu [at] stanford.edu). Please include a minimally
-reproducible example and your `sessionInfo()` output.
-
-<!-- badges: start -->
-
-**sconjoint**: [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-<!-- badges: end -->
+The bundled data come from @graham2020democracy and @ballard2017structure. Please cite them when
+you use the data.

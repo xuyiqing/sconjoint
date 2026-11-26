@@ -1,111 +1,78 @@
-# sconjoint: paper-aligned mixed logit
 
-This local development branch implements the respondent-sequence estimator,
-regular inference for supported finite collections of paper quantities,
-the computation protocol, and specification
-assessment in Sections 3--4 of `paperps.pdf`. It is based on
-`xuyiqing/sconjoint@feat/mixed-logit` at commit
-`c38d4a721ed803469548a54b06896bf4c5ac44f7`.
+<!-- README.md is generated from README.Rmd. Please edit README.Rmd. -->
 
-The maintained structural model is
+# sconjoint
 
-```text
-beta_i = mu(Z_i) + A u_i,       u_i ~ N(0, I_q),
-Pr(Y_it = 1 | beta_i) = logit^{-1}(kappa + DeltaX_it' beta_i).
+`sconjoint` fits the structural random-utility model of Acharya,
+Hainmueller and Xu (2026) to forced-choice conjoint experiments. It
+estimates what respondents prefer, how many of them prefer it, and how
+strongly.
+
+In the democracy experiment of Graham and Svolik (2020), for example, a
+co-partisan candidate gains about 14 percentage points of support on
+average. The model adds that an estimated 82.5% of partisans and leaners
+prefer a co-partisan, other attributes held fixed, and that for many of
+them the party advantage outweighs the penalty for a candidate who
+prosecutes journalists.
+
+## The model
+
+Each respondent has tastes $\beta_i$, one weight per coded feature, that
+stay the same across their tasks. A neural network maps the respondent’s
+characteristics $Z_i$ to mean tastes, and $q$ taste factors let tastes
+vary among respondents with the same characteristics:
+
+$$\beta_i = \mu(Z_i) + \Lambda u_i, \quad u_i \sim N(0, I_q), \qquad
+\Pr(Y_{it} = 1) = G(\kappa + a_i + d_{it}^\top \beta_i),$$
+
+where $d_{it}$ is the coded difference between the two profiles, $G$ the
+logistic function, and $a_i$ a persistent pull toward the first profile.
+Estimation is cross-fitted over respondents, with one-step corrected
+standard errors for population quantities.
+
+## Installation
+
+``` r
+# install.packages("remotes")
+remotes::install_github("xuyiqing/sconjoint")
 ```
 
-`scmix()` maximizes the integrated likelihood of each respondent's complete
-choice sequence. The product over tasks is taken before integrating over the
-persistent factor, and the sample objective gives respondents equal weight. A
-full-sample fit estimates the structural plug-in object; respondent-level
-outer-fold fits are retained for inference and held-out assessment.
+## Workflow
 
-## Statistical scope
-
-- The DNN is a sieve for the unknown conditional mean `mu(Z)`. It is not a
-  separate behavioral assumption.
-- Population and subgroup quantities integrate the fitted conditional normal
-  distribution and the respondent empirical distribution of `Z`.
-- With bounded task counts, posterior summaries are predictions. They are not
-  consistently recovered realized respondent preferences.
-- `scmix_dml()` implements respondent-level, cross-fitted, Riesz-corrected
-  inference for prespecified rowwise-expectation primitives.
-  `scmix_inference_target()` constructs the supported paper primitives and
-  `scmix_delta_transform()` maps them into subgroup ratios, MRS, directional
-  heterogeneity shares, and covariance decompositions. The procedure uses
-  complete-sequence Fisher scores and includes the direct empirical-`P_Z`
-  influence term; it does not claim an arbitrary-functional API.
-- Ordinary inference is withheld at a covariance-rank boundary. The software
-  also does not prove the paper's DNN rate, curvature, optimization, or
-  numerical-integration assumptions.
-- Specification assessments can expose lack of support, poor fit, weak
-  information, numerical instability, and sensitivity. They cannot verify
-  normality, common covariance, noninformative completion, or independent
-  logit shocks.
-
-## Main workflow
-
-```r
+``` r
 library(sconjoint)
+x <- sc_example_data("gs")                  # the paper's inputs, from the bundled gs2020 data
+fits <- lapply(1:4, function(q) sc_fit(x, q = q))
+sc_select_rank(fits)                         # held-out fit chooses q = 3
+st <- sc_states(fits[[3]])                   # what the estimator needs from each fold
+sc_save(st, "gs_q3.rds")
 
-fit <- scmix(
-  choice ~ attribute_1 + attribute_2 | moderator_1 + moderator_2,
-  data = conjoint_long,
-  respondent = "respondent_id",
-  task = "task_id",
-  profile = "profile_id",
-  q = 1L,
-  K = 5L,
-  n_starts = 4L,
-  seed = 2026
-)
-
-# Natural structural plug-ins; these never use empirical posterior modes.
-theta <- scmix_paper_theta(fit)
-choice_probability <- scmix_paper_choice(fit, contrast = c(1, 0))
-
-# Finite-functional one-step calculation. Without a classed numerical,
-# optimization, and tangent audit from scmix_inference_verification(), this
-# deliberately returns status = "conditional_unverified" and withholds intervals.
-inference <- scmix_dml(fit, targets = "theta")
-
-# Assemble prespecified assessment results. Component diagnostics are
-# constructed with scmix_design_audit(), scmix_heldout_sequence_score(),
-# scmix_heldout_calibration(), scmix_local_information(), and related helpers.
-assessment <- scmix_assess(fit = fit, inference = inference,
-                           eigenvalue_margin = 1e-4)
-# The assessment remains incomplete until every required Section 4 component
-# is supplied with provenance.
+st <- sc_load("gs_q3.rds")
+sc_estimate(st, list(
+  sc_mean("co-partisan", "diff_respParty", w = "PL"),
+  sc_share("co-partisan", "diff_respParty", w = "PL"),
+  sc_contest("co-partisan vs other", "diff_respParty", w = "PL")))
 ```
 
-Architecture and penalty selection must occur inside each outer training
-sample when used for DML. `scmix_tune_outer_matrix()` provides that nested,
-respondent-level workflow. Integration refinement and rank sensitivity use
-fresh refits through `scmix_integration_refinement()` and
-`scmix_q_sensitivity()`.
+Fitting at the paper’s settings takes hours. The paper’s saved fold
+states for both applications are a separate download (to be published),
+so the estimates can be computed in seconds.
 
-The older `scfit()` projection/MAP pipeline and the old `scmix_theta()`,
-`scmix_polarization()`, and related binned-information functions remain only
-for backward compatibility. `scfit()` emits a legacy warning, and the old
-mixed-logit quantity objects are marked `paperps_regular_inference = FALSE`;
-none is the estimator or inference method justified by the rebuilt paper.
+## Documentation
 
-## Application data
+The package book walks through a simulated example, both applications of
+the paper, every quantity, inference and respondent posteriors:
+<https://yiqingxu.org/packages/sconjoint/>.
 
-The three replication sources are read without modification from the existing
-`ConjointStructural` project. All new prepared data, checkpoints, diagnostics,
-tables, and figures are written below this clone. See
-[`applications/README.md`](applications/README.md) and
-[`PAPERPS_ALIGNMENT_AUDIT.md`](PAPERPS_ALIGNMENT_AUDIT.md).
+## Citation
 
-## Local verification status
+Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026. “Learning
+Preferences from Conjoint Data: A Structural Deep Learning Approach.”
+Working paper, Stanford University.
 
-The R sources parse and source together, and pure-R unit/smoke checks cover the
-paper-facing quantities, design benchmark, specification gates, finite-sieve
-inference algebra, and computation orchestration. The current host has R 4.0.5
-without `torch` or `testthat`, so the full Torch optimization and formal
-`testthat` suite must be run in the reproducible analysis environment before
-the application estimates are produced.
+The bundled data come from Graham and Svolik (2020, *American Political
+Science Review*) and Ballard-Rosa, Martin and Scheve (2017, *Journal of
+Politics*).
 
 ## License
 

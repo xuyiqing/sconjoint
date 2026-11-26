@@ -1,0 +1,322 @@
+# Ballard-Rosa, Martin and Scheve (2017): income-tax plans {#sec-br}
+
+@ballard2017structure ask how Americans evaluate federal income-tax schedules. In each of eight
+tasks, respondents chose between two tax plans. A plan sets the marginal rate in six income
+brackets and states how much revenue it raises compared with current policy, in five categories.
+This chapter reproduces the paper's results for this experiment from the saved fit.
+
+```{r}
+#| label: br-setup
+#| cache: false
+library(sconjoint)
+fits <- getOption("sconjoint.fits", "fits")
+br <- sc_load(file.path(fits, "br_q4.rds"))
+if (is.null(br)) stop("This chapter needs the saved fit br_q4.rds; see the installation chapter.")
+tab <- function(e, digits = 3) {
+  out <- e[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
+  out[2:6] <- lapply(out[2:6], round, digits)
+  out
+}
+```
+
+## The data and the fit
+
+`sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data: the 1,991
+respondents who answered the income question, 15,928 tasks, and 16 coded features. Plan A comes
+first. Each rate enters utility through a linear and a quadratic term, and the revenue category
+through four contrasts. The network sees age, sex, education, race, income and party ID, coded in
+sixteen columns.
+
+```{r}
+#| label: br-data
+x <- sc_example_data("br")
+x
+table(x$groups$party, useNA = "ifany")
+```
+
+The paper's party groups are Democrats (`party == "Dem"`, 885), Republicans (`party == "Rep"`,
+643) and independents (`pid7 == 4`, 389). The 74 respondents who answered "not sure" belong to
+`party == "Ind"` but to no party group, so the book selects independents by `pid7`.
+
+The fit selected four taste factors. Reproducing it takes several hours:
+
+```{r}
+#| label: br-fit
+#| eval: false
+fit_q <- lapply(1:5, function(q) sc_fit(x, q = q))
+sc_select_rank(fit_q)
+br <- sc_states(fit_q[[4]])                           # q = 4; M = 250 designs, 8 responses each
+sc_save(br, file.path(fits, "br_q4.rds"))
+```
+
+| Taste factors | Held-out log score | Gain over $q - 1$ | Paired $z$ |
+|---|---|---|---|
+| 1 | -4.865 | | |
+| 2 | -4.796 | 0.0696 | 5.52 |
+| 3 | -4.762 | 0.0337 | 3.76 |
+| 4 (selected) | -4.742 | 0.0203 | 3.59 |
+| 5 | -4.746 | -0.0047 | -0.75 |
+
+## The recorded design
+
+The displayed revenue category was generated from the six rates, with noise. A comparison that
+raises one rate therefore also changes the revenue a plan is likely to show. The BR helpers handle
+this, and they need the plans respondents actually saw. The function below takes them from
+`br2017`, in the order of the fitted data.
+
+```{r}
+#| label: br-profiles
+br_profiles <- function(ids) {
+  b <- br2017[br2017$valid_income, ]
+  b <- b[order(match(b$respondent, ids), b$task), ]
+  plan <- function(k) {
+    z <- b[b$profile == k, ]
+    data.frame(tax_rate_1_pct = z$rate_L10, tax_rate_2_pct = z$rate_10_35,
+               tax_rate_3_pct = z$rate_35_85, tax_rate_4_pct = z$rate_85_175,
+               tax_rate_5_pct = z$rate_175_375, tax_rate_6_pct = z$rate_375P,
+               taxrev = 3 - z$revenue_score)
+  }
+  list(A = plan(1), B = plan(2))
+}
+prof <- br_profiles(br$data$data$ids)
+sapply(prof, nrow)
+```
+
+## Rate changes with revenue following the rule
+
+For each bracket, the paper raises the rate from the bottom to the top of the bracket's menu (for
+example from 5% to 55% for incomes above \$375,000). The other five rates average over the
+contexts respondents saw, and the displayed revenue follows the experiment's revenue rule.
+`sc_br_revenue_contrast()` returns that contrast as a vector of 16 coefficients. With `per_point =
+TRUE` it divides by the change in the rate, so the mean is utility per percentage point.
+
+```{r}
+#| label: br-contrast
+top <- sc_br_revenue_contrast(6, profiles = prof, per_point = TRUE)
+round(top, 4)
+```
+
+The rate part sits in `tax6_linear` (the quadratic term cancels because the menu's endpoints are
+symmetric). The revenue part is the average change in the revenue codes that the raise causes.
+
+```{r}
+#| label: br-means
+brackets <- c("under $10k", "$10-35k", "$35-85k", "$85-175k", "$175-375k", "over $375k")
+contrast <- lapply(1:6, function(j) sc_br_revenue_contrast(j, profiles = prof, per_point = TRUE))
+means <- sc_estimate(br, lapply(1:6, function(j) sc_mean(brackets[j], contrast[[j]])))
+tab(means, 4)
+```
+
+Higher rates on the bottom three brackets lower utility on average, and higher rates on the top two
+raise it. Per rate point, the penalty below \$10,000 is -0.0577 and the gain above \$375,000 is
+0.0221. `sc_ratio()` compares the two, with a delta-method interval:
+
+```{r}
+#| label: br-ratio
+ratio <- sc_ratio("bottom penalty / top gain", sc_mean("bottom", contrast[[1]]),
+                  sc_mean("top", contrast[[6]]))
+tab(sc_estimate(br, ratio))
+```
+
+The bottom-bracket penalty is 2.61 times the top-bracket gain.
+
+## Preference shares
+
+The share is the fraction of respondents whose utility change, averaged over contexts, is positive.
+
+```{r}
+#| label: br-shares
+top_55_35 <- sc_br_revenue_contrast(6, high = 55, low = 35, profiles = prof)
+shares <- sc_estimate(br, list(
+  sc_share(brackets[2], contrast[[2]]),
+  sc_share(brackets[4], contrast[[4]]),
+  sc_share(brackets[6], contrast[[6]]),
+  sc_share("top rate 35% to 55%", top_55_35),
+  sc_mean("top rate 35% to 55%: mean", top_55_35)))
+tab(shares, 4)
+```
+
+An estimated 69.1% favor raising the top rate from 5% to 55%. For the \$10,000--\$35,000 bracket,
+29.2% favor the higher rate despite its negative mean, and for \$85,000--\$175,000 the share is
+54.7%. Raising the top rate from 35% to 55% splits respondents evenly: the share is 49.7% and the
+mean is -0.013, with an interval that includes zero. Because utility has a quadratic term in each
+rate, the direction of a taste can depend on where a change starts.
+
+## Differences by party
+
+The same contrasts by party use subgroup weights. A function of the groups returns them.
+
+```{r}
+#| label: br-party
+party_w <- list(Democrats = function(g) g$party == "Dem", independents = function(g) g$pid7 == 4,
+                Republicans = function(g) g$party == "Rep")
+party_targets <- list()
+for (j in c(1, 6)) for (p in names(party_w))
+  party_targets[[length(party_targets) + 1]] <-
+    sc_share(paste(brackets[j], p, sep = ", "), contrast[[j]], w = party_w[[p]])
+party_shares <- sc_estimate(br, party_targets)
+tab(party_shares)
+```
+
+Among Democrats, 83.5% favor the higher top rate; among Republicans, 52.8%, with an interval that
+includes 50%. Both groups largely oppose raising the lowest rate. The score correction matters
+here: before correction (the `plug_in` column) the top-rate shares are 76.8% and 63.8%, a smaller
+gap. The difference between the two party means has its own interval:
+
+```{r}
+#| label: br-gap
+gap <- sc_difference("top rate: Democrats minus Republicans",
+                     sc_mean("Democrats", contrast[[6]], w = party_w$Democrats),
+                     sc_mean("Republicans", contrast[[6]], w = party_w$Republicans))
+tab(sc_estimate(br, gap), 4)
+```
+
+## Fitted distributions
+
+```{r}
+#| label: fig-br-laws
+#| fig-cap: "Fitted distributions of utility per rate point, revenue following the rule"
+#| fig-width: 8
+#| fig-height: 3.4
+mix_density <- function(law, grid) sapply(grid, function(t) mean(dnorm(t, law$mean, law$sd)))
+law_bottom <- sc_fitted_law(br, contrast[[1]])
+law_top <- sc_fitted_law(br, contrast[[6]])
+op <- par(mfrow = c(1, 2), mar = c(4.2, 4.2, 2, 0.8), cex = 0.85)
+grid <- seq(-0.25, 0.15, length.out = 301)
+plot(grid, mix_density(law_bottom, grid), type = "l", lwd = 2, col = "#004a8c",
+     xlab = "Utility per rate point", ylab = "Density",
+     main = "Raising the rate under $10,000", font.main = 1)
+abline(v = 0, lty = 2, col = "grey50")
+grid <- seq(-0.12, 0.17, length.out = 301)
+plot(grid, mix_density(law_top, grid), type = "l", lwd = 2, col = "#004a8c",
+     xlab = "Utility per rate point", ylab = "Density",
+     main = "Raising the rate over $375,000", font.main = 1)
+abline(v = 0, lty = 2, col = "grey50")
+par(op)
+```
+
+The bottom-bracket law lies mostly below zero and is wide: respondents differ a lot in how much
+they dislike a higher bottom rate. The top-bracket law is narrower and centered just above zero,
+with about 30% of its mass below zero. As in @sec-gs, these are
+fitted laws before the score correction.
+
+## Complete tax plans
+
+`sc_br_plan_contest()` compares two complete plans. Each plan's revenue category is drawn from the
+revenue rule, so the contest averages over the categories the two plans could show. The paper uses
+four plans:
+
+| Plan | Under \$10k | \$10--35k | \$35--85k | \$85--175k | \$175--375k | Over \$375k |
+|---|---|---|---|---|---|---|
+| Progressive | 0 | 5 | 15 | 25 | 35 | 45 |
+| Flat | 15 | 15 | 15 | 15 | 15 | 15 |
+| Status-quo analogue | 5 | 15 | 25 | 25 | 35 | 35 |
+| Regressive | 25 | 25 | 15 | 15 | 5 | 5 |
+
+```{r}
+#| label: br-contests
+rates <- rbind(progressive = c(0, 5, 15, 25, 35, 45), flat = rep(15, 6),
+               status_quo = c(5, 15, 25, 25, 35, 35), regressive = c(25, 25, 15, 15, 5, 5))
+groups <- c(list(all = NULL), party_w)
+plan_targets <- list()
+for (alt in 2:4) for (p in names(groups))
+  plan_targets[[length(plan_targets) + 1]] <-
+    sc_br_plan_contest(paste("progressive vs", rownames(rates)[alt], p, sep = ", "),
+                       rates["progressive", ], rates[alt, ], w = groups[[p]])
+plans <- sc_estimate(br, plan_targets)
+wide <- matrix(round(100 * plans$estimate, 1), nrow = 3, byrow = TRUE,
+               dimnames = list(paste("vs", rownames(rates)[2:4]), names(groups)))
+wide
+```
+
+The progressive plan receives an estimated 69.5% of expected support against the flat plan, 59.6%
+against the status-quo analogue, and 81.0% against the regressive plan. Against the flat plan,
+support is 79.3% among Democrats and 58.3% among Republicans. These contests set position effects
+to zero and keep task shocks.
+
+## Effects on choices
+
+`sc_br_endpoint_ame()` gives the AME of moving one bracket's rate from the bottom to the top of
+its menu, with the focal plan's revenue category redrawn from the rule and the opponent as
+recorded. It integrates over both sides of all 15,928 recorded tasks, about 90,000 contest rows
+per bracket, so each bracket takes about 20 minutes. The code is shown but not run.
+
+```{r}
+#| label: br-ames
+#| eval: false
+sc_estimate(br, lapply(1:6, function(j) sc_br_endpoint_ame(brackets[j], j, profiles = prof)))
+```
+
+The paper reports that raising the bottom rate from 0% to 25% lowers a plan's expected support by
+18.8 percentage points, and raising the top rate from 5% to 55% raises it by 14.1 points.
+
+## Decisiveness of a swap
+
+Decisiveness asks how often exchanging two plans' rates in one bracket would reverse the choice,
+with the other rates, the displayed revenue and the task shock as recorded. `sc_decisiveness()`
+takes each bracket's two coded columns and a menu: one row per rate on the bracket's menu, in the
+same coding. The rate part of `sc_br_revenue_contrast()` with `follow_revenue = FALSE` gives each
+row relative to the lowest rate. A common shift of the menu does not change the swaps.
+
+```{r}
+#| label: br-decisiveness
+menu <- function(j, menu_rates) {
+  cols <- paste0("tax", j, c("_linear", "_quadratic"))
+  t(sapply(menu_rates, function(r)
+    sc_br_revenue_contrast(j, r, menu_rates[1], profiles = prof, follow_revenue = FALSE)[cols]))
+}
+dec <- sc_estimate(br, sc_decisiveness(
+  list(top = c("tax6_linear", "tax6_quadratic"), bottom = c("tax1_linear", "tax1_quadratic")),
+  menus = list(top = menu(6, c(5, 15, 25, 35, 45, 55)), bottom = menu(1, c(0, 5, 15, 25))),
+  pairs = list(top = rbind(c(6L, 1L), c(6L, 4L)), bottom = rbind(c(4L, 1L))),
+  names = c("top rate: 55 vs 5", "top rate: 55 vs 35", "bottom rate: 25 vs 0")))
+tab(dec)
+```
+
+Exchanging top rates of 55% and 5% between two plans would reverse an estimated 45.4% of choices,
+but exchanging 55% and 35% only 15.7%. Exchanging bottom rates of 25% and 0% would reverse 50.5%.
+This took about eight minutes.
+
+## The paper's full target list
+
+The paper's main results file for this experiment has 43 rows: a mean and a share for each
+bracket contrast, the bracket 1 and 6 contrasts by party, the 35% to 55% top-rate change (with
+revenue following the rule and with revenue fixed), the 5% to 25% bottom-rate change, the twelve
+plan contests, the ratio and the party difference. Written with the public functions:
+
+```{r}
+#| label: br-full
+#| eval: false
+br_targets <- function(st, prof) {
+  g <- st$data$groups; n <- st$data$data$n
+  groups <- list(Dem = as.numeric(g$party == "Dem"), Ind = as.numeric(g$pid7 == 4),
+                 Rep = as.numeric(g$party == "Rep"))
+  party <- c(list(all = rep(1, n)), groups)
+  tl <- list(); add <- function(t) tl[[length(tl) + 1L]] <<- t
+  add_mean_share <- function(name, c, w = NULL) {
+    add(sc_mean(paste0(name, ".mean"), c, w)); add(sc_share(paste0(name, ".share"), c, w))
+  }
+  for (j in 1:6) {
+    cc <- sc_br_revenue_contrast(j, profiles = prof, per_point = TRUE)
+    add_mean_share(paste0("bracket", j), cc)
+    if (j %in% c(1L, 6L)) for (gg in names(groups)) add_mean_share(paste0("bracket", j, ".", gg), cc, groups[[gg]])
+  }
+  add_mean_share("top55v35", sc_br_revenue_contrast(6, 55, 35, prof))
+  add(sc_mean("top55v35.fixed", sc_br_revenue_contrast(6, 55, 35, prof, follow_revenue = FALSE)))
+  add_mean_share("bottom25v5", sc_br_revenue_contrast(1, 25, 5, prof))
+  rates <- rbind(progressive = c(0, 5, 15, 25, 35, 45), flat = rep(15, 6),
+                 sq = c(5, 15, 25, 25, 35, 35), reg = c(25, 25, 15, 15, 5, 5))
+  for (alt in 2:4) for (gg in names(party))
+    add(sc_br_plan_contest(paste0("contest.", rownames(rates)[alt], ".", gg), rates[1L, ], rates[alt, ],
+                           w = party[[gg]]))
+  c1 <- sc_br_revenue_contrast(1, profiles = prof, per_point = TRUE)
+  c6 <- sc_br_revenue_contrast(6, profiles = prof, per_point = TRUE)
+  add(sc_ratio("ratio.bottom.top", sc_mean("bracket1.mean", c1), sc_mean("bracket6.mean", c6)))
+  add(sc_difference("top.DemMinusRep", sc_mean("bracket6.Dem.mean", c6, groups$Dem),
+                    sc_mean("bracket6.Rep.mean", c6, groups$Rep)))
+  tl
+}
+```
+
+`sc_estimate(br, br_targets(br, prof))` takes about eight minutes, most of it the bounded updates
+of the 16 shares.

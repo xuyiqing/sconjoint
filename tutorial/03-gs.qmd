@@ -1,0 +1,354 @@
+# Graham and Svolik (2020): democracy and partisanship {#sec-gs}
+
+@graham2020democracy ask whether voters punish candidates who violate democratic principles when
+party and policy favor those candidates. Respondents chose between two hypothetical state
+legislative candidates in up to thirteen matchups. The candidates differed in party, economic and
+social policy, governance practices, democratic violations, scandals, and personal traits. This
+chapter reproduces the paper's results for this experiment from the saved fit.
+
+```{r}
+#| label: gs-setup
+#| cache: false
+library(sconjoint)
+fits <- getOption("sconjoint.fits", "fits")
+gs <- sc_load(file.path(fits, "gs_q3.rds"))
+if (is.null(gs)) stop("This chapter needs the saved fit gs_q3.rds; see the installation chapter.")
+# a short table of estimates
+tab <- function(e, digits = 3) {
+  out <- e[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
+  out[2:6] <- lapply(out[2:6], round, digits)
+  out
+}
+```
+
+## The data and the fit
+
+`sc_example_data("gs")` builds the paper's inputs from the bundled `gs2020` data: 1,605
+respondents, 20,657 matchups, and 30 coded features. The candidate shown on the left comes first,
+so `y = 1` means the left candidate was chosen. The network sees sixteen respondent characteristics
+measured before the tasks. The data also carry the paper's five folds, the respondents held out for
+early stopping in each fold, and the grouping variables.
+
+```{r}
+#| label: gs-data
+x <- sc_example_data("gs")
+x
+head(x$groups)
+```
+
+The groups are party ID (`pid7`, from -3 strong Democrat to 3 strong Republican), party (`party`,
+with leaners counted as partisans), self-described ideology among all respondents (`ideology`), and
+`PL`, which is 1 for the 1,377 partisans and leaners. The co-partisan feature is always zero for
+the 228 pure independents, so their co-partisan taste cannot be learned from their choices.
+Quantities about party therefore use `w = "PL"`.
+
+The paper fitted the model at one to four taste factors and chose three. The defaults of `sc_fit()`
+and `sc_states()` are the paper's settings, so the code below reproduces the saved fit. It takes
+several hours and is not run here.
+
+```{r}
+#| label: gs-fit
+#| eval: false
+fit_q <- lapply(1:4, function(q) sc_fit(x, q = q))   # five folds at each rank
+sc_select_rank(fit_q)
+gs <- sc_states(fit_q[[3]])                           # q = 3; M = 300 designs, 4 responses each
+sc_save(gs, file.path(fits, "gs_q3.rds"))
+```
+
+`sc_select_rank()` gives the paper's rank table:
+
+| Taste factors | Held-out log score | Gain over $q - 1$ | Paired $z$ |
+|---|---|---|---|
+| 1 | -7.797 | | |
+| 2 | -7.772 | 0.0249 | 2.19 |
+| 3 (selected) | -7.739 | 0.0329 | 2.99 |
+| 4 | -7.742 | -0.0029 | -0.47 |
+
+The log score is the average log probability of a held-out respondent's whole sequence of choices.
+The rule moves to $q = 3$ and stops because the fourth factor does not improve the fit.
+
+## Mean tastes
+
+A mean taste is the average utility a respondent gains from one coded feature, on the logit scale
+of the model. `sc_mean()` takes the feature name. The co-partisan mean averages over partisans and
+leaners; the others average over all respondents.
+
+```{r}
+#| label: gs-means
+fn <- gs$data$data$feature_names
+mean_targets <- lapply(fn, function(f) sc_mean(f, f, w = if (f == "diff_respParty") "PL" else NULL))
+means <- sc_estimate(gs, mean_targets)
+tab(means[c(1:3, 10:18), ])
+```
+
+Among partisans and leaners, a co-partisan candidate gains 0.81 units of utility on average. Each
+step toward the conservative end of economic policy costs 0.24. All seven undemocratic actions
+(`u_`) carry negative means, from -0.53 for the two-seat gerrymander to -0.90 for prosecuting
+journalists. The two scandals (`v_`) cost -0.94 (an affair) and -1.18 (underpaid taxes). The
+conduct codes are measured against the generic reference position, a candidate who supports an
+elected oversight board. The `plug_in` column is the cross-fitted fitted value before the score
+correction (@sec-inference).
+
+## Preference shares
+
+A mean can hide how many respondents are on each side. `sc_share()` estimates the share of
+respondents whose taste for the contrast is positive. It averages over the fitted normal law of
+each respondent's tastes.
+
+```{r}
+#| label: gs-shares
+shares <- sc_estimate(gs, list(
+  sc_share("co-partisan", "diff_respParty", w = "PL"),
+  sc_share("economic policy, per point", "diff_p1_num"),
+  sc_share("close polling stations", "diff_dem_code_u_limitVote"),
+  sc_share("prosecute journalists", "diff_dem_code_u_journalists")))
+tab(shares, 4)
+```
+
+An estimated 82.5% of partisans and leaners prefer a co-partisan, with a 95% interval from 79.7% to
+84.9%. The share favoring a violation is close to zero, and then it is hard to pin down. For closing
+polling stations the estimate is 7.3%, with a wide interval. For prosecuting journalists the
+estimate is 0.2% and the interval runs from 0 to 1. When nearly everyone opposes an action, the
+share depends on the spread of its taste across respondents. Each respondent saw each violation only
+once, so that spread is measured imprecisely.
+
+## Fitted distributions
+
+`sc_fitted_law()` returns the fitted law of a taste: for each held-out respondent, a normal
+distribution with that respondent's fitted mean and the spread implied by the taste factors. The
+population law is the mixture of these normals.
+
+```{r}
+#| label: gs-laws
+law_cp <- sc_fitted_law(gs, "diff_respParty", w = "PL")
+law_j <- sc_fitted_law(gs, "diff_dem_code_u_journalists")
+attr(law_cp, "summary")
+head(law_cp)
+```
+
+```{r}
+#| label: fig-gs-laws
+#| fig-cap: "Fitted taste distributions in the democracy experiment"
+#| fig-width: 8
+#| fig-height: 3.4
+mix_density <- function(law, grid) {
+  sapply(grid, function(t) mean(dnorm(t, law$mean, law$sd)))
+}
+op <- par(mfrow = c(1, 2), mar = c(4.2, 4.2, 2, 0.8), cex = 0.85)
+grid <- seq(-2.5, 4.5, length.out = 301)
+plot(grid, mix_density(law_cp, grid), type = "l", lwd = 2, col = "#004a8c",
+     xlab = "Taste for a co-partisan (logit utility)", ylab = "Density",
+     main = "Co-partisan, partisans and leaners", font.main = 1)
+abline(v = 0, lty = 2, col = "grey50")
+grid <- seq(-3.5, 1.5, length.out = 301)
+plot(grid, mix_density(law_j, grid), type = "l", lwd = 2, col = "#004a8c",
+     xlab = "Taste for prosecuting journalists (logit utility)", ylab = "Density",
+     main = "Prosecuting journalists, all respondents", font.main = 1)
+abline(v = 0, lty = 2, col = "grey50")
+par(op)
+```
+
+The left panel shows a wide spread: most partisans and leaners favor a co-partisan, some strongly,
+and a minority are below zero. The right panel is narrow and almost entirely below zero. So the share
+favoring prosecution sits near zero, where it is hard to estimate. These curves are fitted values
+before the score correction, so their means can differ from the corrected means above.
+
+## What can offset a violation
+
+The paper asks whether a party advantage can outweigh a violation. Consider a co-partisan who
+prosecutes journalists against an otherwise identical non-co-partisan at the generic reference
+position. A respondent prefers the co-partisan when the sum of the two tastes is positive. The
+*compensation share* is the share for whom that holds. In `sc_share()` the contrast is the sum of
+the two features.
+
+```{r}
+#| label: gs-comp
+g <- gs$data$groups
+comp <- lapply(c(lib = "lib", mod = "mod", con = "con"), function(ideo)
+  sc_share(paste("journalists + co-partisan,", ideo),
+           c("diff_dem_code_u_journalists", "diff_respParty"),
+           w = as.numeric(g$ideology == ideo) * g$PL))
+comp_est <- sc_estimate(gs, comp)
+tab(comp_est)
+```
+
+An estimated 33.8% of liberal partisans and leaners and 59.6% of conservative ones prefer the
+co-partisan who prosecutes journalists. The same party advantage outweighs the violation for many
+respondents, even though the violation's mean penalty is large.
+
+The ratio of the two means compares their average sizes. `sc_ratio()` returns $-\tau_j / \tau_p$,
+the mean prosecution penalty in units of the mean partisan gain, with a delta-method standard error.
+
+```{r}
+#| label: gs-ratio
+price <- sc_ratio("journalists penalty / co-partisan gain",
+                  sc_mean("journalists, partisans", "diff_dem_code_u_journalists", w = "PL"),
+                  sc_mean("co-partisan", "diff_respParty", w = "PL"))
+tab(sc_estimate(gs, price))
+```
+
+The ratio is 1.14 (95% interval 0.91 to 1.37): on average, the two are of similar size.
+
+## Candidate contests
+
+A contest is a specified matchup. `sc_contest()` estimates the expected share choosing the first
+candidate, with position effects set to zero and task shocks kept. The paper places a co-partisan
+at each social-policy position (1 most liberal, 4 most conservative) against a non-co-partisan at
+position 3, with all other attributes equal. The co-partisan either has a clean record or
+prosecutes journalists. The contrast vector is the coded difference between the two candidates.
+
+```{r}
+#| label: gs-contests
+e <- function(f) as.numeric(fn %in% f)
+contests <- list()
+for (ideo in c("lib", "con")) for (violation in c("clean", "journalists")) for (pos in 1:4) {
+  d <- e("diff_respParty") + (pos - 3) * e("diff_p2_num")
+  if (violation == "journalists") d <- d + e("diff_dem_code_u_journalists")
+  contests[[length(contests) + 1]] <- sc_contest(paste(ideo, violation, pos, sep = "."), d,
+                                                 w = as.numeric(g$ideology == ideo) * g$PL)
+}
+contest_est <- sc_estimate(gs, contests)
+wide <- matrix(round(100 * contest_est$estimate, 1), ncol = 4, byrow = TRUE,
+               dimnames = list(c("liberal, clean", "liberal, journalists",
+                                 "conservative, clean", "conservative, journalists"),
+                               paste("position", 1:4)))
+wide
+```
+
+At position 2, the co-partisan who prosecutes journalists receives an estimated 49.8% of support
+among liberal partisans and leaners and 52.1% among conservative ones. Without the violation the
+same candidate receives 74.2% and 67.7%. Prosecuting journalists costs about 24 and 16 points of
+expected support. These are expected vote shares: they include task shocks, so they differ from the
+compensation shares above. The intervals are in `contest_est`.
+
+## Effects on choices
+
+An average marginal effect (AME) switches one attribute of a candidate and averages the change in
+the probability that the candidate is chosen over the experiment's other attributes and opponents.
+It is the model's counterpart of the AMCE. `sc_ame_switch()` names the raw design attribute, the
+level switched to and the reference level. For party, the level is the respondent's own party (1 =
+Democrat, 2 = Republican in the raw design) and the reference is the other party; the switch is
+undefined for pure independents.
+
+```{r}
+#| label: gs-ames
+ames <- sc_estimate(gs, list(
+  sc_ame_switch("co-partisan", "party",
+                level = function(k) c(D = 1L, R = 2L, I = NA_integer_)[[k]],
+                ref = function(k) c(D = 2L, R = 1L, I = NA_integer_)[[k]],
+                design = "gs", w = "PL"),
+  sc_ame_switch("prosecute journalists", "dem", "diff_dem_code_u_journalists", "g_boardElect",
+                design = "gs")))
+tab(ames)
+```
+
+A co-partisan candidate gains 14.0 percentage points of support, and a candidate who prosecutes
+journalists loses 16.2 points. The paper reports regression AMCEs of 14.1 and -16.1 points for the
+same populations. The model reproduces the familiar choice effects and adds the preferences behind
+them.
+
+## Attribute importance
+
+Importance asks how much each attribute moves a respondent's utility over a stated menu of its
+levels, as a share of the total. The paper uses seven attributes: party, the two four-point policy
+scales, all fifteen governance, violation and scandal codes as one attribute, sex, race and
+profession. A policy scale is coded by one column, so its menu is `matrix(1:4)`. The shares sum to
+one and come from one joint update. The package reports them without intervals, because in the
+paper's simulations their intervals cover less often than stated.
+
+```{r}
+#| label: gs-importance
+attrs <- list(party = "diff_respParty", econ = "diff_p1_num", social = "diff_p2_num",
+              conduct = grep("^diff_dem_code_", fn, value = TRUE),
+              sex = grep("^diff_sex_", fn, value = TRUE),
+              race = grep("^diff_race_", fn, value = TRUE),
+              profession = grep("^diff_pro_", fn, value = TRUE))
+imp <- sc_estimate(gs, sc_importance(attrs, menus = list(econ = matrix(1:4), social = matrix(1:4)),
+                                     w = "PL"))
+imp[, c("name", "estimate", "plug_in", "n", "status")]
+```
+
+```{r}
+#| label: gs-importance-summary
+s <- setNames(imp$estimate, imp$name)
+round(100 * c(policy = s[["econ"]] + s[["social"]], party = s[["party"]],
+              conduct = s[["conduct"]], background = s[["sex"]] + s[["race"]] + s[["profession"]]), 1)
+```
+
+Among partisans and leaners, policy accounts for 46.5% of utility variation, party for 32.9%,
+governance and conduct for 18.3%, and background traits for 2.3%. The joint update took about eight
+minutes. The party-specific shares use the same call with `w = function(g) g$party == "Dem"` or
+`"Rep"`, one joint update each.
+
+## Decisiveness of a swap
+
+Decisiveness asks how often exchanging two candidates' levels on one attribute would reverse the
+choice, holding the other attributes and the task shock fixed. It averages over the matchups each
+respondent actually saw. The computation takes about twenty minutes for this experiment, so the code
+is shown but not run.
+
+```{r}
+#| label: gs-decisiveness
+#| eval: false
+conduct <- grep("^diff_dem_code_", fn)
+action <- grep("^diff_dem_code_[uv]_", fn[conduct])
+generic <- c(TRUE, grepl("^diff_dem_code_g_", fn[conduct]))   # reference row plus generic codes
+sc_estimate(gs, list(
+  sc_decisiveness(list(party = "diff_respParty"), pairs = list(party = c(2L, 1L)),
+                  names = "party", w = "PL"),
+  sc_decisiveness(list(conduct = fn[conduct]), pairs = list(conduct = cbind(1L + action, 1L)),
+                  allowed = list(conduct = generic),
+                  names = sub("^diff_dem_code_[uv]_", "", fn[conduct][action]))))
+```
+
+The paper reports that exchanging party reverses 36.1% of choices among partisans and leaners (95%
+interval 33.8% to 38.4%). Exchanging a candidate who prosecutes journalists with one at the generic
+reference position reverses 32.0% (27.3% to 37.1%), the largest among the seven violations.
+
+## The paper's full target list
+
+The function below writes every GS quantity in the paper's main results file with the public
+functions: a mean and a share for each of the 30 features, the compensation shares for seven
+violations in three ideology groups, 24 contests, the switch AMEs and the ratio. With the bounded
+updates for its 51 shares, `sc_estimate(gs, gs_targets(gs))` takes about 40 minutes and reproduces
+the paper's estimates, standard errors and intervals.
+
+```{r}
+#| label: gs-full
+#| eval: false
+gs_targets <- function(st) {
+  fn <- st$data$data$feature_names; g <- st$data$groups
+  e1 <- function(j) as.numeric(seq_along(fn) == j)
+  tl <- list(); add <- function(t) tl[[length(tl) + 1L]] <<- t
+  for (j in seq_along(fn)) {
+    w <- if (j == 1L) "PL" else NULL
+    add(sc_mean(paste0(fn[j], ".mean"), fn[j], w)); add(sc_share(paste0(fn[j], ".share"), fn[j], w))
+  }
+  actions <- grep("^diff_dem_code_u_", fn)
+  for (ideo in c("lib", "mod", "con")) {
+    wi <- as.numeric(g$ideology == ideo) * g$PL
+    for (j in actions) add(sc_share(paste0("comp.", ideo, ".", fn[j]), c(fn[j], fn[1L]), wi))
+    for (violation in c("clean", "journalists")) for (pos in 1:4) {
+      v <- e1(1L) + (pos - 3) * e1(3L)
+      if (violation == "journalists") v <- v + e1(match("diff_dem_code_u_journalists", fn))
+      add(sc_contest(paste0("contest.", ideo, ".", violation, ".", pos), v, w = wi))
+    }
+  }
+  jm <- sc_mean("journalists.partisan.mean", "diff_dem_code_u_journalists", "PL"); add(jm)
+  for (j in c(1:3, actions, grep("^diff_dem_code_v_", fn))) {
+    if (j == 1L) {
+      add(sc_ame_switch(paste0(fn[j], ".ame"), "party", function(k) c(D = 1L, R = 2L, I = NA_integer_)[[k]],
+                        function(k) c(D = 2L, R = 1L, I = NA_integer_)[[k]], design = "gs", w = "PL"))
+    } else if (j <= 3L) {
+      add(sc_ame_switch(paste0(fn[j], ".ame"), paste0("p", j - 1L), 4L, 1L, design = "gs", scale = 1 / 3))
+    } else {
+      add(sc_ame_switch(paste0(fn[j], ".ame"), "dem", fn[j], "g_boardElect", design = "gs"))
+    }
+  }
+  add(sc_ratio("journalists.party.price", jm, sc_mean("diff_respParty.mean", "diff_respParty", "PL")))
+  tl
+}
+```
+
+The policy AMEs switch a candidate from position 1 to position 4 and divide by three, so they are
+per point of the scale.
