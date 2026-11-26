@@ -28,8 +28,9 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-The book's file `_figs-helpers.R` holds the paper's plotting code. Its `estimate_each()` runs
-independent targets in parallel, with the same results as one `sc_estimate()` call.
+The book's file `_figs-helpers.R` holds two helpers. `estimate_each()` runs independent targets
+in parallel, with the same results as one `sc_estimate()` call. `pick()` takes rows by name. The
+figures come from the package's plot functions (@sec-plots).
 
 ```{r}
 #| label: gs-helpers
@@ -151,10 +152,7 @@ right of zero and is wide. Most partisans prefer a co-partisan, by different amo
 #| fig-cap: "Fitted tastes: party, policy and governance"
 #| fig-width: 8.2
 #| fig-height: 9.2
-paper_par()
-par(mfrow = c(5, 3), mar = c(1.7, .5, 1.9, .3), oma = c(1, .2, .2, .2))
-for (j in 1:15) small_density(laws[[j]], labels[j], pick(means, fn[j]))
-mtext("Utility contrast (logit units)", 1, outer = TRUE, line = .1)
+sc_plot_laws(laws[1:15], labels = labels[1:15], means = pick(means, fn[1:15]), layout = "panels")
 ```
 
 ```{r}
@@ -162,10 +160,7 @@ mtext("Utility contrast (logit units)", 1, outer = TRUE, line = .1)
 #| fig-cap: "Fitted tastes: conduct and background"
 #| fig-width: 8.2
 #| fig-height: 9.2
-paper_par()
-par(mfrow = c(5, 3), mar = c(1.7, .5, 1.9, .3), oma = c(1, .2, .2, .2))
-for (j in 16:30) small_density(laws[[j]], labels[j], pick(means, fn[j]))
-mtext("Utility contrast (logit units)", 1, outer = TRUE, line = .1)
+sc_plot_laws(laws[16:30], labels = labels[16:30], means = pick(means, fn[16:30]), layout = "panels")
 ```
 
 Blue curves are fitted values before the score correction. The red line and bar are the
@@ -228,25 +223,26 @@ grey diamond (D).
 #| fig-cap: "Preferences and choice effects"
 #| fig-width: 9.2
 #| fig-height: 5.5
-jj <- match(fig_features, fn); yy <- rev(seq_along(jj))
-paper_par()
-layout(matrix(1:5, 1), widths = c(2.3, 1.45, 1.65, 1.6, 1.75))
-row_labels(labels[jj])
-panel(c(-1.55, 1.05), 12, "A. Mean\nutility", c(-1, 0, 1))
-ci(pick(means, fig_features), yy)
-panel(c(-4, 4), 12, "B. Fitted\npart-worths", c(-4, 0, 4))
-for (j in seq_along(jj)) ridge(laws[[jj[j]]], yy[j], c(-4, 4))
-panel(c(0, 100), 12, "C. Share\nfavoring (%)", c(0, 50, 100))
-ci(pick(shares, fig_features), yy, scale = 100, hide_wide = TRUE)
-panel(c(-26, 17), 12, "D. Choice\neffect (pp)", c(-20, 0, 15))
-ci(pick(ames, fig_features), yy + .09, scale = 100)
-points(100 * amce[fig_features], yy - .13, pch = 18, col = "#555555", cex = .85)
+lab <- setNames(labels, fn)
+sc_plot_preferences(means, setNames(laws, fn), shares, ames, labels = lab, reference = amce,
+                    order = fig_features,
+                    xlim = list(A = c(-1.55, 1.05), B = c(-4, 4), D = c(-26, 17)),
+                    ticks = list(A = c(-1, 0, 1), B = c(-4, 0, 4), D = c(-20, 0, 15)))
 ```
 
 Panel B's curves are fitted values before the score correction, scaled to the same height, so
 their centers need not match Panel A. In Panel C, a hollow point marks a share whose interval spans
 at least 95 percentage points, and that interval is not drawn. Party uses partisans and leaners,
 the other rows all respondents.
+
+`sc_table()` gives the same estimates as a table (@sec-plots):
+
+```{r}
+#| label: gs-table
+#| results: asis
+sc_table("Mean utility" = means, "Share favoring" = shares, "Choice effect" = ames,
+         order = fig_features, labels = lab, format = "markdown", n = TRUE)
+```
 
 ## Compensation shares
 
@@ -275,18 +271,13 @@ co-partisan who prosecutes journalists, despite the large mean penalty of the vi
 #| fig-cap: "Compensation shares"
 #| fig-width: 7.5
 #| fig-height: 4.4
-paper_par()
-layout(matrix(c(1, 2, 3, 3), 2, byrow = TRUE), widths = c(2.2, 5), heights = c(4, .4))
-row_labels(labels[match(violations, fn)]); yy <- 7:1
-panel(c(0, 100), 7, "Party advantage offsets the violation", seq(0, 100, 25),
-      xlabel = "Share preferring co-partisan despite violation (%)")
-for (k in 1:3) {
-  z <- pick(comp_est, paste(c("lib", "mod", "con")[k], violations, sep = "."))
-  ci(z, yy + c(.18, 0, -.18)[k], color = cols[k], scale = 100)
+by_ideology <- function(ideo) {       # one group's rows, named by violation
+  z <- pick(comp_est, paste(ideo, violations, sep = ".")); z$name <- violations; z
 }
-par(mar = rep(0, 4)); plot.new()
-legend("center", c("Liberal", "Moderate", "Conservative"), col = cols, pch = 16,
-       bty = "n", cex = .85, horiz = TRUE)
+sc_plot_estimates(Liberal = by_ideology("lib"), Moderate = by_ideology("mod"),
+                  Conservative = by_ideology("con"), labels = lab, scale = 100, xlim = c(0, 100),
+                  xlab = "Share preferring co-partisan despite violation (%)",
+                  main = "Party advantage offsets the violation")
 ```
 
 Rows are violations and colors ideology groups. Points are bounded estimates and bars 95% log-odds
@@ -342,24 +333,17 @@ expected vote shares include task shocks, so they differ from the compensation s
 #| fig-cap: "Expected support in candidate contests"
 #| fig-width: 8.4
 #| fig-height: 3.3
-paper_par()
-par(mfrow = c(1, 3), mar = c(3.2, 3.4, 2.6, .8), oma = c(.7, 0, 0, 0))
-for (k in 1:3) {
-  plot(NA, xlim = c(1, 4), ylim = c(0, 100), xlab = "Social policy position",
-       ylab = if (k == 1) "Expected vote share (%)" else "", axes = FALSE)
-  abline(h = c(0, 25, 50, 75, 100), col = "#E8E8E8"); abline(h = 50, lty = 2, col = "#777777")
-  axis(1, at = 1:4); axis(2, at = c(0, 50, 100))
-  title(c("Liberal", "Moderate", "Conservative")[k], line = .8, cex.main = 1)
-  for (v in c("clean", "journalists")) {
-    z <- pick(contest_est, paste(c("lib", "mod", "con")[k], v, 1:4, sep = "."))
-    cc <- if (v == "clean") blue else red
-    polygon(c(1:4, 4:1), 100 * c(z$lower, rev(z$upper)), col = adjustcolor(cc, .12), border = NA)
-    lines(1:4, 100 * z$estimate, col = cc, lwd = 1.5, lty = if (v == "clean") 1 else 2)
-    points(1:4, 100 * z$estimate, col = cc, pch = if (v == "clean") 16 else 17, cex = .7)
-  }
-  if (k == 2) legend("bottomleft", c("No violation", "Prosecutes journalists"), col = c(blue, red),
-                     lty = c(1, 2), bty = "n", cex = .75)
+layout(matrix(c(1, 2, 3, 4, 4, 4), 2, byrow = TRUE), heights = c(3, .35))
+for (ideo in c("lib", "mod", "con")) {
+  row <- function(v) pick(contest_est, paste(ideo, v, 1:4, sep = "."))
+  sc_plot_lines("No violation" = row("clean"), "Prosecutes journalists" = row("journalists"),
+                x = 1:4, scale = 100, xlab = "Social policy position",
+                ylab = if (ideo == "lib") "Expected vote share (%)" else "",
+                main = c(lib = "Liberal", mod = "Moderate", con = "Conservative")[[ideo]], legend = FALSE)
 }
+par(mar = rep(0, 4)); plot.new()
+legend("center", c("No violation", "Prosecutes journalists"), col = c(blue, red), lty = 1:2,
+       lwd = 1.5, pch = 16, pt.cex = .7, bty = "n", horiz = TRUE, cex = .85)
 ```
 
 Blue lines have no violation, red dashed lines prosecute journalists. The opponent stays at
@@ -410,27 +394,12 @@ Democrats (52.5% against 29.5%). Among Republicans the two are close (39.7% agai
 #| fig-cap: "Attribute importance by party"
 #| fig-width: 7.2
 #| fig-height: 4.1
-paper_par()
-layout(matrix(1:2, 2), heights = c(3.35, .45))
-par(mar = c(3, 9.7, .7, 1.1))
-xmax <- max(50, 10 * ceiling((100 * max(imp_display) + 5) / 10))
-plot(NA, xlim = c(0, xmax), ylim = c(.5, 4.5), axes = FALSE,
-     xlab = "Mean importance share (%)", ylab = "")
-abline(v = seq(0, xmax, 10), col = "#E8E8E8", lwd = .6)
-axis(1, at = seq(0, xmax, 10))
-axis(2, at = 4:1, labels = c("Policy", "Party", "Governance/conduct", "Background"),
-     tick = FALSE, cex.axis = .95)
-imp_cols <- c("#333333", blue, red)
-for (k in 1:3) {
-  s <- imp_display[, k]
-  stopifnot(abs(sum(s) - 1) < 1e-8)
-  y <- 4:1 + c(.20, 0, -.20)[k]
-  rect(0, y - .075, 100 * s, y + .075, col = imp_cols[k], border = NA)
-  text(100 * s, y, sprintf("%.1f", 100 * s), pos = 4, offset = .55, col = imp_cols[k], cex = .78)
-}
-par(mar = rep(0, 4)); plot.new()
-legend("center", c("All partisans and leaners", "Democrat", "Republican"),
-       fill = imp_cols, border = NA, bty = "n", horiz = TRUE, cex = .85)
+sc_plot_importance("All partisans and leaners" = imp[startsWith(imp$name, "All."), ],
+                   Democrat = imp[startsWith(imp$name, "Dem."), ],
+                   Republican = imp[startsWith(imp$name, "Rep."), ],
+                   combine = combine, colors = c("#333333", blue, red),
+                   labels = c(policy = "Policy", party = "Party", governance = "Governance/conduct",
+                              background = "Background"))
 ```
 
 The bars are the pooled group (dark grey), Democrats (blue, 723 respondents) and Republicans (red,

@@ -61,9 +61,9 @@ chapters start from step 5.
 
 @sec-install installs the package and the saved fits. @sec-quickstart runs every step on a
 simulated experiment with a known truth. @sec-gs and @sec-br reproduce the paper's two applications
-from the saved fits. @sec-quantities lists every quantity and its interval rule. @sec-inference
-explains the standard errors and what they do not cover. @sec-respondents summarizes individual
-respondents.
+from the saved fits. @sec-quantities lists every quantity and its interval rule. @sec-plots shows
+the functions that draw the figures and tables. @sec-inference explains the standard errors and
+what they do not cover. @sec-respondents summarizes individual respondents.
 
 ## Citation
 

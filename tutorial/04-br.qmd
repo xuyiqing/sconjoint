@@ -26,8 +26,8 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-The figures use the helpers of @sec-gs in `_figs-helpers.R`, including `estimate_each()` for
-targets run in parallel.
+The chapter uses the helpers of @sec-gs in `_figs-helpers.R`: `estimate_each()` runs targets in
+parallel and `pick()` takes rows by name.
 
 ```{r}
 #| label: br-helpers
@@ -181,16 +181,13 @@ row of the figure).
 #| fig-cap: "Preference shares by party"
 #| fig-width: 7.2
 #| fig-height: 3.4
-paper_par()
-layout(matrix(c(1, 2, 3, 3), 2, byrow = TRUE), widths = c(2.15, 4.7), heights = c(3, .4))
-row_labels(c("Below $10k", "Above $375k"))
-panel(c(0, 100), 2, "Share favoring the higher rate (%)", seq(0, 100, 25))
-for (k in 1:3)
-  ci(pick(party_shares, paste(brackets[c(1, 6)], names(party_w)[k], sep = ", ")),
-     2:1 + c(.16, 0, -.16)[k], color = cols[k], scale = 100)
-par(mar = rep(0, 4)); plot.new()
-legend("center", c("Democrat", "Independent", "Republican"), col = cols, pch = 16, bty = "n",
-       cex = .85, horiz = TRUE)
+by_party <- function(p) {             # one party's rows, named by bracket
+  z <- pick(party_shares, paste(brackets[c(1, 6)], p, sep = ", ")); z$name <- brackets[c(1, 6)]; z
+}
+sc_plot_estimates(Democrat = by_party("Democrats"), Independent = by_party("independents"),
+                  Republican = by_party("Republicans"), scale = 100, xlim = c(0, 100),
+                  labels = c("Below $10k", "Above $375k"),
+                  xlab = "Share favoring the higher rate (%)")
 ```
 
 Bars are 95% log-odds intervals. Party groups include leaners.
@@ -227,10 +224,8 @@ curve's center.
 #| fig-cap: "Fitted preferences over tax-rate changes"
 #| fig-width: 8
 #| fig-height: 6.3
-paper_par()
-par(mfrow = c(3, 2), mar = c(2.1, .8, 2.1, .5), oma = c(1, .2, .2, .2))
-for (j in 1:6) small_density(laws[[j]], bn[j], pick(means, brackets[j]))
-mtext("Utility per percentage point of tax rate", 1, outer = TRUE, line = .1)
+sc_plot_laws(laws, labels = bn, means = pick(means, brackets), layout = "panels", ncol = 2,
+             xlab = "Utility per percentage point of tax rate")
 ```
 
 The tastes for the displayed revenue label hold the rates fixed. The revenue category (`taxrev`: 1 = much more revenue, 3 = about the same, 5 = much less) enters
@@ -252,11 +247,9 @@ All four are wide. These panels have no corrected means.
 #| fig-cap: "Fitted preferences over displayed revenue"
 #| fig-width: 8
 #| fig-height: 4.6
-paper_par()
-par(mfrow = c(2, 2), mar = c(2, .8, 2.1, .5), oma = c(1, .2, .2, .2))
-for (k in 1:4) small_density(revenue_laws[[k]], c("Much less revenue", "Less revenue",
-                                                    "More revenue", "Much more revenue")[k])
-mtext("Utility relative to about the same revenue", 1, outer = TRUE, line = .1)
+sc_plot_laws(revenue_laws, labels = c("Much less revenue", "Less revenue", "More revenue",
+                                      "Much more revenue"),
+             layout = "panels", ncol = 2, xlab = "Utility relative to about the same revenue")
 ```
 
 ## Complete tax plans
@@ -312,8 +305,7 @@ intervals, and the dashed line marks 50%.
 #| fig-cap: "Expected support for complete tax plans"
 #| fig-width: 8.2
 #| fig-height: 8.8
-paper_par()
-par(ps = 12)
+par(las = 1, tcl = -.2, mgp = c(1.7, .45, 0), xaxs = "i", yaxs = "i", ps = 12)
 layout(matrix(c(1, 1, 2, 3, 4, 5, 6, 6), 4, byrow = TRUE), heights = c(2.1, 3.05, 3.05, .6))
 par(mar = c(3, 4, 2.3, 1))
 plot(NA, xlim = c(1, 6), ylim = c(0, 60), xlab = "Income bracket (lowest to highest)",
@@ -378,23 +370,26 @@ the share favoring the higher rate (C), and the AME of the whole endpoint switch
 #| fig-cap: "Preferences over tax-rate changes"
 #| fig-width: 9.2
 #| fig-height: 4.1
-yy <- 6:1; m <- c(2.8, .9, 4, 1)
-paper_par()
-layout(matrix(1:5, 1), widths = c(1.85, 1.6, 1.7, 1.6, 1.8))
-row_labels(bn)
-panel(c(-.08, .05), 6, "A. Mean utility\nper rate point", c(-.06, 0, .04), margins = m)
-ci(pick(means, brackets), yy)
-panel(c(-.3, .2), 6, "B. Fitted\npart-worths", c(-.3, 0, .2), margins = m)
-for (j in 1:6) ridge(laws[[j]], yy[j], c(-.3, .2))
-panel(c(0, 100), 6, "C. Share\nfavoring (%)", c(0, 50, 100), margins = m)
-ci(pick(shares, brackets), yy, scale = 100)
 ame_ticks <- pretty(range(0, 100 * ames$lower, 100 * ames$upper), n = 3)
-panel(range(ame_ticks), 6, "D. Choice\neffect (pp)", ame_ticks, margins = m)
-ci(pick(ames, brackets), yy, scale = 100)
+sc_plot_preferences(means, laws, shares, ames, labels = bn, order = brackets, hide_wide = FALSE,
+                    xlim = list(A = c(-.08, .05), B = c(-.3, .2), D = range(ame_ticks)),
+                    # ticks off the panels' edges, so neighbouring labels do not touch
+                    ticks = list(A = c(-.06, 0, .04), B = c(-.2, -.1, 0, .1), D = head(ame_ticks[-1], -1)),
+                    titles = list(A = "A. Mean utility\nper rate point"),
+                    widths = c(1.85, 1.6, 1.7, 1.6, 1.8))
 ```
 
 Revenue follows the rule. Panel B's curves are fitted values before the score correction, scaled
 to the same height. Intervals are 95%, Wald for means and AMEs and log-odds for shares.
+
+As a table:
+
+```{r}
+#| label: br-table
+#| results: asis
+sc_table("Mean per point" = means, "Share favoring" = shares, "Choice effect" = ames,
+         order = brackets, labels = bn, digits = 3, format = "markdown", n = TRUE)
+```
 
 ## Decisiveness
 
