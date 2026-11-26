@@ -97,9 +97,13 @@
 .rum_tgt_mean <- function(name, c, w = NULL) list(name = name, kind = "mean", c = c, w = w,
   m = function(mu, th) drop(mu %*% c))
 
-# Fitted-law share with c' beta_i > 0: Phi(c' mu_i / ||Lambda' c||) (one factor: |c' lambda|).
+# Fitted-law share with c' beta_i > 0: Phi(c' mu_i / ||Lambda' c||) (one factor: |c' lambda|). When
+# Lambda' c = 0 the law of c' beta_i is a point mass at c' mu_i: the share is 1(c' mu_i > 0).
 .rum_tgt_share <- function(name, c, w = NULL) list(name = name, kind = "share", c = c, w = w,
-  m = function(mu, th) stats::pnorm(drop(mu %*% c) / abs(.rum_ld_scale(th$loading, c))))
+  m = function(mu, th) {
+    s <- abs(.rum_ld_scale(th$loading, c))
+    if (s > 0) stats::pnorm(drop(mu %*% c) / s) else as.numeric(drop(mu %*% c) > 0)
+  })
 
 # Position-neutral win probability for one contest d, side preference integrated
 # (gradients by central differences).

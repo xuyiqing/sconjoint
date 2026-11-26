@@ -109,3 +109,20 @@ test_that("5: per-respondent histories follow their respondents across folds", {
   }
   expect_error(sc_posterior(st, respondents = ids, history = c(1, 2)), "one per selected respondent")
 })
+
+test_that("7: zero and degenerate share contrasts give no NaN", {
+  st <- sc_test_states()
+  expect_error(sc_estimate(st, sc_share("zero", rep(0, 3)), bounded = FALSE), "is zero")
+  expect_error(sc_estimate(st, sc_share("zero", c(f2 = 0)), bounded = FALSE), "is zero")
+  s0 <- attr(sc_fitted_law(st, c(0, 0, 0)), "summary")
+  expect_identical(unname(s0), c(0, 0, 0))
+  # a contrast the factor does not load on: point mass at c' mu, share = 1(c' mu > 0)
+  th <- list(kappa = 0, loading = c(1, 0, 0), omega = .3)
+  mu <- matrix(c(.5, -.2, .3, .1, -.4, .2), 2, 3)
+  tg <- .rum_tgt_share("s", c(0, 1, 0), NULL)
+  expect_identical(tg$m(mu, th), as.numeric(mu[, 2] > 0))
+  expect_true(all(is.finite(unlist(.rum_target_grad(tg, mu, th)))))
+  # nondegenerate shares are unchanged
+  th$loading <- c(.4, .3, -.2); cc <- c(1, -1, .5)
+  expect_identical(.rum_tgt_share("s", cc)$m(mu, th), stats::pnorm(drop(mu %*% cc) / abs(sum(th$loading * cc))))
+})

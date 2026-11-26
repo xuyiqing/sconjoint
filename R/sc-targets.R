@@ -114,7 +114,13 @@ sc_mean <- function(name, c, w = NULL) {
 #' @export
 sc_share <- function(name, c, w = NULL) {
   force(c); force(w)
-  .sc_target(name, "share", "bounded", function(ctx) list(.rum_tgt_share(name, .sc_resolve_cvec(c, ctx), .sc_resolve_w(w, ctx))))
+  .sc_target(name, "share", "bounded", function(ctx) {
+    cc <- .sc_resolve_cvec(c, ctx)
+    if (!all(is.finite(cc))) stop("the contrast of '", name, "' must be finite", call. = FALSE)
+    if (all(cc == 0)) stop("the contrast of '", name, "' is zero: its share above zero is 0 for everyone, ",
+                           "so there is nothing to estimate", call. = FALSE)
+    list(.rum_tgt_share(name, cc, .sc_resolve_w(w, ctx)))
+  })
 }
 
 #' Win probability in a hypothetical contest
