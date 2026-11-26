@@ -70,14 +70,15 @@ is the respondent's persistent pull toward the first candidate. Here
 
 Mean tastes \code{mu(Z)} move smoothly, and not linearly, with the
 respondent's characteristics. With \code{a = (age - 49) / 18} and
-\code{s = ideology / 3}: the taste for a Republican is \verb{1.5 tanh(2 s) + 0.1 a}
-(it saturates for strong partisans); for some and for long experience
+\code{s = ideology / 3}: the taste for a Republican is \verb{2 tanh(3 s) + 0.1 a}
+(it saturates for strong partisans, so the population splits into two
+camps with the moderates between them); for some and for long experience
 \verb{0.4 + 0.15 a} and \verb{0.6 + 0.35 tanh(1.5 a)}; for a moderate and for a
 conservative position (against a liberal one) \verb{g (1 + 2 s)} and \verb{g 4 s},
 with \verb{g = 0.25 + 0.25 s^2}, which is a quadratic loss around the
 respondent's own position that weighs more for those at the extremes; and
 for a woman candidate \verb{0.15 + 0.35 female - 0.15 a}. The first taste factor
-moves party and policy together (loadings 0.7 on party, 0.3 and 0.6 on the
+moves party and policy together (loadings 0.5 on party, 0.3 and 0.6 on the
 moderate and conservative positions); the second moves experience and
 gender (0.4 and 0.8 on some and long experience, -0.2 on the conservative
 position, 0.6 on a woman candidate).
@@ -88,8 +89,8 @@ estimates: mean tastes, shares of respondents who prefer one level to
 another, a compensating share, the probability that one candidate beats
 another, the average marginal effect of long experience, and attribute
 importance shares. The covariates are discrete (whole years of age from 18
-to 80, uniform; ideology on seven points; gender with probability one
-half), so each population value is an exact sum over the 882 covariate
+to 80, uniform; ideology on seven points with probabilities 0.09, 0.14,
+0.15, 0.20, 0.15, 0.15 and 0.12; gender with probability one half), so each population value is an exact sum over the 882 covariate
 cells. Inside a cell, means and shares are exact normal formulas, the
 contest and the AME are one-dimensional integrals by Gauss-Hermite
 quadrature with 100 nodes (the AME also enumerates every context the

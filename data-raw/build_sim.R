@@ -52,12 +52,12 @@ p <- length(features)            # position_moderate, position_conservative, gen
 # ---- covariate law ------------------------------------------------------------------------------------
 ages <- 18:80                                    # uniform over whole years
 ideo_levels <- -3:3                              # 1 very liberal ... 7 very conservative, centred
-ideo_probs <- c(0.07, 0.12, 0.15, 0.26, 0.16, 0.14, 0.10)
+ideo_probs <- c(0.09, 0.14, 0.15, 0.20, 0.15, 0.15, 0.12)
 female_prob <- 0.5
 
 # ---- true model ---------------------------------------------------------------------------------------
 # Mean tastes. a = (age - 49) / 18 (about -1.7 to 1.7), s = ideology / 3 (-1 to 1).
-#   party_Republican        1.5 tanh(2 s) + 0.1 a            partisanship follows ideology, saturating
+#   party_Republican        2 tanh(3 s) + 0.1 a              partisanship follows ideology, saturating
 #   experience_some         0.4 + 0.15 a
 #   experience_long         0.6 + 0.35 tanh(1.5 a)           older respondents value experience more
 #   position_moderate       g(s) (1 + 2 s)                   quadratic loss around the ideal point s,
@@ -65,7 +65,7 @@ female_prob <- 0.5
 #   gender_female           0.15 + 0.35 female - 0.15 a
 mean_taste <- function(age, ideology, female) {
   a <- (age - 49) / 18; s <- ideology / 3; g <- 0.25 + 0.25 * s^2
-  out <- cbind(party_Republican = 1.5 * tanh(2 * s) + 0.1 * a,
+  out <- cbind(party_Republican = 2 * tanh(3 * s) + 0.1 * a,
                experience_some = 0.4 + 0.15 * a,
                experience_long = 0.6 + 0.35 * tanh(1.5 * a),
                position_moderate = g * (1 + 2 * s),
@@ -74,7 +74,7 @@ mean_taste <- function(age, ideology, female) {
   out
 }
 environment(mean_taste) <- baseenv()
-loading <- cbind(factor1 = c(0.7, 0, 0, 0.3, 0.6, 0),       # ideological intensity: party and policy
+loading <- cbind(factor1 = c(0.5, 0, 0, 0.3, 0.6, 0),       # ideological intensity: party and policy
                  factor2 = c(0, 0.4, 0.8, 0, -0.2, 0.6))    # experience and gender
 rownames(loading) <- features
 kappa <- 0.2
