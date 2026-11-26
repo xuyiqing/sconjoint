@@ -74,12 +74,22 @@ sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_ite
     for (tg in b) add_internal(tg)
     vapply(b, `[[`, "", "name")
   }
+  # A component of a ratio or difference reuses a target of the same name only when both define the
+  # same mean contrast (same coefficients and weights); a different definition under that name stops.
+  same_mean <- function(a, b) identical(a$kind, "mean") && identical(b$kind, "mean") &&
+    identical(as.numeric(a$c), as.numeric(b$c)) && identical(a$w, b$w)
   for (st in tl) {
     if (identical(st$estimator, "derived")) {
       comp <- character(0)
       for (pt in st$parts) {
         nm <- pt$name
         if (is.null(internal[[nm]])) build_one(pt)
+        else {
+          b <- pt$build(ctx)
+          if (length(b) != 1L || !same_mean(internal[[nm]], b[[1L]]))
+            stop("'", st$name, "' uses a component named '", nm, "' that differs from another target of that name; ",
+                 "give the two targets different names", call. = FALSE)
+        }
         comp <- c(comp, nm)
       }
       rows[[length(rows) + 1L]] <- list(type = "derived", spec = st, names = st$name, parts = comp)

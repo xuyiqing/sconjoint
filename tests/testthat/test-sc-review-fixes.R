@@ -31,3 +31,19 @@ test_that("1: built-in designs require the design's feature order", {
   expect_length(sc_br_plan_contest("p", c(0, 5, 15, 25, 35, 45), rep(15, 6))$build(ok), 1L)
   expect_length(sc_contest("c", matrix(0.1, 1, 16))$build(ctx), 1L)
 })
+
+test_that("2: ratio and difference components with a reused name must have the same definition", {
+  st <- sc_test_states()
+  expect_error(sc_estimate(st, list(sc_mean("x", "f1"), sc_difference("d", sc_mean("x", "f2"), sc_mean("y", "f1"))),
+                           bounded = FALSE), "component named 'x' that differs")
+  expect_error(sc_estimate(st, sc_difference("d", sc_mean("x", "f1"), sc_mean("x", "f2")), bounded = FALSE),
+               "component named 'x'")
+  expect_error(sc_estimate(st, list(sc_mean("x", "f1", w = "g"), sc_ratio("r", sc_mean("x", "f1"), sc_mean("y", "f2"))),
+                           bounded = FALSE), "component named 'x'")
+  # the same definition under the same name is reused (as the paper's target lists do)
+  e <- sc_estimate(st, list(sc_mean("x", "f2"), sc_mean("y", "f1"),
+                            sc_difference("d", sc_mean("x", c(f2 = 1)), sc_mean("y", "f1"))), bounded = FALSE)
+  expect_equal(e$estimate[3], e$estimate[1] - e$estimate[2], tolerance = 1e-14)
+  e2 <- sc_estimate(st, sc_difference("d", sc_mean("x", "f2"), sc_mean("y", "f1")), bounded = FALSE)
+  expect_identical(e2$estimate, e$estimate[3]); expect_identical(e2$se, e$se[3])
+})
