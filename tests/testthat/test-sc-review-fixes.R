@@ -204,3 +204,21 @@ test_that("11: partial fold states are refused for population quantities", {
   s1 <- sc_states(f, M = 2L, ny = 1L, info_nodes = 32L, score_nodes = 32L, folds = 1)
   expect_error(sc_fitted_law(s1, "tax6_linear"), "held out in no fold")
 })
+
+test_that("12: named posterior contrasts must use unique feature names", {
+  st <- sc_test_states(); f <- st$folds[[1]]
+  par <- list(mu = f$mu, kappa = .1, loading = f$th$loading, omega = .3)
+  post <- function(cc) sc_posterior(par, st$data, respondents = 1:2, contrasts = cc, nodes = 64)$contrasts
+  expect_error(post(c(typo = 1, f2 = 0)), "unknown: typo")
+  expect_error(post(c(f1 = 1, f1 = 2)), "repeated: f1")
+  expect_error(post(rbind(a = c(f1 = 1, zz = 1))), "unknown: zz")
+  # valid names, unnamed vectors, and contrasts in columns give the same answer
+  ref <- post(rbind(a = c(1, 0, -1)))
+  expect_equal(post(rbind(a = c(f1 = 1, f3 = -1)))$mean, ref$mean, tolerance = 0)
+  expect_equal(post(c(f3 = -1, f1 = 1))$mean, ref$mean, tolerance = 0)
+  expect_equal(post(cbind(a = c(f1 = 1, f2 = 0, f3 = -1)))$mean, ref$mean, tolerance = 0)
+  m3 <- matrix(c(1, 0, -1, 0, 1, 0, 1, 1, 1), 3, 3, dimnames = list(c("f1", "f2", "f3"), c("a", "b", "c")))
+  expect_equal(post(m3)$mean[post(m3)$contrast == "a"], ref$mean, tolerance = 0)
+  expect_equal(post(matrix(c(1, 0, -1), 3, 1))$mean, ref$mean, tolerance = 0)
+  expect_equal(post(rbind(f1 = c(1, 0, -1)))$mean, ref$mean, tolerance = 0)   # a label that is a feature name
+})

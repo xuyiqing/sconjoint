@@ -64,8 +64,9 @@
 #' @param contrasts Optional utility contrasts \eqn{c}. A matrix with one contrast per row and
 #'   one column per feature (row names name the contrasts), a single vector of length p, or a
 #'   named vector or matrix whose names are a subset of `data$feature_names` (missing
-#'   features get 0). A matrix with p rows and a different number of columns is read with one
-#'   contrast per column.
+#'   features get 0; any other name is an error). A matrix whose rows are named by features,
+#'   or a matrix with p unnamed rows and a different number of columns, is read with one
+#'   contrast per column (its column names then name the contrasts).
 #' @param newtasks Optional tasks to predict: a matrix of coded task differences (p columns)
 #'   used for every respondent, a list with one such matrix per selected respondent (named by
 #'   ID or in order), or `"remaining"` to predict each respondent's own tasks after `history`.
@@ -379,12 +380,23 @@ sc_posterior.default <- function(object, data, respondents = NULL, contrasts = N
     nm <- names(contrasts)
     contrasts <- matrix(contrasts, 1L, dimnames = list(NULL, nm))
   }
+  # Names, when given, must be unique feature names (matched by name); unnamed contrasts are positional.
+  # One contrast per column (column names then label the contrasts): a matrix whose rows are named by
+  # features (and whose columns are not, or are not p), or a matrix with unnamed rows, p of them, and
+  # another number of columns.
+  given <- function(x) !is.null(x) && any(nzchar(x) & !is.na(x))
+  is_features <- function(x) given(x) && all(x %in% features)
+  cn <- colnames(contrasts); rn <- rownames(contrasts)
+  if (!is_features(cn) && ((is_features(rn) && (given(cn) || ncol(contrasts) != p)) ||
+                           (!given(rn) && ncol(contrasts) != p && nrow(contrasts) == p)))
+    contrasts <- t(contrasts)
   cn <- colnames(contrasts)
-  if (is.null(cn) || !all(cn %in% features)) {
-    if (ncol(contrasts) != p && nrow(contrasts) == p) contrasts <- t(contrasts)
-    cn <- colnames(contrasts)
-  }
-  if (!is.null(cn) && all(cn %in% features) && !anyDuplicated(cn)) {
+  if (given(cn)) {
+    bad <- unique(cn[is.na(cn) | !cn %in% features])
+    if (length(bad))
+      stop("contrasts named by features must use names from data$feature_names; unknown: ",
+           paste(utils::head(bad, 5L), collapse = ", "), ".")
+    if (anyDuplicated(cn)) stop("contrasts named by features must name each feature once; repeated: ", paste(unique(cn[duplicated(cn)]), collapse = ", "), ".")
     full <- matrix(0, nrow(contrasts), p, dimnames = list(rownames(contrasts), features))
     full[, cn] <- contrasts
     contrasts <- full
