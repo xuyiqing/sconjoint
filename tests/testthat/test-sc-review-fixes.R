@@ -145,3 +145,29 @@ test_that("8: validation sets are matched by fold label or by position over sort
   x$validation <- list(v10, v20, v10)
   expect_error(fit(x), "3 elements but the data have 2 folds")
 })
+
+test_that("9: save/load keeps the mean basis, mean names and metadata", {
+  st <- sc_test_states(); d <- st$data$data
+  rec <- function(v) lapply(seq_len(d$n), function(i) v(d$offsets[i] + seq_len(d$T[i])))
+  rd <- rum_data(rec(function(r) d$y[r]), rec(function(r) d$d[r, , drop = FALSE]),
+                 mean_basis = matrix(c(1, 0, 0), 3, 1, dimnames = list(NULL, "first")), ids = d$ids,
+                 feature_names = d$feature_names, metadata = list(orientation = "o", tag = "example"))
+  s9 <- st; s9$data$data <- rd
+  f <- tempfile(fileext = ".rds"); on.exit(unlink(f))
+  sc_save(s9, f); back <- sc_load(f)$data$data
+  expect_identical(back, rd)
+  # default data round-trip exactly (up to the names of the task counts), without storing the identity basis
+  d <- st$data$data; names(d$T) <- NULL
+  sc_save(st, f); z <- readRDS(f)
+  expect_null(z$data$mean_basis)
+  expect_identical(sc_load(f)$data$data, d)
+  # files written before these fields were stored still load, with the defaults
+  z$data$mean_basis <- z$data$mean_names <- z$data$metadata <- NULL; saveRDS(z, f)
+  expect_identical(sc_load(f)$data$data, d)
+  # per-respondent bases are kept as a list
+  rl <- rum_data(rec(function(r) d$y[r]), rec(function(r) d$d[r, , drop = FALSE]),
+                 mean_basis = lapply(seq_len(d$n), function(i) matrix(c(1, 0, i), 3, 1)), ids = d$ids,
+                 feature_names = d$feature_names, metadata = list(orientation = "o"))
+  s9$data$data <- rl; sc_save(s9, f)
+  expect_identical(sc_load(f)$data$data, rl)
+})
