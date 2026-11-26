@@ -179,3 +179,28 @@ test_that("10: sc_decisiveness() fixes best_worst when it is called", {
   t2 <- sc_decisiveness(list(a = 1), pairs = list(a = c(2, 1)), best_worst = bw)
   expect_length(t2$build(ctx), 2L)
 })
+
+test_that("11: partial fold states are refused for population quantities", {
+  st <- sc_test_states()
+  one <- st; one$folds <- one$folds[1]
+  expect_error(sc_estimate(one, sc_mean("m", "f1")), "15 of 30 respondents are held out in no fold")
+  expect_error(sc_fitted_law(one, "f1"), "held out in no fold")
+  twice <- st; twice$folds[[2]]$te <- c(twice$folds[[2]]$te, twice$folds[[1]]$te[1])
+  expect_error(sc_estimate(twice, sc_mean("m", "f1")), "1 in more than one")
+  part <- st; part$info$partial <- TRUE
+  expect_error(sc_estimate(part, sc_mean("m", "f1")), "for checks")
+  expect_error(sc_fitted_law(part, "f1"), "for checks")
+  expect_s3_class(sc_estimate(st, sc_mean("m", "f1")), "sc_estimates")
+  # sc_states(respondents = ) still builds states for checks, which estimation then refuses
+  skip_on_cran()
+  toy <- .sc_toy_data(n = 16L)
+  f <- sc_fit(toy, q = 1L, hidden = 3L, seeds = 1L, control = list(max_epochs = 3L), nodes = 32L,
+              check_nodes = 64L, heldout_nodes = 64L, verbose = FALSE)
+  s <- sc_states(f, M = 2L, ny = 1L, info_nodes = 32L, score_nodes = 32L, respondents = 2L)
+  expect_identical(vapply(s$folds, function(x) length(x$te), 0L), c(`1` = 2L, `2` = 2L))
+  expect_output(print(s), "for checks only")
+  expect_error(sc_estimate(s, sc_mean("m", "tax6_linear")), "for checks")
+  expect_s3_class(sc_posterior(s, respondents = s$folds[[1]]$te[1], nodes = 64), "sc_posterior")
+  s1 <- sc_states(f, M = 2L, ny = 1L, info_nodes = 32L, score_nodes = 32L, folds = 1)
+  expect_error(sc_fitted_law(s1, "tax6_linear"), "held out in no fold")
+})

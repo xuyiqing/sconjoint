@@ -9,8 +9,20 @@
   out
 }
 
-.sc_states_check <- function(object) {
+# population = TRUE (sc_estimate(), sc_fitted_law()): the states must hold every respondent's held-out
+# fold, each respondent in exactly one fold. States built with sc_states(respondents = ) are for checks.
+.sc_states_check <- function(object, population = FALSE) {
   if (!inherits(object, "sc_states")) stop("expected fold states from sc_states() or sc_load()", call. = FALSE)
+  if (!population) return(object)
+  if (isTRUE(object$info$partial))
+    stop("these fold states were built for the first held-out respondents only (sc_states(respondents = )): ",
+         "they are for checks, not for population quantities. Build them without respondents.", call. = FALSE)
+  n <- object$data$data$n
+  cover <- tabulate(unlist(lapply(object$folds, `[[`, "te"), use.names = FALSE), nbins = n)
+  if (any(cover != 1L))
+    stop(sprintf(paste0("population quantities need every respondent held out in exactly one fold: %d of %d respondents ",
+                        "are held out in no fold and %d in more than one. Fit and build states for all folds."),
+                 sum(cover == 0L), n, sum(cover > 1L)), call. = FALSE)
   object
 }
 # The bounded updates' score rule (rebuilt from the stored settings; the paper's rule by default).
@@ -39,7 +51,8 @@
 #' bounded update does not converge keeps its one-step estimate and SE, with
 #' no interval; its `status` says why.
 #'
-#' @param object Fold states from [sc_states()] or [sc_load()].
+#' @param object Fold states from [sc_states()] or [sc_load()], covering every
+#'   respondent (all folds; not built with `respondents`).
 #' @param targets A target or a list of targets (from [sc_mean()],
 #'   [sc_share()], [sc_contest()], [sc_ame_switch()], [sc_ame_rows()],
 #'   [sc_importance()], [sc_decisiveness()], [sc_ratio()], [sc_difference()]
@@ -60,7 +73,7 @@
 #' }
 #' @export
 sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L) {
-  object <- .sc_states_check(object)
+  object <- .sc_states_check(object, population = TRUE)
   ctx <- .sc_context(object$data); data <- ctx$data; n <- data$n; FS <- object$folds
   tl <- .sc_flatten_targets(targets)
   # internal targets: one-step list (unique names), shares, joint sets, derived
@@ -184,7 +197,8 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #' `||Lambda' c||`; the population law is the mixture of these normals (paper
 #' eq. partworth_distribution).
 #'
-#' @param object Fold states from [sc_states()] or [sc_load()].
+#' @param object Fold states from [sc_states()] or [sc_load()], covering every
+#'   respondent (all folds; not built with `respondents`).
 #' @inheritParams sc_mean
 #' @return A data frame with one row per held-out respondent with positive
 #'   weight (fold order): `id`, `fold`, `mean`, `sd` and `weight` (the
@@ -198,7 +212,7 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #' }
 #' @export
 sc_fitted_law <- function(object, c, w = NULL) {
-  object <- .sc_states_check(object); ctx <- .sc_context(object$data)
+  object <- .sc_states_check(object, population = TRUE); ctx <- .sc_context(object$data)
   cc <- .sc_resolve_cvec(c, ctx); ww <- .sc_resolve_w(w, ctx)
   people <- if (is.null(ww)) NULL else which(ww > 0)
   out <- do.call(rbind, lapply(names(object$folds), function(k) {
