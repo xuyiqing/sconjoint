@@ -96,3 +96,16 @@ test_that("6: fitted laws skip folds without subgroup members", {
   l1 <- sc_fitted_law(st, "f1", w = as.numeric(seq_len(st$data$data$n) == one))
   expect_identical(l1$id, st$data$data$ids[one]); expect_identical(l1$fold, 2L)
 })
+
+test_that("5: per-respondent histories follow their respondents across folds", {
+  st <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint")); dat <- st$data$data
+  ids <- dat$ids[c(st$folds[[2]]$te[1], st$folds[[1]]$te[1], st$folds[[2]]$te[2])]
+  h <- c(0L, 3L, 5L)
+  pp <- sc_posterior(st, respondents = ids, history = h, nodes = 256)
+  expect_identical(pp$diagnostics$id, ids)
+  for (k in seq_along(ids)) {
+    one <- sc_posterior(st, respondents = ids[k], history = h[k], nodes = 256)
+    expect_equal(pp$beta[pp$beta$id == ids[k], "mean"], one$beta$mean, tolerance = 0)
+  }
+  expect_error(sc_posterior(st, respondents = ids, history = c(1, 2)), "one per selected respondent")
+})

@@ -32,7 +32,7 @@ sc_posterior.sc_fit <- function(object, data = NULL, respondents = NULL, contras
     nodes = nodes, seed = seed, ...)
 }
 
-.sc_posterior_crossfit <- function(parts, fitted_data, data, respondents, newtasks, ...) {
+.sc_posterior_crossfit <- function(parts, fitted_data, data, respondents, newtasks, history = NULL, ...) {
   if (is.null(data)) data <- fitted_data
   if (inherits(data, "sc_data")) data <- data$data
   if (!identical(data$ids, fitted_data$ids))
@@ -41,6 +41,8 @@ sc_posterior.sc_fit <- function(object, data = NULL, respondents = NULL, contras
   fold_of <- rep(NA_integer_, data$n)
   for (j in seq_along(parts)) fold_of[parts[[j]]$te] <- j
   if (anyNA(fold_of[sel])) stop("Some selected respondents are held out in no fold.")
+  # one history per selected respondent, resolved against the whole selection, then split by fold
+  hist <- if (is.null(history)) NULL else .sc_post_history(data, sel, history)
   if (is.list(newtasks) && !is.data.frame(newtasks) && is.null(names(newtasks))) {
     if (length(newtasks) != length(sel))
       stop("A newtasks list needs one matrix per selected respondent (named by ID or in order).")
@@ -52,7 +54,7 @@ sc_posterior.sc_fit <- function(object, data = NULL, respondents = NULL, contras
     nt <- if (is.list(newtasks) && !is.data.frame(newtasks)) newtasks[data$ids[s]] else newtasks
     pr <- parts[[j]]
     r <- .sc_posterior_run(pr$mu, pr$kappa, pr$loading, pr$omega, data, respondents = s,
-                           newtasks = nt, ...)
+                           newtasks = nt, history = if (is.null(hist)) NULL else hist[fold_of[sel] == j], ...)
     r$diagnostics$fold <- pr$k
     runs[[length(runs) + 1L]] <- r
   }
