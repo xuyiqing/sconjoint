@@ -1,8 +1,7 @@
 # Respondents {#sec-respondents}
 
-The quantities in the earlier chapters describe the population. This chapter turns to individual
-respondents: what the fitted model says about one respondent's tastes, given that respondent's
-characteristics and choices. `sc_posterior()` computes it.
+`sc_posterior()` summarizes individual respondents: what the fitted model says about one
+respondent's tastes, given that respondent's characteristics and choices.
 
 ```{r}
 #| label: r-setup
@@ -13,23 +12,22 @@ gs <- sc_load(file.path(fits, "gs_q3.rds"))
 if (is.null(gs)) stop("This chapter needs the saved fit gs_q3.rds; see the installation chapter.")
 ```
 
-## What a posterior is here
+## Posterior
 
-Before we see any choices, the model predicts a respondent's tastes from their characteristics:
-the tastes are normal, with mean $\mu(Z_i)$ and covariance $\Lambda\Lambda^\top$. This is the
-*prior*. Each observed choice is more likely under some tastes than others. Bayes' rule combines the
-prior with the choices into the *posterior*: an updated distribution of that
-respondent's tastes, at the fitted parameters.
+Before any choices, the model predicts a respondent's tastes from their characteristics: normal,
+with mean $\mu(Z_i)$ and covariance $\Lambda\Lambda^\top$. This is the *prior*. Bayes' rule
+combines the prior with the respondent's choices into the *posterior*, an updated distribution of
+that respondent's tastes at the fitted parameters.
 
-With thirteen tasks, the choices tell us only a little. The posterior then stays close to the
-prior, and the posterior mean is pulled toward the mean of respondents with the same
-characteristics. It is a prediction of the respondent's tastes, not a measurement of them. Only with
-many tasks does the posterior concentrate around the respondent's own tastes.
+With thirteen tasks, the choices carry little information. The posterior stays close to the prior,
+and its mean is pulled toward the mean of respondents with the same characteristics. It is a
+prediction of the respondent's tastes, not a measurement of them. Only with many tasks does the
+posterior concentrate around the respondent's own tastes.
 
-## A few partisans in the democracy experiment
+## Democracy experiment
 
-For fold states, `sc_posterior()` uses each respondent's held-out fit: the one that did not train
-on their choices. A contrast is given as a named vector or a matrix with one row per contrast.
+For fold states, `sc_posterior()` uses the fit that did not train on the respondent's choices. A
+contrast is a named vector or a matrix with one row per contrast.
 
 ```{r}
 #| label: r-gs
@@ -41,11 +39,11 @@ round(post$contrasts[, c("prior_mean", "prior_sd", "mean", "sd", "lower", "upper
                          "prob_positive")], 2)
 ```
 
-The first two respondents had similar priors, a co-partisan taste of about 1.4 and 1.1 with a
+The first two respondents have similar priors, a co-partisan taste of about 1.4 and 1.1 with a
 standard deviation of 0.87. After their thirteen choices, the first respondent's posterior mean
-rises to 1.75 and the second's falls to 0.27. `prob_positive` is the posterior probability that
-the respondent's co-partisan taste is positive. The posterior standard deviations are about three
-quarters of the prior ones. `history = 0` returns the prior itself:
+rises to 1.75 and the second's falls to 0.27. `prob_positive` is the posterior probability that the
+co-partisan taste is positive. The posterior standard deviations are about three quarters of the
+prior ones. `history = 0` returns the prior:
 
 ```{r}
 #| label: r-history0
@@ -53,12 +51,11 @@ round(sc_posterior(gs, respondents = partisans[1:2], contrasts = cp, history = 0
   c("prior_mean", "mean", "sd")], 2)
 ```
 
-## Do not count posterior means
+## Counting posterior means
 
-It is tempting to summarize the population by counting respondents whose posterior mean is
-positive. That is not an estimate of the preference share. Posterior means are shrunk toward the
-prior means, so their spread is smaller than the spread of tastes, and their signs follow the
-prior. The population quantities of the earlier chapters average over each respondent's whole taste
+The share of respondents with a positive posterior mean is not an estimate of the preference share.
+Posterior means are shrunk toward the prior means, so they spread less than tastes do, and their
+signs follow the prior. The population quantities average over each respondent's whole taste
 distribution instead.
 
 ```{r}
@@ -70,17 +67,17 @@ rbind(
   "fitted law" = c(sd = attr(law, "summary")[["sd"]], positive = attr(law, "summary")[["share_positive"]]))
 ```
 
-The spread of the 1,377 posterior means is smaller than the spread of the fitted law. The share
-with a positive posterior mean is also not the fitted share of 83.3%, nor the corrected share of
-82.5% in @sec-gs. The posterior summaries also condition on the fitted parameters, so they carry
-no sampling uncertainty from the fit.
+The 1,377 posterior means spread less than the fitted law. The share with a positive posterior mean
+is neither the fitted share of 83.3% nor the corrected share of 82.5% in @sec-gs. Posterior
+summaries also condition on the fitted parameters, so they carry no sampling uncertainty from the
+fit.
 
-## Long panels: a simulated example
+## Long panels
 
-With many tasks per respondent the posterior can learn individual tastes. The paper shows this
-with a 30-task experiment. Here we simulate one with known tastes: 200 respondents, 30 tasks each,
-three coded features, one taste factor and a position effect. `sc_posterior()` also takes fitted
-parameters directly, as a list with `mu`, `kappa`, `loading` and `omega`.
+With many tasks per respondent, the posterior can learn individual tastes. The paper shows this
+with a 30-task experiment. The code below simulates one with known tastes: 200 respondents, 30
+tasks each, three coded features, one taste factor and a position effect. `sc_posterior()` also
+takes fitted parameters directly, as a list with `mu`, `kappa`, `loading` and `omega`.
 
 ```{r}
 #| label: r-sim
@@ -98,9 +95,9 @@ dat <- sc_data(y, X, id)
 par_true <- list(mu = mu, kappa = kappa, loading = L, omega = omega)
 ```
 
-For each history (the number of each respondent's first tasks conditioned on), we compute the
-posterior of the party taste and predict the final five tasks. The parameters are the true ones,
-so the table shows what the choices themselves add.
+For each history (the number of first tasks conditioned on), the code computes the posterior of the
+party taste and predicts the final five tasks. The parameters are the true ones, so the table shows
+what the choices themselves add.
 
 ```{r}
 #| label: r-learning
@@ -118,11 +115,11 @@ round(learn, 3)
 ```
 
 As the history grows, the posterior standard deviation of the party taste falls, the posterior
-means track the true tastes more closely, and the predictions of the last five choices improve.
-With 25 earlier choices the posterior is still far from a point: respondents' choices are noisy,
-and each task carries little information about any one taste.
+means track the true tastes more closely, and predictions of the last five choices improve. With 25
+earlier choices the posterior is still far from a point. Choices are noisy, and each task carries
+little information about any one taste.
 
 The default integrator (`method = "adaptive"`) centers its draws at each respondent's posterior
 mode, so it stays accurate when the posterior is much narrower than the prior. The `diagnostics`
-table reports each respondent's effective sample size; a small value means the draws should be
-increased with `nodes`.
+table reports each respondent's effective sample size. If it is small, increase the draws with
+`nodes`.

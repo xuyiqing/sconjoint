@@ -1,38 +1,33 @@
-# What sconjoint estimates {#sec-intro}
+# Overview {#sec-intro}
 
 `sconjoint` fits the structural random-utility model of @acharya2026structural to forced-choice
-conjoint experiments. It estimates what respondents prefer, how many of them prefer it, and how
-strongly. This book shows how to fit the model, how to compute each quantity, and how to read the
-results.
+conjoint experiments. It estimates what respondents prefer, how many prefer it, and how strongly.
 
-## One example
+## Example
 
 In the democracy experiment of @graham2020democracy, respondents chose between two hypothetical
-state legislative candidates in up to thirteen matchups. The candidates differed in party, policy,
-their record on democratic practices, and personal traits. A standard analysis reports the average
-marginal component effect (AMCE) of each attribute [@hainmueller2014causal]: how much a candidate's
-chance of being chosen changes when the attribute changes. For a co-partisan candidate, that effect
-is about 14 percentage points.
+state legislative candidates in up to thirteen matchups. The average marginal component effect
+(AMCE) [@hainmueller2014causal] of a co-partisan candidate, the change in the chance of being
+chosen, is about 14 percentage points. It does not say how many respondents prefer a co-partisan.
+It fits almost everyone mildly preferring their own party, and also a minority who care a great deal
+while the rest do not care.
 
-The AMCE does not say how many respondents prefer a co-partisan. A 14-point average is consistent
-with almost everyone mildly preferring their own party. It is also consistent with a minority who
-care a great deal while the rest do not care. The structural model separates these two cases. Among
-the 1,377 partisans and leaners in the study, the paper estimates that 82.5% prefer a co-partisan
-candidate, other attributes held fixed (95% interval 79.7% to 84.9%). The average strength of that
-preference is 0.81 on the logit utility scale. @sec-gs computes both numbers from the saved fit.
+The structural model separates the two cases. Among the 1,377 partisans and leaners, the paper
+estimates that 82.5% prefer a co-partisan candidate, other attributes held fixed (95% interval
+79.7% to 84.9%). The average strength of that preference is 0.81 on the logit utility scale.
+@sec-gs computes both numbers from the saved fit.
 
-## The model in a few lines
+## Model
 
 Each respondent $i$ has a vector of tastes $\beta_i$, one weight per coded feature of a profile.
-The tastes stay the same across that respondent's tasks. In task $t$, respondent $i$ sees two
-profiles whose coded features differ by $d_{it}$ (first profile minus second) and chooses the first
-profile with probability
+In task $t$, respondent $i$ sees two profiles whose coded features differ by $d_{it}$ (first
+profile minus second) and chooses the first profile with probability
 
 $$
 \Pr(Y_{it} = 1) = G(\kappa + a_i + d_{it}^\top \beta_i), \qquad G(s) = \frac{e^s}{1 + e^s}.
 $$
 
-Here $\kappa$ is the average pull toward the first profile (the position effect) and $a_i$ is the
+Here $\kappa$ is the average pull toward the first profile (the position effect), and $a_i$ is the
 respondent's own persistent deviation from it. Tastes vary in two ways:
 
 $$
@@ -40,15 +35,13 @@ $$
 $$
 
 A neural network $\mu(\cdot)$ maps the respondent's characteristics $Z_i$, measured before the
-tasks, to mean tastes. The loading matrix $\Lambda$ with $q$ columns (the *taste factors*) lets
-tastes vary among respondents who share the same characteristics. Because every task of a
-respondent uses the same $\beta_i$ and $a_i$, repeated choices separate persistent tastes from
-task-level noise. The model is a mixed logit for repeated choices [@mcfadden1974conditional;
-@revelt1998mixed; @train2009discrete], with a neural network for the mean tastes.
+tasks, to mean tastes. The loading matrix $\Lambda$ has $q$ columns (the *taste factors*). It lets
+tastes vary among respondents with the same characteristics. All tasks of a respondent share
+$\beta_i$ and $a_i$, so repeated choices separate persistent tastes from task-level noise. The model
+is a mixed logit for repeated choices [@mcfadden1974conditional; @revelt1998mixed;
+@train2009discrete] with a neural network for the mean tastes.
 
-## The workflow
-
-The package has one path from data to estimates:
+## Workflow
 
 | Step | Function | What it does |
 |---|---|---|
@@ -60,16 +53,16 @@ The package has one path from data to estimates:
 | 6. Targets | `sc_mean()`, `sc_share()`, `sc_contest()`, ... | Describe each quantity of interest |
 | 7. Estimate | `sc_estimate()` | Compute estimates, standard errors and intervals |
 
-Steps 2 and 4 are slow at the paper's settings (hours for an application). Steps 6 and 7 take
-seconds for most quantities. The book therefore ships the paper's fold states as saved fits
-(@sec-install), and the application chapters start from step 5.
+Steps 2 and 4 take hours at the paper's settings. Steps 6 and 7 take seconds for most quantities.
+The book therefore ships the paper's fold states as saved fits (@sec-install), and the application
+chapters start from step 5.
 
-## How this book is organized
+## Chapters
 
 @sec-install installs the package and the saved fits. @sec-quickstart runs every step on a
-simulated experiment whose truth is known, and checks that the estimates recover it. @sec-gs and @sec-br reproduce the paper's two applications from the saved
-fits. @sec-quantities lists every quantity and its interval rule, @sec-inference explains how the
-standard errors are computed and what they do not cover, and @sec-respondents summarizes individual
+simulated experiment with a known truth. @sec-gs and @sec-br reproduce the paper's two applications
+from the saved fits. @sec-quantities lists every quantity and its interval rule. @sec-inference
+explains the standard errors and what they do not cover. @sec-respondents summarizes individual
 respondents.
 
 ## Citation
