@@ -16,8 +16,8 @@ if (is.null(br)) stop("This chapter needs the saved fit br_q4.rds; see the insta
 
 `sc_fit()` fits the model five times, each time on four of five folds of respondents. Each
 respondent's contribution to an estimate comes from the one fit that held them out. This
-respondent-level cross-fitting follows the double/debiased machine learning framework
-[@chernozhukov2018double]. The folds are stored with the data:
+cross-fitting by respondent follows double/debiased machine learning [@chernozhukov2018double]. The
+data store the folds:
 
 ```{r}
 #| label: inf-folds
@@ -27,13 +27,13 @@ table(br$data$fold)
 ## One-step correction
 
 The *fitted value* (`plug_in`) averages a contrast at each respondent's fitted mean tastes. The
-network is fitted with a penalty and stopped early, so these tastes are pulled toward simpler
-functions of the covariates, and the fitted value is biased. The *one-step correction* removes most
-of that bias. A held-out respondent's *score* is the direction in which their choices would move
-the fitted mean tastes and the common parameters. Correction weights turn that movement into a
-change in the target. They come from the target's derivatives and the respondent's *information*,
-the expected curvature of their log likelihood over the task designs the experiment could have
-assigned them. The estimate is the fitted value plus the average correction:
+network is fitted with a penalty and stopped early, which pulls these tastes toward simpler
+functions of the covariates and biases the fitted value. The *one-step correction* removes most of
+that bias. A held-out respondent's *score* is the direction in which their choices would move the
+fitted mean tastes and the common parameters. Correction weights turn that movement into a change in
+the target. They come from the target's derivatives and the respondent's *information*: the expected
+curvature of their log likelihood over the designs the experiment could have assigned. The estimate
+is the fitted value plus the average correction:
 
 $$
 \hat\psi = \frac{1}{N}\sum_{i=1}^N \left[\hat m_i + \hat a_i^\top \hat s_{\mu i} + \hat b^\top \hat s_{\xi i}\right],
@@ -63,15 +63,15 @@ est[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
 ```
 
 For the average utility per point of a higher top rate (@sec-br), the correction moves the overall
-mean only a little, from 0.0230 to 0.0221, and the Democrats' mean more, from 0.0313 to 0.0401. In
-the paper, the correction changed subgroup estimates the most.
+mean a little, from 0.0230 to 0.0221, and the Democrats' mean more, from 0.0313 to 0.0401. In the
+paper, too, subgroup estimates moved the most.
 
 `sc_states()` computes the information once per held-out respondent and fold by simulating task
 designs from the experiment's randomization law (here 250 designs with eight simulated response
-sequences each), so it needs the design. It first puts the taste factors on their principal axes
-and removes directions that only rotate them, since rotations leave the model unchanged. Very small
-eigenvalues of a respondent's information are raised to $10^{-6}$ times the largest. The fold
-states record how many respondents needed this:
+sequences each), so it needs the design. It first puts the taste factors on their principal axes and
+removes directions that only rotate them, which leave the model unchanged. Eigenvalues of a
+respondent's information below $10^{-6}$ times the largest are raised to that floor. The fold states
+count the respondents who needed this:
 
 ```{r}
 #| label: inf-floor
@@ -81,9 +81,9 @@ sum(vapply(br$folds, function(f) sum(f$parts$floored), 0))
 ## Standard errors
 
 Each respondent's term in the sum above, minus the estimate, is their *influence value*. The
-standard error is the standard deviation of the influence values divided by $\sqrt N$. It covers
-variation in respondent characteristics as well as in choices, so it describes sampling
-respondents from the population the sample represents.
+standard error is their standard deviation divided by $\sqrt N$. It covers variation in respondent
+characteristics as well as in choices, so it describes sampling respondents from the population the
+sample represents.
 
 ```{r}
 #| label: inf-se
@@ -91,26 +91,24 @@ phi <- attr(est, "influence")
 rbind(reported = est$se, from_influence = apply(phi, 2, sd) / sqrt(nrow(phi)))
 ```
 
-For a subgroup target, the members' weights are divided by the subgroup's share of the sample.
-Other respondents still contribute through the common parameters. Ratios and differences combine
-the influence values of their parts (the delta method), so their standard errors account for the
-correlation between the parts.
+For a subgroup target, the members' weights are divided by the subgroup's share of the sample. Other
+respondents still contribute through the common parameters. Ratios and differences combine their
+parts' influence values (@sec-quantities).
 
 ## Shares and contests
 
-An additive correction can push a share outside $[0, 1]$. `sc_estimate()` instead moves the fitted
-tastes along the score directions and recomputes the share, until the remaining correction is below
-$10^{-3}$ standard errors (the *bounded update*, @sec-quantities). Shares, contest probabilities and
-decisiveness use log-odds intervals mapped back to $[0, 1]$. Near 0 or 1, such an interval can span
-nearly the whole unit interval or be unavailable.
+An additive correction can push a share outside $[0, 1]$, so `sc_estimate()` uses the *bounded
+update* of @sec-quantities, which stops when the remaining correction is below $10^{-3}$ standard
+errors. Shares, contest probabilities and decisiveness use log-odds intervals mapped back to $[0,
+1]$.
 
 ## Number of factors
 
-`sc_select_rank()` scores fits with $q = 1, 2, \ldots$ taste factors by the log probability of
-each held-out respondent's whole sequence of choices. Starting from $q = 1$, it moves to $q$ only
-if the paired gain over $q - 1$ (the mean over respondents of the difference in log scores) exceeds
-two standard errors, and stops at the first $q$ that fails. The rule was fixed before the paper's
-fits were run. The saved fits keep each fold's held-out scores at the selected rank:
+`sc_select_rank()` scores fits with $q = 1, 2, \ldots$ taste factors by the log probability of each
+held-out respondent's whole sequence of choices. Starting from $q = 1$, it adds a factor while
+the paired gain over $q - 1$ (the mean over respondents of the difference in log scores) exceeds two
+standard errors. The rule was fixed before the paper's fits were run. The saved fits keep each
+fold's held-out scores at the selected rank:
 
 ```{r}
 #| label: inf-heldout
@@ -118,12 +116,11 @@ h <- unlist(lapply(br$fits$folds, function(f) f$heldout$sobol8192))
 c(respondents = length(h), mean_log_score = mean(h))
 ```
 
-This is the $q = 4$ row of the rank table in @sec-br. The standard errors of all targets condition
-on the selected rank and do not include the uncertainty of choosing it.
+This is the $q = 4$ row of the rank table in @sec-br.
 
 ## Assumptions
 
-The intervals are correct only under the model and its approximations. The paper states these limits.
+The intervals are correct only under the model and its approximations:
 
 - **The model.** Tastes are normal given the covariates, with a covariance of rank $q$; task shocks
   are logistic; assigned designs do not depend on tastes. Shares and compensation shares depend on
@@ -135,13 +132,14 @@ The intervals are correct only under the model and its approximations. The paper
   updates. Importance intervals cover 74% to 89%, so the package reports importance without
   intervals. BR means keep a pull toward zero.
 - **Shares near 0 or 1.** Such a share depends on the spread of the taste, and its interval can be
-  uninformative. In GS, each violation was shown once per respondent, and most violation shares
-  have intervals that span nearly $[0, 1]$.
+  uninformative or missing. In GS, where each violation was shown once per respondent, most
+  violation shares have intervals that span nearly $[0, 1]$.
 - **Identification.** In GS, the conduct codes appear once per respondent. The paper has no global
   identification result for them with more than one taste factor. A local check holds at the
   fitted values.
-- **Conditioning.** The intervals condition on the selected rank and the training rule, and in BR
-  also on the reconstructed revenue rule and the recorded contexts.
+- **Conditioning.** The intervals condition on the selected rank (they ignore the uncertainty of
+  choosing it) and the training rule, and in BR also on the reconstructed revenue rule and the
+  recorded contexts.
 - **Not in the simulations.** The rate-asymmetry ratio, the violation-price ratio, the switch AMEs,
   decisiveness, and some contests and compensation shares follow the general calculation but were
   not in the coverage experiments.

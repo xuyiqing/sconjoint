@@ -1,10 +1,10 @@
 # Democracy experiment {#sec-gs}
 
 @graham2020democracy ask whether voters punish candidates who violate democratic principles when
-party and policy favor them. Respondents chose between two hypothetical state legislative
-candidates in up to thirteen matchups. The candidates differed in party, economic and social
-policy, governance practices, democratic violations, scandals, and personal traits. This chapter
-reproduces the paper's results and figures from the saved fit.
+party and policy favor them. Respondents chose between two hypothetical state legislative candidates
+in up to thirteen matchups. The candidates differed in party, economic and social policy, governance
+practices, democratic violations, scandals, and personal traits. This chapter reproduces the paper's
+results from the saved fit.
 
 ```{r}
 #| label: gs-setup
@@ -28,8 +28,8 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-The book's file `_figs-helpers.R` holds two helpers. `estimate_each()` runs independent targets
-in parallel, with the same results as one `sc_estimate()` call. `pick()` takes rows by name. The
+The book's `_figs-helpers.R` has two helpers: `estimate_each()` runs independent targets in
+parallel, with the same results as one `sc_estimate()` call, and `pick()` takes rows by name. The
 figures come from the package's plot functions (@sec-plots).
 
 ```{r}
@@ -40,10 +40,10 @@ figures come from the package's plot functions (@sec-plots).
 
 ## Data and fit
 
-`sc_example_data("gs")` builds the paper's inputs from the bundled `gs2020` data: 1,605
-respondents, 20,657 matchups, and 30 coded features. `y = 1` means the left candidate was chosen.
-The network uses sixteen respondent characteristics measured before the tasks. The data also carry
-the paper's five folds, the early-stopping respondents of each fold, and the grouping variables.
+`sc_example_data("gs")` builds the paper's inputs from the bundled `gs2020` data: 1,605 respondents,
+20,657 matchups, and 30 coded features. `y = 1` means the left candidate was chosen. The network
+uses sixteen respondent characteristics measured before the tasks. The data also carry the paper's
+five folds, each fold's early-stopping respondents, and the grouping variables.
 
 ```{r}
 #| label: gs-data
@@ -53,14 +53,13 @@ head(x$groups)
 ```
 
 The groups are party ID (`pid7`, from -3 strong Democrat to 3 strong Republican), party (`party`,
-leaners counted as partisans), self-described ideology (`ideology`, all respondents), and `PL`,
-which is 1 for the 1,377 partisans and leaners. The co-partisan feature is always zero for the 228
-pure independents, so their choices carry no information on that taste. Quantities about party
-therefore use `w = "PL"`.
+leaners counted as partisans), self-described ideology (`ideology`, all respondents), and `PL`, 1
+for the 1,377 partisans and leaners. The co-partisan feature is always zero for the 228 pure
+independents, whose choices say nothing about that taste, so quantities about party use `w = "PL"`.
 
-The paper fitted one to four taste factors and chose three. The code below reproduces the saved
-fit with the defaults of `sc_fit()` and `sc_states()`, which are the paper's settings. It takes
-several hours and is not run here.
+The paper fitted one to four taste factors and chose three. The defaults of `sc_fit()` and
+`sc_states()` are the paper's settings. The code below reproduces the saved fit in several hours and
+is not run here.
 
 ```{r}
 #| label: gs-fit
@@ -80,14 +79,13 @@ sc_save(gs, file.path(fits, "gs_q3.rds"))
 | 3 (selected) | -7.739 | 0.0329 | 2.99 |
 | 4 | -7.742 | -0.0029 | -0.47 |
 
-The log score is the average log probability of a held-out respondent's whole sequence of choices.
-The rule stops at $q = 3$ because the fourth factor does not improve the fit.
+The log score is the average log probability of a held-out respondent's whole sequence of choices. A
+fourth factor does not improve it, so the rule stops at $q = 3$.
 
 ## Mean tastes
 
-`sc_mean()` estimates the average utility from one coded feature, on the logit scale. The
-co-partisan mean averages over partisans and leaners, the others over all respondents. The figures
-use the paper's short feature names.
+`sc_mean()` estimates the average utility of one coded feature, on the logit scale. The co-partisan
+mean averages over partisans and leaners, the others over all respondents.
 
 ```{r}
 #| label: gs-means
@@ -105,19 +103,19 @@ labels <- c("Co-partisan", "Economic policy (+1)", "Social policy (+1)",
 tab(means[c(1:3, 10:18), ])
 ```
 
-Among partisans and leaners, a co-partisan candidate gains 0.81 units of utility on average. Each
-step toward the conservative end of economic policy costs 0.24. The seven undemocratic actions
-(`u_`) have negative means, from -0.53 (two-seat gerrymander) to -0.90 (prosecuting journalists).
-The two scandals (`v_`) cost -0.94 (an affair) and -1.18 (underpaid taxes). Conduct is measured
-against the generic reference position, a candidate who supports an elected oversight board.
-`plug_in` is the cross-fitted value before the score correction (@sec-inference).
+Among partisans and leaners, a co-partisan gains 0.81 units of utility on average. Each step toward
+the conservative end of economic policy costs 0.24. The means of the seven violations (`u_`) run
+from -0.53 (two-seat gerrymander) to -0.90 (prosecuting journalists), and the two scandals (`v_`)
+cost -0.94 (an affair) and -1.18 (underpaid taxes). Conduct is measured against the generic
+reference position, a candidate who supports an elected oversight board. `plug_in` is the
+cross-fitted value before the score correction (@sec-inference).
 
 ## Preference shares
 
-`sc_share()` estimates the share of respondents with a positive taste for a contrast, averaging
-over each respondent's fitted normal law. The paper's main figure reports shares for party, the two
-policy scales, the seven violations and the two scandals. Each share needs its own bounded update
-(about 15 seconds), so they run in parallel.
+`sc_share()` estimates the share of respondents with a positive taste for a contrast, averaging over
+each respondent's fitted normal law. The main figure reports shares for party, the two policy
+scales, the seven violations and the two scandals. Each needs its own bounded update (about 15
+seconds), so they run in parallel.
 
 ```{r}
 #| label: gs-shares
@@ -127,10 +125,9 @@ tab(shares, 4)
 ```
 
 An estimated 82.5% of partisans and leaners prefer a co-partisan (95% interval 79.7% to 84.9%).
-Shares favoring a violation are near zero and imprecise, 7.3% for closing polling stations
-(interval 2.0% to 23.4%) and 0.2% for prosecuting journalists (interval 0 to 1). Such a share
-depends on the spread of the taste across respondents. Each respondent saw each violation only
-once, so that spread is measured imprecisely.
+Shares favoring a violation are near zero and imprecise: 7.3% for closing polling stations (interval
+2.0% to 23.4%) and 0.2% for prosecuting journalists (interval 0 to 1). Such a share depends on the
+spread of the taste, which is measured imprecisely because each respondent saw each violation once.
 
 ## Fitted distributions
 
@@ -144,8 +141,7 @@ attr(laws[[1]], "summary")
 head(laws[[1]])
 ```
 
-The two figures draw all 30 laws, as in the paper's appendix. The co-partisan curve lies mostly
-right of zero and is wide. Most partisans prefer a co-partisan, by different amounts.
+The two figures draw all 30 laws, as in the paper's appendix.
 
 ```{r}
 #| label: fig-gs-distributions-1
@@ -163,22 +159,18 @@ sc_plot_laws(laws[1:15], labels = labels[1:15], means = pick(means, fn[1:15]), l
 sc_plot_laws(laws[16:30], labels = labels[16:30], means = pick(means, fn[16:30]), layout = "panels")
 ```
 
-Blue curves are fitted values before the score correction. The red line and bar are the
-score-corrected mean and its 95% interval, so the line need not sit at the curve's center. Each
-panel has its own horizontal range and height. The co-partisan panel uses the 1,377
-partisans and leaners, the others all 1,605 respondents. Policy is a one-point move toward the
-conservative end. Conduct is compared with the generic reference position, sex with male, race with
-white, and profession with business executive.
+Blue curves are fitted values before the score correction. Red marks the corrected mean and its 95%
+interval, so the two need not line up. Each panel has its own scales. The reference levels are male,
+white and business executive.
 
 ## Effects on choices
 
-`sc_ame_switch()` gives the average marginal effect (AME) of switching one attribute of a
-candidate, the model's counterpart of the AMCE (@sec-quantities). It takes the raw design
-attribute, the level and the reference level. For party, the level is the respondent's own party
-(1 = Democrat, 2 = Republican in the raw design) and the reference is the other party, so the
-switch is undefined for pure independents. A policy AME switches from position 1 to position 4 and
-divides by three, so it is per point of the scale. A conduct AME switches from the generic
-reference position (`g_boardElect`) to the named violation.
+`sc_ame_switch()` gives the average marginal effect (AME) of switching one attribute of a candidate,
+the model's counterpart of the AMCE (@sec-quantities). It takes the raw design attribute, the level
+and the reference level. For party, the level is the respondent's own party (1 = Democrat, 2 =
+Republican) and the reference the other party, so the switch is undefined for pure independents. A
+policy AME switches from position 1 to 4 and divides by three, giving the effect per point. A
+conduct AME switches from the generic reference position (`g_boardElect`) to the violation.
 
 ```{r}
 #| label: gs-ames
@@ -211,12 +203,11 @@ amce <- setNames(c(amce_pl[1], amce_all[-1]), fn)
 round(100 * amce[fig_features], 1)
 ```
 
-A co-partisan candidate gains 14.0 percentage points of support, and a candidate who prosecutes
-journalists loses 16.2 points. The regression AMCEs are 14.1 and -16.1 points.
+A co-partisan gains 14.0 percentage points of support, and a candidate who prosecutes journalists
+loses 16.2. The regression AMCEs are 14.1 and -16.1.
 
-The paper's main figure shows four views of each feature: the mean taste (A), its fitted
-distribution (B), the share with a positive taste (C), and the AME with the regression AMCE as a
-grey diamond (D).
+The main figure shows each feature's mean taste (A), fitted distribution (B), share with a positive
+taste (C), and AME with the regression AMCE as a grey diamond (D).
 
 ```{r}
 #| label: fig-gs-preferences
@@ -230,10 +221,9 @@ sc_plot_preferences(means, setNames(laws, fn), shares, ames, labels = lab, refer
                     ticks = list(A = c(-1, 0, 1), B = c(-4, 0, 4), D = c(-20, 0, 15)))
 ```
 
-Panel B's curves are fitted values before the score correction, scaled to the same height, so
-their centers need not match Panel A. In Panel C, a hollow point marks a share whose interval spans
-at least 95 percentage points, and that interval is not drawn. Party uses partisans and leaners,
-the other rows all respondents.
+Panel B's curves are fitted values before the score correction, scaled to the same height, so their
+centers need not match Panel A. In Panel C, a hollow point marks a share whose interval spans at
+least 95 points and is not drawn.
 
 `sc_table()` gives the same estimates as a table (@sec-plots):
 
@@ -246,10 +236,10 @@ sc_table("Mean utility" = means, "Share favoring" = shares, "Choice effect" = am
 
 ## Compensation shares
 
-The *compensation share* is the share of respondents who prefer a co-partisan with a violation to
-an otherwise identical non-co-partisan at the generic reference position. In `sc_share()` the
-contrast is the sum of the two features. The paper computes it for the seven violations among
-liberal, moderate and conservative partisans and leaners, 21 bounded updates in all.
+The *compensation share* is the share of respondents who prefer a co-partisan with a violation to an
+otherwise identical non-co-partisan at the generic reference position. In `sc_share()` the contrast
+is the sum of the two features. The paper computes it for the seven violations among liberal,
+moderate and conservative partisans and leaners: 21 bounded updates.
 
 ```{r}
 #| label: gs-comp
@@ -264,7 +254,7 @@ tab(comp_est[grepl("journalists", comp_est$name), ])
 ```
 
 An estimated 33.8% of liberal partisans and leaners and 59.6% of conservative ones prefer the
-co-partisan who prosecutes journalists, despite the large mean penalty of the violation.
+co-partisan who prosecutes journalists, despite its large mean penalty.
 
 ```{r}
 #| label: fig-gs-compensation
@@ -280,8 +270,7 @@ sc_plot_estimates(Liberal = by_ideology("lib"), Moderate = by_ideology("mod"),
                   main = "Party advantage offsets the violation")
 ```
 
-Rows are violations and colors ideology groups. Points are bounded estimates and bars 95% log-odds
-intervals. All other attributes of the two candidates are equal.
+Points are bounded estimates and bars 95% log-odds intervals.
 
 `sc_ratio()` returns $-\tau_j / \tau_p$, the mean prosecution penalty in units of the mean partisan
 gain, with a delta-method standard error.
@@ -299,11 +288,10 @@ The ratio is 1.14 (95% interval 0.91 to 1.37), so on average the two are of simi
 ## Candidate contests
 
 `sc_contest()` estimates the expected share choosing the first candidate in a specified matchup,
-with position effects set to zero and task shocks kept. The paper places a co-partisan at each
-social-policy position (1 most liberal, 4 most conservative) against a non-co-partisan at position
-3, all else equal. The co-partisan has a clean record or prosecutes journalists. The contrast is
-the coded difference between the two candidates. The groups are liberal, moderate and conservative
-partisans and leaners.
+with position effects set to zero and task shocks kept. Its contrast is the coded difference between
+the two candidates. The paper places a co-partisan, with a clean record or prosecuting journalists,
+at each social-policy position (1 most liberal, 4 most conservative) against a non-co-partisan at
+position 3, all else equal, among liberal, moderate and conservative partisans and leaners.
 
 ```{r}
 #| label: gs-contests
@@ -323,10 +311,10 @@ wide <- matrix(round(100 * contest_est$estimate, 1), ncol = 4, byrow = TRUE,
 wide
 ```
 
-At position 2, the co-partisan who prosecutes journalists receives an estimated 49.8% of support
-among liberal partisans and leaners and 52.1% among conservative ones. Without the violation, the
-same candidate receives 74.2% and 67.7%, so the violation costs about 24 and 16 points. These
-expected vote shares include task shocks, so they differ from the compensation shares.
+At position 2, the co-partisan who prosecutes journalists receives an estimated 49.8% among liberal
+partisans and leaners and 52.1% among conservative ones, against 74.2% and 67.7% without the
+violation: a cost of about 24 and 16 points. These vote shares include task shocks, so they differ
+from the compensation shares.
 
 ```{r}
 #| label: fig-gs-contests
@@ -346,18 +334,17 @@ legend("center", c("No violation", "Prosecutes journalists"), col = c(blue, red)
        lwd = 1.5, pch = 16, pt.cex = .7, bty = "n", horiz = TRUE, cex = .85)
 ```
 
-Blue lines have no violation, red dashed lines prosecute journalists. The opponent stays at
-position 3. Shading gives pointwise 95% log-odds intervals.
+Shading gives pointwise 95% log-odds intervals.
 
 ## Attribute importance
 
 `sc_importance()` gives each attribute's share of a respondent's utility variation over a stated
 menu of levels. The paper uses seven attributes: party, the two four-point policy scales, the
-fifteen governance, violation and scandal codes as one attribute, sex, race and profession. A
-policy scale has one column, so its menu is `matrix(1:4)`. The shares sum to one and come from one
-joint update, about nine minutes per group. The package gives no intervals for them, because in the
-paper's simulations those intervals cover less often than stated. The groups are all partisans and
-leaners, Democrats, and Republicans (leaners included).
+fifteen governance, violation and scandal codes as one attribute, sex, race and profession. A policy
+scale has one column, so its menu is `matrix(1:4)`. The shares sum to one and come from one joint
+update, about nine minutes per group. They have no intervals: in the paper's simulations such
+intervals cover less often than stated. The groups are all partisans and leaners, Democrats, and
+Republicans (leaners included).
 
 ```{r}
 #| label: gs-importance
@@ -385,9 +372,9 @@ imp_display <- sapply(names(imp_groups), function(k)
 round(100 * imp_display, 1)
 ```
 
-Among all partisans and leaners, policy accounts for 46.5% of utility variation, party for 32.9%,
-governance and conduct for 18.3%, and background traits for 2.3%. Policy outweighs party among
-Democrats (52.5% against 29.5%). Among Republicans the two are close (39.7% against 36.7%).
+Among all partisans and leaners, policy accounts for 46.5% of utility variation, party 32.9%,
+governance and conduct 18.3%, and background 2.3%. Policy outweighs party among Democrats (52.5%
+against 29.5%). Among Republicans the two are close (39.7% against 36.7%).
 
 ```{r}
 #| label: fig-gs-importance
@@ -402,9 +389,8 @@ sc_plot_importance("All partisans and leaners" = imp[startsWith(imp$name, "All."
                               background = "Background"))
 ```
 
-The bars are the pooled group (dark grey), Democrats (blue, 723 respondents) and Republicans (red,
-654). The shares are point estimates, with equal weights over each attribute's stated levels, and
-sum to 100% within each group.
+Democrats number 723 and Republicans 654. The shares are point estimates, with equal weights over
+each attribute's stated levels, and sum to 100% within each group.
 
 ## Decisiveness
 
@@ -432,11 +418,11 @@ reference position reverses 32.0% (27.3% to 37.1%), the most of the seven violat
 
 ## All paper targets
 
-`gs_targets()` below builds every GS quantity in the paper's main results file from the public
-functions: a mean and a share for each of the 30 features, the compensation shares for seven
-violations in three ideology groups, 24 contests, the switch AMEs and the ratio. With bounded
-updates for its 51 shares, `sc_estimate(gs, gs_targets(gs))` takes about 40 minutes in one process.
-It reproduces the paper's estimates, standard errors and intervals.
+`gs_targets()` below builds every GS quantity in the paper's main results file: a mean and a share
+for each of the 30 features, the compensation shares for seven violations in three ideology groups,
+24 contests, the switch AMEs and the ratio. `sc_estimate(gs, gs_targets(gs))` reproduces the paper's
+estimates, standard errors and intervals in about 40 minutes in one process, mostly for the bounded
+updates of its 51 shares.
 
 ```{r}
 #| label: gs-full

@@ -1,8 +1,8 @@
 # Quantities {#sec-quantities}
 
 This chapter lists every target constructor, what it estimates, and its interval rule. The examples
-use the toy fit that ships with the package: 40 simulated respondents under the tax-plan design,
-one taste factor and two folds. Its estimates mean nothing. It only shows the calls and the output.
+use the package's toy fit: 40 simulated respondents under the tax-plan design, one taste factor and
+two folds. Its estimates mean nothing.
 
 Targets that average over the experiment's randomization (`sc_ame_switch()`, and the information
 behind every standard error) need the design. The package knows the two applications' designs
@@ -18,9 +18,8 @@ toy
 
 ## Contrasts and weights
 
-Most constructors take a contrast `c`, a vector with one coefficient per coded feature. A
-respondent's utility difference for the contrast is $c^\top \beta_i$. There are three ways to write
-it:
+Most constructors take a contrast `c`, a vector with one coefficient per coded feature, so that a
+respondent's utility difference is $c^\top \beta_i$. It can be written three ways:
 
 - feature names, whose unit vectors are added: `"tax6_linear"`, or `c("tax6_linear",
   "revenue_helmert1")` for the sum,
@@ -28,10 +27,10 @@ it:
   = -1)`,
 - a full numeric vector in feature order, such as the output of `sc_br_revenue_contrast()`.
 
-The optional weights `w` define a subgroup. They are the name of a 0/1 column of the data's groups
-(`"PL"`), a vector with one weight per respondent, or a function of the groups that returns such a
-vector (`function(g) g$party == "Dem"`). A target averages over respondents with positive weight,
-and the output column `n` counts them.
+The optional weights `w` define a subgroup: the name of a 0/1 column of the data's groups (`"PL"`),
+a vector with one weight per respondent, or a function of the groups that returns such a vector
+(`function(g) g$party == "Dem"`). A target averages over respondents with positive weight, and the
+output column `n` counts them.
 
 ## Constructors
 
@@ -75,21 +74,20 @@ All intervals use the standard error of @sec-inference and `z = 1.96` by default
 - **Log-odds** for probabilities and shares, so the interval stays inside $[0, 1]$. For an estimate
   $p$ with standard error $s$, the interval is $G\{\log(p / (1 - p)) \pm z s / (p (1 - p))\}$, with $G$
   the logistic function. It is missing when $p$ is exactly 0 or 1.
-- **None** for importance shares, which are reported as point estimates.
+- **None** for importance shares (point estimates only).
 
-An interval that spans almost all of $[0, 1]$ carries no information. This happens for shares near
-zero or one, such as the share of respondents who favor a candidate who prosecutes journalists in
-@sec-gs.
+For shares near 0 or 1, an interval can span almost all of $[0, 1]$ and carry no information, as for
+the share favoring a candidate who prosecutes journalists (@sec-gs).
 
 ## Bounded updates
 
 The one-step correction (@sec-inference) can push a share below 0 or above 1. `sc_estimate()`
-therefore refines each share by a *bounded update*. It moves the fitted tastes along the directions
-the correction points to, recomputes the share, and repeats until the remaining correction is
-negligible. The estimate is then a share of a fitted law, so it stays in $[0, 1]$, and the `status`
-column says `converged`. A share whose update does not converge keeps its one-step estimate and
-standard error, with no interval, and its status says why. Importance shares get one joint update
-that keeps them summing to one.
+therefore refines each share by a *bounded update*: it moves the fitted tastes along the directions
+the correction points to and recomputes the share, until the remaining correction is negligible. The
+estimate is then a share of a fitted law, so it stays in $[0, 1]$, and `status` says `converged`. A
+share whose update does not converge keeps its one-step estimate and standard error, with no
+interval, and `status` says why. Importance shares get one joint update that keeps them summing to
+one.
 
 `bounded = FALSE` skips these updates and reports the one-step values, which is much faster:
 
@@ -100,15 +98,15 @@ sc_estimate(toy, sc_share("top rate, share", "tax6_linear"), bounded = FALSE)
 
 ## Ratios and differences
 
-`sc_ratio()` and `sc_difference()` combine two means by the delta method: each respondent's
-influence value for the ratio is a linear combination of their values for the two means, weighted
-by the ratio's derivatives. Both means are estimated in the same call, so their correlation enters
-the standard error.
+`sc_ratio()` and `sc_difference()` combine two means by the delta method: a respondent's influence
+value for the ratio is a linear combination of their values for the two means, weighted by the
+ratio's derivatives. Both means come from the same call, so their correlation enters the standard
+error.
 
 ## Output
 
 `sc_estimate()` returns a data frame with one row per target: `name`, `kind`, `estimate`,
-`plug_in` (the cross-fitted fitted value before correction), `se`, `lower`, `upper`, `interval`,
+`plug_in` (the cross-fitted value before correction), `se`, `lower`, `upper`, `interval`,
 `n`, `status` and `method`. The attribute `"influence"` holds the respondent-level influence
 values, one column per target. The standard error is their standard deviation divided by
 $\sqrt{n}$:
