@@ -32,6 +32,6 @@ eq. partworth_distribution).
 \examples{
 \donttest{
 fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
-if (!is.null(fit)) head(sc_fitted_law(fit, "x1"))
+if (!is.null(fit)) head(sc_fitted_law(fit, "tax6_linear"))
 }
 }

@@ -56,7 +56,7 @@
 #' @examples
 #' \donttest{
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
-#' if (!is.null(fit)) sc_estimate(fit, sc_mean("x1", "x1"))
+#' if (!is.null(fit)) sc_estimate(fit, sc_mean("top rate", "tax6_linear"))
 #' }
 #' @export
 sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L) {
@@ -182,7 +182,7 @@ print.sc_estimates <- function(x, digits = 4, ...) {
 #' @examples
 #' \donttest{
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
-#' if (!is.null(fit)) head(sc_fitted_law(fit, "x1"))
+#' if (!is.null(fit)) head(sc_fitted_law(fit, "tax6_linear"))
 #' }
 #' @export
 sc_fitted_law <- function(object, c, w = NULL) {

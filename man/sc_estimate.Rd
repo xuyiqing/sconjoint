@@ -50,6 +50,6 @@ no interval; its \code{status} says why.
 \examples{
 \donttest{
 fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
-if (!is.null(fit)) sc_estimate(fit, sc_mean("x1", "x1"))
+if (!is.null(fit)) sc_estimate(fit, sc_mean("top rate", "tax6_linear"))
 }
 }

@@ -37,8 +37,8 @@ toy <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
 if (!is.null(toy)) {
   f <- tempfile(fileext = ".rds")
   sc_save(toy, f)
-  identical(sc_estimate(sc_load(f), sc_mean("x1", "x1"))$estimate,
-            sc_estimate(toy, sc_mean("x1", "x1"))$estimate)
+  identical(sc_estimate(sc_load(f), sc_mean("top rate", "tax6_linear"))$estimate,
+            sc_estimate(toy, sc_mean("top rate", "tax6_linear"))$estimate)
 }
 }
 }
