@@ -41,6 +41,10 @@ the structural random-utility model with a neural-network mean and $q$ taste fac
   updates for shares, one joint update for importance shares, intervals chosen by the type of
   quantity, and the delta method for ratios and differences) and `sc_fitted_law()`.
 - Respondents: `sc_posterior()`.
+- Plots and tables (base graphics, no new dependencies): `sc_plot_estimates()` (also `plot()` on
+  an estimate table), `sc_plot_laws()`, `sc_plot_preferences()` (the paper's four-panel summary),
+  `sc_plot_importance()`, `sc_plot_lines()`, `sc_plot_posterior()`, and `sc_table()` (a data frame,
+  Markdown or LaTeX).
 
 From the paper's fold states, `sc_estimate()` reproduces the paper's results files for both
 applications: estimates, standard errors and intervals to $10^{-10}$, and bounded shares to
@@ -48,4 +52,4 @@ $10^{-8}$.
 
 **Book.** Rewritten for the new model. The application chapters start from the paper's saved fits,
 which are a separate download. The simulation chapter runs live on `simconjoint` and compares
-every estimate with the truth.
+every estimate with the truth. Every figure is drawn with the package's plot functions, which @sec-plots describes.
