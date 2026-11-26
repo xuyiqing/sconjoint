@@ -20,7 +20,8 @@ sc_states(
 \item{fit}{A fit from \code{\link[=sc_fit]{sc_fit()}}.}
 
 \item{M, ny}{Design draws per respondent and simulated responses per design
-(default: the paper's, GS 300 and 4, BR 250 and 8).}
+(default: the paper's, GS 300 and 4, BR 250 and 8; 250 and 8 for an
+\code{\link[=sc_design]{sc_design()}}).}
 
 \item{info_nodes, score_nodes}{Sobol nodes of the information and score rules (2048, 4096).}
 
@@ -48,11 +49,13 @@ choices, averaged over task designs drawn from the experiment's
 randomization law. That information sets the one-step correction.
 }
 \details{
-The design law must be known to the package: only the built-in designs
-\code{"gs"} (Graham and Svolik 2020; the respondent's party, \code{pid7} in the data's
-groups, codes the co-partisan feature) and \code{"br"} (Ballard-Rosa, Martin and
-Scheve 2017) are supported. Set it with \code{sc_data(design = )}. Other
-experiments need their own design generator. The information is slow (at
+The design law must be known to the package. Set it with
+\code{sc_data(design = )}: a design from \code{\link[=sc_design]{sc_design()}} (each attribute drawn
+independently, the most common conjoint design), or one of the built-in
+designs \code{"gs"} (Graham and Svolik 2020; the respondent's party, \code{pid7} in
+the data's groups, codes the co-partisan feature) and \code{"br"} (Ballard-Rosa,
+Martin and Scheve 2017). Experiments with restricted or blocked
+randomization need their own design generator. The information is slow (at
 the paper's settings about 15 seconds per held-out respondent and fold at
 q = 3); \code{respondents} limits it to the first held-out respondents of every
 fold, for checks.

@@ -43,9 +43,11 @@ used for early stopping when that fold is held out. Elements are matched
 to folds by name (the fold label) when named, otherwise by position over
 the sorted fold labels.}
 
-\item{design}{Name of the experiment's randomization law: \code{"gs"} (Graham
-and Svolik 2020), \code{"br"} (Ballard-Rosa, Martin and Scheve 2017) or \code{NULL}.
-\code{\link[=sc_states]{sc_states()}} needs it.}
+\item{design}{The experiment's randomization law: a design from
+\code{\link[=sc_design]{sc_design()}} (independently drawn attributes), the name of a built-in
+design, \code{"gs"} (Graham and Svolik 2020) or \code{"br"} (Ballard-Rosa, Martin
+and Scheve 2017), or \code{NULL}. \code{\link[=sc_states]{sc_states()}} needs it. The columns of \code{X}
+must be the design's features in the design's order.}
 
 \item{orientation}{One sentence saying what \code{y = 1} means.}
 

@@ -472,6 +472,7 @@
 
 .rum_spec_arg <- function(spec) {
   if (is.character(spec)) spec <- .rum_design_spec(spec)
+  if (inherits(spec, "sc_design")) spec <- .sc_design_spec(spec)          # R/sc-design.R
   if (!inherits(spec, "rum_design_spec")) stop("spec must come from .rum_design_spec().")
   spec
 }
