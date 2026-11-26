@@ -2,7 +2,7 @@
 # respondent: choices y and coded task matrices d) with what the paper's pipeline also needs: the
 # respondent covariates Z that feed the network, grouping variables used for subgroup targets, the
 # cross-fitting folds and the early-stopping (validation) respondents of every fold, and the name of the
-# experiment's design law ("gs", "br") that the conditional information draws from.
+# experiment's design law ("gs", "br" or an sc_design()) that the conditional information draws from.
 
 #' Prepare conjoint data for the structural random-utility model
 #'
@@ -34,9 +34,11 @@
 #'   used for early stopping when that fold is held out. Elements are matched
 #'   to folds by name (the fold label) when named, otherwise by position over
 #'   the sorted fold labels.
-#' @param design Name of the experiment's randomization law: `"gs"` (Graham
-#'   and Svolik 2020), `"br"` (Ballard-Rosa, Martin and Scheve 2017) or `NULL`.
-#'   [sc_states()] needs it.
+#' @param design The experiment's randomization law: a design from
+#'   [sc_design()] (independently drawn attributes), the name of a built-in
+#'   design, `"gs"` (Graham and Svolik 2020) or `"br"` (Ballard-Rosa, Martin
+#'   and Scheve 2017), or `NULL`. [sc_states()] needs it. The columns of `X`
+#'   must be the design's features in the design's order.
 #' @param orientation One sentence saying what `y = 1` means.
 #' @param data Alternatively, an internal `rum_data` object; `y`, `X` and `id`
 #'   are then ignored.
@@ -87,10 +89,8 @@ sc_data <- function(y, X, id, Z = NULL, groups = NULL, fold = NULL, validation =
     if (!is.list(validation)) stop("validation must be a list of respondent ids, one element per fold", call. = FALSE)
     validation <- lapply(validation, as.character)
   }
-  if (!is.null(design)) {
-    design <- match.arg(design, c("gs", "br"))
-    .sc_check_design_features(data$feature_names, design)
-  }
+  design <- .sc_design_arg(design)
+  if (!is.null(design)) .sc_check_design_features(data$feature_names, design)
   structure(list(data = data, Z = Z, groups = groups, fold = fold, validation = validation,
                  design = design), class = "sc_data")
 }
@@ -103,22 +103,24 @@ print.sc_data <- function(x, ...) {
   cat("  covariates:", if (is.null(x$Z)) "none" else sprintf("%d columns", ncol(x$Z)), "\n")
   if (!is.null(x$groups)) cat("  groups:", paste(names(x$groups), collapse = ", "), "\n")
   if (!is.null(x$fold)) cat("  folds:", paste(sprintf("%d (%d)", sort(unique(x$fold)), tabulate(x$fold)[sort(unique(x$fold))]), collapse = ", "), "\n")
-  cat("  design:", if (is.null(x$design)) "not given" else x$design, "\n")
+  cat("  design:", if (is.null(x$design)) "not given" else .sc_design_label(x$design), "\n")
   invisible(x)
 }
 
-# A built-in design law codes its features in a fixed order (.rum_design_spec(design)$features). The
-# information and the design-generated targets use that order, so the data must have the same features
-# in the same order; they are not reordered.
+# A design law codes its features in a fixed order (.rum_design_spec(design)$features for a built-in design,
+# design$features for an sc_design()). The information and the design-generated targets use that order, so
+# the data must have the same features in the same order; they are not reordered.
 .sc_check_design_features <- function(feature_names, design) {
-  want <- .rum_design_spec(design)$features
+  want <- .sc_design_features(design)
   if (identical(as.character(feature_names), want)) return(invisible(TRUE))
   detail <- if (length(feature_names) != length(want)) sprintf("the data have %d features, the design %d", length(feature_names), length(want))
     else if (setequal(feature_names, want)) "the data have the same features in another order"
     else paste0("features not in the design: ", paste(utils::head(setdiff(feature_names, want), 5L), collapse = ", "))
   stop(sprintf("the '%s' design codes its %d features in a fixed order (%s, ...), and the data must match it: %s. ",
-               design, length(want), paste(utils::head(want, 3L), collapse = ", "), detail),
-       "Reorder the columns of X to the design's order (.rum_design_spec(design)$features) or drop design.", call. = FALSE)
+               .sc_design_label(design), length(want), paste(utils::head(want, 3L), collapse = ", "), detail),
+       if (inherits(design, "sc_design")) "Code X with sc_code(design, A, B), or reorder its columns to design$features."
+       else "Reorder the columns of X to the design's order (.rum_design_spec(design)$features) or drop design.",
+       call. = FALSE)
 }
 
 .sc_check_data <- function(x) {

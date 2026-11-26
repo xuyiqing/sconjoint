@@ -22,11 +22,12 @@ sc_ame_switch(
 \arguments{
 \item{name}{Label of the target.}
 
-\item{attr}{The raw design attribute (for \code{"gs"}: \code{"party"}, \code{"p1"}, \code{"p2"},
-\code{"dem"}, \code{"female"}, \code{"race"}, \code{"pro"}; for \code{"br"}: \code{"r1"} ... \code{"r6"},
-\code{"taxrev"}).}
+\item{attr}{The design attribute: for an \code{\link[=sc_design]{sc_design()}}, one of its
+attributes; for \code{"gs"}: \code{"party"}, \code{"p1"}, \code{"p2"}, \code{"dem"}, \code{"female"},
+\code{"race"}, \code{"pro"}; for \code{"br"}: \code{"r1"} ... \code{"r6"}, \code{"taxrev"}.}
 
-\item{level, ref}{The level switched to and the reference level: raw values
+\item{level, ref}{The level switched to and the reference level: for an
+\code{\link[=sc_design]{sc_design()}}, level names (or their positions); otherwise raw values
 (level indices), GS democracy codes by name, or functions of the
 respondent's design key (GS: \code{"D"}, \code{"R"}, \code{"I"}) returning a raw value or
 \code{NA} (switch undefined: weight 0).}
@@ -57,7 +58,8 @@ The change in the probability that a profile is chosen when one attribute
 of that profile switches from a reference level to another level, with the
 rest of the contest held fixed (paper eq. standardized_ame). Contexts are
 draws from the experiment's design law, both screen positions, with
-position effects kept. Needs a built-in design (\code{"gs"} or \code{"br"}).
+position effects kept. Needs a design: one from \code{\link[=sc_design]{sc_design()}} or a built-in
+design (\code{"gs"} or \code{"br"}).
 }
 \examples{
 sc_ame_switch("economic policy", "p1", level = 4, ref = 1, design = "gs", scale = 1/3)

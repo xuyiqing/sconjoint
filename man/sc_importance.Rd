@@ -15,7 +15,10 @@ sc_importance(
 }
 \arguments{
 \item{groups}{Named list: the coded feature columns (names or indices) of
-each attribute. Every attribute that enters utility should be listed.}
+each attribute. Every attribute that enters utility should be listed.
+Or a design from \code{\link[=sc_design]{sc_design()}}: one group per attribute, its menu the
+attribute's coding of every level and its level weights the design's
+level probabilities (\code{menus} and \code{level_weights} are then ignored).}
 
 \item{menus}{Optional named list of menus, one matrix per group (levels x
 the group's columns). Default: a zero row plus the identity.}

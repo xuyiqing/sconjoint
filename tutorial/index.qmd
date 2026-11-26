@@ -52,7 +52,7 @@ The package has one path from data to estimates:
 
 | Step | Function | What it does |
 |---|---|---|
-| 1. Data | `sc_data()`, `sc_example_data()` | Collect choices, coded differences, covariates, groups and folds |
+| 1. Data | `sc_design()`, `sc_code()`, `sc_data()`, `sc_example_data()` | Describe the design, code the profiles, and collect choices, coded differences, covariates, groups and folds |
 | 2. Fit | `sc_fit()` | Train the model by cross-fitting: one fit per fold, each on the other folds |
 | 3. Rank | `sc_select_rank()` | Choose the number of taste factors $q$ by held-out fit |
 | 4. Fold states | `sc_states()` | Compute what the estimator needs from each fold's fit |
@@ -66,8 +66,8 @@ seconds for most quantities. The book therefore ships the paper's fold states as
 
 ## How this book is organized
 
-@sec-install installs the package and the saved fits. @sec-quickstart runs every step on simulated
-data in about a minute. @sec-gs and @sec-br reproduce the paper's two applications from the saved
+@sec-install installs the package and the saved fits. @sec-quickstart runs every step on a
+simulated experiment whose truth is known, and checks that the estimates recover it. @sec-gs and @sec-br reproduce the paper's two applications from the saved
 fits. @sec-quantities lists every quantity and its interval rule, @sec-inference explains how the
 standard errors are computed and what they do not cover, and @sec-respondents summarizes individual
 respondents.

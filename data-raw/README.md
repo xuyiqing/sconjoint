@@ -8,6 +8,7 @@ folder is excluded from the package build (`.Rbuildignore`).
 |---|---|---|
 | `build_gs2020.R` | `data/gs2020.rda` | Graham and Svolik (2020) `data_experiment.csv`, `data_covariates.csv`, `data_howDemocratic.csv` (`SCONJOINT_GS_RAW`) |
 | `build_br2017.R` | `data/br2017.rda` | Ballard-Rosa, Martin and Scheve (2017) `us_fullsurvey_taxplan_level.dta` (`SCONJOINT_BR_RAW`) |
+| `build_sim.R` | `data/simconjoint.rda`, `data/simconjoint_truth.rda` | nothing: simulated from the package's model with a fixed seed; computes the exact population values |
 | `build_sysdata.R` | `R/sysdata.rda` | the paper's `G_inputs.rds` (folds) and fold fit files (validation respondents) (`SCONJOINT_PAPER_ROOT`) |
 
 The defaults point at the paper project's folder

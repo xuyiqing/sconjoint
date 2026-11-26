@@ -142,3 +142,109 @@
 #' # Respondents without an income answer
 #' unique(br2017$respondent[!br2017$valid_income])
 "br2017"
+
+#' A simulated candidate-choice conjoint with known truth
+#'
+#' A small simulated experiment for learning the package and for checking
+#' that the model recovers what it should. Each of 800 respondents makes 10
+#' choices between two hypothetical candidates. A candidate has four
+#' attributes: party (Democrat, Republican), experience (none, some, long),
+#' policy position (liberal, moderate, conservative) and gender (male,
+#' female). Each attribute's level is drawn uniformly and independently, as
+#' in [sc_design()]. Each respondent has three characteristics: age, a
+#' seven-point ideology, and a 0/1 indicator for women.
+#'
+#' The choices follow the package's model exactly. Respondent `i` chooses the
+#' first candidate of a task with probability `plogis(kappa + a_i + d' beta_i)`,
+#' where `d` is the first candidate's coded attributes minus the second's
+#' (treatment dummies against the first level of each attribute: six
+#' features), `beta_i = mu(Z_i) + Lambda u_i` with two taste factors
+#' (`u_i` standard normal in two dimensions), and `a_i = sqrt(omega) v_i`
+#' is the respondent's persistent pull toward the first candidate. Here
+#' `kappa = 0.2` and `omega = 0.3`.
+#'
+#' Mean tastes `mu(Z)` move smoothly, and not linearly, with the
+#' respondent's characteristics. With `a = (age - 49) / 18` and
+#' `s = ideology / 3`: the taste for a Republican is `2 tanh(3 s) + 0.1 a`
+#' (it saturates for strong partisans, so the population splits into two
+#' camps with the moderates between them); for some and for long experience
+#' `0.4 + 0.15 a` and `0.6 + 0.35 tanh(1.5 a)`; for a moderate and for a
+#' conservative position (against a liberal one) `g (1 + 2 s)` and `g 4 s`,
+#' with `g = 0.25 + 0.25 s^2`, which is a quadratic loss around the
+#' respondent's own position that weighs more for those at the extremes; and
+#' for a woman candidate `0.15 + 0.35 female - 0.15 a`. The first taste factor
+#' moves party and policy together (loadings 0.7 on party, 0.3 and 0.6 on the
+#' moderate and conservative positions); the second moves experience and
+#' gender (0.4 and 0.8 on some and long experience, -0.2 on the conservative
+#' position, 0.6 on a woman candidate).
+#'
+#' `simconjoint_truth` holds the truth. Its `population` table gives the
+#' population value of every quantity the book's simulation chapter
+#' estimates: mean tastes, shares of respondents who prefer one level to
+#' another, a compensating share, the probability that one candidate beats
+#' another, the average marginal effect of long experience, and attribute
+#' importance shares. The covariates are discrete (whole years of age from 18
+#' to 80, uniform; ideology on seven points with probabilities 0.09, 0.14,
+#' 0.15, 0.20, 0.15, 0.15 and 0.12; gender with probability one half), so each population value is an exact sum over the 882 covariate
+#' cells. Inside a cell, means and shares are exact normal formulas, the
+#' contest and the AME are one-dimensional integrals by Gauss-Hermite
+#' quadrature with 100 nodes (the AME also enumerates every context the
+#' design can produce), and importance shares are two-dimensional integrals
+#' by a 256 x 256 Gauss-Hermite rule. The `accuracy` column gives the
+#' numerical error: about 1e-12 for the first ten quantities and the change
+#' from a 192 x 192 rule (about 1e-6) for importance.
+#'
+#' The data are built by `data-raw/build_sim.R` in the package sources with a
+#' fixed seed.
+#'
+#' @format `simconjoint`: a data frame with 16,000 rows (800 respondents x 10
+#'   tasks x 2 candidates) and 11 columns:
+#' \describe{
+#'   \item{id, task, profile}{Respondent (1 to 800), task (1 to 10) and
+#'     candidate (1 = the first candidate, shown on the left; 2 = the
+#'     second).}
+#'   \item{party, experience, position, gender}{The candidate's attributes
+#'     (factors; the first level is the reference).}
+#'   \item{chosen}{1 if this candidate was chosen, 0 if not. The two rows of
+#'     a task sum to 1.}
+#'   \item{age, ideology, female}{The respondent's characteristics: age in
+#'     years (18 to 80), ideology from -3 (very liberal) to 3 (very
+#'     conservative), and 1 for women. They repeat on every row of the
+#'     respondent.}
+#' }
+#'
+#' `simconjoint_truth`: a list with
+#' \describe{
+#'   \item{design}{The experiment's design, from [sc_design()].}
+#'   \item{parameters}{`kappa`, `omega`, the 6 x 2 `loading` matrix
+#'     (`Lambda`) and `q = 2`.}
+#'   \item{mean_taste}{The function `mu(age, ideology, female)`, returning
+#'     one row of six mean tastes per respondent.}
+#'   \item{covariate_law}{The population law of the characteristics.}
+#'   \item{respondents}{The 800 respondents' characteristics.}
+#'   \item{mu, beta, u, side}{Each respondent's true mean tastes `mu(Z_i)`,
+#'     tastes `beta_i` (800 x 6), taste-factor draws `u_i` (800 x 2) and
+#'     position effect `a_i`.}
+#'   \item{population}{The true population quantities: `name`, `kind`,
+#'     `value`, `method` and `accuracy`.}
+#'   \item{contrasts}{The coefficient vectors of the contrasts in
+#'     `population` (`compensating` is a Republican with no experience
+#'     against a Democrat with long experience; `contest` is the coded
+#'     difference of the two candidates of the contest).}
+#'   \item{seed}{The seed of the simulation.}
+#' }
+#' @seealso [sc_design()], [sc_code()].
+#' @examples
+#' data(simconjoint)
+#' head(simconjoint)
+#' simconjoint_truth$population[, c("name", "value")]
+#' des <- simconjoint_truth$design
+#' A <- simconjoint[simconjoint$profile == 1, ]
+#' B <- simconjoint[simconjoint$profile == 2, ]
+#' X <- sc_code(des, A, B)
+#' head(X)
+"simconjoint"
+
+#' @rdname simconjoint
+#' @format NULL
+"simconjoint_truth"

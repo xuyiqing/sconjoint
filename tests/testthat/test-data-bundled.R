@@ -1,8 +1,28 @@
 # Bundled datasets: shape, identifiers and the columns added for the paper's inputs.
 
-test_that("only the paper's two datasets are bundled", {
+test_that("the paper's two datasets and the simulated one are bundled", {
   ds <- ls(getNamespaceInfo(asNamespace("sconjoint"), "lazydata"))
-  expect_setequal(ds, c("br2017", "gs2020"))
+  expect_setequal(ds, c("br2017", "gs2020", "simconjoint", "simconjoint_truth"))
+})
+
+test_that("simconjoint has two rows per task and matches its truth", {
+  sim <- sconjoint::simconjoint; tr <- sconjoint::simconjoint_truth
+  expect_identical(dim(sim), c(16000L, 11L))
+  expect_identical(sim$profile, rep(1:2, 8000L))
+  p1 <- sim[sim$profile == 1L, ]; p2 <- sim[sim$profile == 2L, ]
+  expect_identical(p1$chosen + p2$chosen, rep(1L, 8000L))
+  expect_identical(as.vector(table(p1$id)), rep(10L, 800L))
+  expect_identical(tr$design$features, colnames(sc_code(tr$design, p1[1:2, ], p2[1:2, ])))
+  r <- p1[!duplicated(p1$id), ]
+  expect_equal(unname(tr$mu), unname(tr$mean_taste(r$age, r$ideology, r$female)))
+  expect_equal(unname(tr$beta), unname(tr$mu + tr$u %*% t(tr$parameters$loading)))
+  expect_identical(nrow(tr$population), 14L)
+  # a population mean taste is the probability-weighted cell sum of mu
+  law <- tr$covariate_law
+  cells <- expand.grid(age = law$age, ideology = law$ideology, female = 0:1)
+  w <- law$ideology_probs[match(cells$ideology, law$ideology)] / length(law$age) * 0.5
+  m <- colSums(w * tr$mean_taste(cells$age, cells$ideology, cells$female))
+  expect_equal(tr$population$value[tr$population$name == "mean: long experience"], m[["experience_long"]])
 })
 
 test_that("gs2020 has the paper's sample and two rows per matchup", {

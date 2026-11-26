@@ -5,13 +5,15 @@
 # the score rule (Sobol 4,096 nodes: 2,048 points mirrored in v, seed 20261114); the HELD-OUT respondents'
 # own conditional information is estimated by Louis's identity with Rao-Blackwellization, each respondent's
 # own design draws from the experiment's randomization law (GS: M = 300 designs, ny = 4 simulated
-# responses, the party key from pid7; BR: M = 250, ny = 8), on the information rule (Sobol 2,048 nodes);
+# responses, the party key from pid7; BR: M = 250, ny = 8; an sc_design(): M = 250, ny = 8), on the
+# information rule (Sobol 2,048 nodes);
 # the q(q - 1)/2 rotation directions are removed and the eigenvalues floored (1e-6 relative) before the
 # weight parts are formed. Seeds: the fold's information seed is seed + 10 k (inside, + k again and per
 # respondent, as .rum_cond_info_fold).
 
 .sc_info_defaults <- function(design)
-  switch(design, gs = list(M = 300L, ny = 4L), br = list(M = 250L, ny = 8L))
+  if (inherits(design, "sc_design")) list(M = 250L, ny = 8L) else
+    switch(design, gs = list(M = 300L, ny = 4L), br = list(M = 250L, ny = 8L))
 
 # Constructor (also used to wrap states made outside sc_states()).
 .sc_new_states <- function(x, q, folds, score, info, fits = NULL) {
@@ -29,18 +31,21 @@
 #' choices, averaged over task designs drawn from the experiment's
 #' randomization law. That information sets the one-step correction.
 #'
-#' The design law must be known to the package: only the built-in designs
-#' `"gs"` (Graham and Svolik 2020; the respondent's party, `pid7` in the data's
-#' groups, codes the co-partisan feature) and `"br"` (Ballard-Rosa, Martin and
-#' Scheve 2017) are supported. Set it with `sc_data(design = )`. Other
-#' experiments need their own design generator. The information is slow (at
+#' The design law must be known to the package. Set it with
+#' `sc_data(design = )`: a design from [sc_design()] (each attribute drawn
+#' independently, the most common conjoint design), or one of the built-in
+#' designs `"gs"` (Graham and Svolik 2020; the respondent's party, `pid7` in
+#' the data's groups, codes the co-partisan feature) and `"br"` (Ballard-Rosa,
+#' Martin and Scheve 2017). Experiments with restricted or blocked
+#' randomization need their own design generator. The information is slow (at
 #' the paper's settings about 15 seconds per held-out respondent and fold at
 #' q = 3); `respondents` limits it to the first held-out respondents of every
 #' fold, for checks.
 #'
 #' @param fit A fit from [sc_fit()].
 #' @param M,ny Design draws per respondent and simulated responses per design
-#'   (default: the paper's, GS 300 and 4, BR 250 and 8).
+#'   (default: the paper's, GS 300 and 4, BR 250 and 8; 250 and 8 for an
+#'   [sc_design()]).
 #' @param info_nodes,score_nodes Sobol nodes of the information and score rules (2048, 4096).
 #' @param seed Base seed (default 20261114).
 #' @param eig_floor Relative eigenvalue floor of each respondent's information.
@@ -67,14 +72,14 @@ sc_states <- function(fit, M = NULL, ny = NULL, info_nodes = 2048L, score_nodes 
   if (!inherits(fit, "sc_fit")) stop("expected a fit from sc_fit()", call. = FALSE)
   x <- fit$data; d <- x$data; q <- fit$q; p <- d$p; n_th <- .rum_th_len(p, q); IDS <- d$ids
   design <- x$design
-  if (is.null(design)) stop("sc_states() needs the experiment's design law: sc_data(design = 'gs' or 'br'). ",
-                            "Only these built-in designs are supported.", call. = FALSE)
+  if (is.null(design)) stop("sc_states() needs the experiment's design law: sc_data(design = ), with a design ",
+                            "from sc_design() or a built-in design ('gs' or 'br').", call. = FALSE)
   .sc_check_design_features(d$feature_names, design)
   def <- .sc_info_defaults(design)
   if (is.null(M)) M <- def$M
   if (is.null(ny)) ny <- def$ny
   resp <- NULL
-  if (design == "gs") {
+  if (identical(design, "gs")) {
     if (is.null(x$groups$pid7)) stop("the GS design needs pid7 in the data's groups", call. = FALSE)
     resp <- data.frame(pid7 = x$groups$pid7)
   }

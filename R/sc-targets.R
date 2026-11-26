@@ -168,13 +168,15 @@ sc_contest <- function(name, D, coef = NULL, w = NULL, order = 41L) {
 #' of that profile switches from a reference level to another level, with the
 #' rest of the contest held fixed (paper eq. standardized_ame). Contexts are
 #' draws from the experiment's design law, both screen positions, with
-#' position effects kept. Needs a built-in design (`"gs"` or `"br"`).
+#' position effects kept. Needs a design: one from [sc_design()] or a built-in
+#' design (`"gs"` or `"br"`).
 #'
 #' @inheritParams sc_mean
-#' @param attr The raw design attribute (for `"gs"`: `"party"`, `"p1"`, `"p2"`,
-#'   `"dem"`, `"female"`, `"race"`, `"pro"`; for `"br"`: `"r1"` ... `"r6"`,
-#'   `"taxrev"`).
-#' @param level,ref The level switched to and the reference level: raw values
+#' @param attr The design attribute: for an [sc_design()], one of its
+#'   attributes; for `"gs"`: `"party"`, `"p1"`, `"p2"`, `"dem"`, `"female"`,
+#'   `"race"`, `"pro"`; for `"br"`: `"r1"` ... `"r6"`, `"taxrev"`.
+#' @param level,ref The level switched to and the reference level: for an
+#'   [sc_design()], level names (or their positions); otherwise raw values
 #'   (level indices), GS democracy codes by name, or functions of the
 #'   respondent's design key (GS: `"D"`, `"R"`, `"I"`) returning a raw value or
 #'   `NA` (switch undefined: weight 0).
@@ -197,7 +199,8 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
   force(position); force(order)
   .sc_target(name, "ame", "onestep", function(ctx) {
     des <- if (is.null(design)) ctx$design else design
-    if (is.null(des)) stop("sc_ame_switch() needs a design law: give design = 'gs' or 'br', or set it in sc_data()", call. = FALSE)
+    if (is.null(des)) stop("sc_ame_switch() needs a design law: give design (sc_design(), 'gs' or 'br'), or set it in sc_data()", call. = FALSE)
+    des <- .sc_design_arg(des)
     spec <- .rum_spec_arg(des)
     .sc_check_design_features(ctx$feature_names, des)
     keys <- NULL
@@ -206,6 +209,11 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
       keys <- .rum_gs_key(ctx$groups$pid7)
     }
     lv <- level; rf <- ref
+    if (inherits(des, "sc_design")) {
+      if (!attr %in% names(des$attributes))
+        stop(sprintf("'%s' is not an attribute of the design (%s)", attr, paste(names(des$attributes), collapse = ", ")), call. = FALSE)
+      lv <- .sc_design_level(des, attr, lv); rf <- .sc_design_level(des, attr, rf)
+    }
     if (identical(des, "gs") && identical(attr, "dem")) {
       if (is.character(lv)) lv <- match(sub("^diff_dem_code_", "", lv), .RUM_GS_DEM)
       if (is.character(rf)) rf <- match(sub("^diff_dem_code_", "", rf), .RUM_GS_DEM)
@@ -214,6 +222,15 @@ sc_ame_switch <- function(name, attr, level, ref, design = NULL, draws = 40L, se
     list(.rum_tgt_switch_ame(name, des, raw, attr, lv, rf, keys = keys, w = .sc_resolve_w(w, ctx),
                              position = position, context = context, scale = scale, order = order))
   })
+}
+
+# A level of an sc_design attribute, by name or position, as its index.
+.sc_design_level <- function(des, attr, x) {
+  lv <- des$attributes[[attr]]
+  j <- if (is.character(x)) match(x, lv) else if (is.numeric(x) && length(x) == 1L && x %in% seq_along(lv)) as.integer(x) else NA_integer_
+  if (length(j) != 1L || is.na(j))
+    stop(sprintf("'%s' is not a level of '%s' (%s)", paste(x, collapse = ", "), attr, paste(lv, collapse = ", ")), call. = FALSE)
+  j
 }
 
 # Internal target over contest rows evaluated in chunks of rows (sums of the chunks' values and gradients
@@ -330,6 +347,9 @@ sc_difference <- function(name, a, b) {
 #'
 #' @param groups Named list: the coded feature columns (names or indices) of
 #'   each attribute. Every attribute that enters utility should be listed.
+#'   Or a design from [sc_design()]: one group per attribute, its menu the
+#'   attribute's coding of every level and its level weights the design's
+#'   level probabilities (`menus` and `level_weights` are then ignored).
 #' @param menus Optional named list of menus, one matrix per group (levels x
 #'   the group's columns). Default: a zero row plus the identity.
 #' @param level_weights Optional named list of level probabilities per group:
@@ -345,6 +365,10 @@ sc_difference <- function(name, a, b) {
 #'               menus = list(econ = matrix(1:4)))
 #' @export
 sc_importance <- function(groups, menus = NULL, level_weights = NULL, w = NULL, names = NULL, control = list()) {
+  if (inherits(groups, "sc_design")) {
+    des <- groups
+    groups <- lapply(des$coding, colnames); menus <- lapply(des$coding, unname); level_weights <- des$probs
+  }
   if (!is.list(groups) || is.null(base::names(groups))) stop("groups must be a named list", call. = FALSE)
   if (is.null(names)) names <- base::names(groups)
   force(menus); force(level_weights); force(w)
