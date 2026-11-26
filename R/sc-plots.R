@@ -1067,7 +1067,7 @@ sc_plot_posterior <- function(post, truth = NULL, which = NULL, xlab = NULL, yla
 #' `format = "markdown"` returns a pipe table as one string, which prints as a
 #' table in a knitr or Quarto chunk with the option `results: asis`
 #' (`#| results: asis`); `"latex"` returns a booktabs `tabular` (wrapped in a
-#' `table` with the caption when one is given), with `%`, `&`, `_` and `#`
+#' `table` with the caption when one is given), with `%`, `&`, `_`, `#` and `$`
 #' escaped in labels and headers. Both print as plain text.
 #'
 #' @param ... One or more estimate tables from [sc_estimate()] (or one list of

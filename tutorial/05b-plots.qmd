@@ -45,8 +45,8 @@ sc_plot_estimates(All = means, Democrats = means_dem)
 the laws share one panel, one row each, scaled to the same height. With `layout = "panels"` each law
 gets its own panel, and `means` adds the corrected mean as a red line with its 95% interval as a red
 bar. `truth` takes true density functions in a simulation. The curves are fitted values before the
-one-step correction, so a corrected mean need not sit at a curve's center. (In the toy fit the
-corrected means fall outside the curves, so the example leaves them out.)
+one-step correction, so a corrected mean need not sit at a curve's center. (The toy fit's corrected means
+lie far from its curves, so the example leaves them out.)
 
 ```{r}
 #| label: p-laws
@@ -153,8 +153,8 @@ In a Quarto or R Markdown chunk with `#| results: asis`, `format = "markdown"` p
 sc_table(All = means, Democrats = means_dem, digits = 3, format = "markdown")
 ```
 
-`format = "latex"` returns a booktabs table for a paper. It escapes `%`, `&`, `_` and `#` in
-labels and headers. Write other LaTeX special characters, such as `$`, as `\$` yourself.
+`format = "latex"` returns a booktabs table for a paper. It escapes `%`, `&`, `_`, `#` and `$` in
+labels and headers. Write other LaTeX special characters, such as `~` or `^`, in LaTeX yourself.
 
 ```{r}
 #| label: p-table-tex

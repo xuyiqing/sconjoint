@@ -56,7 +56,7 @@ error either); a target a table lacks gives an empty cell.
 \code{format = "markdown"} returns a pipe table as one string, which prints as a
 table in a knitr or Quarto chunk with the option \code{results: asis}
 (\verb{#| results: asis}); \code{"latex"} returns a booktabs \code{tabular} (wrapped in a
-\code{table} with the caption when one is given), with \verb{\%}, \code{&}, \verb{_} and \verb{#}
+\code{table} with the caption when one is given), with \verb{\%}, \code{&}, \verb{_}, \verb{#} and \code{$}
 escaped in labels and headers. Both print as plain text.
 }
 \examples{
