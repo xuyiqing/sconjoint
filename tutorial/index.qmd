@@ -1,45 +1,49 @@
 # Overview {#sec-intro}
 
 `sconjoint` fits the structural random-utility model of @acharya2026structural to forced-choice
-conjoint experiments. It estimates what respondents prefer, how many prefer it, and how strongly.
+conjoint experiments, estimating what respondents prefer, how many prefer it, and how strongly.
 
 ## Example
 
 In the democracy experiment of @graham2020democracy, each respondent chose sixteen times between
-two hypothetical state legislative candidates. The analysis keeps up to thirteen of these choices
-per respondent. The average marginal component effect
-(AMCE) [@hainmueller2014causal] of a co-partisan candidate, the change in the chance of being
-chosen, is about 14 percentage points. It does not say how many respondents prefer a co-partisan.
-The same AMCE fits two cases: almost everyone mildly prefers their own party, or a minority cares a
-great deal while the rest do not care.
+two hypothetical state legislative candidates, and the analysis keeps up to thirteen of these
+choices per respondent. For a co-partisan candidate, the change in the chance of being chosen ---
+the average marginal component effect (AMCE) [@hainmueller2014causal] --- is about 14 percentage
+points. On its own, however, that figure does not say how many respondents prefer a co-partisan,
+because the same AMCE fits two cases: almost everyone mildly prefers their own party, or a minority
+cares a great deal while the rest do not care.
 
-The structural model separates the two cases. Among the 1,377 partisans and leaners, the paper
+The structural model separates the two cases: among the 1,377 partisans and leaners, the paper
 estimates that 82.5% prefer a co-partisan candidate, other attributes held fixed (95% interval
-79.7% to 84.9%). The average strength of that preference is 0.81 on the logit utility scale.
+79.7% to 84.9%), and the average strength of that preference is 0.81 on the logit utility scale.
 @sec-gs computes both numbers from the saved fit.
 
 ## Model
 
-Each respondent $i$ has a vector of tastes $\beta_i$, one weight per coded feature of a profile.
-In task $t$, respondent $i$ sees two profiles whose coded features differ by $d_{it}$ (first
-profile minus second) and chooses the first profile with probability
+Each respondent $i$ assigns one weight to each coded feature of a profile, and these weights form a
+vector of tastes $\beta_i$. In task $t$, respondent $i$ sees two profiles whose coded features
+differ by $d_{it}$ (first profile minus second) and chooses the first profile with probability
 
 $$
 \Pr(Y_{it} = 1) = G(\kappa + a_i + d_{it}^\top \beta_i), \qquad G(s) = \frac{e^s}{1 + e^s}.
 $$
 
-Here $\kappa$ is the average pull toward the first profile (the position effect), and $a_i$ is the
-respondent's own persistent deviation from it. Tastes vary in two ways:
+In this choice probability, $\kappa$ is the average pull toward the first profile (the position
+effect), and $a_i$ is the respondent's own persistent deviation from it. Across respondents, tastes
+vary in two ways:
 
 $$
 \beta_i = \mu(Z_i) + \Lambda u_i, \qquad u_i \sim N(0, I_q), \qquad a_i = \sqrt{\omega}\, v_i, \qquad v_i \sim N(0, 1).
 $$
 
-A neural network $\mu(\cdot)$ maps observed respondent characteristics $Z_i$ to mean tastes. The loading matrix $\Lambda$ has $q$ columns (the *taste factors*). It lets
-tastes vary among respondents with the same characteristics. All tasks of a respondent share
-$\beta_i$ and $a_i$, so repeated choices separate persistent tastes from task-level noise. The model
-is a mixed logit for repeated choices [@mcfadden1974conditional; @revelt1998mixed;
-@train2009discrete] with a neural network for the mean tastes.
+First, a neural network $\mu(\cdot)$ maps observed respondent characteristics $Z_i$ to mean tastes.
+Second, to let tastes vary among respondents with the same characteristics, the model includes the
+loading matrix $\Lambda$, whose $q$ columns are the *taste factors*.
+
+Because a respondent's $\beta_i$ and $a_i$ are shared across all tasks, repeated choices separate
+persistent tastes from task-level noise. Taken together, the model is a mixed logit for repeated
+choices [@mcfadden1974conditional; @revelt1998mixed; @train2009discrete] with a neural network for
+the mean tastes.
 
 ## Workflow
 
@@ -53,17 +57,20 @@ is a mixed logit for repeated choices [@mcfadden1974conditional; @revelt1998mixe
 | 6. Targets | `sc_mean()`, `sc_share()`, `sc_contest()`, ... | Describe each quantity of interest |
 | 7. Estimate | `sc_estimate()` | Compute estimates, standard errors and intervals |
 
-Steps 2 and 4 take hours at the paper's settings. Steps 6 and 7 take seconds for most quantities.
-The book therefore ships the paper's fold states as saved fits (@sec-install), and the application
-chapters start from step 5.
+At the paper's settings, steps 2 and 4 take hours, whereas steps 6 and 7 take seconds for most
+quantities. The book therefore ships the paper's fold states as saved fits (@sec-install), so the
+application chapters start from step 5.
 
 ## Chapters
 
-@sec-install installs the package and the saved fits. @sec-quickstart runs every step on a
-simulated experiment with a known truth. @sec-gs and @sec-br reproduce the paper's two applications
-from the saved fits. @sec-quantities lists every quantity and its interval rule. @sec-plots shows
-the functions that draw the figures and tables. @sec-inference explains the standard errors and
-what they do not cover. @sec-respondents summarizes individual respondents.
+@sec-install covers installing the package and the saved fits, and @sec-quickstart runs every step
+on a simulated experiment with a known truth. Using the saved fits, @sec-gs and @sec-br reproduce
+the paper's two applications.
+
+The remaining chapters turn to outputs and inference: @sec-quantities lists every quantity and its
+interval rule, and @sec-plots shows the functions that draw the figures and tables. Finally,
+@sec-inference explains the standard errors and what they do not cover, while @sec-respondents
+summarizes individual respondents.
 
 ## Citation
 
@@ -72,7 +79,7 @@ Please cite the paper when you use the package:
 > Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026. "Learning Preferences from Conjoint
 > Data: A Structural Deep Learning Approach." Working paper, Stanford University.
 
-The bundled data come from @graham2020democracy and @ballard2017structure. Please cite them when
+The bundled data come from @graham2020democracy and @ballard2017structure, so please cite them when
 you use the data.
 
 <!-- badges: start -->

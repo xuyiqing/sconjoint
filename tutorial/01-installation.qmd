@@ -2,8 +2,8 @@
 
 ## Package
 
-Install `sconjoint` from GitHub. It contains C++ code, so it needs a compiler: Xcode command-line
-tools on macOS, Rtools on Windows, or a standard build toolchain on Linux.
+Install `sconjoint` from GitHub. Because it contains C++ code, installing it requires a compiler:
+Xcode command-line tools on macOS, Rtools on Windows, or a standard build toolchain on Linux.
 
 ```{r}
 #| label: install
@@ -12,8 +12,9 @@ install.packages("remotes")
 remotes::install_github("xuyiqing/sconjoint")
 ```
 
-The package needs R 4.1 or later and four packages: `Rcpp`, `withr`, `digest`, and `spacefillr`
-(scrambled Sobol points for numerical integration). The book's figures use base R graphics.
+The package requires R 4.1 or later along with four dependencies: `Rcpp`, `withr`, `digest`, and
+`spacefillr`, which supplies scrambled Sobol points for numerical integration. The book's figures
+use base R graphics.
 
 ```{r}
 #| label: load
@@ -34,8 +35,8 @@ rev <- if (length(rev)) rev[1] else "unknown"
 This book was rendered with sconjoint `r packageVersion("sconjoint")`, from source revision
 `r rev` of the package repository.
 
-Two datasets ship with the package, `gs2020` [@graham2020democracy] and `br2017`
-[@ballard2017structure]. `sc_example_data()` turns each into the paper's model inputs.
+Two datasets ship with the package---`gs2020` [@graham2020democracy] and `br2017`
+[@ballard2017structure]---and `sc_example_data()` converts each into the paper's model inputs.
 
 ```{r}
 #| label: data-list
@@ -44,29 +45,29 @@ data(package = "sconjoint")$results[, c("Item", "Title")]
 
 ## Saved fits
 
-Fitting the model at the paper's settings takes hours. Most of the time goes to each held-out
-respondent's information (@sec-inference), not to training the network. The paper's fold states
-are saved in two files:
+Fitting the model at the paper's settings takes hours, with most of that time spent on each
+held-out respondent's information (@sec-inference) rather than on training the network. The paper's
+fold states are therefore saved, in two files:
 
 | File | Application | Taste factors | Size |
 |---|---|---|---|
 | `gs_q3.rds` | Graham and Svolik (2020) | 3 | 42,951,896 bytes |
 | `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | 20,506,732 bytes |
 
-Their checksums:
+The checksums for these files are:
 
 - `gs_q3.rds`: MD5 `17d0f2efa2ecf7c4b2ce3b01991a893b`; SHA-256
   `82ec4e8005d2979f8352d65d3104ea6d503542be005ed1c352658819af845731`.
 - `br_q4.rds`: MD5 `6293fd6938d20477369b4f583c986a43`; SHA-256
   `0aa879eadc4ed744ec508dd26fc7a85521326c3f8f8d107c03dd56e8fd245faa`.
 
-The files are too large for the package. They are published with the GitHub release
-[`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11). For each of the
-five folds, a file holds what `sc_estimate()` needs and the fold's network and covariate scaling. It
-also holds the respondent ids, groups, folds, the validation respondents (used to stop training
-early), and a checksum of its contents that `sc_load()` verifies.
+For each of the five folds, a file stores what `sc_estimate()` needs along with that fold's network
+and covariate scaling. It also holds the respondent ids, groups, folds, and validation respondents
+(used to stop training early), together with a checksum of its contents that `sc_load()` verifies.
 
-To download both files into a folder `fits` and check them:
+Because the files are too large for the package, they are published with the GitHub release
+[`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11). The code below
+downloads both files into a folder `fits` and checks them:
 
 ```{r}
 #| label: fits-download
@@ -80,20 +81,21 @@ for (f in files) download.file(file.path(base, f), file.path("fits", f), mode = 
 unname(tools::md5sum(file.path("fits", files))) == md5   # both TRUE
 ```
 
-**Provenance.** The fits are the paper's selected-rank fits. They were trained on 14 November 2026
-at package revision `1f7567a` (in the repository's history), on the paper's inputs, which
-`sc_example_data()` rebuilds exactly from the bundled data. The folds and validation respondents are
-stored in the files. On 25
-November 2026 each application's fold states and fit files were packed into one file with
-`sc_save()`, under package version 0.4.0.9000. The packing was checked: `sc_load()` gives back fold
-states identical to the originals, and each fold's stored network reproduces its stored mean tastes
-exactly. The files keep these records (`package_version` and `fit_sha` inside each file). They
-describe the archived fits, so they stay as they are; later package versions read the files
+**Provenance.** These files hold the paper's selected-rank fits, trained on 14 November 2026 at
+package revision `1f7567a` (in the repository's history) on the paper's inputs, which
+`sc_example_data()` rebuilds exactly from the bundled data; the folds and validation respondents
+are stored in the files as well. On 25 November 2026, each application's fold states and fit files
+were packed into one file with `sc_save()` under package version 0.4.0.9000. Checks on the packed
+files confirmed that `sc_load()` returns fold states identical to the originals and that each
+fold's stored network reproduces its stored mean tastes exactly.
+
+Each file keeps these records (`package_version` and `fit_sha` inside it). Because they describe
+the archived fits, the records stay as they are, and later package versions read the files
 unchanged.
 
-@sec-gs, @sec-br, @sec-inference and @sec-respondents read the files from the folder in the option
-`sconjoint.fits`. The default is `fits` in the working directory. For another folder, set the
-option first:
+@sec-gs, @sec-br, @sec-inference and @sec-respondents read the saved files from the folder
+specified in the `sconjoint.fits` option, which defaults to `fits` in the working directory. To use
+another folder, set the option first:
 
 ```{r}
 #| label: fits-option
@@ -101,8 +103,8 @@ option first:
 options(sconjoint.fits = "~/Downloads/sconjoint-fits")
 ```
 
-Each chapter runs in its own R session. To render the book with the fits elsewhere, put that line
-in an `.Rprofile` file in the book's folder.
+Because each chapter runs in its own R session, put that line in an `.Rprofile` file in the book's
+folder to render the book with the fits elsewhere.
 
 ```{r}
 #| label: fits-check
@@ -112,6 +114,6 @@ gs <- sc_load(file.path(fits, "gs_q3.rds"))
 gs
 ```
 
-The printout gives the rank $q$, the number of folds, respondents and coded features, and the
-integration settings used for the information and the scores. `sc_load()` returns `NULL` with a message when the
-file is missing. It stops when the checksum does not match.
+The printout reports the rank $q$, the number of folds, respondents and coded features, and the
+integration settings used for the information and the scores. If the file is missing, `sc_load()`
+returns `NULL` with a message; if the checksum does not match, it stops.

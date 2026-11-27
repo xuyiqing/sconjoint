@@ -1,10 +1,13 @@
 # Plots and tables {#sec-plots}
 
-The package draws the paper's figures and tables from its own output: estimate tables from
-`sc_estimate()`, fitted laws from `sc_fitted_law()` and posterior summaries from `sc_posterior()`.
-The functions use base graphics, so `layout()` or `par(mfrow = )` combine several calls into one
-figure. Each returns the data it drew, invisibly, so you can check what is on the page. The examples
-use the toy fit of @sec-quantities and run in seconds. Their estimates mean nothing.
+The package produces the paper's figures and tables directly from its own output: estimate tables
+from `sc_estimate()`, fitted laws from `sc_fitted_law()`, and posterior summaries from
+`sc_posterior()`. Because the plotting functions use base graphics, several calls can be combined
+into one figure with `layout()` or `par(mfrow = )`. Each returns the data it drew, invisibly, so
+you can check what is on the page.
+
+The examples below use the toy fit of @sec-quantities and run in seconds, though their estimates
+mean nothing.
 
 ```{r}
 #| label: p-setup
@@ -21,13 +24,15 @@ laws <- lapply(f, function(cc) sc_fitted_law(toy, cc))
 
 ## Estimates
 
-`sc_plot_estimates()` draws one row per target: a point for the estimate and a line for its 95%
-interval. It takes one or more estimate tables. Several tables, passed as named arguments, become
-groups in different colors, with the names in the legend. Key arguments: `labels` and `order` for
-the rows, `scale = 100` for percent, `xlim`, `reference` for values to compare with (true values
-in a simulation, regression AMCEs) and `hide_wide` to drop intervals that span almost all of
-$[0, 1]$. A point is hollow when its interval is missing. `plot()` on an estimate table calls the
-same function.
+`sc_plot_estimates()` takes one or more estimate tables and draws one row per target: a point for
+the estimate and a line for its 95% interval, leaving the point hollow when its interval is missing.
+Passing several tables as named arguments separates them into groups in different colors and places
+those names in the legend; calling `plot()` on an estimate table invokes the same function.
+
+Several arguments adjust the display: `labels` and `order` control the rows, `scale = 100` expresses
+values in percent, and `xlim` sets the horizontal limits. In addition, `reference` adds comparison
+values such as true values in a simulation or regression AMCEs, while `hide_wide` drops intervals
+that span almost all of $[0, 1]$.
 
 ```{r}
 #| label: p-estimates
@@ -36,17 +41,20 @@ same function.
 sc_plot_estimates(All = means, Democrats = means_dem)
 ```
 
-@fig-sim-estimates compares estimates with the truth, and @fig-gs-compensation and
+@fig-sim-estimates compares estimates with the truth, while @fig-gs-compensation and
 @fig-br-party-shares show three groups.
 
 ## Fitted laws
 
-`sc_plot_laws()` draws fitted laws from `sc_fitted_law()`. With `layout = "ridges"` (the default)
-the laws share one panel, one row each, scaled to the same height. With `layout = "panels"` each law
-gets its own panel, and `means` adds the corrected mean as a red line with its 95% interval as a red
-bar. `truth` takes true density functions in a simulation. The curves are fitted values before the
-one-step correction, so a corrected mean need not sit at a curve's center. (The toy fit's corrected means
-lie far from its curves, so the example leaves them out.)
+`sc_plot_laws()` draws the fitted laws returned by `sc_fitted_law()` in either of two layouts. Under
+the default `layout = "ridges"`, the laws share one panel, arranged one row each and scaled to the
+same height. Under `layout = "panels"`, each law gets its own panel, and `means` adds the corrected
+mean as a red line with its 95% interval as a red bar. In a simulation, true density functions can
+be passed through `truth`.
+
+Because the curves show fitted values before the one-step correction, a corrected mean need not sit
+at a curve's center. In the toy fit, the corrected means lie far from the curves, so the example
+below leaves them out.
 
 ```{r}
 #| label: p-laws
@@ -55,16 +63,19 @@ lie far from its curves, so the example leaves them out.)
 sc_plot_laws(laws[c(1, 6)], labels = bn[c(1, 6)], layout = "panels", ncol = 2)
 ```
 
-@fig-gs-distributions-1 and @fig-br-distributions use panels with means, and @fig-sim-laws
-adds the truth.
+@fig-gs-distributions-1 and @fig-br-distributions use panels with means, and @fig-sim-laws adds the
+truth.
 
 ## Summary figure
 
-`sc_plot_preferences()` draws the paper's summary figure, one row per feature: (A) the mean taste,
-(B) its fitted law as a ridge, (C) the share with a positive taste, in percent, and, with `ames`,
-(D) the choice effect in percentage points, with optional `reference` values as grey diamonds. Key
-arguments: `order` for the rows, and `xlim`, `ticks` and `titles`, each a list named by panel. In
-Panel C, `hide_wide` hides intervals that span at least 95 points.
+`sc_plot_preferences()` draws the paper's summary figure with one row per feature across aligned
+panels: (A) the mean taste, (B) its fitted law as a ridge, (C) the share with a positive taste, in
+percent, and, when `ames` is supplied, (D) the choice effect in percentage points, with optional
+`reference` values shown as grey diamonds.
+
+Row order is set with `order`, while per-panel options---`xlim`, `ticks`, and `titles`---are each
+supplied as a list named by panel. In Panel C, `hide_wide` hides intervals that span at least 95
+points.
 
 ```{r}
 #| label: p-preferences
@@ -77,10 +88,11 @@ sc_plot_preferences(means, laws, shares, order = bn[c(1, 2, 6)])
 
 ## Importance
 
-`sc_plot_importance()` draws importance shares as horizontal bars, in percent, with the value at
-each bar's end. Each group is an estimate table of `sc_importance()` targets, passed as a named
-argument. `combine` adds attributes into display groups. Names such as `"All.low"` lose the
-common prefix, so rows of different tables match by attribute.
+`sc_plot_importance()` draws importance shares as horizontal bars in percent, with each bar's value
+printed at its end. Each group is passed as a named argument holding an estimate table of
+`sc_importance()` targets, and target names such as `"All.low"` lose their common prefix so that
+rows from different tables match by attribute. In addition, `combine` adds attributes into display
+groups.
 
 ```{r}
 #| label: p-importance
@@ -100,11 +112,13 @@ sc_plot_importance(All = imp_all, Democrats = imp_dem,
 
 ## Lines
 
-`sc_plot_lines()` draws estimates against an ordered setting `x`, such as an income bracket: a line
-with points for each table and a shaded band for the 95% intervals. Each table has one row per value
-of `x`. `xlab` is required. `hline` sets the dashed reference line (default 0.5 for probabilities
-and shares). One call draws one panel. For several panels, set up `layout()`, call the
-function once per panel with `legend = FALSE`, and draw one legend.
+`sc_plot_lines()` plots estimates against an ordered setting `x`, such as an income bracket, drawing
+a line with points for each estimate table and a shaded band for its 95% intervals. Each table has
+one row per value of `x`; an axis label via `xlab` is required, and `hline` sets the dashed
+reference line (defaulting to 0.5 for probabilities and shares).
+
+Because one call draws a single panel, multi-panel figures are built by setting up `layout()`,
+calling the function once per panel with `legend = FALSE`, and drawing one legend.
 
 ```{r}
 #| label: p-lines
@@ -118,10 +132,11 @@ sc_plot_lines(All = means, Democrats = means_dem, x = 1:6,
 
 ## Respondents
 
-`sc_plot_posterior()` draws posterior summaries from `sc_posterior()`. Without `truth` it gives
-respondents sorted by posterior mean, each with a 95% posterior interval. With `truth`, in a
-simulation, it plots each posterior mean against the true value, with a 45-degree line and the
-correlation. `which` picks the contrast.
+`sc_plot_posterior()` draws posterior summaries from `sc_posterior()`, with `which` picking the
+contrast. Its plot depends on whether `truth` is supplied: without `truth`, it shows respondents
+sorted by posterior mean with each respondent's 95% posterior interval; with `truth` in a
+simulation, it plots each posterior mean against the true value, adding a 45-degree line and the
+correlation.
 
 ```{r}
 #| label: p-posterior
@@ -135,17 +150,18 @@ sc_plot_posterior(post, ylab = "Posterior taste for a higher top rate")
 
 ## Tables
 
-`sc_table()` puts one or more estimate tables side by side: one row per target and one column per
-table. A cell holds the estimate and its 95% interval (`style = "ci"`) or its standard error in
-parentheses (`style = "se"`). `n = TRUE` adds the number of respondents. The output is a data frame,
-a Markdown table or a LaTeX `tabular`.
+`sc_table()` places one or more estimate tables side by side, with one row per target and one column
+per table. Each cell holds the estimate alongside either its 95% interval (`style = "ci"`) or its
+standard error in parentheses (`style = "se"`), while `n = TRUE` adds the number of respondents. The
+output can be returned as a data frame, a Markdown table, or a LaTeX `tabular`.
 
 ```{r}
 #| label: p-table
 sc_table(All = means, Democrats = means_dem, digits = 3, n = TRUE)
 ```
 
-In a Quarto or R Markdown chunk with `#| results: asis`, `format = "markdown"` prints as a table:
+In a Quarto or R Markdown chunk with `#| results: asis`, `format = "markdown"` prints the result as
+a table:
 
 ```{r}
 #| label: p-table-md
@@ -153,8 +169,9 @@ In a Quarto or R Markdown chunk with `#| results: asis`, `format = "markdown"` p
 sc_table(All = means, Democrats = means_dem, digits = 3, format = "markdown")
 ```
 
-`format = "latex"` returns a booktabs table for a paper. It escapes `%`, `&`, `_`, `#` and `$` in
-labels and headers. Write other LaTeX special characters, such as `~` or `^`, in LaTeX yourself.
+For a paper, `format = "latex"` returns a booktabs table. It escapes `%`, `&`, `_`, `#`, and `$` in
+labels and headers, while other LaTeX special characters, such as `~` or `^`, must be written in
+LaTeX directly.
 
 ```{r}
 #| label: p-table-tex
