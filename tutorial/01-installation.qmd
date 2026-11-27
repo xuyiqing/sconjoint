@@ -37,8 +37,8 @@ This book was rendered with sconjoint `r packageVersion("sconjoint")`, from sour
 
 Three datasets ship with the package:
 
-- `gs2020`: the democracy experiment of @graham2020democracy (@sec-gs).
-- `br2017`: the tax-plan experiment of @ballard2017structure (@sec-br).
+- `gs2020`: the democracy experiment of @graham2020democracy, analyzed in @sec-gs.
+- `br2017`: the tax-plan experiment of @ballard2017structure, analyzed in @sec-br.
 - `simconjoint`: a simulated candidate-choice experiment with known tastes, 800 respondents who each
   choose between two candidates ten times. Its companion `simconjoint_truth` holds the parameters
   that generated the choices, each respondent's true tastes, and the population values the
