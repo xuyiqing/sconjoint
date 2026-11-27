@@ -17,12 +17,14 @@ The package needs R 4.1 or later and four packages: `Rcpp`, `withr`, `digest`, a
 
 ```{r}
 #| label: load
+#| cache: false
 library(sconjoint)
 packageVersion("sconjoint")
 ```
 
 ```{r}
 #| label: render-revision
+#| cache: false
 #| echo: false
 rev <- tryCatch(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE, stderr = FALSE),
                 error = function(e) character(0), warning = function(e) character(0))
