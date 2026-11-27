@@ -80,8 +80,8 @@
   matrix(items[col(key)[o]], M, n, byrow = TRUE)
 }
 
-.rum_side_array <- function(left, right, M, T) {
-  a <- array(0L, c(M, T, 2L))
+.rum_side_array <- function(left, right, M, n_task) {
+  a <- array(0L, c(M, n_task, 2L))
   a[, , 1L] <- left
   a[, , 2L] <- right
   a
@@ -115,7 +115,7 @@
   matrix(rk, M, 16L)[, seq_len(S), drop = FALSE] <= 8L
 }
 
-.rum_gs_draw <- function(M, T = 13L) {
+.rum_gs_draw <- function(M, n_task = 13L) {
   S <- 13L
   # democracy: 0 = generic-vs-generic, 8..16 = the negative position's code
   type <- .rum_row_perm(M, c(rep(0L, 4L), 8:16))
@@ -150,17 +150,17 @@
     female = .rum_side_array(femL, femR, M, S),
     race = race, pro = pro,
     area = matrix(as.integer(area), M, S))
-  .rum_raw_head(raw, T)
+  .rum_raw_head(raw, n_task)
 }
 
-.rum_raw_head <- function(raw, T) {
+.rum_raw_head <- function(raw, n_task) {
   S <- dim(raw[[1L]])[2L]
-  T <- as.integer(T)
-  if (length(T) != 1L || is.na(T) || T < 1L || T > S)
+  n_task <- as.integer(n_task)
+  if (length(n_task) != 1L || is.na(n_task) || n_task < 1L || n_task > S)
     stop(sprintf("T must be an integer between 1 and %d.", S))
-  if (T == S) return(raw)
-  lapply(raw, function(a) if (length(dim(a)) == 3L) a[, seq_len(T), , drop = FALSE]
-                          else a[, seq_len(T), drop = FALSE])
+  if (n_task == S) return(raw)
+  lapply(raw, function(a) if (length(dim(a)) == 3L) a[, seq_len(n_task), , drop = FALSE]
+                          else a[, seq_len(n_task), drop = FALSE])
 }
 
 # pid_lean: "D" if pid7 < 0 (strong, weak, leaning Democrats), "R" if pid7 > 0,
@@ -186,8 +186,8 @@
 .rum_gs_x <- function(raw, side, key) {
   g <- function(a) as.vector(a[, , side])
   pk <- match(key, c("D", "R", "I"))
-  M <- dim(raw$party)[1L]; T <- dim(raw$party)[2L]
-  if (length(pk) == 1L) pk <- rep(pk, M * T) else if (length(pk) == M) pk <- rep(pk, T)
+  M <- dim(raw$party)[1L]; n_task <- dim(raw$party)[2L]
+  if (length(pk) == 1L) pk <- rep(pk, M * n_task) else if (length(pk) == M) pk <- rep(pk, n_task)
   cbind(as.numeric(g(raw$party) == pk), g(raw$p1), g(raw$p2),
         .RUM_GS_LU_DEM[g(raw$dem), , drop = FALSE], g(raw$female),
         .RUM_GS_LU_RACE[g(raw$race), , drop = FALSE],
@@ -195,10 +195,10 @@
 }
 
 .rum_gs_code <- function(raw, key) {
-  M <- dim(raw$party)[1L]; T <- dim(raw$party)[2L]
+  M <- dim(raw$party)[1L]; n_task <- dim(raw$party)[2L]
   if (!length(key) %in% c(1L, M)) stop("resp must have one row or one row per draw.")
   d <- .rum_gs_x(raw, 1L, key) - .rum_gs_x(raw, 2L, key)
-  array(d, c(M, T, length(.RUM_GS_FEATURES)),
+  array(d, c(M, n_task, length(.RUM_GS_FEATURES)),
         dimnames = list(NULL, NULL, .RUM_GS_FEATURES))
 }
 
@@ -220,11 +220,11 @@
 }
 
 .rum_gs_raw_to_profiles <- function(raw) {
-  M <- dim(raw$party)[1L]; T <- dim(raw$party)[2L]
+  M <- dim(raw$party)[1L]; n_task <- dim(raw$party)[2L]
   one <- function(side) {
     g <- function(a) as.vector(t(a[, , side]))   # draw-major, task-minor
     ar <- as.vector(t(raw$area))
-    data.frame(draw = rep(seq_len(M), each = T), task = rep(seq_len(T), M),
+    data.frame(draw = rep(seq_len(M), each = n_task), task = rep(seq_len(n_task), M),
                party = c("D", "R")[g(raw$party)], p1_area = .RUM_GS_AREA_P1[ar],
                p1_num = g(raw$p1), p2_area = .RUM_GS_AREA_P2[ar], p2_num = g(raw$p2),
                dem_code = .RUM_GS_DEM[g(raw$dem)],
@@ -289,13 +289,13 @@
 # Each plan's six rates are independent uniform draws from the bracket menus,
 # independent across brackets, plans and tasks; revenue is drawn per plan from
 # the noisy rule. 8 tasks per respondent, kept in table order.
-.rum_br_draw <- function(M, T = 8L) {
+.rum_br_draw <- function(M, n_task = 8L) {
   n2 <- M * 8L * 2L
   rate <- lapply(.RUM_BR_MENUS, function(m) array(sample.int(length(m), n2, replace = TRUE), c(M, 8L, 2L)))
   pct <- vapply(1:6, function(j) .RUM_BR_MENUS[[j]][as.vector(rate[[j]])], numeric(n2))
   rev <- array(.rum_br_revenue_draw(pct), c(M, 8L, 2L))
   names(rate) <- paste0("r", 1:6)
-  .rum_raw_head(c(rate, list(taxrev = rev)), T)
+  .rum_raw_head(c(rate, list(taxrev = rev)), n_task)
 }
 
 .rum_br_x <- function(raw, side) {
@@ -305,9 +305,9 @@
 }
 
 .rum_br_code <- function(raw, key = NULL) {
-  M <- dim(raw$r1)[1L]; T <- dim(raw$r1)[2L]
+  M <- dim(raw$r1)[1L]; n_task <- dim(raw$r1)[2L]
   d <- .rum_br_x(raw, 1L) - .rum_br_x(raw, 2L)
-  array(d, c(M, T, length(.RUM_BR_RECIPE$features)),
+  array(d, c(M, n_task, length(.RUM_BR_RECIPE$features)),
         dimnames = list(NULL, NULL, .RUM_BR_RECIPE$features))
 }
 
@@ -326,10 +326,10 @@
 }
 
 .rum_br_raw_to_profiles <- function(raw) {
-  M <- dim(raw$r1)[1L]; T <- dim(raw$r1)[2L]
+  M <- dim(raw$r1)[1L]; n_task <- dim(raw$r1)[2L]
   one <- function(side) {
     g <- function(a) as.vector(t(a[, , side]))
-    out <- data.frame(draw = rep(seq_len(M), each = T), task = rep(seq_len(T), M))
+    out <- data.frame(draw = rep(seq_len(M), each = n_task), task = rep(seq_len(n_task), M))
     for (j in 1:6) out[[paste0("r", j)]] <- .RUM_BR_MENUS[[j]][g(raw[[paste0("r", j)]])]
     out$taxrev <- g(raw$taxrev)
     out
@@ -366,10 +366,10 @@
 
 # Five attributes per candidate, each uniform and independent, independent across
 # candidates and the 3 elections (article p. 7; uniform is read off the marginals).
-.rum_sw_draw <- function(M, T = 3L) {
+.rum_sw_draw <- function(M, n_task = 3L) {
   n2 <- M * 3L * 2L
   raw <- lapply(.RUM_SW_LEVELS, function(l) array(sample.int(length(l), n2, replace = TRUE), c(M, 3L, 2L)))
-  .rum_raw_head(raw, T)
+  .rum_raw_head(raw, n_task)
 }
 
 .rum_sw_x <- function(raw, side, explicit) {
@@ -380,10 +380,10 @@
 }
 
 .rum_sw_code <- function(raw, key = NULL, explicit = FALSE) {
-  M <- dim(raw$gender)[1L]; T <- dim(raw$gender)[2L]
+  M <- dim(raw$gender)[1L]; n_task <- dim(raw$gender)[2L]
   nm <- if (explicit) .RUM_SW_FEATURES_EXPLICIT else .RUM_SW_FEATURES
   d <- .rum_sw_x(raw, 1L, explicit) - .rum_sw_x(raw, 2L, explicit)
-  array(d, c(M, T, length(nm)), dimnames = list(NULL, NULL, nm))
+  array(d, c(M, n_task, length(nm)), dimnames = list(NULL, NULL, nm))
 }
 
 .rum_sw_profiles_to_raw <- function(profA, profB) {
@@ -398,9 +398,9 @@
 }
 
 .rum_sw_raw_to_profiles <- function(raw) {
-  M <- dim(raw$gender)[1L]; T <- dim(raw$gender)[2L]
+  M <- dim(raw$gender)[1L]; n_task <- dim(raw$gender)[2L]
   one <- function(side) {
-    out <- data.frame(draw = rep(seq_len(M), each = T), task = rep(seq_len(T), M))
+    out <- data.frame(draw = rep(seq_len(M), each = n_task), task = rep(seq_len(n_task), M))
     for (a in names(.RUM_SW_LEVELS)) out[[a]] <- .RUM_SW_LEVELS[[a]][as.vector(t(raw[[a]][, , side]))]
     out
   }
@@ -477,12 +477,12 @@
   spec
 }
 
-.rum_design_draw_raw <- function(spec, M, T = NULL, seed = NULL) {
+.rum_design_draw_raw <- function(spec, M, n_task = NULL, seed = NULL) {
   spec <- .rum_spec_arg(spec)
   M <- as.integer(M)
   if (length(M) != 1L || is.na(M) || M < 1L) stop("M must be a positive integer.")
-  if (is.null(T)) T <- spec$T
-  .rum_with_seed(seed, spec$draw(M, T))
+  if (is.null(n_task)) n_task <- spec$T
+  .rum_with_seed(seed, spec$draw(M, n_task))
 }
 
 # Code raw sequences for one respondent (resp: one row or a pid value) or, in GS,
@@ -497,7 +497,7 @@
 # task matrix and matrix(d, M * T, p) %*% beta is the M x T matrix of d'beta.
 # raw = TRUE attaches the raw sequences as attr(, "raw"); format = "list"
 # returns a list of M matrices (T x p) instead.
-.rum_draw_designs <- function(spec, resp = NULL, M, seed = NULL, T = NULL,
+.rum_draw_designs <- function(spec, resp = NULL, M, seed = NULL, n_task = NULL,
                               raw = FALSE, format = c("array", "list")) {
   spec <- .rum_spec_arg(spec)
   format <- match.arg(format)
@@ -505,7 +505,7 @@
     key <- spec$key(resp)
     if (length(key) != 1L) stop("resp must describe one respondent; use .rum_draw_designs_crn() for many.")
   }
-  r <- .rum_design_draw_raw(spec, M, T, seed)
+  r <- .rum_design_draw_raw(spec, M, n_task, seed)
   d <- .rum_design_code(spec, r, resp)
   if (format == "list") {
     dd <- dim(d)
@@ -525,9 +525,9 @@
 # .rum_crn_designs(crn, i) for respondent i. For a respondent with T_i < T tasks,
 # take the first T_i tasks: [, seq_len(T_i), , drop = FALSE] (the GS law is
 # exchangeable over scenario IDs, BR and SW tasks are iid).
-.rum_draw_designs_crn <- function(spec, resp = NULL, M, seed = NULL, T = NULL, n = NULL) {
+.rum_draw_designs_crn <- function(spec, resp = NULL, M, seed = NULL, n_task = NULL, n = NULL) {
   spec <- .rum_spec_arg(spec)
-  r <- .rum_design_draw_raw(spec, M, T, seed)
+  r <- .rum_design_draw_raw(spec, M, n_task, seed)
   if (spec$uses_resp) {
     keys <- spec$key(resp)
   } else {

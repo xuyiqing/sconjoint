@@ -36,10 +36,10 @@
 .RUM_BHH_ATTR_OF <- rep(seq_along(.RUM_BHH_LEVELS), lengths(.RUM_BHH_LEVELS) - 1L)
 .RUM_BHH_LU <- lapply(.RUM_BHH_LEVELS, function(l) diag(length(l))[, -1L, drop = FALSE])
 
-.rum_bhh_draw <- function(M, T = 5L) {
+.rum_bhh_draw <- function(M, n_task = 5L) {
   n2 <- M * 5L * 2L
   raw <- lapply(.RUM_BHH_LEVELS, function(l) array(sample.int(length(l), n2, replace = TRUE), c(M, 5L, 2L)))
-  .rum_raw_head(raw, T)
+  .rum_raw_head(raw, n_task)
 }
 
 .rum_bhh_x <- function(raw, side) {
@@ -48,9 +48,9 @@
 }
 
 .rum_bhh_code <- function(raw, key = NULL) {
-  M <- dim(raw$consist)[1L]; T <- dim(raw$consist)[2L]
+  M <- dim(raw$consist)[1L]; n_task <- dim(raw$consist)[2L]
   d <- .rum_bhh_x(raw, 1L) - .rum_bhh_x(raw, 2L)
-  array(d, c(M, T, length(.RUM_BHH_FEATURES)), dimnames = list(NULL, NULL, .RUM_BHH_FEATURES))
+  array(d, c(M, n_task, length(.RUM_BHH_FEATURES)), dimnames = list(NULL, NULL, .RUM_BHH_FEATURES))
 }
 
 .rum_bhh_profiles_to_raw <- function(profA, profB) {
@@ -65,9 +65,9 @@
 }
 
 .rum_bhh_raw_to_profiles <- function(raw) {
-  M <- dim(raw$consist)[1L]; T <- dim(raw$consist)[2L]
+  M <- dim(raw$consist)[1L]; n_task <- dim(raw$consist)[2L]
   one <- function(side) {
-    out <- data.frame(draw = rep(seq_len(M), each = T), task = rep(seq_len(T), M))
+    out <- data.frame(draw = rep(seq_len(M), each = n_task), task = rep(seq_len(n_task), M))
     for (a in names(.RUM_BHH_LEVELS)) out[[a]] <- .RUM_BHH_LEVELS[[a]][as.vector(t(raw[[a]][, , side]))]
     out
   }

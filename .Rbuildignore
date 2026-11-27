@@ -13,14 +13,13 @@
 ^LICENSE\.md$
 ^README\.md$
 
-# CRAN: ship a lean test set. The long RUM suites stay in the repo and run locally
-# (NOT_CRAN=true TESTTHAT_PARALLEL=true TESTTHAT_CPUS=10).
-^tests/testthat/test-rum-conjointrum-scripts\.R$
-^tests/testthat/test-rum-decisiveness\.R$
-^tests/testthat/test-rum-qfactor-targets\.R$
-^tests/testthat/test-rum-qfactor-inference\.R$
-^tests/testthat/test-rum-qfactor-fixes\.R$
-^tests/testthat/test-rum-inference\.R$
-^tests/testthat/test-rum-correction\.R$
+# CRAN: ship a lean test set: bundled data, the estimator end to end on synthetic fold states, the plot
+# functions; about 2 seconds. Every other test file and folder stays in the repo and runs locally with
+# NOT_CRAN=true TESTTHAT_PARALLEL=true TESTTHAT_CPUS=10.
+^tests/testthat/(?!(helper-sc-states|test-data-bundled|test-sc-engine|test-sc-plots)\.R$)
 ^tests/testthat/_problems$
 ^tests/testthat/testthat-problems\.rds$
+
+# Developer scripts: kept in the repo, not shipped.
+^inst/examples$
+^inst/extdata/make_toy_fit\.R$

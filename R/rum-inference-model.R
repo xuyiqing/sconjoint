@@ -39,17 +39,17 @@
 # no division by sqrt(omega).
 .rum_seq_scores <- function(MU, DL, Y, th, quad) {
   if (.rum_th_nfac(th) > 1L) return(.rum_seq_scores_q(MU, DL, Y, th, quad))
-  B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
+  B <- nrow(MU); p <- ncol(MU); n_task <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
   um <- matrix(quad$u, B, G, byrow = TRUE); vm <- matrix(quad$v, B, G, byrow = TRUE); svm <- s * vm
-  ETA <- vector("list", T); ll <- matrix(0, B, G)
-  for (t in seq_len(T)) {
+  ETA <- vector("list", n_task); ll <- matrix(0, B, G)
+  for (t in seq_len(n_task)) {
     e <- th$kappa + rowSums(DL[[t]] * MU) + drop(DL[[t]] %*% th$loading) * um + svm; ETA[[t]] <- e
     ll <- ll + Y[, t] * stats::plogis(e, log.p = TRUE) + (1 - Y[, t]) * stats::plogis(-e, log.p = TRUE)
   }
   ll <- sweep(ll, 2, log(quad$weight), "+"); P <- exp(ll - apply(ll, 1, max)); P <- P / rowSums(P)
   smu <- slam <- matrix(0, B, p); sk <- som <- numeric(B)
   boundary <- th$omega < .rum_omega_small; RS <- CV <- 0
-  for (t in seq_len(T)) {
+  for (t in seq_len(n_task)) {
     pr <- stats::plogis(ETA[[t]]); r <- P * (Y[, t] - pr); R0 <- rowSums(r)
     smu <- smu + DL[[t]] * R0; slam <- slam + DL[[t]] * rowSums(r * um); sk <- sk + R0
     if (boundary) { RS <- RS + (Y[, t] - pr); CV <- CV + pr * (1 - pr) }
@@ -66,19 +66,19 @@
 # threshold, one definition) the omega score is E[v^2 (R^2 - sum_t p_t(1-p_t)) | Y] / 2, the C++ kernel's
 # boundary form: for a rule symmetric in v the limit of the interior form (see src/rum_core.cpp).
 .rum_seq_scores_q <- function(MU, DL, Y, th, quad) {
-  B <- nrow(MU); p <- ncol(MU); T <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
+  B <- nrow(MU); p <- ncol(MU); n_task <- length(DL); G <- length(quad$weight); s <- sqrt(th$omega)
   L <- as.matrix(th$loading); nf <- ncol(L)
   if (.rum_quad_nfac(quad) != nf) stop("the quadrature rule does not have ncol(loading) taste factors")
   U <- matrix(quad$u, G, nf); vm <- matrix(quad$v, B, G, byrow = TRUE); svm <- s * vm
-  ETA <- vector("list", T); ll <- matrix(0, B, G)
-  for (t in seq_len(T)) {
+  ETA <- vector("list", n_task); ll <- matrix(0, B, G)
+  for (t in seq_len(n_task)) {
     e <- th$kappa + rowSums(DL[[t]] * MU) + (DL[[t]] %*% L) %*% t(U) + svm; ETA[[t]] <- e
     ll <- ll + Y[, t] * stats::plogis(e, log.p = TRUE) + (1 - Y[, t]) * stats::plogis(-e, log.p = TRUE)
   }
   ll <- sweep(ll, 2, log(quad$weight), "+"); P <- exp(ll - apply(ll, 1, max)); P <- P / rowSums(P)
   smu <- matrix(0, B, p); slam <- matrix(0, B, p * nf); sk <- som <- numeric(B)
   boundary <- th$omega < .rum_omega_small; RS <- CV <- 0
-  for (t in seq_len(T)) {
+  for (t in seq_len(n_task)) {
     pr <- stats::plogis(ETA[[t]]); r <- P * (Y[, t] - pr); R0 <- rowSums(r)
     smu <- smu + DL[[t]] * R0; sk <- sk + R0; RU <- r %*% U          # B x q: E[e_t u_k | Y]
     for (k in seq_len(nf)) slam[, (k - 1L) * p + seq_len(p)] <- slam[, (k - 1L) * p + seq_len(p)] + DL[[t]] * RU[, k]
@@ -114,16 +114,16 @@
     jm <- dr$j[mm]; um <- if (nf == 1L) dr$u[mm] else dr$u[mm, , drop = FALSE]
     vm <- dr$v[mm]; U <- dr$U[mm, , drop = FALSE]
     Sc <- matrix(NA_real_, np, D)
-    for (T in sort(unique(Tj[jm]))) {
-      r <- which(Tj[jm] == T); MU <- mu[ii[r], , drop = FALSE]
-      DL <- lapply(seq_len(T), function(t) data$d[off[jm[r]] + t, , drop = FALSE])
-      Y <- matrix(0, length(r), T)
+    for (n_task in sort(unique(Tj[jm]))) {
+      r <- which(Tj[jm] == n_task); MU <- mu[ii[r], , drop = FALSE]
+      DL <- lapply(seq_len(n_task), function(t) data$d[off[jm[r]] + t, , drop = FALSE])
+      Y <- matrix(0, length(r), n_task)
       if (nf == 1L) {
-        for (t in seq_len(T)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
+        for (t in seq_len(n_task)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
           rowSums(DL[[t]] * (MU + outer(um[r], th$loading))) + s * vm[r]))
       } else {
         BU <- MU + um[r, , drop = FALSE] %*% t(th$loading)          # beta = mu + Lambda u
-        for (t in seq_len(T)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
+        for (t in seq_len(n_task)) Y[, t] <- as.numeric(U[r, t] < stats::plogis(th$kappa +
           rowSums(DL[[t]] * BU) + s * vm[r]))
       }
       Sc[r, ] <- .rum_seq_scores(MU, DL, Y, th, quad)

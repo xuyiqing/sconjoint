@@ -133,15 +133,8 @@ rum_scale_parameters <- function(data, par, scales, inverse = FALSE) {
   par
 }
 
-# Evaluate expr after set.seed(seed) under the current RNG kind, then restore the caller's RNG state
-# (withr::with_preserve_seed; the package never writes .Random.seed itself).
-.rum_with_seed <- function(seed, expr) {
-  if (is.null(seed)) return(force(expr))
-  withr::with_preserve_seed({
-    set.seed(seed)
-    force(expr)
-  })
-}
+# Seeded draws use .rum_with_seed() in R/rum-design.R: withr::with_seed(), which restores the caller's
+# random-number state, so the package never writes .Random.seed or the global environment.
 
 rum_simulate <- function(data, par, seed = NULL, policy_law = "normal") {
   .rum_check_data(data); .rum_check_par(data, par)

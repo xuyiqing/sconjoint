@@ -31,5 +31,5 @@ test_that("BHH draws are uniform, reproducible and shared across respondents", {
   crn <- sconjoint:::.rum_draw_designs_crn(sp, NULL, M = 20, seed = 3, n = 4)
   expect_equal(crn$key, rep(1L, 4))
   expect_equal(dim(crn$designs$all), c(20L, 5L, 27L))
-  expect_equal(dim(sconjoint:::.rum_draw_designs(sp, NULL, 6, seed = 1, T = 3)), c(6L, 3L, 27L))
+  expect_equal(dim(sconjoint:::.rum_draw_designs(sp, NULL, 6, seed = 1, n_task = 3)), c(6L, 3L, 27L))
 })
