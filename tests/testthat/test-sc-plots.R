@@ -418,4 +418,10 @@ test_that("sc_plot_shares draws favoring and opposing bars that add to 100 (0.4.
   bad <- sh; bad$estimate[1] <- 1.2; bad$kind <- NA
   expect_error(sc_plot_shares(bad), "between 0 and 1")
   expect_error(sc_plot_shares(sh, colors = "red"), "two colors")
+  # reference shares (for example the truth in a simulation)
+  expect_no_warning(pr <- draw(sc_plot_shares(sh, reference = c("b 1" = .5, "b 3" = .25), reference_label = "Truth")))
+  expect_equal(pr$reference, c(50, NA, 25))
+  expect_true(all(is.na(draw(sc_plot_shares(sh))$reference)))
+  expect_error(sc_plot_shares(sh, reference = c("b 1" = 1.5)), "reference shares must lie")
+  expect_error(sc_plot_shares(sh, reference = c(nope = .5)), "no name of reference")
 })

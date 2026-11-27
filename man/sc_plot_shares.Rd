@@ -14,7 +14,9 @@ sc_plot_shares(
   colors = c(.scp_blue, .scp_red),
   xlab = "Respondents (\%)",
   legend = TRUE,
-  main = NULL
+  main = NULL,
+  reference = NULL,
+  reference_label = NULL
 )
 }
 \arguments{
@@ -42,12 +44,19 @@ points.}
 \item{legend}{If \code{TRUE}, a legend at the bottom.}
 
 \item{main}{Optional title.}
+
+\item{reference}{Optional named numeric vector (names = target names) of
+reference shares between 0 and 1, for example true values in a
+simulation, drawn as open black circles.}
+
+\item{reference_label}{Legend label of the reference values (default
+"Reference").}
 }
 \value{
 Invisibly, the plotting data: a data frame with one row per target
 (\code{name}, \code{label}, \code{y}, \code{favor} and \code{oppose} in percent, the interval
-\code{lower} and \code{upper} in percent, \code{shown}, and \code{group} when \code{groups} is
-given).
+\code{lower} and \code{upper} in percent, \code{shown}, \code{reference} in percent, and
+\code{group} when \code{groups} is given).
 }
 \description{
 One row per target of an estimate table of \code{\link[=sc_share]{sc_share()}} targets: a blue bar

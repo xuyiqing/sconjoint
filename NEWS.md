@@ -9,7 +9,8 @@
   `height` (about 1.3 lets each ridge rise over the row above it), `bins` and `outline = "line"`
   (a line through the bin midpoints instead of steps).
 * New `sc_plot_shares()`: preference shares as favoring (blue, right) and opposing (red, left) bars
-  with each share's 95% interval, and `labels`, `order` and `groups` like the other plots.
+  with each share's 95% interval, optional `reference` values (such as the truth in a simulation),
+  and `labels`, `order` and `groups` like the other plots.
 * Ridge fills are opaque tints of the same colors, so overlapping ridges cover each other's tails;
   the zero line is drawn over them.
 * The book's applications draw each attribute's fitted tastes as one grouped ridge figure on a

@@ -235,6 +235,22 @@ probabilities, the AME, and importance shares, grouped by kind. Importance share
 run their largest miss is `r round(100 * imp_err, 1)` points, for
 `r sub("importance: ", "", est$name[imp_worst])`, so they should be read as rough.
 
+@fig-sim-shares shows the four preference shares another way: for each, the percent of respondents
+who favor the contrast (blue, right) and the percent who oppose it (red, left), with the share's 95%
+interval and the true share as an open circle. In this run,
+`r k <- sum(est$covered[est$kind == "share"]); if (k == 4) "all four intervals cover" else paste(k, "of the four intervals cover")`
+the truth.
+
+```{r}
+#| label: fig-sim-shares
+#| fig-cap: "Shares favoring and opposing, with the truth"
+#| fig-width: 7.2
+#| fig-height: 3.4
+sh <- est[est$kind == "share", ]
+sc_plot_shares(sh, labels = lab, reference = truth_of[sh$name], reference_label = "Truth",
+               groups = c("One attribute", "One attribute", "One attribute", "Trade-off"))
+```
+
 Although two population mean tastes---for party and policy---sit close to zero, that does not mean
 respondents do not care (@fig-sim-laws).
 

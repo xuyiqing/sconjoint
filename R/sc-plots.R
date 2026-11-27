@@ -536,10 +536,15 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #' @param xlab Label of the horizontal axis.
 #' @param legend If `TRUE`, a legend at the bottom.
 #' @param main Optional title.
+#' @param reference Optional named numeric vector (names = target names) of
+#'   reference shares between 0 and 1, for example true values in a
+#'   simulation, drawn as open black circles.
+#' @param reference_label Legend label of the reference values (default
+#'   "Reference").
 #' @return Invisibly, the plotting data: a data frame with one row per target
 #'   (`name`, `label`, `y`, `favor` and `oppose` in percent, the interval
-#'   `lower` and `upper` in percent, `shown`, and `group` when `groups` is
-#'   given).
+#'   `lower` and `upper` in percent, `shown`, `reference` in percent, and
+#'   `group` when `groups` is given).
 #' @examples
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
 #' if (!is.null(fit)) {
@@ -549,7 +554,8 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #' }
 #' @export
 sc_plot_shares <- function(shares, labels = NULL, order = NULL, groups = NULL, intervals = TRUE, hide_wide = TRUE,
-                           colors = c(.scp_blue, .scp_red), xlab = "Respondents (%)", legend = TRUE, main = NULL) {
+                           colors = c(.scp_blue, .scp_red), xlab = "Respondents (%)", legend = TRUE, main = NULL,
+                           reference = NULL, reference_label = NULL) {
   fun <- "sc_plot_shares"
   sh <- .scp_tables(list(shares), fun)[[1L]]
   kinds <- sh$kind[!is.na(sh$kind)]
@@ -566,9 +572,13 @@ sc_plot_shares <- function(shares, labels = NULL, order = NULL, groups = NULL, i
   x <- sh[match(rows, sh$name), , drop = FALSE]
   favor <- 100 * x$estimate
   shown <- isTRUE(intervals) & .scp_shown(x$lower, x$upper, hide_wide)
+  ref <- .scp_reference(reference, rows, fun)
+  if (!is.null(ref) && any(is.finite(ref) & (ref < 0 | ref > 1)))
+    stop("sc_plot_shares(): reference shares must lie between 0 and 1", call. = FALSE)
+  if (is.null(reference_label)) reference_label <- "Reference"
   pd <- data.frame(name = rows, label = if (is.character(labs)) labs else rows, y = yy,
                    favor = favor, oppose = 100 - favor, lower = 100 * x$lower, upper = 100 * x$upper,
-                   shown = shown, stringsAsFactors = FALSE)
+                   shown = shown, reference = if (is.null(ref)) NA_real_ else 100 * ref, stringsAsFactors = FALSE)
   if (!is.null(grp)) pd$group <- grp$group
   op <- .scp_par_keep(); on.exit(graphics::par(op))
   .scp_paper_par()
@@ -588,11 +598,13 @@ sc_plot_shares <- function(shares, labels = NULL, order = NULL, groups = NULL, i
   graphics::rect(-(100 - favor[ok]), yy[ok] - .3, 0, yy[ok] + .3, col = .scp_tint(colors[2L], .75), border = NA)
   graphics::abline(v = 0, col = .scp_dark, lwd = .8)
   if (any(shown)) graphics::segments(pd$lower[shown], yy[shown], pd$upper[shown], yy[shown], col = .scp_dark, lwd = 1.3)
+  if (!is.null(ref)) graphics::points(100 * ref, yy, pch = 21, bg = "white", col = "black", cex = 1.2)
   if (show_leg) {
     lg <- c("Favoring", "Opposing"); fl <- c(.scp_tint(colors[1L], .75), .scp_tint(colors[2L], .75))
-    bd <- c(NA, NA); lc <- c(NA, NA); lt <- c(NA, NA)
-    if (any(shown)) { lg <- c(lg, "95% interval of the share"); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, .scp_dark); lt <- c(lt, 1) }
-    .scp_bottom_legend(legend = lg, fill = fl, border = bd, col = lc, lty = lt, lwd = 1.3)
+    bd <- c(NA, NA); lc <- c(NA, NA); lt <- c(NA, NA); lp <- c(NA, NA)
+    if (any(shown)) { lg <- c(lg, "95% interval of the share"); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, .scp_dark); lt <- c(lt, 1); lp <- c(lp, NA) }
+    if (!is.null(ref)) { lg <- c(lg, reference_label); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, "black"); lt <- c(lt, NA); lp <- c(lp, 1) }
+    .scp_bottom_legend(legend = lg, fill = fl, border = bd, col = lc, lty = lt, lwd = 1.3, pch = lp, pt.cex = 1.2)
   }
   invisible(pd)
 }
