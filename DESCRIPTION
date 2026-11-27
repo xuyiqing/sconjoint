@@ -1,6 +1,6 @@
 Package: sconjoint
 Title: Structural Random-Utility Estimation for Conjoint Experiments
-Version: 0.4.0.9000
+Version: 0.4.1
 Date: 2026-11-25
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),

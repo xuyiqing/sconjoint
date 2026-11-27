@@ -75,3 +75,15 @@ Please cite the paper when you use the package:
 
 The bundled data come from @graham2020democracy and @ballard2017structure. Please cite them when
 you use the data.
+
+<!-- badges: start -->
+
+**sconjoint**: [![Lifecycle: experimental](https://lifecycle.r-lib.org/articles/figures/lifecycle-experimental.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+```{=html}
+<!-- Add after the CRAN release (these show "not found" until then):
+[<img src="https://www.r-pkg.org/badges/version/sconjoint" alt="CRAN status"/>](https://CRAN.R-project.org/package=sconjoint) [<img src="https://cranlogs.r-pkg.org/badges/grand-total/sconjoint" alt="CRAN downloads"/>](https://cran.r-project.org/package=sconjoint)
+-->
+```
+
+<!-- badges: end -->

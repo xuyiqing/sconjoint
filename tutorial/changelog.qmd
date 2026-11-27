@@ -1,55 +1,30 @@
 # Changelog {#sec-changelog .unnumbered}
 
-## sconjoint 0.4.0.9000 (development)
+## sconjoint 0.4.1
 
-This version follows the current paper, @acharya2026structural. The package now fits one model:
-the structural random-utility model with a neural-network mean and $q$ taste factors.
+This version follows the current paper, @acharya2026structural. The package fits one model: a
+mixed logit for repeated choices whose mean tastes come from a neural network, with $q$ taste
+factors.
 
-**Removed.**
+- **Workflow:** `sc_design()`, `sc_code()`, `sc_data()`, `sc_example_data()`, `sc_fit()`,
+  `sc_select_rank()`, `sc_states()`, `sc_save()`, `sc_load()`.
+- **Quantities:** `sc_mean()`, `sc_share()`, `sc_contest()`, `sc_ame_switch()`, `sc_importance()`,
+  `sc_decisiveness()` and others (@sec-quantities), estimated by `sc_estimate()` with a cross-fitted
+  one-step correction. `sc_posterior()` summarizes individual respondents.
+- **Plots and tables:** `sc_plot_estimates()`, `sc_plot_laws()`, `sc_plot_preferences()`,
+  `sc_plot_importance()`, `sc_plot_lines()`, `sc_plot_posterior()` and `sc_table()` (@sec-plots).
+- **Data:** `gs2020` and `br2017` as used in the paper, and `simconjoint`, a simulated experiment
+  with a known truth.
+- **Removed:** the earlier estimators `scfit()` and `scmix()` with their functions, the datasets
+  `sw2022`, `bs2013` and `simdata`, and the dependence on `torch`. The last version with them is
+  tagged `pre-rum-only-2026-11-25`.
 
-- The earlier deep-network estimator `scfit()` and its `sc_*` functions, and the mixed-logit
-  estimator `scmix()` and its `scmix_*` functions. The last version with them is tagged
-  `pre-rum-only-2026-11-25` in the repository.
-- The datasets `sw2022`, `bs2013` and `simdata`. The paper no longer uses them.
-- The dependence on `torch`. The model is trained in R and C++.
+From the paper's saved fits, `sc_estimate()` reproduces the paper's estimates, standard errors and
+intervals for both applications.
 
-**Data.**
+## Earlier versions
 
-- `gs2020` gains `on_left`, the screen side of each candidate. The paper puts the left-displayed
-  candidate first, so its position effect is a screen-side effect.
-- `br2017` gains the raw covariates `resp_age`, `resp_educ` and `resp_income` and the indicator
-  `valid_income` for the 1,991 respondents in the paper's sample.
-- `simconjoint`, a simulated candidate-choice conjoint (800 respondents, 10 tasks, four attributes,
-  two taste factors), and `simconjoint_truth`, its true parameters, each respondent's tastes and the
-  exact population values of the quantities the simulation chapter estimates.
-- `sc_example_data("gs")` and `sc_example_data("br")` build the paper's exact model inputs, folds
-  and validation respondents from the bundled data.
-
-**New functions.**
-
-- Data and fit: `sc_data()`, `sc_example_data()`, `sc_fit()`, `sc_select_rank()`, `sc_states()`,
-  `sc_save()`, `sc_load()`.
-- Designs: `sc_design()` describes the most common conjoint design (each attribute drawn on its
-  own, two profiles per task, a fixed number of tasks) and how profiles are coded; `sc_code()`
-  codes recorded profiles with it. `sc_data()`, `sc_states()`, `sc_ame_switch()` and
-  `sc_importance()` accept such a design, so the whole workflow runs on experiments other than the
-  paper's two.
-- Targets: `sc_mean()`, `sc_share()`, `sc_ratio()`, `sc_difference()`, `sc_contest()`,
-  `sc_ame_switch()`, `sc_ame_rows()`, `sc_importance()`, `sc_decisiveness()`, and the tax-plan
-  helpers `sc_br_revenue_contrast()`, `sc_br_plan_contest()` and `sc_br_endpoint_ame()`.
-- Estimation: `sc_estimate()` (cross-fitted one-step correction with held-out information, bounded
-  updates for shares, one joint update for importance shares, intervals chosen by the type of
-  quantity, and the delta method for ratios and differences) and `sc_fitted_law()`.
-- Respondents: `sc_posterior()`.
-- Plots and tables (base graphics, no new dependencies): `sc_plot_estimates()` (also `plot()` on
-  an estimate table), `sc_plot_laws()`, `sc_plot_preferences()` (the paper's four-panel summary),
-  `sc_plot_importance()`, `sc_plot_lines()`, `sc_plot_posterior()`, and `sc_table()` (a data frame,
-  Markdown or LaTeX).
-
-From the paper's fold states, `sc_estimate()` reproduces the paper's results files for both
-applications: estimates, standard errors and intervals to $10^{-10}$, and bounded shares to
-$10^{-8}$.
-
-**Book.** Rewritten for the new model. The application chapters start from the paper's saved fits,
-which are a separate download. The simulation chapter runs live on `simconjoint` and compares
-every estimate with the truth. The figures are drawn with the package's plot functions (@sec-plots), except the tax-plan contest figure, which has its own code.
+Versions 0.2.0 to 0.2.2 (May to July 2026) implemented the paper's earlier estimator, `scfit()`: a
+deep network for each respondent's tastes, trained with `torch`, followed by debiased quantities
+such as importance, vote shares and marginal rates of substitution. They bundled five datasets.
+The 0.3 development series added a mixed-logit estimator, `scmix()`.

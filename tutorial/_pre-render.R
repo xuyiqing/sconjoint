@@ -2,9 +2,9 @@
 ## any chapter, so it only checks; settings that chapters need are made inside
 ## each chapter.
 if (!requireNamespace("sconjoint", quietly = TRUE) ||
-    utils::packageVersion("sconjoint") < "0.4.0.9000" ||
+    utils::packageVersion("sconjoint") < "0.4.1" ||
     !"sc_estimate" %in% getNamespaceExports("sconjoint")) {
-  stop("The book needs sconjoint 0.4.0.9000 or later (with sc_estimate()). ",
+  stop("The book needs sconjoint 0.4.1 or later (with sc_estimate()). ",
        "Install it from the package repository first.", call. = FALSE)
 }
 ## The installation, application, inference and respondents chapters read the
