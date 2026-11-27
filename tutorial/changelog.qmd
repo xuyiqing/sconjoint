@@ -1,5 +1,15 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## sconjoint 0.4.3
+
+Plots and prose; estimates are unchanged. `sc_plot_laws()`, `sc_plot_estimates()` and
+`sc_plot_preferences()` take `groups`, which names groups of rows (such as the levels of one
+attribute) at the left with a gap between them. Ridge plots of fitted laws can mark the estimated
+means, overlap (`height`) and use a smooth outline (`outline = "line"`). The applications now show
+every fitted taste in one grouped ridge figure on a shared axis (@sec-gs, @sec-br). The new
+`sc_plot_shares()` draws preference shares as favoring and opposing bars, and @sec-plots shows how to
+adjust a figure. The book's prose was rewritten to read more smoothly.
+
 ## sconjoint 0.4.2
 
 Documentation only. The saved fits are published with checksums (@sec-install), the README

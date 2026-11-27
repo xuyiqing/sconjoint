@@ -1,3 +1,22 @@
+# sconjoint 0.4.3
+
+* `sc_plot_laws()`, `sc_plot_estimates()` and `sc_plot_preferences()` take `groups`: rows that belong
+  together (for example the levels of one attribute) are named in grey at the left, with a small gap
+  between groups. In `sc_plot_laws(layout = "ridges")` and Panel B of `sc_plot_preferences()` the
+  ridge fills alternate from group to group.
+* `sc_plot_laws(layout = "ridges")` now also takes `means` (a vertical line from the baseline to the
+  outline at each estimated mean) and draws each ridge only where it holds mass. New arguments
+  `height` (about 1.3 lets each ridge rise over the row above it), `bins` and `outline = "line"`
+  (a line through the bin midpoints instead of steps).
+* New `sc_plot_shares()`: preference shares as favoring (blue, right) and opposing (red, left) bars
+  with each share's 95% interval, and `labels`, `order` and `groups` like the other plots.
+* Ridge fills are opaque tints of the same colors, so overlapping ridges cover each other's tails;
+  the zero line is drawn over them.
+* The book's applications draw each attribute's fitted tastes as one grouped ridge figure on a
+  shared axis; the plots chapter adds the share bars and examples of adjusting a figure (labels,
+  order, colors, axis limits, several plots in one figure); and the prose was rewritten for
+  readability. Estimates and numbers are unchanged.
+
 # sconjoint 0.4.2
 
 * Documentation only; the estimator and its results are unchanged.

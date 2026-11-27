@@ -16,7 +16,8 @@ sc_plot_preferences(
   ticks = NULL,
   titles = NULL,
   hide_wide = TRUE,
-  widths = NULL
+  widths = NULL,
+  groups = NULL
 )
 }
 \arguments{
@@ -47,11 +48,16 @@ as grey diamonds.}
 \item{hide_wide}{Hide intervals spanning at least 95 points in Panel C.}
 
 \item{widths}{Optional relative widths of the label column and the panels.}
+
+\item{groups}{Optional groups of rows (for example attributes), named in
+grey at the left of the label column, with a small gap and alternating
+ridge fills between groups: one group per row in order, or a character
+vector named by target name. The rows of a group must be adjacent.}
 }
 \value{
 Invisibly, a list: \code{rows} (a data frame with each row's name,
-label, position and the scaled estimates and intervals drawn), \code{xlim} and
-\code{ticks} (lists by panel).
+label, position, group when \code{groups} is given, and the scaled estimates
+and intervals drawn), \code{xlim} and \code{ticks} (lists by panel).
 }
 \description{
 Four panels side by side, one row per feature: (A) the mean taste with its

@@ -78,7 +78,7 @@ test_that("sc_plot_laws draws ridges and panels", {
   bw <- diff(p$x[1:2])
   expect_lt(abs(sum(p$density[p$law == 1]) * bw - 1), .02)
   expect_no_warning(draw(sc_plot_laws(laws[[1]], truth = function(x) stats::dnorm(x), xlim = c(-6, 4))))
-  expect_error(sc_plot_laws(laws, means = means), "panels")
+  expect_no_warning(draw(sc_plot_laws(laws, means = means)))     # means also mark ridges (0.4.3)
   expect_error(sc_plot_laws(laws, means = means[1, ], layout = "panels"), "one mean per law")
   expect_error(sc_plot_laws(list(data.frame(a = 1))), "not a table from sc_fitted_law")
   expect_error(sc_plot_laws(laws, truth = list(function(x) x)), "density functions")
@@ -361,4 +361,61 @@ test_that("a panel's limits include the corrected mean and its interval", {
   grDevices::pdf(NULL); on.exit(grDevices::dev.off())
   d <- sc_plot_laws(law, means = m, layout = "panels")
   expect_gte(max(d$x), 5.5)
+})
+
+test_that("groups add grey labels, gaps between groups and grouped plotting data (0.4.3)", {
+  skip_if(is.null(toy))
+  # estimates: rows of a group sit one unit apart, groups 1.6 apart
+  three <- sc_estimate(toy, list(sc_mean("t6", "tax6_linear"), sc_mean("t5", "tax5_linear"),
+                                 sc_mean("t1", "tax1_linear")))
+  pd <- draw(sc_plot_estimates(three, groups = c("Top", "Top", "Bottom")))
+  expect_equal(pd$row_group, c("Top", "Top", "Bottom"))
+  expect_equal(-diff(pd$y), c(1, 1.6))
+  pd2 <- draw(sc_plot_estimates(three, groups = c(t1 = "Bottom", t5 = "Top", t6 = "Top"), order = c("t1", "t5", "t6")))
+  expect_equal(pd2$row_group, c("Bottom", "Top", "Top"))
+  expect_null(draw(sc_plot_estimates(three))$row_group)
+  expect_error(sc_plot_estimates(three, groups = c("A", "B", "A")), "not adjacent")
+  expect_error(sc_plot_estimates(three, groups = c("A", "B")), "labels has 2 entries")
+  expect_error(sc_plot_estimates(three, groups = c(t1 = "A")), "names no group")
+  expect_error(sc_plot_estimates(three, groups = list("A", "A", "B")), "character vector")
+  # laws as grouped ridges with mean marks and a line outline
+  l3 <- list(sc_fitted_law(toy, "tax6_linear"), sc_fitted_law(toy, "tax5_linear"), sc_fitted_law(toy, "tax1_linear"))
+  expect_no_warning(r <- draw(sc_plot_laws(l3, labels = c("Top", "Upper", "Bottom"), means = three,
+                                           groups = c("High", "High", "Low"), height = 1.3, bins = 300,
+                                           outline = "line")))
+  expect_equal(unique(r$group), c("High", "Low"))
+  expect_equal(as.vector(table(r$law)), rep(300L, 3))
+  expect_error(sc_plot_laws(l3, groups = c("a", "a", "b"), layout = "panels"), "ridges")
+  expect_error(sc_plot_laws(l3, height = 0), "height")
+  expect_error(sc_plot_laws(l3, bins = 5), "bins")
+  expect_error(sc_plot_laws(l3, outline = "smooth"), "should be one of")
+  # the ridges' densities do not depend on the drawing options
+  r0 <- draw(sc_plot_laws(l3, bins = 300))
+  expect_equal(r0$density, r$density)
+  # preferences: grouped rows, same estimates as without groups
+  pr <- draw(sc_plot_preferences(means, laws, shares, groups = c("Top", "Bottom")))
+  p0 <- draw(sc_plot_preferences(means, laws, shares))
+  expect_equal(pr$rows$group, c("Top", "Bottom"))
+  expect_equal(pr$rows[setdiff(names(pr$rows), c("group", "y"))], p0$rows[setdiff(names(p0$rows), "y")])
+  expect_equal(-diff(pr$rows$y), 1.6)
+  expect_false("group" %in% names(p0$rows))
+})
+
+test_that("sc_plot_shares draws favoring and opposing bars that add to 100 (0.4.3)", {
+  skip_if(is.null(toy))
+  sh <- sc_estimate(toy, lapply(1:3, function(j) sc_share(paste("b", j), paste0("tax", j, "_linear"))), bounded = FALSE)
+  expect_no_warning(pd <- draw(sc_plot_shares(sh, labels = c("One", "Two", "Three"), groups = c("A", "A", "B"),
+                                              main = "Shares")))
+  expect_equal(pd$favor, 100 * sh$estimate)
+  expect_equal(pd$favor + pd$oppose, rep(100, 3))
+  expect_equal(pd$group, c("A", "A", "B"))
+  expect_equal(-diff(pd$y), c(1, 1.6))
+  wide <- (sh$upper - sh$lower) >= .95
+  expect_equal(pd$shown, !wide & is.finite(sh$lower) & is.finite(sh$upper))
+  expect_false(any(draw(sc_plot_shares(sh, intervals = FALSE))$shown))
+  expect_equal(draw(sc_plot_shares(sh, order = c("b 3", "b 1")))$name, c("b 3", "b 1"))
+  expect_error(sc_plot_shares(means), "sc_share\\(\\) targets only")
+  bad <- sh; bad$estimate[1] <- 1.2; bad$kind <- NA
+  expect_error(sc_plot_shares(bad), "between 0 and 1")
+  expect_error(sc_plot_shares(sh, colors = "red"), "two colors")
 })

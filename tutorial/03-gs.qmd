@@ -151,28 +151,23 @@ attr(laws[[1]], "summary")
 head(laws[[1]])
 ```
 
-The following figures provide additional fitted-distribution diagnostics for all thirty
-coefficients, while the full inventory is retained in the replication materials.
+The figure below shows the fitted laws of all thirty tastes on one axis, grouped by attribute,
+while the full inventory is retained in the replication materials.
 
 ```{r}
-#| label: fig-gs-distributions-1
-#| fig-cap: "Fitted tastes: party, policy and governance"
-#| fig-width: 8.2
-#| fig-height: 9.2
-sc_plot_laws(laws[1:15], labels = labels[1:15], means = pick(means, fn[1:15]), layout = "panels")
+#| label: fig-gs-distributions
+#| fig-cap: "Fitted tastes, by attribute"
+#| fig-width: 7.6
+#| fig-height: 9.8
+attribute <- c("Party", rep("Policy", 2), rep("Governance", 6), rep("Violations", 7),
+               rep("Scandals", 2), "Sex", rep("Race", 3), rep("Profession", 8))
+sc_plot_laws(laws, labels = labels, means = pick(means, fn), groups = attribute, height = 1.3,
+             bins = 300, outline = "line", xlim = c(-4, 4), xlab = "Taste (logit units)")
 ```
 
-```{r}
-#| label: fig-gs-distributions-2
-#| fig-cap: "Fitted tastes: conduct and background"
-#| fig-width: 8.2
-#| fig-height: 9.2
-sc_plot_laws(laws[16:30], labels = labels[16:30], means = pick(means, fn[16:30]), layout = "panels")
-```
-
-In each panel, the blue curve shows fitted values before the one-step correction and red marks the
-corrected mean and its 95% interval, so the two need not line up. Each panel uses its own scales,
-and the reference levels are male, white, and business executive.
+Each curve shows fitted values before the one-step correction, and its vertical line marks the
+corrected mean, so the two need not line up. All thirty tastes share one axis, and the reference
+levels are male, white, and business executive.
 
 ## Effects on choices
 
@@ -229,7 +224,7 @@ a grey diamond (D).
 #| fig-height: 5.5
 lab <- setNames(labels, fn)
 sc_plot_preferences(means, setNames(laws, fn), shares, ames, labels = lab, reference = amce,
-                    order = fig_features,
+                    order = fig_features, groups = setNames(attribute, fn)[fig_features],
                     xlim = list(A = c(-1.55, 1.2), B = c(-4.6, 4.6), C = c(-6, 106), D = c(-26, 18)),
                     # ticks off the panels' edges, so neighbouring labels do not touch
                     ticks = list(A = c(-1, 0, 1), B = c(-4, 0, 4), D = c(-20, 0, 15)))

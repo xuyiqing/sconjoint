@@ -13,7 +13,11 @@ sc_plot_laws(
   xlim = NULL,
   xlab = "Utility contrast (logit units)",
   ncol = 3,
-  main = NULL
+  main = NULL,
+  groups = NULL,
+  height = 0.63,
+  bins = 150,
+  outline = c("step", "line")
 )
 }
 \arguments{
@@ -23,7 +27,7 @@ sc_plot_laws(
 names of \code{laws}. Default the names of \code{laws}, else "Law 1", ...}
 
 \item{means}{Optional estimate table from \code{\link[=sc_estimate]{sc_estimate()}} with one mean per
-law, in the order of \code{laws} (\code{"panels"} only).}
+law, in the order of \code{laws}.}
 
 \item{layout}{\code{"ridges"} or \code{"panels"}.}
 
@@ -38,21 +42,39 @@ values and returning the density there. Drawn as black lines.}
 \item{ncol}{Number of panel columns (\code{"panels"}).}
 
 \item{main}{Optional title (\code{"ridges"}).}
+
+\item{groups}{Optional groups of laws (\code{"ridges"} only): one group per law
+in order, or a character vector named by the names of \code{laws}. The laws of
+a group must be adjacent.}
+
+\item{height}{Height of each ridge's peak, in rows (\code{"ridges"}). The
+default 0.63 keeps rows apart; about 1.3 gives overlapping ridges.}
+
+\item{bins}{Number of bins of the outline (at least 20).}
+
+\item{outline}{\code{"step"} draws each bin's mass as a step (a point mass shows
+as a narrow bar); \code{"line"} joins the bin midpoints, which reads more
+smoothly with many bins (\code{"ridges"}).}
 }
 \value{
 Invisibly, the plotting data: a data frame with one row per law and
 bin (\code{law}, \code{label}, bin midpoint \code{x}, fitted \code{density}, true density
-\code{truth}).
+\code{truth}, and \code{group} when \code{groups} is given).
 }
 \description{
 Draws one or more fitted laws from \code{\link[=sc_fitted_law]{sc_fitted_law()}}: the population
 distribution of a taste contrast, a mixture of each held-out respondent's
-normal law. \code{"ridges"} stacks the laws in one panel, one row each, as the
-step outline of their mass in 150 bins, scaled to the same height (the
-paper's Panel B). \code{"panels"} gives each law its own panel over its means
-plus or minus three standard deviations (and zero), with its density on the
-vertical axis; \code{means} adds the estimated mean taste as a red line with its
-95\% interval as a red bar.
+normal law. \code{"ridges"} stacks the laws in one panel on one horizontal
+axis, one row each, as the outline of their mass in \code{bins} bins, scaled to
+the same height and drawn only where a bin holds at least 1\% of the peak
+bin's mass (the paper's Panel B draws the whole baseline); \code{groups} names groups of
+rows (for example attributes) in grey to the left of the labels, with a gap
+and alternating fills between groups, and a \code{height} above about 1 lets
+each ridge rise over the row above it. \code{"panels"} gives each law its own
+panel over its means plus or minus three standard deviations (and zero),
+with its density on the vertical axis. \code{means} adds the estimated mean
+taste: in \code{"ridges"} a vertical line from the baseline to the outline, in
+\code{"panels"} a red line with its 95\% interval as a red bar.
 }
 \details{
 The curves are fitted values before the score correction, so a corrected
@@ -74,5 +96,8 @@ if (!is.null(fit)) {
   laws <- list(sc_fitted_law(fit, "tax1_linear"), sc_fitted_law(fit, "tax6_linear"))
   sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"))
   sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"), layout = "panels", ncol = 2)
+  means <- sc_estimate(fit, list(sc_mean("bottom", "tax1_linear"), sc_mean("top", "tax6_linear")))
+  sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"), means = means,
+               groups = c("Tax rates", "Tax rates"), height = 1.3)
 }
 }
