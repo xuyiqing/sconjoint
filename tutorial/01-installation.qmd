@@ -46,13 +46,17 @@ Fitting the model at the paper's settings takes hours. Most of the time goes to 
 respondent's information (@sec-inference), not to training the network. The paper's fold states
 are saved in two files:
 
-| File | Application | Taste factors | Size (bytes) | MD5 |
-|---|---|---|---|---|
-| `gs_q3.rds` | Graham and Svolik (2020) | 3 | 42,951,896 | `17d0f2efa2ecf7c4b2ce3b01991a893b` |
-| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | 20,506,732 | `6293fd6938d20477369b4f583c986a43` |
+| File | Application | Taste factors | Size |
+|---|---|---|---|
+| `gs_q3.rds` | Graham and Svolik (2020) | 3 | 42,951,896 bytes |
+| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | 20,506,732 bytes |
 
-The SHA-256 sums are `82ec4e8005d2979f8352d65d3104ea6d503542be005ed1c352658819af845731` for
-`gs_q3.rds` and `0aa879eadc4ed744ec508dd26fc7a85521326c3f8f8d107c03dd56e8fd245faa` for `br_q4.rds`.
+Their checksums:
+
+- `gs_q3.rds`: MD5 `17d0f2efa2ecf7c4b2ce3b01991a893b`; SHA-256
+  `82ec4e8005d2979f8352d65d3104ea6d503542be005ed1c352658819af845731`.
+- `br_q4.rds`: MD5 `6293fd6938d20477369b4f583c986a43`; SHA-256
+  `0aa879eadc4ed744ec508dd26fc7a85521326c3f8f8d107c03dd56e8fd245faa`.
 
 The files are too large for the package. They are published with the GitHub release
 [`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11). For each of the
