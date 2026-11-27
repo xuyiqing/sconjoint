@@ -61,6 +61,12 @@
 #'   their one-step estimates (faster).
 #' @param z Critical value of the intervals (default 1.96).
 #' @param joint_max_iter Iteration cap of the joint importance update.
+#' @param cores Number of processes. With more than one, the targets (each
+#'   element of `targets`: one target, or a set such as an importance set)
+#'   are estimated in parallel forked processes and stacked, with the same
+#'   results as one call; useful when there are many shares, whose bounded
+#'   updates are slow. Forking is not available on Windows, where the targets
+#'   run one after another.
 #' @return A data frame with one row per target: `name`, `kind`, `estimate`,
 #'   `plug_in` (the cross-fitted fitted value), `se`, `lower`, `upper`,
 #'   `interval` (`"wald"`, `"log-odds"` or `"none"`), `n` (respondents with
@@ -72,7 +78,14 @@
 #' if (!is.null(fit)) sc_estimate(fit, sc_mean("top rate", "tax6_linear"))
 #' }
 #' @export
-sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L) {
+sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L, cores = 1L) {
+  if (!is.numeric(cores) || length(cores) != 1L || !is.finite(cores) || cores < 1)
+    stop("sc_estimate(): cores must be one whole number >= 1", call. = FALSE)
+  cores <- as.integer(cores)
+  if (cores > 1L) {
+    tl <- .sc_flatten_targets(targets)
+    if (length(tl) > 1L) return(.sc_estimate_parallel(object, tl, bounded, z, joint_max_iter, cores))
+  }
   object <- .sc_states_check(object, population = TRUE)
   ctx <- .sc_context(object$data); data <- ctx$data; n <- data$n; FS <- object$folds
   tl <- .sc_flatten_targets(targets)
@@ -181,11 +194,52 @@ sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_ite
   res
 }
 
+# Each target (or target set) in its own forked process; rows, influence values and the update
+# records stacked in the order of the targets.
+.sc_estimate_parallel <- function(object, tl, bounded, z, joint_max_iter, cores) {
+  run <- function(t) sc_estimate(object, list(t), bounded = bounded, z = z, joint_max_iter = joint_max_iter)
+  parts <- if (.Platform$OS.type == "windows") lapply(tl, run) else
+    parallel::mclapply(tl, function(t) tryCatch(run(t), error = function(e) e),
+                       mc.cores = min(cores, length(tl)), mc.preschedule = FALSE)
+  for (p in parts) {
+    if (inherits(p, "error")) stop(conditionMessage(p), call. = FALSE)
+    if (inherits(p, "try-error")) stop(as.character(p), call. = FALSE)
+  }
+  res <- do.call(rbind, lapply(parts, function(p) { y <- as.data.frame(p); attributes(y)[c("influence", "bounded", "joint")] <- NULL; y }))
+  rownames(res) <- NULL
+  if (anyDuplicated(res$name))
+    stop("two targets are named '", res$name[duplicated(res$name)][1L], "'", call. = FALSE)
+  attr(res, "influence") <- do.call(cbind, lapply(parts, attr, "influence"))
+  B <- Filter(Negate(is.null), lapply(parts, attr, "bounded")); if (length(B)) attr(res, "bounded") <- B
+  J <- unlist(lapply(parts, attr, "joint"), recursive = FALSE); if (length(J)) attr(res, "joint") <- J
+  class(res) <- c("sc_estimates", "data.frame")
+  res
+}
+
+#' Print an estimate table
+#'
+#' Shows each target's estimate, its fitted value before the correction
+#' (`plug_in`), standard error, 95% interval and number of respondents,
+#' rounded to `digits` decimal places, and lists targets whose update did not
+#' converge. `all = TRUE` shows every column. The table itself keeps full
+#' precision (use [as.data.frame()] for the numbers).
+#'
+#' @param x An estimate table from [sc_estimate()].
+#' @param digits Decimal places.
+#' @param all If `TRUE`, show every column.
+#' @param ... Ignored.
+#' @return `x`, invisibly.
 #' @export
-print.sc_estimates <- function(x, digits = 4, ...) {
+print.sc_estimates <- function(x, digits = 3, all = FALSE, ...) {
   y <- as.data.frame(x); attr(y, "influence") <- NULL; attr(y, "bounded") <- NULL; attr(y, "joint") <- NULL
-  y$method <- NULL
-  print(y, digits = digits, row.names = FALSE)
+  if (!isTRUE(all)) y <- y[, intersect(c("name", "estimate", "plug_in", "se", "lower", "upper", "n"), names(y)), drop = FALSE]
+  num <- vapply(y, is.double, logical(1))
+  y[num] <- lapply(y[num], round, digits)
+  print(y, row.names = FALSE)
+  odd <- !is.na(x$status) & !x$status %in% c("one-step", "converged")
+  if (!isTRUE(all) && any(odd))
+    cat(sprintf("\nNot converged (one-step estimate kept): %s\n",
+                paste0(x$name[odd], " (", x$status[odd], ")", collapse = "; ")))
   invisible(x)
 }
 

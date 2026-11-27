@@ -47,7 +47,7 @@ points.}
 
 \item{reference}{Optional named numeric vector (names = target names) of
 reference shares between 0 and 1, for example true values in a
-simulation, drawn as open black circles.}
+simulation, drawn as open black circles; or a table from \code{\link[=sc_compare]{sc_compare()}}.}
 
 \item{reference_label}{Legend label of the reference values (default
 "Reference").}

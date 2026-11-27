@@ -12,11 +12,6 @@ library(sconjoint)
 fits <- getOption("sconjoint.fits", "fits")
 br <- sc_load(file.path(fits, "br_q4.rds"))
 if (is.null(br)) stop("This chapter needs the saved fit br_q4.rds; see the installation chapter.")
-tab <- function(e, digits = 3) {
-  out <- e[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
-  out[2:6] <- lapply(out[2:6], round, digits)
-  out
-}
 ```
 
 ```{r}
@@ -26,8 +21,8 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-As in @sec-gs, the chapter draws on the helper functions in `_figs-helpers.R`, such as
-`estimate_each()`.
+As in @sec-gs, the chapter loads `_figs-helpers.R`, which sets `cores` for `sc_estimate()` and
+defines `pick()`.
 
 ```{r}
 #| label: br-helpers
@@ -125,7 +120,7 @@ codes caused by the raise.
 brackets <- c("under $10k", "$10-35k", "$35-85k", "$85-175k", "$175-375k", "over $375k")
 contrast <- lapply(1:6, function(j) sc_br_revenue_contrast(j, profiles = prof, per_point = TRUE))
 means <- sc_estimate(br, lapply(1:6, function(j) sc_mean(brackets[j], contrast[[j]])))
-tab(means, 4)
+print(means, digits = 4)
 ```
 
 On average, higher rates lower utility in the bottom three brackets and raise it in the top two: per
@@ -136,7 +131,7 @@ rate point, the penalty below \$10,000 is -0.0577, whereas the gain above \$375,
 #| label: br-ratio
 ratio <- sc_ratio("bottom penalty / top gain", sc_mean("bottom", contrast[[1]]),
                   sc_mean("top", contrast[[6]]))
-tab(sc_estimate(br, ratio))
+sc_estimate(br, ratio)
 ```
 
 In relative terms, the bottom-bracket penalty is 2.61 times the top-bracket gain.
@@ -150,11 +145,11 @@ parallel.
 ```{r}
 #| label: br-shares
 top_55_35 <- sc_br_revenue_contrast(6, high = 55, low = 35, profiles = prof)
-shares <- estimate_each(br, c(
+shares <- sc_estimate(br, c(
   lapply(1:6, function(j) sc_share(brackets[j], contrast[[j]])),
   list(sc_share("top rate 35% to 55%", top_55_35),
-       sc_mean("top rate 35% to 55%: mean", top_55_35))))
-tab(shares, 4)
+       sc_mean("top rate 35% to 55%: mean", top_55_35))), cores = cores)
+print(shares, digits = 4)
 ```
 
 Across the full menu range, an estimated 69.1% favor raising the top rate from 5% to 55%, while
@@ -178,8 +173,8 @@ party_targets <- list()
 for (j in c(1, 6)) for (p in names(party_w))
   party_targets[[length(party_targets) + 1]] <-
     sc_share(paste(brackets[j], p, sep = ", "), contrast[[j]], w = party_w[[p]])
-party_shares <- estimate_each(br, party_targets)
-tab(party_shares)
+party_shares <- sc_estimate(br, party_targets, cores = cores)
+party_shares
 ```
 
 On raising the top rate, 83.5% of Democrats favor the increase compared with 52.8% of Republicans,
@@ -212,7 +207,7 @@ The difference between the two party means can also be estimated with its own in
 gap <- sc_difference("top rate: Democrats minus Republicans",
                      sc_mean("Democrats", contrast[[6]], w = party_w$Democrats),
                      sc_mean("Republicans", contrast[[6]], w = party_w$Republicans))
-tab(sc_estimate(br, gap), 4)
+print(sc_estimate(br, gap), digits = 4)
 ```
 
 ## Fitted distributions
@@ -370,9 +365,9 @@ minutes.
 
 ```{r}
 #| label: br-ames
-ames <- estimate_each(br, lapply(1:6, function(j) sc_br_endpoint_ame(brackets[j], j, profiles = prof)),
+ames <- sc_estimate(br, lapply(1:6, function(j) sc_br_endpoint_ame(brackets[j], j, profiles = prof)),
                       cores = min(6L, parallel::detectCores()))
-tab(ames)
+ames
 ```
 
 Raising the bottom rate from 0% to 25% lowers a plan's expected support by 18.8 percentage points,
@@ -430,7 +425,7 @@ dec <- sc_estimate(br, sc_decisiveness(
   menus = list(top = menu(6, c(5, 15, 25, 35, 45, 55)), bottom = menu(1, c(0, 5, 15, 25))),
   pairs = list(top = rbind(c(6L, 1L), c(6L, 4L)), bottom = rbind(c(4L, 1L))),
   names = c("top rate: 55 vs 5", "top rate: 55 vs 35", "bottom rate: 25 vs 0")))
-tab(dec)
+dec
 ```
 
 Exchanging top rates of 55% and 5% between two plans would reverse an estimated 45.4% of choices,

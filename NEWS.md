@@ -11,6 +11,16 @@
 * New `sc_plot_shares()`: preference shares as favoring (blue, right) and opposing (red, left) bars
   with each share's 95% interval, optional `reference` values (such as the truth in a simulation),
   and `labels`, `order` and `groups` like the other plots.
+* New `sc_compare()`: lines an estimate table up with known true values (for checks on simulated
+  data), with the error and whether each interval covers the truth; prints a coverage line, gives a
+  markdown table with `format = "markdown"`, and serves as `reference` for the plots.
+* New `sc_spread()`: each feature's spread of tastes among respondents with the same
+  characteristics (the square roots of the diagonal of `Lambda Lambda'`), by fold and averaged.
+* `sc_estimate()` gains `cores`: independent targets run in parallel forked processes with the same
+  results as one process (one after another on Windows).
+* Estimate tables print compactly: name, estimate, `plug_in`, SE, interval and n, rounded to
+  `digits` decimal places, with a note on any update that did not converge; `print(x, all = TRUE)`
+  shows every column.
 * Ridge fills are opaque tints of the same colors, so overlapping ridges cover each other's tails;
   the zero line is drawn over them.
 * The book's applications draw each attribute's fitted tastes as one grouped ridge figure on a

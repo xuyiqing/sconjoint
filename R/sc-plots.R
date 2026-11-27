@@ -194,6 +194,7 @@
 # Named numeric reference values aligned to `rows` (NA where absent).
 .scp_reference <- function(reference, rows, fun) {
   if (is.null(reference)) return(NULL)
+  if (inherits(reference, "sc_compare")) reference <- stats::setNames(reference$truth, reference$name)
   if (!is.numeric(reference) || is.null(names(reference)))
     stop(sprintf("%s(): reference must be a named numeric vector (names = target names)", fun), call. = FALSE)
   out <- unname(reference[match(rows, names(reference))])
@@ -402,7 +403,8 @@
 #' @param colors Colors of the groups (default house blue, green, red, ...).
 #' @param reference Optional named numeric vector (names = target names) of
 #'   reference values on the unscaled scale, for example true values in a
-#'   simulation or regression AMCEs; multiplied by `scale`.
+#'   simulation or regression AMCEs; multiplied by `scale`. A table from
+#'   [sc_compare()] gives its true values.
 #' @param reference_label Legend label of the reference values (default
 #'   "Reference").
 #' @param reference_style `"diamond"` (a grey diamond just below the row's
@@ -538,7 +540,7 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #' @param main Optional title.
 #' @param reference Optional named numeric vector (names = target names) of
 #'   reference shares between 0 and 1, for example true values in a
-#'   simulation, drawn as open black circles.
+#'   simulation, drawn as open black circles; or a table from [sc_compare()].
 #' @param reference_label Legend label of the reference values (default
 #'   "Reference").
 #' @return Invisibly, the plotting data: a data frame with one row per target

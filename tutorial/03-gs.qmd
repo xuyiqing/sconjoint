@@ -13,12 +13,6 @@ library(sconjoint)
 fits <- getOption("sconjoint.fits", "fits")
 gs <- sc_load(file.path(fits, "gs_q3.rds"))
 if (is.null(gs)) stop("This chapter needs the saved fit gs_q3.rds; see the installation chapter.")
-# a short table of estimates
-tab <- function(e, digits = 3) {
-  out <- e[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
-  out[2:6] <- lapply(out[2:6], round, digits)
-  out
-}
 ```
 
 ```{r}
@@ -28,9 +22,10 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-The chunk below loads two helpers from the book's `_figs-helpers.R`: `estimate_each()` runs
-independent targets in parallel with the same results as one `sc_estimate()` call, while `pick()`
-selects rows by name. The figures come from the package's plot functions (@sec-plots).
+The chunk below loads the book's `_figs-helpers.R`. It sets `cores`, the number of processes that
+`sc_estimate(cores = )` uses to estimate independent targets in parallel, with the same results as
+one process, and defines `pick()`, which selects rows by name. The figures come from the package's
+plot functions (@sec-plots).
 
 ```{r}
 #| label: gs-helpers
@@ -105,7 +100,7 @@ labels <- c("Co-partisan", "Economic policy (+1)", "Social policy (+1)",
             "Extramarital affair", "Underpaid taxes", "Female", "Asian", "Black", "Hispanic",
             "Farmer", "Lawyer", "Legislative staffer", "Police officer", "Army veteran",
             "Navy veteran", "Small business owner", "Teacher")
-tab(means[c(1:3, 10:18), ])
+means[c(1:3, 10:18), ]
 ```
 
 Among partisans and leaners, a co-partisan gains 0.81 units of utility on average, while each step
@@ -129,8 +124,8 @@ each update takes about 15 seconds, they are run in parallel.
 ```{r}
 #| label: gs-shares
 fig_features <- fn[c(1:3, 10:18)]
-shares <- estimate_each(gs, lapply(fig_features, function(f) sc_share(f, f, w = w_of(f))))
-tab(shares, 4)
+shares <- sc_estimate(gs, lapply(fig_features, function(f) sc_share(f, f, w = w_of(f))), cores = cores)
+print(shares, digits = 4)
 ```
 
 An estimated 82.5% of partisans and leaners prefer a co-partisan (95% interval 79.7% to 84.9%). By
@@ -194,8 +189,8 @@ ame_target <- function(f) {
     sc_ame_switch(f, "dem", f, "g_boardElect", design = "gs")
   }
 }
-ames <- estimate_each(gs, lapply(fig_features, ame_target))
-tab(ames)
+ames <- sc_estimate(gs, lapply(fig_features, ame_target), cores = cores)
+ames
 ```
 
 For comparison, the regression AMCEs are the coefficients of a linear regression of the choice on
@@ -260,8 +255,8 @@ comp <- list()
 for (ideo in c("lib", "mod", "con")) for (f in violations)
   comp[[length(comp) + 1]] <- sc_share(paste(ideo, f, sep = "."), c(f, "diff_respParty"),
                                        w = as.numeric(g$ideology == ideo) * g$PL)
-comp_est <- estimate_each(gs, comp)
-tab(comp_est[grepl("journalists", comp_est$name), ])
+comp_est <- sc_estimate(gs, comp, cores = cores)
+comp_est[grepl("journalists", comp_est$name), ]
 ```
 
 Despite the large mean penalty for prosecuting journalists, an estimated 33.8% of liberal partisans
@@ -292,7 +287,7 @@ prosecuting journalists and $\tau_p$ is the mean co-partisan taste.
 price <- sc_ratio("journalists penalty / co-partisan gain",
                   sc_mean("journalists, partisans", "diff_dem_code_u_journalists", w = "PL"),
                   sc_mean("co-partisan", "diff_respParty", w = "PL"))
-tab(sc_estimate(gs, price))
+sc_estimate(gs, price)
 ```
 
 The estimated ratio is 1.14 (95% interval 0.91 to 1.37), indicating that on average the two are of
@@ -372,9 +367,9 @@ attrs <- list(party = "diff_respParty", econ = "diff_p1_num", social = "diff_p2_
               race = grep("^diff_race_", fn, value = TRUE),
               profession = grep("^diff_pro_", fn, value = TRUE))
 imp_groups <- list(All = "PL", Dem = function(g) g$party == "Dem", Rep = function(g) g$party == "Rep")
-imp <- estimate_each(gs, lapply(names(imp_groups), function(k)
+imp <- sc_estimate(gs, lapply(names(imp_groups), function(k)
   sc_importance(attrs, menus = list(econ = matrix(1:4), social = matrix(1:4)),
-                w = imp_groups[[k]], names = paste(k, names(attrs), sep = "."))))
+                w = imp_groups[[k]], names = paste(k, names(attrs), sep = "."))), cores = cores)
 imp[, c("name", "estimate", "plug_in", "n", "status")]
 ```
 
@@ -423,13 +418,13 @@ matchups each respondent saw. In the call below, the conduct swaps take about tw
 conduct <- grep("^diff_dem_code_", fn)
 action <- grep("^diff_dem_code_[uv]_", fn[conduct])
 generic <- c(TRUE, grepl("^diff_dem_code_g_", fn[conduct]))   # reference row plus generic codes
-dec <- estimate_each(gs, list(
+dec <- sc_estimate(gs, list(
   sc_decisiveness(list(party = "diff_respParty"), pairs = list(party = c(2L, 1L)),
                   names = "party", w = "PL"),
   sc_decisiveness(list(conduct = fn[conduct]), pairs = list(conduct = cbind(1L + action, 1L)),
                   allowed = list(conduct = generic),
-                  names = sub("^diff_dem_code_[uv]_", "", fn[conduct][action]))))
-tab(dec)
+                  names = sub("^diff_dem_code_[uv]_", "", fn[conduct][action]))), cores = cores)
+dec
 ```
 
 Among partisans and leaners, exchanging party reverses an estimated 36.1% of choices (95% interval

@@ -256,4 +256,5 @@ sc_table(All = means, Democrats = means_dem, labels = paste("Bracket", 1:6), sty
          format = "latex", caption = "Toy estimates")
 ```
 
-@sec-gs and @sec-br each show one table at full scale.
+@sec-gs and @sec-br each show one table at full scale. For checks on simulated data,
+`sc_compare()` lines estimates up with their true values and reports coverage (@sec-quickstart).

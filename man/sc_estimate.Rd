@@ -4,7 +4,14 @@
 \alias{sc_estimate}
 \title{Estimate population quantities from cross-fitted fold states}
 \usage{
-sc_estimate(object, targets, bounded = TRUE, z = 1.96, joint_max_iter = 50L)
+sc_estimate(
+  object,
+  targets,
+  bounded = TRUE,
+  z = 1.96,
+  joint_max_iter = 50L,
+  cores = 1L
+)
 }
 \arguments{
 \item{object}{Fold states from \code{\link[=sc_states]{sc_states()}} or \code{\link[=sc_load]{sc_load()}}, covering every
@@ -21,6 +28,13 @@ their one-step estimates (faster).}
 \item{z}{Critical value of the intervals (default 1.96).}
 
 \item{joint_max_iter}{Iteration cap of the joint importance update.}
+
+\item{cores}{Number of processes. With more than one, the targets (each
+element of \code{targets}: one target, or a set such as an importance set)
+are estimated in parallel forked processes and stacked, with the same
+results as one call; useful when there are many shares, whose bounded
+updates are slow. Forking is not available on Windows, where the targets
+run one after another.}
 }
 \value{
 A data frame with one row per target: \code{name}, \code{kind}, \code{estimate},

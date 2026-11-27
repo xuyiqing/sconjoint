@@ -27,6 +27,7 @@ Imports:
     Rcpp,
     graphics,
     grDevices,
+    parallel,
     stats,
     utils,
     withr,
