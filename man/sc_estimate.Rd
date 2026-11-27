@@ -41,7 +41,9 @@ A data frame with one row per target: \code{name}, \code{kind}, \code{estimate},
 \code{plug_in} (the cross-fitted fitted value), \code{se}, \code{lower}, \code{upper},
 \code{interval} (\code{"wald"}, \code{"log-odds"} or \code{"none"}), \code{n} (respondents with
 positive weight), \code{status} and \code{method}. The influence values are in the
-attribute \code{"influence"} (an n x targets matrix).
+attribute \code{"influence"} (an n x targets matrix, rows named by respondent
+id); \code{\link[=sc_compare]{sc_compare()}} uses them to compare two models fitted to the same
+respondents.
 }
 \description{
 Computes every target with the paper's estimator. For each fold, the

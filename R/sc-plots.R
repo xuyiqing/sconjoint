@@ -194,7 +194,8 @@
 # Named numeric reference values aligned to `rows` (NA where absent).
 .scp_reference <- function(reference, rows, fun) {
   if (is.null(reference)) return(NULL)
-  if (inherits(reference, "sc_compare")) reference <- stats::setNames(reference$truth, reference$name)
+  if (inherits(reference, "sc_compare"))
+    reference <- stats::setNames(if (is.null(reference$truth)) reference$reference else reference$truth, reference$name)
   if (!is.numeric(reference) || is.null(names(reference)))
     stop(sprintf("%s(): reference must be a named numeric vector (names = target names)", fun), call. = FALSE)
   out <- unname(reference[match(rows, names(reference))])
@@ -404,7 +405,7 @@
 #' @param reference Optional named numeric vector (names = target names) of
 #'   reference values on the unscaled scale, for example true values in a
 #'   simulation or regression AMCEs; multiplied by `scale`. A table from
-#'   [sc_compare()] gives its true values.
+#'   [sc_compare()] gives its true values or the other model's estimates.
 #' @param reference_label Legend label of the reference values (default
 #'   "Reference").
 #' @param reference_style `"diamond"` (a grey diamond just below the row's

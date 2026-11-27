@@ -11,9 +11,12 @@
 * New `sc_plot_shares()`: preference shares as favoring (blue, right) and opposing (red, left) bars
   with each share's 95% interval, optional `reference` values (such as the truth in a simulation),
   and `labels`, `order` and `groups` like the other plots.
-* New `sc_compare()`: lines an estimate table up with known true values (for checks on simulated
-  data), with the error and whether each interval covers the truth; prints a coverage line, gives a
-  markdown table with `format = "markdown"`, and serves as `reference` for the plots.
+* New `sc_compare()`: compares an estimate table with another model's estimates of the same
+  targets (each difference with its standard error and 95% interval, paired through the
+  respondents' influence values when both models were fitted to the same respondents), or with known
+  true values in a simulation (error and coverage). Prints a summary line, gives a markdown table
+  with `format = "markdown"`, and serves as `reference` for the plots.
+* Estimate tables name the rows of their influence values by respondent id.
 * New `sc_spread()`: each feature's spread of tastes among respondents with the same
   characteristics (the square roots of the diagonal of `Lambda Lambda'`), by fold and averaged.
 * `sc_estimate()` gains `cores`: independent targets run in parallel forked processes with the same

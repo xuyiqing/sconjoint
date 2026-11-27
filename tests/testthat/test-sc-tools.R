@@ -33,10 +33,53 @@ test_that("sc_compare lines estimates up with the truth and reports coverage", {
   # plots take it as their reference
   pd <- draw(sc_plot_estimates(est[1:2, ], reference = cmp))
   expect_equal(pd$reference, cmp$truth[1:2])
-  expect_error(sc_compare(est, c(nope = 1)), "no name in truth")
+  expect_error(sc_compare(est, c(nope = 1)), "no name in the reference")
   expect_error(sc_compare(est, c(top = 1, top = 2)), "twice")
   expect_error(sc_compare(est, 1:2), "named by target name")
   expect_error(sc_compare(est, data.frame(a = 1)), "name and value")
+})
+
+test_that("sc_compare compares two models with paired standard errors", {
+  skip_if(is.null(toy))
+  tg <- list(sc_mean("top", "tax6_linear"), sc_mean("bottom", "tax1_linear"), sc_share("share", "tax6_linear"),
+             sc_importance(list(a = "tax1_linear", b = "tax6_linear"), names = c("ia", "ib")))
+  est <- sc_estimate(toy, tg)
+  I <- attr(est, "influence")
+  expect_equal(rownames(I), toy$data$data$ids)
+  # the same model: zero differences with zero paired SE
+  same <- sc_compare(est, est)
+  expect_equal(attr(same, "type"), "model")
+  expect_equal(same$difference, rep(0, 5))
+  expect_equal(same$se[1:3], rep(0, 3))
+  expect_true(all(is.na(same$se[4:5])))                         # importance: no SE
+  # a second "model" whose influence values are half and estimates shifted (rows in another order)
+  other <- est; other$estimate <- other$estimate + .1
+  o <- sample(nrow(I)); attr(other, "influence") <- (I / 2)[o, , drop = FALSE]
+  cmp <- sc_compare(est, other)
+  expect_true(all(cmp$paired[1:3]))
+  expect_equal(cmp$difference[1:3], rep(-.1, 3))
+  expect_equal(cmp$se[1:3], unname(apply(I[, 1:3] / 2, 2, stats::sd)) / sqrt(nrow(I)))
+  expect_equal(cmp$lower, cmp$difference - 1.96 * cmp$se)
+  out <- capture.output(print(cmp))
+  expect_true(any(grepl("differences have a 95% interval that excludes zero", out, fixed = TRUE)))
+  # subsetting rows keeps the influence values, so the pairing still works
+  sub <- sc_compare(est[1:2, ], est[1:2, ])
+  expect_true(all(sub$paired)); expect_equal(sub$se, c(0, 0))
+  # without influence values: independent SEs, said in print
+  bare <- est[1:2, ]; attr(bare, "influence") <- NULL
+  ind <- sc_compare(bare, bare)
+  expect_false(any(ind$paired))
+  expect_equal(ind$se, sqrt(2) * est$se[1:2])
+  expect_true(any(grepl("independent", capture.output(print(ind)))))
+  # other respondents: independent
+  attr(other, "influence") <- I; rownames(attr(other, "influence")) <- paste0("x", seq_len(nrow(I)))
+  expect_false(any(sc_compare(est, other)$paired))
+  # markdown and plots
+  md <- sc_compare(est, est, format = "markdown")
+  expect_match(md, "| Target | Estimate | Reference | Difference | 95% interval |", fixed = TRUE)
+  pd <- draw(sc_plot_estimates(est[1:2, ], reference = sc_compare(est, other)))
+  expect_equal(pd$reference, other$estimate[1:2])
+  expect_error(sc_compare(est, est[est$name == "nope", ]), "no target of the reference")
 })
 
 test_that("sc_spread gives rotation-invariant conditional sds by fold and on average", {

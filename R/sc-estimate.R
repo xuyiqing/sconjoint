@@ -71,7 +71,9 @@
 #'   `plug_in` (the cross-fitted fitted value), `se`, `lower`, `upper`,
 #'   `interval` (`"wald"`, `"log-odds"` or `"none"`), `n` (respondents with
 #'   positive weight), `status` and `method`. The influence values are in the
-#'   attribute `"influence"` (an n x targets matrix).
+#'   attribute `"influence"` (an n x targets matrix, rows named by respondent
+#'   id); [sc_compare()] uses them to compare two models fitted to the same
+#'   respondents.
 #' @examples
 #' \donttest{
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
@@ -187,7 +189,8 @@ sc_estimate <- function(object, targets, bounded = TRUE, z = 1.96, joint_max_ite
     }
   }
   res <- do.call(rbind, out); rownames(res) <- NULL
-  attr(res, "influence") <- do.call(cbind, infl)
+  IF <- do.call(cbind, infl); if (!is.null(IF) && nrow(IF) == length(data$ids)) rownames(IF) <- data$ids
+  attr(res, "influence") <- IF
   if (!is.null(B)) attr(res, "bounded") <- B
   if (length(joints)) attr(res, "joint") <- joints
   class(res) <- c("sc_estimates", "data.frame")

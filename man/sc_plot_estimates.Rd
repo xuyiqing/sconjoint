@@ -49,7 +49,7 @@ only later tables have.}
 \item{reference}{Optional named numeric vector (names = target names) of
 reference values on the unscaled scale, for example true values in a
 simulation or regression AMCEs; multiplied by \code{scale}. A table from
-\code{\link[=sc_compare]{sc_compare()}} gives its true values.}
+\code{\link[=sc_compare]{sc_compare()}} gives its true values or the other model's estimates.}
 
 \item{reference_label}{Legend label of the reference values (default
 "Reference").}
