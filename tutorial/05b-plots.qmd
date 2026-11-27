@@ -32,9 +32,9 @@ those names in the legend; calling `plot()` on an estimate table invokes the sam
 Several arguments adjust the display: `labels` and `order` control the rows, `scale = 100` expresses
 values in percent, and `xlim` sets the horizontal limits. In addition, `reference` adds comparison
 values such as true values in a simulation or regression AMCEs, while `hide_wide` drops intervals
-that span almost all of $[0, 1]$. `groups` names groups of rows, such as the levels of one
-attribute, in grey at the left, with a small gap between groups; `sc_plot_laws()` and
-`sc_plot_preferences()` take it too.
+that span almost all of $[0, 1]$. To separate rows into groups---such as the levels of one
+attribute---`groups` leaves a small gap between them and prints each group's name in grey at the
+left; `sc_plot_laws()` and `sc_plot_preferences()` take it too.
 
 ```{r}
 #| label: p-estimates
@@ -50,11 +50,12 @@ sc_plot_estimates(All = means, Democrats = means_dem)
 
 `sc_plot_laws()` draws the fitted laws returned by `sc_fitted_law()` in either of two layouts. Under
 the default `layout = "ridges"`, the laws share one panel and one axis, arranged one row each and
-scaled to the same height. There `groups` names groups of rows, `height` above about 1 lets each
-ridge rise over the row above it, and `outline = "line"` joins the bin midpoints instead of drawing
-steps. Under `layout = "panels"`, each law gets its own panel. In both layouts `means` adds the
-corrected means: as a vertical line in a ridge, and as a red line with its 95% interval as a red
-bar in a panel. In a simulation, true density functions can be passed through `truth`.
+scaled to the same height. In this layout, `groups` labels groups of rows, setting `height` above
+about 1 lets each ridge rise over the row above it, and `outline = "line"` joins the bin midpoints
+instead of drawing steps. Under `layout = "panels"`, each law gets its own panel. In both layouts,
+`means` adds the corrected means: as a vertical line in a ridge, and as a red line with a red bar
+for its 95% interval in a panel. In a simulation, true density functions can be passed through
+`truth`.
 
 Because the curves show fitted values before the one-step correction, a corrected mean need not sit
 at a curve's center. In the toy fit, the corrected means lie far from the curves, so the examples
@@ -102,11 +103,13 @@ sc_plot_preferences(means, laws, shares, order = bn[c(1, 2, 6)])
 
 `sc_plot_shares()` shows a table of `sc_share()` estimates as two bars per row: a blue bar to the
 right for the percent of respondents whose taste for the contrast is positive, and a red bar to the
-left for the rest. The dark line at the end of the blue bar is the share's 95% interval, which
-`intervals = FALSE` leaves out and `hide_wide` drops when it spans at least 95 points. Like the
-other plots, it takes `labels`, `order` and `groups`. The bars need shares between 0 and 1, so the
-shares come from the bounded update (`sc_estimate()`'s default), not from `bounded = FALSE` as in
-the setup above.
+left for the rest. A dark line at the end of the blue bar marks the share's 95% interval;
+`intervals = FALSE` omits it, and `hide_wide` drops intervals that span at least 95 points. Like the
+other plot functions, it takes `labels`, `order`, and `groups`.
+
+Because the bars require shares between 0 and 1, the example below computes them with
+`sc_estimate()`'s default bounded update rather than using the `bounded = FALSE` shares from the
+setup above.
 
 ```{r}
 #| label: p-shares
@@ -183,9 +186,10 @@ sc_plot_posterior(post, ylab = "Posterior taste for a higher top rate")
 
 ## Adjusting a figure
 
-`sc_plot_estimates()` takes `labels`, `order`, `xlim`, `xlab` and `main`, and `colors`, one color
-per table; the other plot functions take most of the same arguments (see their help pages). The
-first example relabels the rows, reverses their order and changes the two colors.
+`sc_plot_estimates()` accepts `labels` and `order` for the rows, `xlim`, `xlab`, and `main` for the
+horizontal axis and title, and `colors` (one color per table); the other plot functions take most of
+the same arguments (see their help pages). The first example relabels the rows, reverses their
+order, and changes the two colors.
 
 ```{r}
 #| label: p-custom-rows
@@ -195,8 +199,8 @@ sc_plot_estimates(All = means, Democrats = means_dem, order = rev(bn),
                   labels = setNames(paste("Bracket", 1:6), bn), colors = c("#333333", "#BD4C39"))
 ```
 
-The second fixes the horizontal axis, its label and a title. With `scale = 100`, values and limits
-are in percent.
+The second example sets the horizontal limits, axis label, and title. With `scale = 100`, values and
+limits are in percent.
 
 ```{r}
 #| label: p-custom-axis
@@ -206,10 +210,10 @@ sc_plot_estimates(means, xlim = c(-30, 30), xlab = "Mean taste for the linear ra
                   main = "Toy fit")
 ```
 
-The single-panel plots (`sc_plot_estimates()`, `sc_plot_laws()` with `layout = "ridges"`,
-`sc_plot_shares()`, `sc_plot_importance()`, `sc_plot_lines()` and `sc_plot_posterior()`) can share
-one figure through `layout()` or `par(mfrow = )`. `sc_plot_preferences()` and the `"panels"` layout
-of `sc_plot_laws()` use the whole page and cannot.
+Because they draw a single panel, `sc_plot_estimates()`, `sc_plot_laws()` with `layout = "ridges"`,
+`sc_plot_shares()`, `sc_plot_importance()`, `sc_plot_lines()`, and `sc_plot_posterior()` can share
+one figure through `layout()` or `par(mfrow = )`. By contrast, `sc_plot_preferences()` and the
+`"panels"` layout of `sc_plot_laws()` use the whole page and cannot be combined in this way.
 
 ```{r}
 #| label: p-custom-layout

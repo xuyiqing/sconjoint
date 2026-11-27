@@ -37,14 +37,14 @@ As in @sec-gs, the chapter draws on the helper functions in `_figs-helpers.R`, s
 
 ## Data and fit
 
-Calling `sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data, taking the
-1,991 respondents who answered the income question across 15,928 tasks with Plan A as the first
+Calling `sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data. It takes
+the 1,991 respondents who answered the income question, giving 15,928 tasks with Plan A as the first
 profile. Plans are represented by 16 coded features: each rate enters utility through a linear and a
 quadratic term, while the revenue category enters through four contrasts.
 
-For the network, age, sex, education, race, income and party ID are coded in sixteen columns. These
-covariates were collected after the experiment; their reporting and inclusion in the valid-income
-sample are assumed unaffected by assignment.
+For the network, age, sex, education, race, income and party ID are coded in sixteen columns.
+These covariates were collected after the experiment, and their reporting and inclusion in the
+valid-income sample are assumed unaffected by assignment.
 
 ```{r}
 #| label: br-data
@@ -104,9 +104,9 @@ sapply(prof, nrow)
 ## Rate changes
 
 To evaluate a rate increase in a single bracket, `sc_br_revenue_contrast()` moves that bracket's
-rate from the bottom to the top of its menu (for example, from 5% to 55% for incomes above
-\$375,000) while averaging the other five rates over the contexts respondents saw and letting the
-displayed revenue follow the revenue rule. The result is a vector of 16 coefficients, and setting
+rate from the bottom to the top of its menu --- for example, from 5% to 55% for incomes above
+\$375,000. It averages the other five rates over the contexts respondents saw and lets the displayed
+revenue follow the revenue rule. The result is a vector of 16 coefficients, and setting
 `per_point = TRUE` divides it by the change in the rate so that the mean measures utility per
 percentage point.
 
@@ -203,8 +203,9 @@ sc_plot_estimates(Democrat = by_party("Democrats"), Independent = by_party("inde
 The plotted bars show 95% log-odds intervals, and the party groups include leaners.
 
 Before the one-step correction (`plug_in`), the top-rate shares of Democrats and Republicans are
-76.8% and 63.8%, a smaller gap. The difference between the two party means can also be estimated
-with its own interval:
+76.8% and 63.8%, a smaller gap than the corrected shares above.
+
+The difference between the two party means can also be estimated with its own interval:
 
 ```{r}
 #| label: br-gap
@@ -238,10 +239,12 @@ sc_plot_laws(laws, labels = bn, means = pick(means, brackets), height = 1.3, bin
              outline = "line", xlab = "Utility per percentage point of tax rate")
 ```
 
-Tastes for the displayed revenue hold the rates fixed. The revenue category (`taxrev`: 1 = much more
-revenue, 3 = about the same, 5 = much less) enters through four Helmert columns, each scaled to mean
-square one, and row `k` of `H` below codes category `k`. A contrast compares a category with "about
-the same" and has zero rate coefficients.
+To examine tastes for the displayed revenue alone, each contrast holds the tax rates fixed --- with
+zero rate coefficients --- and compares a revenue category with "about the same" revenue. The
+revenue category (`taxrev`: 1 = much more revenue, 3 = about the same, 5 = much less) enters through
+four Helmert columns, each scaled to mean square one. In the code below, row `k` of `H` codes
+category `k`, so subtracting row 3 from row `k` gives its contrast relative to "about the same",
+with zero rate coefficients.
 
 ```{r}
 #| label: br-revenue-laws
@@ -250,7 +253,8 @@ revenue_contrast <- function(k) setNames(c(rep(0, 12), H[k, ] - H[3, ]), br$data
 revenue_laws <- lapply(c(5, 4, 2, 1), function(k) sc_fitted_law(br, revenue_contrast(k)))
 ```
 
-Unlike the rate figure above, this figure has no corrected means.
+Unlike the rate figure above, the figure below plots the fitted distributions without corrected
+means.
 
 ```{r}
 #| label: fig-br-revenue-distributions
@@ -303,7 +307,7 @@ wide[rownames(rates)[2:4], names(groups)]
 ```
 
 The progressive plan receives an estimated 69.5% of expected support against the flat plan, 59.6%
-against the status-quo analogue, and 81.0% against the regressive plan; against the flat plan, it
+against the status-quo analogue, and 81.0% against the regressive plan. Against the flat plan, it
 draws 79.3% among Democrats and 58.3% among Republicans. Among the other pairings, the status-quo
 analogue draws 65.1% against the flat plan, and the flat plan draws 82.6% against the regressive
 plan. Throughout these contests, position effects are set to zero and task shocks are kept.
@@ -405,12 +409,14 @@ sc_table("Mean per point" = means, "Share favoring" = shares, "Choice effect" = 
 ## Decisiveness
 
 A bracket's decisiveness is how often exchanging two plans' rates in that bracket would reverse the
-choice, keeping the other rates, the displayed revenue, and the task shock as recorded.
-`sc_decisiveness()` computes this from each bracket's two coded columns and a menu with one row per
-rate. In the code below, each menu row takes the rate part of `sc_br_revenue_contrast()`
-(`follow_revenue = FALSE`) for a move from the lowest rate to that rate; anchoring every row at the
-lowest rate does not affect the result because adding the same vector to every row does not change
-the swaps.
+choice, keeping the other rates, the displayed revenue, and the task shock as recorded. To compute
+it, `sc_decisiveness()` takes each bracket's two coded columns together with a menu containing one
+row per rate.
+
+In the code below, each menu row takes the rate part of `sc_br_revenue_contrast()`
+(`follow_revenue = FALSE`) for a move from the lowest rate to that rate. Anchoring every row at the
+lowest rate does not affect the result, because adding the same vector to every row leaves the swaps
+unchanged.
 
 ```{r}
 #| label: br-decisiveness
@@ -428,15 +434,16 @@ tab(dec)
 ```
 
 Exchanging top rates of 55% and 5% between two plans would reverse an estimated 45.4% of choices,
-whereas exchanging 55% and 35% would reverse only 15.7%; for the bottom bracket, exchanging rates of
+whereas exchanging 55% and 35% would reverse only 15.7%. For the bottom bracket, exchanging rates of
 25% and 0% would reverse 50.5%. This calculation took about eight minutes.
 
 ## All paper targets
 
 The paper's main results file for this experiment has 43 rows, which `br_targets()` assembles in a
-single list: a mean and a share for each bracket contrast, the bracket 1 and 6 contrasts by party,
-the 35% to 55% top-rate change (both with revenue following the rule and with revenue fixed), the 5%
-to 25% bottom-rate change, the twelve plan contests, the ratio, and the party difference.
+single list. It includes a mean and a share for each bracket contrast, the bracket 1 and 6 contrasts
+by party, the 35% to 55% top-rate change (both with revenue following the rule and with revenue
+fixed), the 5% to 25% bottom-rate change, the twelve plan contests, the ratio, and the party
+difference.
 
 ```{r}
 #| label: br-full

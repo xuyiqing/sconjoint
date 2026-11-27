@@ -58,11 +58,11 @@ candidate was chosen), the coded feature differences, the respondent ids, and th
 that predict mean tastes. Attaching the design here allows `sc_states()` to average later over the
 comparisons each respondent could have seen.
 
-Ideology enters the network as six 0/1 indicators, one for each level except the middle one (0),
-rather than as a single number. A seven-point scale has few levels, and the indicators let each
-level have its own mean taste. Entered as one number, the same small network learns a mean taste for
-a Republican that is close to a straight line in ideology and misses how it levels off at the ends
-(@sec-sim-coding).
+Among those characteristics, ideology enters the network as six 0/1 indicators, one for each level
+except the middle one (0), rather than as a single number. A seven-point scale has few levels,
+and using indicators lets each level have its own mean taste. When ideology is entered as one
+number instead, the same small network learns a mean taste for a Republican that is close to a
+straight line in ideology and misses how it levels off at the ends (@sec-sim-coding).
 
 ```{r}
 #| label: sim-scdata
@@ -135,11 +135,11 @@ fit <- fits[[which(rank$selected)]]
 q_sel <- rank$q[rank$selected]
 ```
 
-Here the rule picks $q = `r q_sel`$`r if (q_sel == 2) ", the true number" else ", not the true number, 2"`.
+In these data, respondents with the same characteristics still differ in two ways---in how strongly
+partisan they are and in how much they care about experience and gender---so the data have two
+factors. Here the rule picks $q = `r q_sel`$`r if (q_sel == 2) ", the true number" else ", not the true number, 2"`.
 Adding a second factor improves the held-out score by `r round(rank$z[2], 1)` standard errors,
 and a third by `r round(rank$z[3], 1)`, `r if (q_sel == 3) "just over the rule's threshold of two" else "below the threshold"`.
-The data have two factors: respondents with the same characteristics still differ in two ways, in
-how strongly partisan they are and in how much they care about experience and gender.
 `r if (q_sel == 3) paste0("The third factor's gain is less than a third of the second's (", round(rank$diff_to_prev[3], 3), " against ", round(rank$diff_to_prev[2], 3), " per respondent), and the estimates below come from the three-factor fit.") else ""`
 
 ## Fold states
@@ -210,8 +210,8 @@ Across these targets, `r n_cov` of the `r n_int` intervals cover the truth`r if 
 Because 95% intervals are expected to miss about once in twenty times, a single run cannot show
 that coverage is exact.
 
-Furthermore, the intervals target the population rather than the sample, and this sample of 800
-leans right: it holds more conservatives than the population (`r round(100 * cons_sample)`% against
+The intervals also target the population rather than the sample, and this sample of 800 leans
+right: it holds more conservatives than the population (`r round(100 * cons_sample)`% against
 `r round(100 * cons_pop)`%), and its true average taste for a Republican is
 `r round(party_sample, 2)` compared with `r round(r_party$truth, 2)` in the population. The
 interval for that mean, from `r round(r_party$lower, 2)` to `r round(r_party$upper, 2)`,
@@ -242,13 +242,13 @@ legend("center", keys, horiz = TRUE, bty = "n", pch = c(16, 1, 1), lty = c(1, NA
 ```
 
 In the figure, the left panel plots mean tastes while the right panel displays shares,
-probabilities, the AME, and importance shares, grouped by kind. Importance shares carry no intervals, and in this
-run their largest miss is `r round(100 * imp_err, 1)` points, for
+probabilities, the AME, and importance shares, grouped by kind. Importance shares carry no
+intervals, and in this run their largest miss is `r round(100 * imp_err, 1)` points, for
 `r sub("importance: ", "", est$name[imp_worst])`, so they should be read as rough.
 
-@fig-sim-shares shows the four preference shares another way: for each, the percent of respondents
-who favor the contrast (blue, right) and the percent who oppose it (red, left), with the share's 95%
-interval and the true share as an open circle. In this run,
+@fig-sim-shares shows the four preference shares another way, splitting each contrast into the
+percent of respondents who favor it (in blue on the right) and the percent who oppose it (in red on
+the left), alongside the share's 95% interval and an open circle for the true share. In this run,
 `r k <- sum(est$covered[est$kind == "share"]); if (k == 4) "all four intervals cover" else paste(k, "of the four intervals cover")`
 the truth.
 
@@ -262,8 +262,8 @@ sc_plot_shares(sh, labels = lab, reference = truth_of[sh$name], reference_label 
                groups = c("One attribute", "One attribute", "One attribute", "Trade-off"))
 ```
 
-Although two population mean tastes---for party and policy---sit close to zero, that does not mean
-respondents do not care (@fig-sim-laws).
+Two of the population mean tastes above---for party and policy---sit close to zero, yet that does
+not mean respondents do not care (@fig-sim-laws).
 
 ## Taste distributions
 
@@ -293,22 +293,23 @@ sc_plot_laws(lapply(sf, function(f) sc_fitted_law(st, f)),
 ```
 
 For a Republican candidate, the true taste distribution has two humps, with liberals below zero and
-conservatives above. The mean taste rises with ideology as $2 \tanh(3s)$, with $s$ equal to ideology
-divided by 3, so it jumps between the levels just left and right of the center and levels off
-beyond them. With ideology entered as indicators, the network learns a mean taste for each level,
-and the fit recovers both humps, slightly lower and wider than the true ones because the fitted
-spread is somewhat larger (shown in the table below).
+conservatives above. That split comes from how the mean taste rises with ideology: it follows
+$2 \tanh(3s)$, with $s$ equal to ideology divided by 3, so it jumps between the levels just left
+and right of the center and levels off beyond them. Because ideology enters as indicators, the
+network learns a mean taste for each level and recovers both humps. The fitted humps are slightly
+lower and wider than the true ones because the fitted spread is somewhat larger, as shown in the
+table below.
 
-The tastes for experience and gender each have a single hump, and the fit recovers them closely; for
-long experience, about three quarters of the distribution lies above zero. The taste for a moderate
-position is the rough spot: its true distribution has one peak with shoulders, while the fitted one
-shows two small humps.
+The tastes for experience and gender each have a single hump, with about three quarters of the
+long-experience distribution lying above zero, and the fit recovers them closely. The taste for a
+moderate position is the rough spot: its true distribution has one peak with shoulders, whereas the
+fitted distribution shows two small humps.
 
-Turning to that spread, the loading $\Lambda$ itself is not identified, because any rotation of its
-columns gives the same model. What is identified is the spread of tastes among respondents with the
-same characteristics, $\Lambda\Lambda^\top$, and the square roots of its diagonal entries give the
-conditional standard deviations. Averaged over the five folds, the fitted values compare with the
-truth as follows:
+Turning to the fitted spread, the loading $\Lambda$ itself is not identified, because any rotation
+of its columns gives the same model. What is identified is the spread of tastes among respondents
+with the same characteristics, $\Lambda\Lambda^\top$, and the square roots of its diagonal entries
+give the conditional standard deviations. Averaged over the five folds, the fitted values compare
+with the truth as follows:
 
 ```{r}
 #| label: sim-spread
@@ -330,21 +331,22 @@ truth. The largest gap is for `r spread$feature[j]` (`r spread$fitted_sd[j]` aga
 
 ### Ideology as a number {#sec-sim-coding}
 
-Entering ideology as one number, $-3$ to 3, instead of six indicators changes the fit of the taste
-for a Republican. In our trials with the same data and settings, the 8-unit network then learned a
-mean taste close to a straight line in ideology: too low just right of the center (about 1.1
-against the true 1.5 at level 1) and too high at the end (about 2.6 against 2.0 at level 3). It made
-up for the misfit with a larger spread (about 0.9 against 0.7), which blurred the two humps into a
-plateau. Neither ten times as many training epochs nor five times as many respondents brought the
-humps back; the paper's larger network brought them back only partly.
+Entering ideology as a single number, from $-3$ to 3, instead of six indicators changes the fit of
+the taste for a Republican. In our trials with the same data and settings, the 8-unit network then
+learned a mean taste close to a straight line in ideology: too low just right of the center (about
+1.1 against the true 1.5 at level 1) and too high at the end (about 2.6 against 2.0 at level 3). To
+compensate for that misfit, it estimated a larger spread (about 0.9 against 0.7), blurring the two
+humps into a plateau. Neither ten times as many training epochs nor five times as many respondents
+brought the humps back, and the paper's larger network brought them back only partly.
 
-The held-out score barely separates the two codings: the indicator fit predicted held-out choices
-better by about 0.003 log points per respondent, far less than the gain from a second factor. A
-better held-out score therefore does not validate a fitted distribution, and a fitted distribution
-can be wrong while the held-out score looks fine. The shares stay close to the truth under either
-coding, because they depend mostly on the mass above zero, and so do the means. A covariate with
-few levels, like a seven-point scale, is safer entered as indicators; one with many values, like
-age, is better entered as a number.
+Yet the held-out score barely separates the two codings: the indicator fit predicted held-out
+choices better by only about 0.003 log points per respondent, far less than the gain from a second
+factor. A better held-out score therefore does not validate a fitted distribution, and a fitted
+distribution can be wrong while the held-out score looks fine.
+
+The means stay close to the truth under either coding, and so do the shares, because shares depend
+mostly on the mass above zero. Still, a covariate with few levels, like a seven-point scale, is
+safer entered as indicators, whereas one with many values, like age, is better entered as a number.
 
 ## Individual respondents
 
@@ -392,14 +394,14 @@ mean_miss <- miss[grepl("^mean: ", miss)]
 n_mean <- sum(grepl("^mean: ", est$name))
 ```
 
-Summarizing across the chapter, the list below describes this one run on one simulated sample; it
-illustrates the workflow rather than validating the method.
+The list below summarizes this one run on one simulated sample; it illustrates the workflow rather
+than validating the method.
 
 - **Recovered:** `r if (q_sel == 2) "the number of taste factors; " else ""`the shares, compensating
   share, contest probability, AME, and
   `r if (length(mean_miss)) paste(n_mean - length(mean_miss), "of the", n_mean) else "all"` mean
   tastes, with `r n_cov` of `r n_int` intervals covering the population value; the distributions of
-  the tastes for a Republican (both humps), experience and gender; the spread of most tastes; and
+  the tastes for a Republican (both humps), experience, and gender; the spread of most tastes; and
   the position effects $\kappa$ and $\omega$ (whose per-fold values appear in `summary(fit)`).
 - **Recovered roughly:** `r if (length(mean_miss)) paste0(paste0("the mean taste for a ", sub("mean: ", "", mean_miss), collapse = " and "), ", whose interval misses the population value because the sample leans right; ") else ""`importance
   shares, which carry no intervals and miss here by up to `r round(100 * imp_err, 1)` points;
