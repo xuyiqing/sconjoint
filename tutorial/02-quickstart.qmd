@@ -58,10 +58,20 @@ candidate was chosen), the coded feature differences, the respondent ids, and th
 that predict mean tastes. Attaching the design here allows `sc_states()` to average later over the
 comparisons each respondent could have seen.
 
+Ideology enters the network as six 0/1 indicators, one for each level except the middle one (0),
+rather than as a single number. A seven-point scale has few levels, and the indicators let each
+level have its own mean taste. Entered as one number, the same small network learns a mean taste for
+a Republican that is close to a straight line in ideology and misses how it levels off at the ends
+(@sec-sim-coding).
+
 ```{r}
 #| label: sim-scdata
-Z <- as.matrix(A[!duplicated(A$id), c("age", "ideology", "female")])
+z <- A[!duplicated(A$id), c("age", "ideology", "female")]
+Z <- cbind(age = z$age, female = z$female,
+           sapply(c(-3:-1, 1:3), function(l) as.numeric(z$ideology == l)))
+colnames(Z)[-(1:2)] <- paste0("ideo", c(-3:-1, 1:3))
 rownames(Z) <- unique(A$id)
+head(Z, 3)
 x <- sc_data(A$chosen, X, A$id, Z = Z, groups = data.frame(female = Z[, "female"]), design = des,
              orientation = "y = 1 selects the first (left) candidate; X = first minus second")
 x
@@ -127,9 +137,10 @@ q_sel <- rank$q[rank$selected]
 
 Here the rule picks $q = `r q_sel`$`r if (q_sel == 2) ", the true number" else ", not the true number, 2"`.
 Adding a second factor improves the held-out score by `r round(rank$z[2], 1)` standard errors,
-whereas a third changes it by `r round(rank$z[3], 1)`, which is noise. Two factors are needed
-because respondents with the same characteristics still differ in two ways: how strongly partisan
-they are, and how much they care about experience and gender.
+and a third by `r round(rank$z[3], 1)`, `r if (q_sel == 3) "just over the rule's threshold of two" else "below the threshold"`.
+The data have two factors: respondents with the same characteristics still differ in two ways, in
+how strongly partisan they are and in how much they care about experience and gender.
+`r if (q_sel == 3) paste0("The third factor's gain is less than a third of the second's (", round(rank$diff_to_prev[3], 3), " against ", round(rank$diff_to_prev[2], 3), " per respondent), and the estimates below come from the three-factor fit.") else ""`
 
 ## Fold states
 
@@ -282,20 +293,16 @@ sc_plot_laws(lapply(sf, function(f) sc_fitted_law(st, f)),
 ```
 
 For a Republican candidate, the true taste distribution has two humps, with liberals below zero and
-conservatives above. The fitted distribution captures the right width, from about $-3$ to $3$, but
-blurs those humps into a plateau. Because the 8-unit network learns a mean taste that is almost
-linear in ideology while the truth---$2 \tanh(3s)$, with $s$ equal to ideology divided by
-3---levels off away from the center, the fit compensates with a larger spread (shown in the table
-below).
+conservatives above. The mean taste rises with ideology as $2 \tanh(3s)$, with $s$ equal to ideology
+divided by 3, so it jumps between the levels just left and right of the center and levels off
+beyond them. With ideology entered as indicators, the network learns a mean taste for each level,
+and the fit recovers both humps, slightly lower and wider than the true ones because the fitted
+spread is somewhat larger (shown in the table below).
 
-A network with two hidden layers (16 and 8 units) found the humps in our trials, yet it predicted
-held-out choices worse, so the held-out score prefers the smoother fit; a better held-out score
-therefore does not validate the fitted distribution. Even so, the shares stay close to the truth
-because they depend mostly on the mass above zero, and the means remain close too, though the
-larger spread absorbs part of the error in the mean`r if (!isTRUE(r_party$covered)) ", and in this run the interval for the Republican mean misses the population value" else ""`.
-
-By contrast, the taste for long experience has a single hump, with about three quarters of it above
-zero, and the fit recovers it almost exactly.
+The tastes for experience and gender each have a single hump, and the fit recovers them closely; for
+long experience, about three quarters of the distribution lies above zero. The taste for a moderate
+position is the rough spot: its true distribution has one peak with shoulders, while the fitted one
+shows two small humps.
 
 Turning to that spread, the loading $\Lambda$ itself is not identified, because any rotation of its
 columns gives the same model. What is identified is the spread of tastes among respondents with the
@@ -318,9 +325,26 @@ gap <- abs(spread$fitted_sd - spread$true_sd); j <- which.max(gap)
 ```
 
 For five of the six features, the fitted spread lies within `r round(max(gap[-j]), 2)` of the
-truth. The exception is `r spread$feature[j]` (`r spread$fitted_sd[j]` against
-`r spread$true_sd[j]`), where the spread absorbs the part of the mean taste the network did not
-learn.
+truth. The largest gap is for `r spread$feature[j]` (`r spread$fitted_sd[j]` against
+`r spread$true_sd[j]`).
+
+### Ideology as a number {#sec-sim-coding}
+
+Entering ideology as one number, $-3$ to 3, instead of six indicators changes the fit of the taste
+for a Republican. In our trials with the same data and settings, the 8-unit network then learned a
+mean taste close to a straight line in ideology: too low just right of the center (about 1.1
+against the true 1.5 at level 1) and too high at the end (about 2.6 against 2.0 at level 3). It made
+up for the misfit with a larger spread (about 0.9 against 0.7), which blurred the two humps into a
+plateau. Neither ten times as many training epochs nor five times as many respondents brought the
+humps back; the paper's larger network brought them back only partly.
+
+The held-out score barely separates the two codings: the indicator fit predicted held-out choices
+better by about 0.003 log points per respondent, far less than the gain from a second factor. A
+better held-out score therefore does not validate a fitted distribution, and a fitted distribution
+can be wrong while the held-out score looks fine. The shares stay close to the truth under either
+coding, because they depend mostly on the mass above zero, and so do the means. A covariate with
+few levels, like a seven-point scale, is safer entered as indicators; one with many values, like
+age, is better entered as a number.
 
 ## Individual respondents
 
@@ -371,15 +395,17 @@ n_mean <- sum(grepl("^mean: ", est$name))
 Summarizing across the chapter, the list below describes this one run on one simulated sample; it
 illustrates the workflow rather than validating the method.
 
-- **Recovered:** the number of taste factors; the shares, compensating share, contest probability,
-  AME, and `r if (length(mean_miss)) paste(n_mean - length(mean_miss), "of the", n_mean) else "all"`
-  mean tastes, with `r n_cov` of `r n_int` intervals covering the population value; the
-  distribution of the taste for experience; the spread of most tastes; and the position effects
-  $\kappa$ and $\omega$ (whose per-fold values appear in `summary(fit)`).
-- **Recovered roughly:** `r if (length(mean_miss)) paste0(paste0("the mean taste for a ", sub("mean: ", "", mean_miss), collapse = " and "), ", whose interval misses the population value: the sample leans right, and the larger spread absorbs part of the error in the mean; ") else ""`importance
-  shares, which carry no intervals and miss here by up to `r round(100 * imp_err, 1)` points; and
-  the distribution of the taste for a Republican, which has the right width but blurs its two humps
-  into a plateau.
+- **Recovered:** `r if (q_sel == 2) "the number of taste factors; " else ""`the shares, compensating
+  share, contest probability, AME, and
+  `r if (length(mean_miss)) paste(n_mean - length(mean_miss), "of the", n_mean) else "all"` mean
+  tastes, with `r n_cov` of `r n_int` intervals covering the population value; the distributions of
+  the tastes for a Republican (both humps), experience and gender; the spread of most tastes; and
+  the position effects $\kappa$ and $\omega$ (whose per-fold values appear in `summary(fit)`).
+- **Recovered roughly:** `r if (length(mean_miss)) paste0(paste0("the mean taste for a ", sub("mean: ", "", mean_miss), collapse = " and "), ", whose interval misses the population value because the sample leans right; ") else ""`importance
+  shares, which carry no intervals and miss here by up to `r round(100 * imp_err, 1)` points;
+  `r if (q_sel != 2) paste0("the number of taste factors, where the rule picks ", q_sel, " instead of 2 by a narrow margin; ") else ""`and
+  the distribution of the taste for a moderate position, which shows two small humps the truth does
+  not have.
 - **Not recovered:** the loading $\Lambda$ itself, which is identified only up to rotation; and
   individual tastes, which ten tasks pin down only partly.
 
