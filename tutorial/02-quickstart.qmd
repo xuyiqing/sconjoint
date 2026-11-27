@@ -16,7 +16,7 @@ identical Democrat, and long experience raises a candidate's chance of being cho
 `r round(100 * tv("AME: long vs no experience"), 1)` percentage points on average. This chapter runs
 the full workflow on these data and compares the resulting estimates with the truth.
 
-All results below come from one illustrative run that executes live in about five minutes on a
+All results below come from one illustrative run that executes live in about seven minutes on a
 recent laptop. It uses a small network and fewer integration nodes than the paper; while the
 paper's larger settings reduce integration and fitting error, they do not guarantee narrower
 intervals.
@@ -269,6 +269,48 @@ sc_plot_shares(sh, labels = lab, reference = cmp, reference_label = "Truth",
                groups = c("One attribute", "One attribute", "One attribute", "Trade-off"))
 ```
 
+## Comparing two models {#sec-sim-compare}
+
+With real data there is no truth to compare against, but `sc_compare()` can also compare two models:
+given a second model's estimates of the same targets, it reports each difference with its standard
+error and 95% interval. When both models were fitted to the same respondents, as here, the standard
+error is paired. It uses each respondent's influence values from both models, so the sampling noise
+the two estimates share cancels, and differences far smaller than either estimate's own standard
+error become visible.
+
+The rank rule picked `r q_sel` taste factors. The code below builds the fold states of the
+`r 5 - q_sel`-factor fit, estimates the same targets, and compares the two models. Importance shares
+are left out because they carry no standard errors.
+
+```{r}
+#| label: sim-compare-rank
+t0 <- proc.time()[["elapsed"]]
+q_other <- if (q_sel == 2) 3L else 2L
+st_other <- sc_states(fits[[q_other]], M = 40L, ny = 4L, info_nodes = 256L, score_nodes = 512L)
+est_other <- sc_estimate(st_other, targets)
+t_cmp <- proc.time()[["elapsed"]] - t0
+keep <- est$kind != "importance"
+rank_cmp <- sc_compare(est[keep, ], est_other)
+rank_cmp
+```
+
+```{r}
+#| label: sim-compare-text
+#| echo: false
+big <- which.max(abs(rank_cmp$difference))
+apart <- sum(rank_cmp$lower > 0 | rank_cmp$upper < 0, na.rm = TRUE)
+se_ratio <- median(rank_cmp$se / est$se[keep])
+```
+
+The largest difference is `r round(rank_cmp$difference[big], 3)`, for "`r rank_cmp$name[big]`",
+about `r round(abs(rank_cmp$difference[big]) / est$se[keep][big], 2)` times that estimate's own
+standard error. The paired standard errors are about `r round(se_ratio, 2)` times the separate ones
+(the median ratio), so
+`r if (apart == 0) "no difference has an interval that excludes zero" else paste(apart, if (apart == 1) "difference has an interval that excludes zero, but it is" else "differences have intervals that exclude zero, but they are", "small next to the estimates' own uncertainty")`.
+The choice between `r min(q_sel, q_other)` and `r max(q_sel, q_other)` factors changes none of the
+conclusions above. An interval that excludes zero says the two models disagree about a target; it
+does not say which one is right.
+
 Two of the population mean tastes above---for party and policy---sit close to zero, yet that does
 not mean respondents do not care (@fig-sim-laws).
 
@@ -416,7 +458,7 @@ than validating the method.
   the position effects $\kappa$ and $\omega$ (whose per-fold values appear in `summary(fit)`).
 - **Recovered roughly:** `r if (length(mean_miss)) paste0(paste0("the mean taste for a ", sub("mean: ", "", mean_miss), collapse = " and "), ", whose interval misses the population value because the sample leans right; ") else ""`importance
   shares, which carry no intervals and miss here by up to `r round(100 * imp_err, 1)` points;
-  `r if (q_sel != 2) paste0("the number of taste factors, where the rule picks ", q_sel, " instead of 2 by a narrow margin; ") else ""`and
+  `r if (q_sel != 2) paste0("the number of taste factors, where the rule picks ", q_sel, " instead of 2 by a narrow margin, though the extra factor changes no estimate by more than ", round(max(abs(rank_cmp$difference)), 3), " (@sec-sim-compare); ") else ""`and
   the distribution of the taste for a moderate position, which shows two small humps the truth does
   not have.
 - **Not recovered:** the loading $\Lambda$ itself, which is identified only up to rotation; and
@@ -429,8 +471,9 @@ t_total <- proc.time()[["elapsed"]] - t_start
 ```
 
 In total, this chapter took `r round(t_total / 60, 1)` minutes to run: `r round(t_fit / 60, 1)`
-minutes for the three fits, `r round(t_states / 60, 1)` for the fold states, and
-`r round(t_est / 60, 1)` for the estimates.
+minutes for the three fits, `r round(t_states / 60, 1)` for the fold states,
+`r round(t_est / 60, 1)` for the estimates, and `r round(t_cmp / 60, 1)` for the comparison of two
+models.
 
 ## Next steps
 
