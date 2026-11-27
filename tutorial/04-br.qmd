@@ -40,7 +40,8 @@ The chapter uses the helpers of @sec-gs in `_figs-helpers.R`, such as `estimate_
 respondents who answered the income question, 15,928 tasks, and 16 coded features. Plan A is the
 first profile. Each rate enters utility through a linear and a quadratic term, and the revenue category
 through four contrasts. The network uses age, sex, education, race, income and party ID, coded in
-sixteen columns.
+sixteen columns. Covariates were collected after the experiment; their reporting and inclusion in
+the valid-income sample are assumed unaffected by assignment.
 
 ```{r}
 #| label: br-data

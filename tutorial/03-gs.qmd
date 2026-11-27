@@ -143,7 +143,8 @@ attr(laws[[1]], "summary")
 head(laws[[1]])
 ```
 
-The two figures draw all 30 laws, as in the paper's appendix.
+The following figures provide additional fitted-distribution diagnostics for all thirty
+coefficients; the full inventory is retained in the replication materials.
 
 ```{r}
 #| label: fig-gs-distributions-1

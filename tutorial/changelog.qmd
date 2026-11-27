@@ -1,5 +1,12 @@
 # Changelog {#sec-changelog .unnumbered}
 
+## sconjoint 0.4.2
+
+Documentation only. The saved fits are published with checksums (@sec-install), the README
+example runs as written, and the package description and help pages state the inference claims more
+narrowly. The guide's wording on covariates, taste spreads and the simulated example is corrected.
+Pages of the earlier guide now forward to the current chapters.
+
 ## sconjoint 0.4.1
 
 This version follows the current paper, @acharya2026structural. The package fits one model: a
