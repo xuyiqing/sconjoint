@@ -1,8 +1,8 @@
 # Democracy experiment {#sec-gs}
 
 @graham2020democracy ask whether voters punish candidates who violate democratic principles when
-party and policy favor them. Respondents chose between two hypothetical state legislative candidates
-in up to thirteen matchups. The candidates differed in party, economic and social policy, governance
+party and policy favor them. Each respondent chose sixteen times between two hypothetical state
+legislative candidates, and the analysis keeps up to thirteen of these choices. The candidates differed in party, economic and social policy, governance
 practices, democratic violations, scandals, and personal traits. This chapter reproduces the paper's
 results from the saved fit.
 

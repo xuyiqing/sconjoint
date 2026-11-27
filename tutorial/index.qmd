@@ -5,8 +5,9 @@ conjoint experiments. It estimates what respondents prefer, how many prefer it, 
 
 ## Example
 
-In the democracy experiment of @graham2020democracy, respondents chose between two hypothetical
-state legislative candidates in up to thirteen matchups. The average marginal component effect
+In the democracy experiment of @graham2020democracy, each respondent chose sixteen times between
+two hypothetical state legislative candidates. The analysis keeps up to thirteen of these choices
+per respondent. The average marginal component effect
 (AMCE) [@hainmueller2014causal] of a co-partisan candidate, the change in the chance of being
 chosen, is about 14 percentage points. It does not say how many respondents prefer a co-partisan.
 The same AMCE fits two cases: almost everyone mildly prefers their own party, or a minority cares a
