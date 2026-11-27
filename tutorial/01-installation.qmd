@@ -35,8 +35,13 @@ rev <- if (length(rev)) rev[1] else "unknown"
 This book was rendered with sconjoint `r packageVersion("sconjoint")`, from source revision
 `r rev` of the package repository.
 
-Two datasets ship with the package---`gs2020` [@graham2020democracy] and `br2017`
-[@ballard2017structure]---and `sc_example_data()` converts each into the paper's model inputs.
+Three datasets ship with the package. `gs2020` [@graham2020democracy] and `br2017`
+[@ballard2017structure] hold the paper's two experiments, and `sc_example_data()` converts each into
+the paper's model inputs. `simconjoint` is a simulated candidate-choice experiment with known
+tastes: 800 respondents who each choose between two candidates ten times. Its companion
+`simconjoint_truth` holds the parameters that generated the choices, each respondent's true tastes,
+and the population values the estimates should recover. It needs no saved fits: @sec-quickstart
+fits the model to it live and compares every estimate with the truth.
 
 ```{r}
 #| label: data-list
