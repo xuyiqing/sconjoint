@@ -233,7 +233,7 @@ mean need not sit at a curve's center.
 #| label: fig-br-distributions
 #| fig-cap: "Fitted preferences over tax-rate changes"
 #| fig-width: 7
-#| fig-height: 4.4
+#| fig-height: 5.8
 sc_plot_laws(laws, labels = bn, means = pick(means, brackets), height = 1.3, bins = 300,
              outline = "line", xlab = "Utility per percentage point of tax rate")
 ```
@@ -256,7 +256,7 @@ Unlike the rate figure above, this figure has no corrected means.
 #| label: fig-br-revenue-distributions
 #| fig-cap: "Fitted preferences over displayed revenue"
 #| fig-width: 7
-#| fig-height: 3.4
+#| fig-height: 4.4
 sc_plot_laws(revenue_laws, labels = c("Much less revenue", "Less revenue", "More revenue",
                                       "Much more revenue"),
              height = 1.3, bins = 300, outline = "line",

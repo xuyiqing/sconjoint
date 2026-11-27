@@ -63,7 +63,7 @@ below leave them out.
 ```{r}
 #| label: p-laws-ridges
 #| fig-width: 7
-#| fig-height: 3.6
+#| fig-height: 4.6
 sc_plot_laws(laws, labels = bn, groups = rep(c("Lower brackets", "Upper brackets"), each = 3),
              height = 1.3, bins = 300, outline = "line")
 ```

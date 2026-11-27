@@ -158,7 +158,7 @@ while the full inventory is retained in the replication materials.
 #| label: fig-gs-distributions
 #| fig-cap: "Fitted tastes, by attribute"
 #| fig-width: 7.6
-#| fig-height: 9.8
+#| fig-height: 13
 attribute <- c("Party", rep("Policy", 2), rep("Governance", 6), rep("Violations", 7),
                rep("Scandals", 2), "Sex", rep("Race", 3), rep("Profession", 8))
 sc_plot_laws(laws, labels = labels, means = pick(means, fn), groups = attribute, height = 1.3,

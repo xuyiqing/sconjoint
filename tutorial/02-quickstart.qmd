@@ -251,7 +251,7 @@ mean.
 #| label: fig-sim-laws
 #| fig-cap: "Fitted (blue) and true (black) distributions of the six tastes"
 #| fig-width: 7.6
-#| fig-height: 5.4
+#| fig-height: 7
 L0 <- simconjoint_truth$parameters$loading; mu0 <- simconjoint_truth$mu
 sf <- des$features
 true_law <- function(f) function(v)          # the true density: a mixture over respondents
