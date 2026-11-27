@@ -49,7 +49,8 @@ Three datasets ship with the package:
 
 ```{r}
 #| label: data-list
-data(package = "sconjoint")$results[, c("Item", "Title")]
+d <- data(package = "sconjoint")$results[, c("Item", "Title")]
+d[match(c("simconjoint", "simconjoint_truth", "gs2020", "br2017"), d[, "Item"]), ]
 ```
 
 ## Saved fits

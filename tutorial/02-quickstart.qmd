@@ -209,19 +209,20 @@ interval for that mean, from `r round(r_party$lower, 2)` to `r round(r_party$upp
 ```{r}
 #| label: fig-sim-estimates
 #| fig-cap: "Estimates and 95% intervals (blue) against the truth (open circles)"
-#| fig-width: 8
-#| fig-height: 4.6
+#| fig-width: 9.4
+#| fig-height: 5
 short <- c("Republican", "Long experience", "Conservative position", "Female candidate",
            "Prefer Republican", "Prefer long experience", "Prefer female candidate",
            "Rep., no exp., over Dem., long exp.", "Contest: A beats B", "AME: long experience",
            paste("Importance:", names(des$attributes)))
 lab <- setNames(short, est$name)
 truth_of <- setNames(est$truth, est$name)
-layout(matrix(c(1, 2, 3, 3), 2, byrow = TRUE), widths = c(1, 1.3), heights = c(4, .45))
+layout(matrix(c(1, 2, 3, 3), 2, byrow = TRUE), widths = c(1, 1.6), heights = c(4, .45))
 sc_plot_estimates(est[1:4, ], labels = lab, reference = truth_of, reference_style = "circle",
                   xlim = c(-.3, .9), xlab = "Mean taste (logit scale)", legend = FALSE)
 sc_plot_estimates(est[5:14, ], labels = lab, reference = truth_of, reference_style = "circle",
-                  xlim = c(0, .85), xlab = "Share or probability", legend = FALSE)
+                  xlim = c(0, .85), xlab = "Share or probability", legend = FALSE,
+                  groups = rep(c("Shares", "Contest", "AME", "Importance"), c(4, 1, 1, 4)))
 par(mar = rep(0, 4)); plot.new()
 keys <- c("Estimate and 95% interval", "Truth", "No interval")
 legend("center", keys, horiz = TRUE, bty = "n", pch = c(16, 1, 1), lty = c(1, NA, NA),
@@ -230,7 +231,7 @@ legend("center", keys, horiz = TRUE, bty = "n", pch = c(16, 1, 1), lty = c(1, NA
 ```
 
 In the figure, the left panel plots mean tastes while the right panel displays shares,
-probabilities, the AME, and importance shares. Importance shares carry no intervals, and in this
+probabilities, the AME, and importance shares, grouped by kind. Importance shares carry no intervals, and in this
 run their largest miss is `r round(100 * imp_err, 1)` points, for
 `r sub("importance: ", "", est$name[imp_worst])`, so they should be read as rough.
 
@@ -242,21 +243,26 @@ respondents do not care (@fig-sim-laws).
 For any taste, `sc_fitted_law()` returns each held-out respondent's fitted normal distribution---its
 fitted law---with mean $c^\top\mu(Z_i)$ and standard deviation $\lVert\Lambda^\top c\rVert$. Mixing
 these respondent-level distributions gives the fitted population distribution, whereas the true
-distribution uses the true $\mu$ and $\Lambda$.
+distribution uses the true $\mu$ and $\Lambda$. The figure draws all six tastes on one axis,
+grouped by attribute, with the true distribution in black and a vertical line at each corrected
+mean.
 
 ```{r}
 #| label: fig-sim-laws
-#| fig-cap: "Fitted (blue) and true (black) distributions of two tastes"
-#| fig-width: 8
-#| fig-height: 3.8
+#| fig-cap: "Fitted (blue) and true (black) distributions of the six tastes"
+#| fig-width: 7.6
+#| fig-height: 5.4
 L0 <- simconjoint_truth$parameters$loading; mu0 <- simconjoint_truth$mu
-sf <- c("party_Republican", "experience_long")
+sf <- des$features
 true_law <- function(f) function(v)          # the true density: a mixture over respondents
   rowMeans(outer(v, mu0[, f], function(g, m) dnorm(g, m, sqrt(sum(L0[f, ]^2)))))
+means6 <- sc_estimate(st, lapply(sf, function(f) sc_mean(f, f)))
 sc_plot_laws(lapply(sf, function(f) sc_fitted_law(st, f)),
-             labels = c("Taste for a Republican", "Taste for long experience"),
-             truth = lapply(sf, true_law), layout = "panels", ncol = 2, xlim = c(-3.5, 3.5),
-             xlab = "Taste (logit scale)")
+             labels = c("Republican", "Some experience", "Long experience", "Moderate position",
+                        "Conservative position", "Female candidate"),
+             truth = lapply(sf, true_law), means = means6,
+             groups = c("Party", "Experience", "Experience", "Position", "Position", "Gender"),
+             height = 1.3, bins = 300, outline = "line", xlim = c(-5, 5), xlab = "Taste (logit scale)")
 ```
 
 For a Republican candidate, the true taste distribution has two humps, with liberals below zero and
