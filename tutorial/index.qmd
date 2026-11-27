@@ -29,8 +29,9 @@ $$
 $$
 
 In this choice probability, $\kappa$ is the average pull toward the first profile (the position
-effect), and $a_i$ is the respondent's own persistent deviation from it. Across respondents, tastes
-vary in two ways:
+effect), and $a_i$ is the respondent's own persistent deviation from it.
+
+Across respondents, tastes vary in two ways:
 
 $$
 \beta_i = \mu(Z_i) + \Lambda u_i, \qquad u_i \sim N(0, I_q), \qquad a_i = \sqrt{\omega}\, v_i, \qquad v_i \sim N(0, 1).
@@ -68,9 +69,9 @@ on a simulated experiment with a known truth. Using the saved fits, @sec-gs and 
 the paper's two applications.
 
 The remaining chapters turn to outputs and inference: @sec-quantities lists every quantity and its
-interval rule, and @sec-plots shows the functions that draw the figures and tables. Finally,
-@sec-inference explains the standard errors and what they do not cover, while @sec-respondents
-summarizes individual respondents.
+interval rule, and @sec-plots shows the functions that draw the figures and tables. @sec-inference
+explains the standard errors and what they do not cover, and @sec-respondents covers summaries of
+individual respondents.
 
 ## Citation
 

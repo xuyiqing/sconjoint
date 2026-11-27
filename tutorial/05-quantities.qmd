@@ -1,9 +1,9 @@
 # Quantities {#sec-quantities}
 
-This chapter lists every target constructor, what it estimates, and its interval rule. Because both
+This chapter lists every target constructor, what it estimates, and its interval rule. Both
 `sc_ame_switch()` and the information behind every standard error average over the experiment's
-randomization, both need the design: the package knows the two applications' designs (`"gs"` and
-`"br"`), and through `sc_design()` it handles designs that draw each attribute on its own, as in
+randomization, so both need the design. The package knows the two applications' designs (`"gs"`
+and `"br"`), and `sc_design()` handles designs that draw each attribute on its own, as in
 @sec-quickstart.
 
 The examples throughout the chapter use the package's toy fit---40 simulated respondents under the
@@ -18,13 +18,13 @@ toy
 
 ## Contrasts and weights
 
-Most constructors take a vector `c` with one coefficient per coded feature, called a contrast, so
-that a respondent's utility difference is $c^\top \beta_i$. That contrast can be written in three
+Most constructors take a vector `c` with one coefficient per coded feature so that a respondent's
+utility difference is $c^\top \beta_i$. This vector, called a contrast, can be written in three
 ways:
 
-- as feature names, whose unit vectors are added---for example, `"tax6_linear"` or, for their sum,
-  `c("tax6_linear", "revenue_helmert1")`;
-- as a named numeric vector matched by name, with missing features set to 0, such as
+- as feature names, whose unit vectors are added---for example, `"tax6_linear"` for a single
+  feature, or `c("tax6_linear", "revenue_helmert1")` for their sum;
+- as a named numeric vector matched to features by name, with omitted features set to 0, such as
   `c(tax6_linear = 1, tax1_linear = -1)`;
 - as a full numeric vector in feature order, such as the output of `sc_br_revenue_contrast()`.
 
@@ -75,22 +75,23 @@ of three rules:
   minus $z$ times the standard error.
 - **Log-odds** intervals apply to probabilities and shares so that the interval stays inside
   $[0, 1]$. For an estimate $p$ with standard error $s$ and the logistic function $G$, the interval
-  is $G\{\log(p / (1 - p)) \pm z s / (p (1 - p))\}$, and it is missing when $p$ is exactly 0 or 1.
+  is $G\{\log(p / (1 - p)) \pm z s / (p (1 - p))\}$. When $p$ is exactly 0 or 1, the interval is
+  missing.
 - **None** is used for importance shares, which are reported as point estimates only.
 
-When a share lies near 0 or 1, however, its interval can still span almost all of $[0, 1]$ and
-carry no information, as happens for the share favoring a candidate who prosecutes journalists
-(@sec-gs).
+Even with a log-odds interval, when a share lies near 0 or 1, its interval can still span almost
+all of $[0, 1]$ and carry no information, as happens for the share favoring a candidate who
+prosecutes journalists (@sec-gs).
 
 ## Bounded updates
 
-Because the one-step correction (@sec-inference) can push a share below 0 or above 1,
-`sc_estimate()` refines each share by moving the fitted tastes along the directions the correction
-points to and recomputing the share until the remaining correction is negligible---a *bounded
-update*. The resulting estimate is a share of a fitted law, so it stays in $[0, 1]$ and `status`
-reports `converged`; if the update does not converge, the target keeps its one-step estimate and
-standard error with no interval, and `status` reports why. Importance shares instead receive one
-joint update that keeps them summing to one.
+The one-step correction (@sec-inference) can push a share below 0 or above 1. To keep each share
+in bounds, `sc_estimate()` shifts the fitted tastes along the directions the correction points to
+and recomputes the share until the remaining correction is negligible---a *bounded update*. When
+the update converges, the resulting estimate is a share of a fitted law, so it stays in $[0, 1]$,
+and `status` reports `converged`. If it does not converge, the target keeps its one-step estimate
+and standard error with no interval, and `status` reports why. Importance shares instead receive
+one joint update that keeps them summing to one.
 
 Setting `bounded = FALSE` skips these updates and reports the one-step values, which is much faster:
 
@@ -101,8 +102,8 @@ sc_estimate(toy, sc_share("top rate, share", "tax6_linear"), bounded = FALSE)
 
 ## Ratios and differences
 
-Both `sc_ratio()` and `sc_difference()` combine two means by the delta method, so that a
-respondent's influence value for a ratio is a linear combination of their values for the two means,
+Both `sc_ratio()` and `sc_difference()` combine two means by the delta method. For a ratio, each
+respondent's influence value is a linear combination of their influence values for the two means,
 weighted by the ratio's derivatives. Because both means come from the same call, forming the
 influence values this way carries their correlation into the standard error.
 
@@ -111,8 +112,8 @@ influence values this way carries their correlation into the standard error.
 `sc_estimate()` returns a data frame with one row per target and columns `name`, `kind`,
 `estimate`, `plug_in` (the cross-fitted value before correction), `se`, `lower`, `upper`,
 `interval`, `n`, `status` and `method`. Its `"influence"` attribute holds the respondent-level
-influence values, with one column per target, and their standard deviation divided by $\sqrt{n}$
-gives the standard error:
+influence values, with one column per target; each column's standard deviation divided by
+$\sqrt{n}$ gives that target's standard error:
 
 ```{r}
 #| label: q-influence

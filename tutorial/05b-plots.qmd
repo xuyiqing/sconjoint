@@ -4,7 +4,7 @@ The package produces the paper's figures and tables directly from its own output
 from `sc_estimate()`, fitted laws from `sc_fitted_law()`, and posterior summaries from
 `sc_posterior()`. Because the plotting functions use base graphics, several calls can be combined
 into one figure with `layout()` or `par(mfrow = )`. Each returns the data it drew, invisibly, so
-you can check what is on the page.
+the values on the page can be checked.
 
 The examples below use the toy fit of @sec-quantities and run in seconds, though their estimates
 mean nothing.
@@ -27,14 +27,14 @@ laws <- lapply(f, function(cc) sc_fitted_law(toy, cc))
 `sc_plot_estimates()` takes one or more estimate tables and draws one row per target: a point for
 the estimate and a line for its 95% interval, leaving the point hollow when its interval is missing.
 Passing several tables as named arguments separates them into groups in different colors and places
-those names in the legend; calling `plot()` on an estimate table invokes the same function.
+those names in the legend. Calling `plot()` on an estimate table invokes the same function.
 
 Several arguments adjust the display: `labels` and `order` control the rows, `scale = 100` expresses
-values in percent, and `xlim` sets the horizontal limits. In addition, `reference` adds comparison
-values such as true values in a simulation or regression AMCEs, while `hide_wide` drops intervals
-that span almost all of $[0, 1]$. To separate rows into groups---such as the levels of one
+values in percent, and `xlim` sets the horizontal limits. Comparison values such as true values in a
+simulation or regression AMCEs can be added with `reference`, and intervals that span almost all of
+$[0, 1]$ can be dropped with `hide_wide`. To separate rows into groups---such as the levels of one
 attribute---`groups` leaves a small gap between them and prints each group's name in grey at the
-left; `sc_plot_laws()` and `sc_plot_preferences()` take it too.
+left; `sc_plot_laws()` and `sc_plot_preferences()` take this argument too.
 
 ```{r}
 #| label: p-estimates
@@ -43,7 +43,7 @@ left; `sc_plot_laws()` and `sc_plot_preferences()` take it too.
 sc_plot_estimates(All = means, Democrats = means_dem)
 ```
 
-@fig-sim-estimates compares estimates with the truth, while @fig-gs-compensation and
+@fig-sim-estimates compares estimates with the truth, and @fig-gs-compensation and
 @fig-br-party-shares show three groups.
 
 ## Fitted laws
@@ -52,14 +52,13 @@ sc_plot_estimates(All = means, Democrats = means_dem)
 the default `layout = "ridges"`, the laws share one panel and one axis, arranged one row each and
 scaled to the same height. In this layout, `groups` labels groups of rows, setting `height` above
 about 1 lets each ridge rise over the row above it, and `outline = "line"` joins the bin midpoints
-instead of drawing steps. Under `layout = "panels"`, each law gets its own panel. In both layouts,
-`means` adds the corrected means: as a vertical line in a ridge, and as a red line with a red bar
-for its 95% interval in a panel. In a simulation, true density functions can be passed through
-`truth`.
+instead of drawing steps. Under `layout = "panels"`, each law gets its own panel.
 
-Because the curves show fitted values before the one-step correction, a corrected mean need not sit
-at a curve's center. In the toy fit, the corrected means lie far from the curves, so the examples
-below leave them out.
+In a simulation, true density functions can be passed through `truth`, and in both layouts `means`
+adds the corrected means: as a vertical line in a ridge, and as a red line with a red bar for its
+95% interval in a panel. Because the curves show fitted values before the one-step correction, a
+corrected mean need not sit at a curve's center. In the toy fit, the corrected means lie far from
+the curves, so the examples below leave them out.
 
 ```{r}
 #| label: p-laws-ridges
@@ -86,8 +85,8 @@ panels: (A) the mean taste, (B) its fitted law as a ridge, (C) the share with a 
 percent, and, when `ames` is supplied, (D) the choice effect in percentage points, with optional
 `reference` values shown as grey diamonds.
 
-Row order is set with `order`, while per-panel options---`xlim`, `ticks`, and `titles`---are each
-supplied as a list named by panel. In Panel C, `hide_wide` hides intervals that span at least 95
+Row order is set with `order`, and per-panel options---`xlim`, `ticks`, and `titles`---are each
+supplied as a list named by panel. In Panel C, `hide_wide` drops intervals that span at least 95
 points.
 
 ```{r}
@@ -107,9 +106,9 @@ left for the rest. A dark line at the end of the blue bar marks the share's 95% 
 `intervals = FALSE` omits it, and `hide_wide` drops intervals that span at least 95 points. Like the
 other plot functions, it takes `labels`, `order`, and `groups`.
 
-Because the bars require shares between 0 and 1, the example below computes them with
-`sc_estimate()`'s default bounded update rather than using the `bounded = FALSE` shares from the
-setup above.
+Because the bars require shares between 0 and 1, the example below computes them with the default
+bounded update of `sc_estimate()` rather than using the `bounded = FALSE` shares from the setup
+above.
 
 ```{r}
 #| label: p-shares
@@ -126,9 +125,9 @@ read when the intervals matter.
 
 `sc_plot_importance()` draws importance shares as horizontal bars in percent, with each bar's value
 printed at its end. Each group is passed as a named argument holding an estimate table of
-`sc_importance()` targets, and target names such as `"All.low"` lose their common prefix so that
-rows from different tables match by attribute. In addition, `combine` adds attributes into display
-groups.
+`sc_importance()` targets. Target names such as `"All.low"` lose their common prefix so that rows
+from different tables match by attribute. Multiple attributes can be added into display groups with
+`combine`.
 
 ```{r}
 #| label: p-importance
@@ -150,8 +149,8 @@ sc_plot_importance(All = imp_all, Democrats = imp_dem,
 
 `sc_plot_lines()` plots estimates against an ordered setting `x`, such as an income bracket, drawing
 a line with points for each estimate table and a shaded band for its 95% intervals. Each table has
-one row per value of `x`; an axis label via `xlab` is required, and `hline` sets the dashed
-reference line (defaulting to 0.5 for probabilities and shares).
+one row per value of `x`, and an axis label must be supplied via `xlab`. The dashed reference line
+is set with `hline`, which defaults to 0.5 for probabilities and shares.
 
 Because one call draws a single panel, multi-panel figures are built by setting up `layout()`,
 calling the function once per panel with `legend = FALSE`, and drawing one legend.
@@ -169,8 +168,8 @@ sc_plot_lines(All = means, Democrats = means_dem, x = 1:6,
 ## Respondents
 
 `sc_plot_posterior()` draws posterior summaries from `sc_posterior()`, with `which` picking the
-contrast. Its plot depends on whether `truth` is supplied: without `truth`, it shows respondents
-sorted by posterior mean with each respondent's 95% posterior interval; with `truth` in a
+contrast. The plot depends on whether `truth` is supplied. Without `truth`, it shows respondents
+sorted by posterior mean along with each respondent's 95% posterior interval. With `truth` in a
 simulation, it plots each posterior mean against the true value, adding a 45-degree line and the
 correlation.
 
@@ -186,10 +185,10 @@ sc_plot_posterior(post, ylab = "Posterior taste for a higher top rate")
 
 ## Adjusting a figure
 
-`sc_plot_estimates()` accepts `labels` and `order` for the rows, `xlim`, `xlab`, and `main` for the
-horizontal axis and title, and `colors` (one color per table); the other plot functions take most of
-the same arguments (see their help pages). The first example relabels the rows, reverses their
-order, and changes the two colors.
+In `sc_plot_estimates()`, `labels` and `order` control the rows, `xlim`, `xlab`, and `main` set the
+horizontal axis and title, and `colors` assigns one color per table. The other plot functions take
+most of the same arguments (see their help pages). The first example relabels the rows, reverses
+their order, and changes the two colors.
 
 ```{r}
 #| label: p-custom-rows
@@ -229,7 +228,7 @@ layout(1)
 
 `sc_table()` places one or more estimate tables side by side, with one row per target and one column
 per table. Each cell holds the estimate alongside either its 95% interval (`style = "ci"`) or its
-standard error in parentheses (`style = "se"`), while `n = TRUE` adds the number of respondents. The
+standard error in parentheses (`style = "se"`), and `n = TRUE` adds the number of respondents. The
 output can be returned as a data frame, a Markdown table, or a LaTeX `tabular`.
 
 ```{r}
@@ -247,8 +246,8 @@ sc_table(All = means, Democrats = means_dem, digits = 3, format = "markdown")
 ```
 
 For a paper, `format = "latex"` returns a booktabs table. It escapes `%`, `&`, `_`, `#`, and `$` in
-labels and headers, while other LaTeX special characters, such as `~` or `^`, must be written in
-LaTeX directly.
+labels and headers. Other LaTeX special characters, such as `~` or `^`, must be written in LaTeX
+directly.
 
 ```{r}
 #| label: p-table-tex

@@ -43,10 +43,10 @@ round(post$contrasts[, c("prior_mean", "prior_sd", "mean", "sd", "lower", "upper
 ```
 
 The first two respondents start with similar priors---co-partisan tastes of about 1.4 and 1.1, both
-with a standard deviation of 0.87---but diverge after their thirteen choices, with the first
-respondent's posterior mean rising to 1.75 and the second's falling to 0.27. Meanwhile, the
-posterior standard deviations are about three quarters of the prior ones, and the posterior
-probability that the co-partisan taste is positive is reported in `prob_positive`.
+with a standard deviation of 0.87---but diverge after their thirteen choices: the first
+respondent's posterior mean rises to 1.75, and the second's falls to 0.27. The posterior standard
+deviations are about three quarters of the prior ones. The `prob_positive` column reports the
+posterior probability that the co-partisan taste is positive.
 
 Setting `history = 0` returns the prior:
 
@@ -60,8 +60,8 @@ round(sc_posterior(gs, respondents = partisans[1:2], contrasts = cp, history = 0
 
 Counting the share of respondents with a positive posterior mean does not estimate the preference
 share. Because posterior means are shrunk toward the prior means, they spread less than tastes do
-and their signs follow the prior, whereas the population quantities average over each respondent's
-whole taste distribution instead.
+and their signs follow the prior. The population quantities instead average over each respondent's
+whole taste distribution.
 
 ```{r}
 #| label: r-count
@@ -83,9 +83,9 @@ uncertainty from the fit.
 
 With many tasks per respondent, the posterior can learn individual tastes, as the paper shows with a
 30-task experiment. The code below simulates one with known tastes---200 respondents, 30 tasks each,
-three coded features, one taste factor, and a position effect---and stores the parameters as a list
-with `mu`, `kappa`, `loading`, and `omega`, which `sc_posterior()` also accepts directly for fitted
-parameters.
+three coded features, one taste factor, and a position effect. It stores the parameters as a list
+with `mu`, `kappa`, `loading`, and `omega`, and `sc_posterior()` also accepts such a list directly
+for fitted parameters.
 
 ```{r}
 #| label: r-sim
@@ -103,9 +103,9 @@ dat <- sc_data(y, X, id)
 par_true <- list(mu = mu, kappa = kappa, loading = L, omega = omega)
 ```
 
-For each history---the number of first tasks conditioned on---the code computes the posterior of the
-party taste and predicts the final five tasks. Because the parameters are the true ones, the table
-shows what the choices themselves add.
+For each number of initial tasks conditioned on---the history---the code computes the posterior of
+the party taste and predicts the final five tasks. Because the parameters are the true ones, the
+table shows what the choices themselves add.
 
 ```{r}
 #| label: r-learning
@@ -129,5 +129,5 @@ task carries little information about any one taste.
 
 To stay accurate when the posterior is much narrower than the prior, the default integrator
 (`method = "adaptive"`) centers its draws at each respondent's posterior mode. Each respondent's
-effective sample size is reported in the `diagnostics` table, and when that value is small,
-increase the number of draws with `nodes`.
+effective sample size is reported in the `diagnostics` table; when that value is small, increase the
+number of draws with `nodes`.

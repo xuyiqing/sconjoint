@@ -23,9 +23,9 @@ knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
 The chunk below loads the book's `_figs-helpers.R`. It sets `cores`, the number of processes that
-`sc_estimate(cores = )` uses to estimate independent targets in parallel, with the same results as
-one process, and defines `pick()`, which selects rows by name. The figures come from the package's
-plot functions (@sec-plots).
+`sc_estimate(cores = )` uses to estimate independent targets in parallel, giving the same results
+as one process. It also defines `pick()`, which selects rows by name. The figures come from the
+package's plot functions (@sec-plots).
 
 ```{r}
 #| label: gs-helpers
@@ -68,9 +68,9 @@ gs <- sc_states(fit_q[[3]])                           # q = 3; M = 300 designs, 
 sc_save(gs, file.path(fits, "gs_q3.rds"))
 ```
 
-Each candidate rank is scored by the average log probability it assigns to a held-out respondent's
-whole sequence of choices --- its held-out log score. Calling `sc_select_rank()` gives the paper's
-rank table:
+Each candidate number of factors (rank) is scored by the average log probability it assigns to a
+held-out respondent's whole sequence of choices --- its held-out log score. Calling
+`sc_select_rank()` gives the paper's rank table:
 
 | Taste factors | Held-out log score | Gain over $q - 1$ | Paired $z$ |
 |---|---|---|---|
@@ -107,7 +107,7 @@ Among partisans and leaners, a co-partisan gains 0.81 units of utility on averag
 toward the conservative end of economic policy costs 0.24. Conduct is measured against the generic
 reference position, a candidate who supports an elected oversight board. Against that baseline, the
 seven violations (`u_`) have mean utilities running from -0.53 for a two-seat gerrymander to -0.90
-for prosecuting journalists, and the two scandals (`v_`) cost -0.94 for an affair and -1.18 for
+for prosecuting journalists, and the two scandals (`v_`) average -0.94 for an affair and -1.18 for
 underpaid taxes.
 
 In the table above, `plug_in` reports the cross-fitted value before the one-step correction
@@ -130,9 +130,9 @@ print(shares, digits = 4)
 
 An estimated 82.5% of partisans and leaners prefer a co-partisan (95% interval 79.7% to 84.9%). By
 contrast, the shares favoring a violation are near zero and imprecise: 7.3% for closing polling
-stations (interval 2.0% to 23.4%) and 0.2% for prosecuting journalists (interval 0 to 1). That
-imprecision arises because such a share depends on the spread of the taste, and because each
-respondent saw each violation once, that spread is itself measured imprecisely.
+stations (interval 2.0% to 23.4%) and 0.2% for prosecuting journalists (interval 0 to 1). Those
+wide intervals arise because such a share depends on the spread of the taste, and since each
+respondent saw each violation once, that spread is itself estimated with little precision.
 
 ## Fitted distributions
 
@@ -147,7 +147,7 @@ attr(laws[[1]], "summary")
 head(laws[[1]])
 ```
 
-The figure below shows the fitted laws of all thirty tastes on one axis, grouped by attribute. The
+The figure below shows the fitted laws of all thirty tastes on one axis, grouped by attribute; the
 full inventory is retained in the replication materials.
 
 ```{r}
@@ -161,7 +161,7 @@ sc_plot_laws(laws, labels = labels, means = pick(means, fn), groups = attribute,
              bins = 300, outline = "line", xlim = c(-4, 4), xlab = "Taste (logit units)")
 ```
 
-Each curve shows fitted values before the one-step correction, and its vertical line marks the
+Each curve shows fitted values before the one-step correction, while its vertical line marks the
 corrected mean, so the two need not line up. All thirty tastes share one axis, and the reference
 levels are male, white, and business executive.
 
@@ -355,9 +355,9 @@ and profession. Because a policy scale has a single column, its menu is specifie
 The shares are evaluated separately for all partisans and leaners, Democrats, and Republicans
 (leaners included).
 
-Within each group, the shares sum to one and come from a single joint bounded update that takes
-about nine minutes per group. No intervals are reported because, in the paper's simulations, such intervals
-cover less often than stated.
+Within each group, the shares sum to one and come from a single joint bounded update taking about
+nine minutes per group. No intervals are reported because, in the paper's simulations, they cover less often
+than stated.
 
 ```{r}
 #| label: gs-importance
@@ -434,9 +434,9 @@ violations.
 
 ## All paper targets
 
-The function `gs_targets()` below assembles every GS quantity in the paper's main results file: a
-mean and a share for each of the 30 features, the compensation shares for seven violations in three
-ideology groups, 24 contests, the switch AMEs, and the ratio. Running
+The function `gs_targets()` below assembles every quantity for this experiment in the paper's main
+results file: a mean and a share for each of the 30 features, the compensation shares for seven
+violations in three ideology groups, 24 contests, the switch AMEs, and the ratio. Running
 `sc_estimate(gs, gs_targets(gs))` in one process reproduces the paper's estimates, standard errors,
 and intervals in about 40 minutes, with most of that time spent on the bounded updates for the 51
 shares.

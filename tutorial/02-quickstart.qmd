@@ -10,11 +10,11 @@ t_start <- proc.time()[["elapsed"]]
 ```
 
 The package's `simconjoint` data contain 800 simulated respondents who each choose between two
-candidates ten times. Their underlying tastes are known. In this simulated population, for
-example, `r round(100 * tv("share: prefer Republican"), 1)`% prefers a Republican candidate to an
-otherwise identical Democrat, and long experience raises a candidate's chance of being chosen by
+candidates ten times, with known underlying tastes. In this simulated population, for example,
+`r round(100 * tv("share: prefer Republican"), 1)`% prefer a Republican candidate to an otherwise
+identical Democrat, and long experience raises a candidate's chance of being chosen by
 `r round(100 * tv("AME: long vs no experience"), 1)` percentage points on average. This chapter runs
-the whole workflow on these data and compares the resulting estimates with the truth.
+the full workflow on these data and compares the resulting estimates with the truth.
 
 All results below come from one illustrative run that executes live in about five minutes on a
 recent laptop. It uses a small network and fewer integration nodes than the paper; while the
@@ -79,16 +79,16 @@ x
 
 ## Truth
 
-The simulated choices follow the package's model (@sec-intro): each respondent has tastes
-$\beta_i = \mu(Z_i) + \Lambda u_i$ with two taste factors, along with an individual pull
-$a_i = \sqrt{\omega}\, v_i$ toward the left candidate on top of the average pull $\kappa$, where
+The simulated choices follow the package's model (@sec-intro). Each respondent has tastes
+$\beta_i = \mu(Z_i) + \Lambda u_i$ with two taste factors, plus a pull toward the left candidate
+made up of an average pull $\kappa$ and an individual term $a_i = \sqrt{\omega}\, v_i$, where
 $\kappa = 0.2$ and $\omega = 0.3$.
 
 Across respondent characteristics, the taste for a Republican rises with ideology and flattens out
-for strong partisans, while older respondents value experience more. Policy tastes follow a
-quadratic loss around the respondent's own position, meaning a candidate loses utility the farther
-its position is from the respondent's. As for the two taste factors, the first moves party and
-policy, whereas the second moves experience and gender. Every formula is given in `?simconjoint`.
+for strong partisans, while older respondents value experience more. Policy tastes fall as a
+candidate's position moves farther from the respondent's own, following a quadratic loss. Of the two
+taste factors, the first moves party and policy, while the second moves experience and gender. Every
+formula is given in `?simconjoint`.
 
 ```{r}
 #| label: sim-truth
@@ -97,15 +97,15 @@ simconjoint_truth$parameters$loading
 ```
 
 True population values are stored in `simconjoint_truth$population`. Each entry is an exact sum
-over the finite set of characteristic values, with the integrals inside the sum computed by
-quadrature to an accuracy of about $10^{-6}$ or better.
+over the finite set of characteristic values, with the integrals inside the sum evaluated by
+numerical integration (quadrature) to an accuracy of about $10^{-6}$ or better.
 
 ## Fits
 
 Using five-fold splitting, `sc_fit()` estimates the model once per fold, each time training on the
 other four folds. The code below fits specifications with one, two, and three taste factors, each
-with one hidden layer of 8 units, one start, at most 100 epochs, and Sobol rules of 128 to 256
-nodes.
+with one hidden layer of 8 units, one start, at most 100 epochs, and Sobol integration rules of 128
+to 256 nodes.
 
 ```{r}
 #| label: sim-fit
@@ -144,10 +144,10 @@ and a third by `r round(rank$z[3], 1)`, `r if (q_sel == 3) "just over the rule's
 
 ## Fold states
 
-Next, `sc_states()` computes what the estimator needs from each fold's fit. The slow part is each
-held-out respondent's information, which is evaluated as an average over task sets drawn from
-`des`, the design carried by `x`. Here the code uses 40 draws per respondent, compared with 250 to
-300 in the paper.
+Next, `sc_states()` computes what the estimator needs from each fold's fit. The slow step is
+computing each held-out respondent's information, which is evaluated as an average over task sets
+drawn from `des`, the design carried by `x`. Here the code uses 40 draws per respondent, compared
+with 250 to 300 in the paper.
 
 ```{r}
 #| label: sim-states
@@ -160,12 +160,12 @@ st
 ## Estimates
 
 Each target in the list below names one population quantity (@sec-quantities). Beyond simple means
-and preference shares, the list includes a compensating share---the share of respondents for whom
-party outweighs experience, taking a Republican with no experience over a Democrat with long
-experience---and a contest comparing a moderate Republican woman with long experience to a liberal
-Democrat man with some experience, with position effects set to zero. For the remaining summaries,
-`sc_ame_switch()` and `sc_importance(des)` draw their contexts and attributes directly from the
-design.
+and preference shares, the list includes a compensating share: the share of respondents for whom
+party outweighs experience, preferring a Republican with no experience to a Democrat with long
+experience. It also includes a contest comparing a moderate Republican woman with long experience to
+a liberal Democrat man with some experience, with position effects set to zero. For the remaining
+summaries, `sc_ame_switch()` and `sc_importance(des)` draw their contexts and attributes directly
+from the design.
 
 ```{r}
 #| label: sim-estimate
@@ -189,10 +189,10 @@ est <- sc_estimate(st, targets)
 t_est <- proc.time()[["elapsed"]] - t0
 ```
 
-`sc_compare()` lines the estimates up with the true values in `simconjoint_truth$population` and
-checks whether each 95% interval covers the truth. Printed, it gives the table and a line on
-coverage; `format = "markdown"` gives the table below, and the plots take the result as their
-`reference`.
+`sc_compare()` aligns the estimates with the true values in `simconjoint_truth$population` and
+checks whether each 95% interval covers the truth. Printing the result displays the table along with
+a line on coverage; passing `format = "markdown"` produces the table below, and the plots take the
+same result as their `reference`.
 
 ```{r}
 #| label: sim-compare
@@ -218,8 +218,8 @@ Across these targets, `r n_cov` of the `r n_int` intervals cover the truth`r if 
 Because 95% intervals are expected to miss about once in twenty times, a single run cannot show
 that coverage is exact.
 
-The intervals also target the population rather than the sample, and this sample of 800 leans
-right: it holds more conservatives than the population (`r round(100 * cons_sample)`% against
+In addition, the intervals target the population rather than the sample, and this sample of 800
+leans right: it holds more conservatives than the population (`r round(100 * cons_sample)`% against
 `r round(100 * cons_pop)`%), and its true average taste for a Republican is
 `r round(party_sample, 2)` compared with `r round(r_party$truth, 2)` in the population. The
 interval for that mean, from `r round(r_party$lower, 2)` to `r round(r_party$upper, 2)`,
@@ -274,12 +274,12 @@ not mean respondents do not care (@fig-sim-laws).
 
 ## Taste distributions
 
-For any taste, `sc_fitted_law()` returns each held-out respondent's fitted normal distribution---its
-fitted law---with mean $c^\top\mu(Z_i)$ and standard deviation $\lVert\Lambda^\top c\rVert$. Mixing
-these respondent-level distributions gives the fitted population distribution, whereas the true
-distribution uses the true $\mu$ and $\Lambda$. The figure draws all six tastes on one axis,
-grouped by attribute, with the true distribution in black and a vertical line at each corrected
-mean.
+For any taste, `sc_fitted_law()` returns each held-out respondent's fitted normal distribution (the
+fitted law), with mean $c^\top\mu(Z_i)$ and standard deviation $\lVert\Lambda^\top c\rVert$. Mixing
+these respondent-level distributions gives the fitted population distribution, whereas doing the
+same with the true $\mu$ and $\Lambda$ gives the true distribution. The figure draws all six tastes
+on one axis, grouped by attribute, with the true distribution in black and a vertical line at each
+corrected mean.
 
 ```{r}
 #| label: fig-sim-laws
@@ -315,8 +315,8 @@ fitted distribution shows two small humps.
 Turning to the fitted spread, the loading $\Lambda$ itself is not identified, because any rotation
 of its columns gives the same model. What is identified is the spread of tastes among respondents
 with the same characteristics, $\Lambda\Lambda^\top$, and the square roots of its diagonal entries
-give the conditional standard deviations. `sc_spread()` reports them for each fold and averaged over
-the five folds, and the averages compare with the truth as follows:
+give the conditional standard deviations. `sc_spread()` reports these standard deviations for each
+fold and averaged over the five folds; the averages compare with the truth as follows:
 
 ```{r}
 #| label: sim-spread
@@ -338,19 +338,21 @@ truth. The largest gap is for `r spread$feature[j]` (`r spread$fitted_sd[j]` aga
 ### Ideology as a number {#sec-sim-coding}
 
 Entering ideology as a single number, from $-3$ to 3, instead of six indicators changes the fit of
-the taste for a Republican. In our trials with the same data and settings, the 8-unit network then
-learned a mean taste close to a straight line in ideology: too low just right of the center (about
-1.1 against the true 1.5 at level 1) and too high at the end (about 2.6 against 2.0 at level 3). To
+the taste for a Republican. In our trials with the same data and settings, the 8-unit network then learned a
+mean taste close to a straight line in ideology: too low just right of the center (about 1.1
+against the true 1.5 at level 1) and too high at the end (about 2.6 against 2.0 at level 3). To
 compensate for that misfit, it estimated a larger spread (about 0.9 against 0.7), blurring the two
-humps into a plateau. With 800 respondents, ten times as many training epochs did not bring the
-humps back, and the paper's larger network brought them back only partly. With 4,000 respondents,
-both did: longer training or the paper's network recovered the two humps and the spread (about 0.7).
-More respondents alone did not help the small network stopped after 100 epochs, even with 20,000.
+humps into a plateau.
+
+With 800 respondents, ten times as many training epochs did not bring the humps back, and the
+paper's larger network brought them back only partly. With 4,000 respondents, both worked: longer
+training or the paper's network recovered the two humps and the spread (about 0.7). More
+respondents alone did not help the small network when stopped after 100 epochs, even with 20,000.
 
 Yet the held-out score barely separates the two codings: the indicator fit predicted held-out
 choices better by only about 0.003 log points per respondent, far less than the gain from a second
 factor. A better held-out score therefore does not validate a fitted distribution, and a fitted
-distribution can be wrong while the held-out score looks fine.
+distribution can be wrong even when the held-out score looks fine.
 
 The means stay close to the truth under either coding, and so do the shares, because shares depend
 mostly on the mass above zero. Still, a covariate with few levels, like a seven-point scale, is
@@ -358,8 +360,9 @@ safer entered as indicators, whereas one with many values, like age, is better e
 
 ## Individual respondents
 
-`sc_posterior()` combines the fitted law with a respondent's own choices, using the fold that did not train on the respondent (@sec-respondents).
-The `history` argument sets how many of the first tasks to use.
+`sc_posterior()` combines the fitted law with a respondent's own choices, using the fold that did
+not train on the respondent (@sec-respondents). The `history` argument sets how many of a
+respondent's first tasks to use.
 
 ```{r}
 #| label: sim-posterior
@@ -431,7 +434,7 @@ minutes for the three fits, `r round(t_states / 60, 1)` for the fold states, and
 
 ## Next steps
 
-Starting from saved fits, @sec-gs and @sec-br apply this same workflow to the paper's data, while
+Starting from saved fits, @sec-gs and @sec-br apply this same workflow to the paper's data, and
 @sec-quantities lists every target. For another experiment with independently drawn attributes,
 describe it with `sc_design()` and code its profiles with `sc_code()`; every step above then works
 unchanged.

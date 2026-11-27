@@ -55,8 +55,8 @@ d[match(c("simconjoint", "simconjoint_truth", "gs2020", "br2017"), d[, "Item"]),
 
 ## Saved fits
 
-Fitting the model at the paper's settings takes hours, with most of that time spent on each
-held-out respondent's information (@sec-inference) rather than on training the network. The paper's
+Fitting the model at the paper's settings takes hours, with most of that time spent computing each
+held-out respondent's information (@sec-inference) rather than training the network. The paper's
 fold states are therefore saved in two files:
 
 | File | Application | Taste factors | Size |
@@ -71,14 +71,14 @@ The checksums for these files are:
 - `br_q4.rds`: MD5 `6293fd6938d20477369b4f583c986a43`; SHA-256
   `0aa879eadc4ed744ec508dd26fc7a85521326c3f8f8d107c03dd56e8fd245faa`.
 
-Each file covers the five folds, storing for each fold what `sc_estimate()` needs along with that
-fold's network and covariate scaling. It also holds the respondent ids, groups, folds, and the
+Each file covers the five folds, storing what `sc_estimate()` needs for each fold along with that fold's
+network and covariate scaling. It also holds the respondent ids, groups, fold assignments, and the
 validation respondents used to stop training early, together with a checksum of its contents that
 `sc_load()` verifies.
 
 Because the files are too large for the package, they are published with the GitHub release
 [`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11). The code below
-downloads both files into a folder `fits` and checks them:
+downloads both files into a folder `fits` and checks their MD5 checksums:
 
 ```{r}
 #| label: fits-download
@@ -92,16 +92,16 @@ for (f in files) download.file(file.path(base, f), file.path("fits", f), mode = 
 unname(tools::md5sum(file.path("fits", files))) == md5   # both TRUE
 ```
 
-**Provenance.** These files hold the paper's selected-rank fits, trained on 14 November 2026 at
-package revision `1f7567a` in the repository's history. They were trained on the paper's inputs,
-which `sc_example_data()` rebuilds exactly from the bundled data, and the files also store the
-folds and validation respondents. On 25 November 2026, each application's fold states and fit files
-were packed into one file with `sc_save()` under package version 0.4.0.9000. Checks on the packed
-files confirmed that `sc_load()` returns fold states identical to the originals and that each
-fold's stored network reproduces its stored mean tastes exactly.
+**Provenance.** These files hold the paper's fits at the selected rank, trained on 14 November 2026
+at package revision `1f7567a` in the repository's history. They were trained on the paper's inputs
+--- which `sc_example_data()` rebuilds exactly from the bundled data --- using the fold assignments
+and validation respondents stored in each file. On 25 November 2026, each application's fold states
+and fit files were packed into a single file with `sc_save()` under package version 0.4.0.9000.
+Checks on the packed files confirmed that `sc_load()` returns fold states identical to the
+originals and that each fold's stored network reproduces its stored mean tastes exactly.
 
-Each file retains these provenance records as `package_version` and `fit_sha`. Because they
-describe the archived fits, those records remain fixed, and later package versions read the files
+Each file records that version and revision as `package_version` and `fit_sha`. Because those
+records describe the archived fits, they remain fixed, and later package versions read the files
 unchanged.
 
 @sec-gs, @sec-br, @sec-inference, and @sec-respondents read the saved files from the folder
@@ -117,6 +117,8 @@ options(sconjoint.fits = "~/Downloads/sconjoint-fits")
 Because each chapter runs in its own R session, place that line in an `.Rprofile` file in the
 book's folder when rendering the book with the fits stored elsewhere.
 
+The code below checks that both files are present and loads `gs_q3.rds`:
+
 ```{r}
 #| label: fits-check
 fits <- getOption("sconjoint.fits", "fits")
@@ -125,7 +127,7 @@ gs <- sc_load(file.path(fits, "gs_q3.rds"))
 gs
 ```
 
-The printout reports the number of taste factors (the rank $q$), the counts of folds, respondents,
-and coded features, and the integration settings used for the information and the scores. If the
+The printout reports the number of taste factors (the rank $q$); the counts of folds, respondents,
+and coded features; and the integration settings used for the information and the scores. If the
 file is missing, `sc_load()` returns `NULL` with a message; if the checksum does not match, it
 stops.
