@@ -17,7 +17,8 @@ being chosen by `r round(100 * tv("AME: long vs no experience"), 1)` percentage 
 This chapter runs the whole workflow on these data and compares the estimates with the truth.
 
 The chapter runs live, in about five minutes on a recent laptop. It uses a small network and
-fewer integration nodes than the paper. The paper's larger settings would give somewhat tighter answers.
+fewer integration nodes than the paper. The paper's larger settings reduce integration and fitting
+error; they do not guarantee narrower intervals. All results below come from one illustrative run.
 
 ## Experiment
 
@@ -248,15 +249,17 @@ plateau. The 8-unit network learns a mean taste almost linear in ideology, while
 $2 \tanh(3s)$ with $s$ the ideology divided by 3, levels off away from the center. The fit makes
 up for this with a larger spread (the table below). A network with two hidden layers (16 and 8
 units) found the humps in our trials but predicted held-out choices worse, so the held-out score
-prefers the smoother fit. The shares and means are still right, because they depend only on the
-mass above zero and the center. The taste for long
+prefers the smoother fit. A better held-out score does not validate the fitted distribution. The
+shares stay close to the truth, because they depend mostly on the mass above zero. The means are
+close too, but the larger spread absorbs part of the error in the mean`r if (!isTRUE(r_party$covered)) ", and in this run the interval for the Republican mean misses the population value" else ""`.
+The taste for long
 experience has one hump, with about three quarters of it above zero, and the fit recovers it almost
 exactly.
 
 The loading $\Lambda$ itself is not identified: any rotation of its columns gives the same model.
 The spread of tastes among respondents with the same characteristics, $\Lambda\Lambda^\top$, is
-identified. Its diagonal gives each taste's standard deviation among such respondents. Averaged
-over the five folds:
+identified. The square roots of its diagonal entries give the conditional standard deviations.
+Averaged over the five folds:
 
 ```{r}
 #| label: sim-spread
@@ -313,9 +316,12 @@ rather than counts of posterior means.
 
 ## What is recovered
 
+The list describes this one run on one simulated sample. It illustrates the workflow; it does not
+validate the method.
+
 - **Recovered:** the number of taste factors; mean tastes, shares, the compensating share, the
   contest probability and the AME, with `r n_cov` of `r n_int` intervals covering the population
-  value; the distribution of the taste for experience; the spread of most tastes; the position
+  value`r if (length(miss)) paste0(" (the miss", if (length(miss) > 1) "es are " else " is ", paste0("\"", miss, "\"", collapse = ", "), ")") else ""`; the distribution of the taste for experience; the spread of most tastes; the position
   effects $\kappa$ and $\omega$ (each fold's values are in `summary(fit)`).
 - **Recovered roughly:** importance shares, which have no intervals and miss here by up to
   `r round(100 * imp_err, 1)` points; the distribution of the taste for a Republican, with the

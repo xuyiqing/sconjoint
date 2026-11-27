@@ -2,7 +2,7 @@
 % Please edit documentation in R/sc-targets.R
 \name{sc_br_plan_contest}
 \alias{sc_br_plan_contest}
-\title{Win probability of one tax plan against another (Ballard-Rosa et al. 2017)}
+\title{Expected support for one tax plan against another (Ballard-Rosa et al. 2017)}
 \usage{
 sc_br_plan_contest(name, plan, opponent, w = NULL)
 }
@@ -24,7 +24,7 @@ A contest between two complete tax plans in the Ballard-Rosa, Martin and
 Scheve (2017) application. Each plan's displayed revenue category follows
 the experiment's revenue rule, so the contest averages over the pairs of
 categories the two plans can show, weighted by their probabilities, before
-averaging the win probability.
+averaging the expected support.
 }
 \examples{
 sc_br_plan_contest("progressive vs flat", c(0, 5, 15, 25, 35, 45), rep(15, 6))

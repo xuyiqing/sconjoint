@@ -2,7 +2,7 @@
 % Please edit documentation in R/sc-targets.R
 \name{sc_contest}
 \alias{sc_contest}
-\title{Win probability in a hypothetical contest}
+\title{Expected support in a hypothetical contest}
 \usage{
 sc_contest(name, D, coef = NULL, w = NULL, order = 41L)
 }
@@ -26,8 +26,10 @@ data's \code{groups} returning such a vector.}
 A target for \code{\link[=sc_estimate]{sc_estimate()}}.
 }
 \description{
-The population probability that profile A beats profile B when position
-effects are set to zero (paper eq. substantive_choice_estimand):
+The expected support for profile A against profile B: the population
+average of each respondent's probability of choosing A, with position
+effects set to zero (paper eq. substantive_choice_estimand). It is not the
+probability that A wins a finite election. In symbols,
 \verb{E[G(d' beta)]} with \code{d} the coded difference A minus B and \code{G} the
 logistic function. Several rows with weights \code{coef} average over contests
 (for example over the revenue categories a plan can display).

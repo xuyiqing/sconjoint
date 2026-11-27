@@ -123,10 +123,12 @@ sc_share <- function(name, c, w = NULL) {
   })
 }
 
-#' Win probability in a hypothetical contest
+#' Expected support in a hypothetical contest
 #'
-#' The population probability that profile A beats profile B when position
-#' effects are set to zero (paper eq. substantive_choice_estimand):
+#' The expected support for profile A against profile B: the population
+#' average of each respondent's probability of choosing A, with position
+#' effects set to zero (paper eq. substantive_choice_estimand). It is not the
+#' probability that A wins a finite election. In symbols,
 #' `E[G(d' beta)]` with `d` the coded difference A minus B and `G` the
 #' logistic function. Several rows with weights `coef` average over contests
 #' (for example over the revenue categories a plan can display).
@@ -427,13 +429,13 @@ sc_decisiveness <- function(groups, pairs = NULL, menus = NULL, allowed = NULL, 
   })
 }
 
-#' Win probability of one tax plan against another (Ballard-Rosa et al. 2017)
+#' Expected support for one tax plan against another (Ballard-Rosa et al. 2017)
 #'
 #' A contest between two complete tax plans in the Ballard-Rosa, Martin and
 #' Scheve (2017) application. Each plan's displayed revenue category follows
 #' the experiment's revenue rule, so the contest averages over the pairs of
 #' categories the two plans can show, weighted by their probabilities, before
-#' averaging the win probability.
+#' averaging the expected support.
 #'
 #' @inheritParams sc_mean
 #' @param plan,opponent Six tax rates each (percent; bracket 1 = lowest income),
