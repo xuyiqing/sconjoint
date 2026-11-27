@@ -1,46 +1,41 @@
 Package: sconjoint
-Title: Structural Deep-Learning Estimation for Conjoint Experiments
-Version: 0.2.0.9001
+Title: Structural Random-Utility Estimation for Conjoint Experiments
+Version: 0.4.1
+Date: 2026-11-25
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
     person("Yiqing", "Xu", , "yiqingxu@stanford.edu", role = c("aut", "cre")))
-Description: Implements the structural deep-learning estimator for
-    forced-choice conjoint experiments of Acharya, Hainmueller, and Xu
-    (2026), which embeds a deep neural network in a random utility logit
-    so that preference parameters vary flexibly with respondent
-    characteristics. Provides double/debiased machine-learning inference
-    with cross-fitting clustered at the respondent level, and a full set
-    of structural quantities including marginal rates of substitution,
-    counterfactual choice probabilities, compensating differentials,
-    consumer surplus, attribute importance, preference polarization, and
-    preference clustering. Builds on 'torch' for the deep-learning
-    backend.
+Description: Estimates a structural random-utility model for forced-choice
+    conjoint experiments. Repeated choices by the same respondent separate
+    persistent tastes from task-level shocks and a respondent-specific
+    position (side) preference. Tastes follow a normal law with a low-rank
+    covariance (q taste factors); a neural network links mean tastes to
+    respondent characteristics. Estimation is cross-fitted, with one-step
+    corrected standard errors for population quantities: preference
+    distributions and shares, compensating differentials, choice and win
+    probabilities in hypothetical matchups, average marginal effects,
+    attribute importance, the decisiveness of named attribute swaps, and
+    respondent-level posterior summaries.
 License: MIT + file LICENSE
-URL: https://github.com/xuyiqing/sconjoint
+URL: https://yiqingxu.org/packages/sconjoint/
 BugReports: https://github.com/xuyiqing/sconjoint/issues
 Depends:
     R (>= 4.1)
 Imports:
-    torch (>= 0.13.0),
+    Rcpp,
+    graphics,
+    grDevices,
     stats,
     utils,
-    parallel,
-    future,
-    future.apply,
-    parallelly,
     withr,
-    ggplot2,
-    ggridges
+    digest,
+    spacefillr
+LinkingTo:
+    Rcpp
 Suggests:
     testthat (>= 3.0.0),
-    covr,
-    gridExtra,
-    lme4,
-    patchwork,
-    quarto,
-    scales,
-    viridisLite
+    quarto
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)

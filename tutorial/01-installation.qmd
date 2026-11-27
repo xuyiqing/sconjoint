@@ -1,32 +1,71 @@
-# Get Started {#sec-start}
+# Installation {#sec-install}
 
-`sconjoint` depends on the `torch` R package for the deep-learning
-backend. `torch` in turn bundles its own copy of `libtorch` which is
-downloaded on first use. Before installing `sconjoint` itself,
-confirm that `torch` can load its native library:
+## Package
 
-```r
-install.packages("torch")
-torch::install_torch()  # downloads libtorch the first time it is run
-torch::torch_is_installed()
-```
+Install `sconjoint` from GitHub. It contains C++ code, so it needs a compiler: Xcode command-line
+tools on macOS, Rtools on Windows, or a standard build toolchain on Linux.
 
-On CPU-only machines the default installation is sufficient. On
-machines with a CUDA-enabled GPU, follow the instructions at
-<https://torch.mlverse.org> to install the CUDA build of `libtorch`;
-`sconjoint` will then pick up GPU acceleration automatically when you
-pass `device = "cuda"` to `scfit()`. Note that the package's
-bit-exact determinism guarantee --- identical `sc_fit` output regardless
-of `n_cores` --- applies only on CPU; on GPU, cuDNN introduces
-nondeterminism that the package cannot fully eliminate.
-
-Install `sconjoint` itself from GitHub:
-
-```r
-# install.packages("remotes")
+```{r}
+#| label: install
+#| eval: false
+install.packages("remotes")
 remotes::install_github("xuyiqing/sconjoint")
 ```
 
-The package pulls in `ggplot2`, `ggridges`, and related plotting
-infrastructure as Imports; no extra setup is required for the
-visualization methods described in the Plot Options chapter.
+The package needs R 4.1 or later and four packages: `Rcpp`, `withr`, `digest`, and `spacefillr`
+(scrambled Sobol points for numerical integration). The book's figures use base R graphics.
+
+```{r}
+#| label: load
+library(sconjoint)
+packageVersion("sconjoint")
+```
+
+Two datasets ship with the package, `gs2020` [@graham2020democracy] and `br2017`
+[@ballard2017structure]. `sc_example_data()` turns each into the paper's model inputs.
+
+```{r}
+#| label: data-list
+data(package = "sconjoint")$results[, c("Item", "Title")]
+```
+
+## Saved fits
+
+Fitting the model at the paper's settings takes hours. Most of the time goes to each held-out
+respondent's information (@sec-inference), not to training the network. The paper's fold states
+are saved in two files:
+
+| File | Application | Taste factors | Size |
+|---|---|---|---|
+| `gs_q3.rds` | Graham and Svolik (2020) | 3 | about 43 MB |
+| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | about 21 MB |
+
+The files are too large for the package. They are a separate download, to be published with the
+package release. For each of the five folds, a file holds what `sc_estimate()` needs and the fold's
+network and covariate scaling. It also holds the respondent ids, groups, folds, the validation
+respondents (used to stop training early), and a checksum that `sc_load()` verifies.
+
+@sec-gs, @sec-br, @sec-inference and @sec-respondents read the files from the folder in the option
+`sconjoint.fits`. The default is `fits` in the working directory. For another folder, set the
+option first:
+
+```{r}
+#| label: fits-option
+#| eval: false
+options(sconjoint.fits = "~/Downloads/sconjoint-fits")
+```
+
+Each chapter runs in its own R session. To render the book with the fits elsewhere, put that line
+in an `.Rprofile` file in the book's folder.
+
+```{r}
+#| label: fits-check
+fits <- getOption("sconjoint.fits", "fits")
+file.exists(file.path(fits, c("gs_q3.rds", "br_q4.rds")))
+gs <- sc_load(file.path(fits, "gs_q3.rds"))
+gs
+```
+
+The printout gives the rank $q$, the number of folds, respondents and coded features, and the
+integration settings used for the information and the scores. `sc_load()` returns `NULL` with a message when the
+file is missing. It stops when the checksum does not match.

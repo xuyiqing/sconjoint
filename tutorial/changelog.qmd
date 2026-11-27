@@ -1,102 +1,30 @@
 # Changelog {#sec-changelog .unnumbered}
 
-## v0.2.0 (development)
+## sconjoint 0.4.1
 
-Paper-catchup release: brings the package up to the algorithmic defaults
-in the 2026-04 paper revision of Acharya, Hainmueller, and Xu (2026).
+This version follows the current paper, @acharya2026structural. The package fits one model: a
+mixed logit for repeated choices whose mean tastes come from a neural network, with $q$ taste
+factors.
 
-**Major default-behavior change**
+- **Workflow:** `sc_design()`, `sc_code()`, `sc_data()`, `sc_example_data()`, `sc_fit()`,
+  `sc_select_rank()`, `sc_states()`, `sc_save()`, `sc_load()`.
+- **Quantities:** `sc_mean()`, `sc_share()`, `sc_contest()`, `sc_ame_switch()`, `sc_importance()`,
+  `sc_decisiveness()` and others (@sec-quantities), estimated by `sc_estimate()` with a cross-fitted
+  one-step correction. `sc_posterior()` summarizes individual respondents.
+- **Plots and tables:** `sc_plot_estimates()`, `sc_plot_laws()`, `sc_plot_preferences()`,
+  `sc_plot_importance()`, `sc_plot_lines()`, `sc_plot_posterior()` and `sc_table()` (@sec-plots).
+- **Data:** `gs2020` and `br2017` as used in the paper, and `simconjoint`, a simulated experiment
+  with a known truth.
+- **Removed:** the earlier estimators `scfit()` and `scmix()` with their functions, the datasets
+  `sw2022`, `bs2013` and `simdata`, and the dependence on `torch`. The last version with them is
+  tagged `pre-rum-only-2026-11-25`.
 
-* `scfit()` now runs the paper's empirical-Bayes MAP update (paper
-  `EnsC5`) as the default Stage 2. The returned `beta_hat` is the
-  hybrid (Stage-2-refined), task-expanded matrix that every `sc_*`
-  quantity function reads. DML point estimates and clustered standard
-  errors are unchanged on the same `seed` --- they continue to use
-  the Stage-1 single-DNN prediction.
-* Set `stage2 = "none"` on `scfit()` to recover v0.1 behavior exactly.
+From the paper's saved fits, `sc_estimate()` reproduces the paper's estimates, standard errors and
+intervals for both applications.
 
-**New `scfit()` arguments**
+## Earlier versions
 
-* `stage2`: one of `"map_c5"` (default), `"none"`, `"varref"`,
-  `"mixed_logit"`. The mixed-logit option implements the
-  `lme4::glmer` BLUP alternative from paper §A.4 with a deterministic
-  tryCatch fallback to the Stage-1 DNN on convergence failure.
-* `stage2_seed`: integer seed for the 2nd DNN in the Stage-2
-  ensemble (default `12345L`); independent of `seed`, so the
-  master-seed bit-exact determinism guarantee extends through
-  Stage 2.
-
-**New `sc_fit` slots**
-
-* `beta_hat_dnn`: the Stage-1 single-DNN matrix that DML used.
-* `beta_hat_dnn2`, `beta_hat_ens`, `beta_hat_resp`: auxiliary
-  Stage-2 intermediates.
-* `sigma_prior`, `sigma_post_diag`: diagonal prior variance and
-  diagonal posterior variance (from the MAP Hessian).
-* `stage2_method`, `stage2_warnings`, `stage2_seed`: provenance.
-
-**New `which_beta` argument on every quantity function**
-
-* Each `sc_*` quantity now accepts `which_beta = c("hybrid", "dnn")`.
-  Default `"hybrid"` reads the Stage-2-refined betas; `"dnn"` reads
-  the Stage-1 single-DNN view.
-
-**New exports**
-
-* `sc_validate_amce(object, subgroup = NULL)`: pooled (and
-  optionally subgroup) homogeneous-logit comparison against the DML
-  $\hat\theta$. Mirrors paper §App-D, where the pooled correlation on
-  the paper's external validation data is near 1.
-  See \[Example: Candidate Choice\](#sec-sw-validate) for a worked
-  example.
-
-**Bug guards**
-
-* Regression test against the prototype's 2026-04-26 prior-indexing
-  bug.
-* Bit-exact orthogonality and determinism test suites confirm
-  `theta` and `vcov` are invariant across Stage-2 choices on the
-  same `seed` and identical across sequential vs parallel × cores.
-
-**New dependencies**
-
-* `lme4` added as `Suggests` (required only for
-  `stage2 = "mixed_logit"`).
-
-## v0.1.0
-
-(2026-04-12) Initial release.
-
-**Estimator**
-
-* `scfit()`: structural deep-learning estimator with DML inference, respondent-clustered cross-fitting, and bit-exact determinism across core counts.
-* `predict.sc_fit()`: forward-pass on new moderator data via `newdata` and `type` arguments.
-* `keep_modules` argument to persist per-fold torch modules for forward-pass prediction.
-
-**Structural quantities (21 functions)**
-
-* Tier A (9): `sc_mrs`, `sc_counterfactual`, `sc_wtp`, `sc_importance`, `sc_polarization`, `sc_fraction_preferring`, `sc_optimal_profile`, `sc_direction_intensity`, `sc_heterogeneity_test`.
-* Tier B (3): `sc_subgroup`, `sc_compensating`, `sc_clusters`.
-* Tier C (7): `sc_surplus`, `sc_welfare_change`, `sc_average`, `sc_indifference`, `sc_demand_curve`, `sc_decisiveness`, `sc_inequality`.
-
-**Baselines**
-
-* `sc_baseline_logit`, `sc_baseline_lpm` for side-by-side comparison with the structural model.
-
-**Plots (7 functions)**
-
-* `plot_amce`, `plot_fraction`, `plot_hetero`, `plot_subgroup`, `plot_importance`: publication-quality diagnostic plots.
-* All accept `dummies`, `labels`, `groups` for customization (variable selection, display names, attribute-group faceting).
-* `plot.sc_fit`: beta ridgelines (`"beta_ridgelines"`) and training loss trace (`"loss_trace"`).
-
-**Bundled datasets**
-
-* `sw2022` (Saha & Weeks 2022): 1,191 respondents, candidate choice, 5 factor attributes, 3 moderators.
-* `gs2020` (Graham & Svolik 2020): 1,605 respondents, democratic norms, 30 attribute levels (7 groups), 12 moderators.
-* `br2017` (Ballard-Rosa, Martin & Scheve 2017): 2,000 respondents, tax preferences, 7 numeric attributes, 12 moderators.
-* `bs2013` (Bechtel & Scheve 2013): 2,500 respondents, climate treaties, 6 attributes (including numeric cost), 3 moderators.
-* `simdata`: 1,000 synthetic respondents with known ground truth for validation.
-
-**Tutorial**
-
-* 9-chapter Quarto book: installation, simulated example, four real-data worked examples (SW, GS, BR, BS), plot options reference, references, changelog.
+Versions 0.2.0 to 0.2.2 (May to July 2026) implemented the paper's earlier estimator, `scfit()`: a
+deep network for each respondent's tastes, trained with `torch`, followed by debiased quantities
+such as importance, vote shares and marginal rates of substitution. They bundled five datasets.
+The 0.3 development series added a mixed-logit estimator, `scmix()`.

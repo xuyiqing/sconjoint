@@ -17,3 +17,20 @@ tutorial/*_files/
 tests/testthat/_problems/
 tests/testthat/testthat-problems.rds
 dev/
+applications/config.local.R
+applications/output/
+.runtime/
+.R-library/
+.runtime
+.R-library
+inputs/
+runs/
+applications/*/results/
+*.Rds
+*.rds
+
+# Compiled code (Rcpp, from the conjointRUM port)
+src/*.o
+src/*.so
+src/*.dll
+!inst/extdata/toy_fit.rds

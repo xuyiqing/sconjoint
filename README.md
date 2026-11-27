@@ -1,100 +1,78 @@
+
+<!-- README.md is generated from README.Rmd. Please edit README.Rmd. -->
+
 # sconjoint
 
-**Structural Deep-Learning Estimation for Conjoint Experiments**
+`sconjoint` fits the structural random-utility model of Acharya,
+Hainmueller and Xu (2026) to forced-choice conjoint experiments. It
+estimates what respondents prefer, how many of them prefer it, and how
+strongly.
 
-`sconjoint` implements the structural deep-learning estimator of
-[Acharya, Hainmueller, and Xu (2026)](https://arxiv.org/abs/2604.10845) for
-forced-choice conjoint experiments. The estimator embeds a deep neural
-network inside a random utility logit so that each respondent's
-preference vector varies flexibly with observed covariates.
-Double/debiased machine-learning (DML) inference delivers
-respondent-clustered standard errors on all quantities.
+In the democracy experiment of Graham and Svolik (2020), for example, a
+co-partisan candidate gains about 14 percentage points of support on
+average. The model adds that an estimated 82.5% of partisans and leaners
+prefer a co-partisan, other attributes held fixed, and that for many of
+them the party advantage outweighs the penalty for a candidate who
+prosecutes journalists.
+
+## The model
+
+Each respondent has tastes $\beta_i$, one weight per coded feature, that
+stay the same across their tasks. A neural network maps the respondent’s
+characteristics $Z_i$ to mean tastes, and $q$ taste factors let tastes
+vary among respondents with the same characteristics:
+
+$$\beta_i = \mu(Z_i) + \Lambda u_i, \quad u_i \sim N(0, I_q), \qquad
+\Pr(Y_{it} = 1) = G(\kappa + a_i + d_{it}^\top \beta_i),$$
+
+where $d_{it}$ is the coded difference between the two profiles, $G$ the
+logistic function, and $a_i$ a persistent pull toward the first profile.
+Estimation is cross-fitted over respondents, with one-step corrected
+standard errors for population quantities.
 
 ## Installation
 
-```r
-install.packages("torch")
-torch::install_torch()
-
+``` r
 # install.packages("remotes")
 remotes::install_github("xuyiqing/sconjoint")
 ```
 
-## Quick example
+## Workflow
 
-```r
+``` r
 library(sconjoint)
-data(sw2022)
+x <- sc_example_data("gs")                  # the paper's inputs, from the bundled gs2020 data
+fits <- lapply(1:4, function(q) sc_fit(x, q = q))
+sc_select_rank(fits)                         # held-out fit chooses q = 3
+st <- sc_states(fits[[3]])                   # what the estimator needs from each fold
+sc_save(st, "gs_q3.rds")
 
-fit <- scfit(
-  choice ~ agenda + talent + children + cand_gender + prior_office |
-           resp_female + age + pid,
-  data = sw2022, respondent = "respondent",
-  task = "task", profile = "profile",
-  K = 5L, n_epochs = 200L, seed = 2024
-)
-
-summary(fit)
-plot_amce(fit)
-plot_fraction(fit)
-plot(fit, "beta_ridgelines")
+st <- sc_load("gs_q3.rds")
+sc_estimate(st, list(
+  sc_mean("co-partisan", "diff_respParty", w = "PL"),
+  sc_share("co-partisan", "diff_respParty", w = "PL"),
+  sc_contest("co-partisan vs other", "diff_respParty", w = "PL")))
 ```
 
-## Features
-
-**Estimator**: `scfit()` --- DNN-based structural conjoint with DML
-inference, respondent-clustered cross-fitting, bit-exact determinism
-across core counts.
-
-**Structural quantities** (21 functions):
-
-| Tier | Functions |
-|------|-----------|
-| Core | `sc_mrs`, `sc_counterfactual`, `sc_wtp`, `sc_importance`, `sc_polarization`, `sc_fraction_preferring`, `sc_optimal_profile`, `sc_direction_intensity`, `sc_heterogeneity_test` |
-| Advanced | `sc_subgroup`, `sc_compensating`, `sc_clusters` |
-| Welfare | `sc_surplus`, `sc_welfare_change`, `sc_average`, `sc_demand_curve` |
-| Diagnostics | `sc_indifference`, `sc_decisiveness`, `sc_inequality` |
-
-**Baselines**: `sc_baseline_logit`, `sc_baseline_lpm` for
-side-by-side comparison with the structural model.
-
-**Plots** (7 functions):
-
-| Function | Purpose |
-|----------|---------|
-| `plot_amce()` | AMCE coefficient plot with CI |
-| `plot_fraction()` | Fraction favor/oppose diverging bar |
-| `plot_hetero()` | Preference heterogeneity bar chart |
-| `plot_subgroup()` | Subgroup AMCE comparison |
-| `plot_importance()` | Attribute importance ridgelines |
-| `plot(fit, "beta_ridgelines")` | Per-respondent preference distributions |
-| `plot(fit, "loss_trace")` | Training convergence |
-
-All plot functions accept `dummies`, `labels`, `groups` for
-customization. See the Plot Options chapter in the tutorial.
-
-**Bundled datasets**: `sw2022` (Saha & Weeks 2022), `gs2020`
-(Graham & Svolik 2020), `br2017` (Ballard-Rosa, Martin & Scheve 2017),
-`bs2013` (Bechtel & Scheve 2013), `simdata` (known-DGP sanity check).
+Fitting at the paper’s settings takes hours. The paper’s saved fold
+states for both applications are a separate download (to be published),
+so the estimates can be computed in seconds.
 
 ## Documentation
 
-The primary documentation is a [Quarto book](tutorial/) with
-worked examples:
+The package book walks through a simulated example, both applications of
+the paper, every quantity, inference and respondent posteriors:
+<https://yiqingxu.org/packages/sconjoint/>.
 
-1. **Get Started** --- installation
-2. **Simulated Example** --- full workflow with ground-truth verification
-3. **Example: Candidate Choice** --- Saha & Weeks (2022)
-4. **Example: Democratic Norms** --- Graham & Svolik (2020)
-5. **Example: Tax Preferences** --- Ballard-Rosa, Martin & Scheve (2017)
-6. **Example: Climate Treaties** --- Bechtel & Scheve (2013)
-7. **Plot Options** --- parameter-first reference for customization
+## Citation
 
-## Reference
+Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026. “Learning
+Preferences from Conjoint Data: A Structural Deep Learning Approach.”
+Working paper, Stanford University.
 
-Acharya, Avidit, Jens Hainmueller, and Yiqing Xu. 2026.
-"[A Structural Deep-Learning Estimator for Conjoint Experiments](https://arxiv.org/abs/2604.10845)."
-Working paper.
+The bundled data come from Graham and Svolik (2020, *American Political
+Science Review*) and Ballard-Rosa, Martin and Scheve (2017, *Journal of
+Politics*).
 
 ## License
 

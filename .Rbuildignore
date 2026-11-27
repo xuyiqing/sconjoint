@@ -9,10 +9,18 @@
 ^\.claude$
 ^\.git$
 ^tutorial$
-^tutorial/.*$
-^vignettes$
 ^data-raw$
-^_freeze$
 ^LICENSE\.md$
-^ARCHITECTURE\.md$
-^dev$
+^README\.md$
+
+# CRAN: ship a lean test set. The long RUM suites stay in the repo and run locally
+# (NOT_CRAN=true TESTTHAT_PARALLEL=true TESTTHAT_CPUS=10).
+^tests/testthat/test-rum-conjointrum-scripts\.R$
+^tests/testthat/test-rum-decisiveness\.R$
+^tests/testthat/test-rum-qfactor-targets\.R$
+^tests/testthat/test-rum-qfactor-inference\.R$
+^tests/testthat/test-rum-qfactor-fixes\.R$
+^tests/testthat/test-rum-inference\.R$
+^tests/testthat/test-rum-correction\.R$
+^tests/testthat/_problems$
+^tests/testthat/testthat-problems\.rds$

@@ -3,59 +3,77 @@
 \docType{data}
 \name{br2017}
 \alias{br2017}
-\title{Ballard-Rosa, Martin & Scheve (2017) tax-plan conjoint}
+\title{Ballard-Rosa, Martin and Scheve (2017) tax-plan conjoint}
 \format{
-A data frame with 32,000 rows (2,000 respondents x 8 tasks x
-2 profiles) and the following columns:
+A data frame with 32,000 rows (2,000 respondents x 8 tasks x 2
+plans) and 39 columns:
 \describe{
-\item{respondent}{Respondent id (character).}
-\item{task}{Task id within respondent (1..8).}
-\item{profile}{Profile id within task (1 or 2).}
-\item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
-\item{rate_L10}{Marginal tax rate (percent) for under-$10k bracket.}
-\item{rate_10_35}{Rate for $10-35k bracket.}
-\item{rate_35_85}{Rate for $35-85k bracket.}
-\item{rate_85_175}{Rate for $85-175k bracket.}
-\item{rate_175_375}{Rate for $175-375k bracket.}
-\item{rate_375P}{Rate for over-$375k bracket.}
-\item{revenue_score}{Revenue impact: -2 (much less) to +2 (much more).}
-\item{resp_age}{Respondent age in years.}
-\item{resp_female}{Respondent gender (0/1, 1 = female).}
-\item{resp_pid7}{Respondent party ID (1=Strong Dem to 7=Strong Rep).}
-\item{resp_educ}{Respondent education (1-6 ordinal).}
-\item{resp_race_white}{Respondent is white (0/1).}
-\item{resp_income}{Household income (1-13 ordinal).}
-\item{resp_ineq_averse}{Inequality averse (0/1).}
-\item{resp_work_vs_luck}{Work-vs-luck belief (ordinal, higher = hard work).}
-\item{resp_taxes_harm}{Taxes-harm-economy belief (ordinal, higher = more harmful).}
-\item{resp_hardwork}{Hard work leads to success (0/1).}
-\item{resp_high_econ_know}{High economic knowledge (0/1).}
-\item{resp_employed_ft}{Employed full-time (0/1).}
+\item{respondent, task, profile}{Identifiers (profile 1 = Plan A).}
+\item{choice}{1 if this plan was chosen, 0 if not.}
+\item{rate_L10, rate_10_35, rate_35_85, rate_85_175, rate_175_375,
+rate_375P}{Marginal tax rate (percent) in the six brackets.}
+\item{revenue_score}{Revenue compared with current policy: -2 (much
+less) to 2 (much more). The raw code is \code{taxrev = 3 - revenue_score}
+(1 = much more, 5 = much less).}
+\item{resp_pid7}{Raw party ID: 1 = strong Democrat to 7 = strong
+Republican, 4 = independent, 8 = not sure.}
+\item{resp_age}{Age in years (raw).}
+\item{resp_educ}{Education code (raw): 1 = no high school, 2 = high
+school graduate, 3 = some college, 4 = two-year degree, 5 = four-year
+degree, 6 = post-graduate.}
+\item{resp_income}{Household income code (raw \code{hh_income}), 1 = under
+$10,000 to 13 = over $375,000; \code{NA} for the 9 respondents who skipped
+the question.}
+\item{valid_income}{\code{TRUE} if the respondent gave an income answer. The
+paper's sample is the 1,991 respondents with \code{TRUE}.}
+\item{age_std, female, pid7_std, educ_std, race_white, income_std,
+ineq_averse, work_vs_luck, taxes_harm_econ, hardwork,
+high_econ_know, employed_ft, conserv_ideo, govt_serv, newsint,
+numeracy, gen_mobile, future_mobile, gov_assist, risk_averse,
+hardship, children, trust}{A wider set of 23 respondent covariates:
+demographics, partisanship, ideology, and economic attitudes and
+beliefs. Continuous ones are standardized and missing values
+median-imputed (\code{income_std} gives the 9 respondents without an income
+answer the median). \code{female} and \code{race_white} are 0/1 and also enter
+the paper's raw inputs.}
 }
 }
 \source{
 Ballard-Rosa, Cameron, Lucy Martin, and Kenneth Scheve. 2017.
 "The Structure of American Income Tax Policy Preferences."
 \emph{Journal of Politics} 79(1):1-16.
-Data from published replication materials.
+Data from the published replication materials, Harvard Dataverse
+\doi{10.7910/DVN/NGRGS5} (CC0 1.0).
 }
 \usage{
 br2017
 }
 \description{
-A long-format forced-choice tax-plan conjoint dataset from the
-replication materials of Ballard-Rosa, Martin, and Scheve (2017).
-Respondents see eight tasks comparing two tax-plan proposals.
-Each plan specifies marginal tax rates for six income brackets
-plus a revenue impact indicator. All attributes are numeric
-(continuous), unlike the other bundled datasets which use factors.
+A long-format forced-choice tax-plan conjoint from the replication
+materials of Ballard-Rosa, Martin and Scheve (2017). Respondents see eight
+tasks. Each task compares two tax plans (Plan A is profile 1). A plan sets
+the marginal tax rate in six income brackets and shows how much revenue it
+raises compared with current policy.
 }
 \details{
-The sample is restricted to respondents who saw the revenue
-column (saw_revenue == 1).
+The sample is the 2,000 respondents who saw the revenue attribute. All six
+bracket rates are rebuilt from the file's coded variables and their value
+labels, because the file's derived column for the $175-375k bracket stores
+the 45 percent rate as 5.
+
+The paper's models use 1,991 respondents: the 9 with no income answer are
+dropped (\code{valid_income == FALSE}). Their network inputs are the raw codes
+(age in years, education and party dummies, the income code), not the
+standardized columns. \code{\link[=sc_example_data]{sc_example_data()}} builds those inputs.
 }
 \examples{
 data(br2017)
-head(br2017)
+head(br2017[, 1:11])
+# Respondents without an income answer
+unique(br2017$respondent[!br2017$valid_income])
+}
+\seealso{
+\code{\link[=sc_example_data]{sc_example_data()}} for the paper's model inputs built from these
+data.
 }
 \keyword{datasets}
