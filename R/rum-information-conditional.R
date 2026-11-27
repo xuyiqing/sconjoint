@@ -66,8 +66,8 @@
 # Above the threshold, and at q = 1, nothing changes.
 
 # All 2^T binary sequences (rows), as a numeric matrix.
-.rum_cond_Y <- function(T) {
-  Y <- as.matrix(expand.grid(rep(list(c(0, 1)), T), KEEP.OUT.ATTRS = FALSE))
+.rum_cond_Y <- function(n_task) {
+  Y <- as.matrix(expand.grid(rep(list(c(0, 1)), n_task), KEEP.OUT.ATTRS = FALSE))
   dimnames(Y) <- NULL
   Y
 }
@@ -78,11 +78,11 @@
 # E[e_t u_k | y] and maps to factor k's loading rows; the last block (E[e_t v | y]) to omega.
 # bnd (q > 1, omega below .rum_omega_small): the last block is the boundary block, weight 1/2.
 .rum_cond_A <- function(Dm, s, n_fac = 1L, bnd = FALSE) {
-  T <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, n_fac, offset = p); D <- p + ix$n_th
-  A <- matrix(0, D, (n_fac + 2L) * T)
-  A[seq_len(p), seq_len(T)] <- t(Dm); A[ix$kappa, seq_len(T)] <- 1
-  for (k in seq_len(n_fac)) A[ix$loading[(k - 1L) * p + seq_len(p)], k * T + seq_len(T)] <- t(Dm)
-  A[ix$omega, (n_fac + 1L) * T + seq_len(T)] <- if (bnd) 0.5 else 1 / (2 * s)
+  n_task <- nrow(Dm); p <- ncol(Dm); ix <- .rum_th_idx(p, n_fac, offset = p); D <- p + ix$n_th
+  A <- matrix(0, D, (n_fac + 2L) * n_task)
+  A[seq_len(p), seq_len(n_task)] <- t(Dm); A[ix$kappa, seq_len(n_task)] <- 1
+  for (k in seq_len(n_fac)) A[ix$loading[(k - 1L) * p + seq_len(p)], k * n_task + seq_len(n_task)] <- t(Dm)
+  A[ix$omega, (n_fac + 1L) * n_task + seq_len(n_task)] <- if (bnd) 0.5 else 1 / (2 * s)
   A
 }
 # The boundary rule applies at q > 1 when omega is below the shared threshold.
@@ -112,27 +112,27 @@
 # With q factors: R x (q + 2)T, blocks (R0_t; E[e_t u_1 | y]; ...; E[e_t u_q | y]; E[e_t v | y]).
 .rum_cond_c <- function(Y, Pi, e, quad, bnd = FALSE) {
   if (.rum_quad_nfac(quad) > 1L) return(.rum_cond_c_q(Y, Pi, e, quad, bnd))
-  T <- ncol(Y); Pt <- t(e$P)
+  n_task <- ncol(Y); Pt <- t(e$P)
   Mx <- Pi %*% cbind(Pt, Pt * quad$u, Pt * quad$v, quad$u, quad$v)
-  cbind(Y - Mx[, seq_len(T), drop = FALSE],
-        Y * Mx[, 3L * T + 1L] - Mx[, T + seq_len(T), drop = FALSE],
-        Y * Mx[, 3L * T + 2L] - Mx[, 2L * T + seq_len(T), drop = FALSE])
+  cbind(Y - Mx[, seq_len(n_task), drop = FALSE],
+        Y * Mx[, 3L * n_task + 1L] - Mx[, n_task + seq_len(n_task), drop = FALSE],
+        Y * Mx[, 3L * n_task + 2L] - Mx[, 2L * n_task + seq_len(n_task), drop = FALSE])
 }
 
 .rum_cond_z <- function(quad) cbind(1, quad$u, quad$v)           # G x (q + 2): (1, u_1..u_q, v)
 .rum_cond_c_q <- function(Y, Pi, e, quad, bnd = FALSE) {
-  T <- ncol(Y); Pt <- t(e$P); Zq <- .rum_cond_z(quad)[, -1L, drop = FALSE]; nz <- ncol(Zq)  # q + 1
+  n_task <- ncol(Y); Pt <- t(e$P); Zq <- .rum_cond_z(quad)[, -1L, drop = FALSE]; nz <- ncol(Zq)  # q + 1
   Mx <- Pi %*% cbind(Pt, do.call(cbind, lapply(seq_len(nz), function(k) Pt * Zq[, k])), Zq)
-  out <- matrix(0, nrow(Y), (nz + 1L) * T); t1 <- seq_len(T)
+  out <- matrix(0, nrow(Y), (nz + 1L) * n_task); t1 <- seq_len(n_task)
   out[, t1] <- Y - Mx[, t1, drop = FALSE]
   for (k in seq_len(nz))
-    out[, k * T + t1] <- Y * Mx[, (nz + 1L) * T + k] - Mx[, k * T + t1, drop = FALSE]
+    out[, k * n_task + t1] <- Y * Mx[, (nz + 1L) * n_task + k] - Mx[, k * n_task + t1, drop = FALSE]
   if (bnd) {           # boundary block: E[v^2 (e_t R - pi_t) | y], R = sum_s e_s (see the header)
     Pg <- colSums(e$P); Yt <- rowSums(Y); v2 <- quad$v^2
     Mb <- Pi %*% cbind(v2, Pg * v2, Pt * (Pg * v2), Pt * v2, t(e$P * (1 - e$P)) * v2)
     # E[v^2 | y], E[v^2 P | y], E[v^2 p_t P | y], E[v^2 p_t | y], E[v^2 pi_t | y]
-    out[, nz * T + t1] <- Y * (Yt * Mb[, 1L]) - Y * Mb[, 2L] - Yt * Mb[, 2L + T + t1, drop = FALSE] +
-      Mb[, 2L + t1, drop = FALSE] - Mb[, 2L + 2L * T + t1, drop = FALSE]
+    out[, nz * n_task + t1] <- Y * (Yt * Mb[, 1L]) - Y * Mb[, 2L] - Yt * Mb[, 2L + n_task + t1, drop = FALSE] +
+      Mb[, 2L + t1, drop = FALSE] - Mb[, 2L + 2L * n_task + t1, drop = FALSE]
   }
   out
 }
@@ -143,30 +143,30 @@
 # diagonal over t with entries sum_g w_g p(1-p) z_a z_b: (q + 2)(q + 3)/2 distinct moments.
 .rum_cond_H3 <- function(e, quad, bnd = FALSE) {
   if (.rum_quad_nfac(quad) > 1L) {
-    T <- nrow(e$P); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
-    pq <- e$P * (1 - e$P); H <- matrix(0, nz * T, nz * T)
+    n_task <- nrow(e$P); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(n_task)
+    pq <- e$P * (1 - e$P); H <- matrix(0, nz * n_task, nz * n_task)
     for (a in seq_len(nz)) for (b in a:nz) {
       if (bnd && b == nz) next                                     # boundary block: below
       m <- drop(pq %*% (quad$weight * Zq[, a] * Zq[, b]))
-      H[cbind((a - 1L) * T + t1, (b - 1L) * T + t1)] <- m
-      H[cbind((b - 1L) * T + t1, (a - 1L) * T + t1)] <- m
+      H[cbind((a - 1L) * n_task + t1, (b - 1L) * n_task + t1)] <- m
+      H[cbind((b - 1L) * n_task + t1, (a - 1L) * n_task + t1)] <- m
     }
     if (bnd) {
       w <- quad$weight; v2 <- quad$v^2; k3 <- pq * (1 - 2 * e$P); k4 <- pq * (1 - 3 * e$P + 3 * e$P^2)
-      tb <- (nz - 1L) * T + t1
+      tb <- (nz - 1L) * n_task + t1
       for (a in seq_len(nz - 1L)) {
         m <- drop(k3 %*% (w * v2 * Zq[, a]))
-        H[cbind((a - 1L) * T + t1, tb)] <- m; H[cbind(tb, (a - 1L) * T + t1)] <- m
+        H[cbind((a - 1L) * n_task + t1, tb)] <- m; H[cbind(tb, (a - 1L) * n_task + t1)] <- m
       }
       sp <- colSums(pq); w4 <- w * v2^2                           # sum_r pi_r per node; w v^4
-      H[tb, tb] <- (pq * rep(w4, each = T)) %*% t(pq) +
-        diag(drop((k4 + pq * rep(sp, each = T) - 3 * pq^2) %*% w4), T)
+      H[tb, tb] <- (pq * rep(w4, each = n_task)) %*% t(pq) +
+        diag(drop((k4 + pq * rep(sp, each = n_task) - 3 * pq^2) %*% w4), n_task)
     }
     return(H)
   }
-  T <- nrow(e$P); u <- quad$u; v <- quad$v
+  n_task <- nrow(e$P); u <- quad$u; v <- quad$v
   H6 <- (e$P * (1 - e$P)) %*% (quad$weight * cbind(1, u, v, u * u, u * v, v * v))
-  H <- matrix(0, 3L * T, 3L * T); t1 <- seq_len(T); t2 <- T + t1; t3 <- 2L * T + t1
+  H <- matrix(0, 3L * n_task, 3L * n_task); t1 <- seq_len(n_task); t2 <- n_task + t1; t3 <- 2L * n_task + t1
   H[cbind(t1, t1)] <- H6[, 1]; H[cbind(t1, t2)] <- H[cbind(t2, t1)] <- H6[, 2]
   H[cbind(t1, t3)] <- H[cbind(t3, t1)] <- H6[, 3]; H[cbind(t2, t2)] <- H6[, 4]
   H[cbind(t2, t3)] <- H[cbind(t3, t2)] <- H6[, 5]; H[cbind(t3, t3)] <- H6[, 6]
@@ -179,14 +179,14 @@
 # the scalar added to I[omega, omega] (louis_rb = FALSE only); check (exact only) holds
 # max |sum_y p(y) c(y)| and |sum_y p(y) - 1|.
 .rum_cond_K <- function(a, b, s, quad, method, Yall = NULL, sim = NULL, louis_rb = TRUE, bnd = FALSE) {
-  e <- .rum_cond_eta(a, b, s, quad); lw <- log(quad$weight); T <- length(a)
+  e <- .rum_cond_eta(a, b, s, quad); lw <- log(quad$weight); n_task <- length(a)
   if (method == "exact") {
     po <- .rum_cond_post(Yall, e, lw); cc <- .rum_cond_c(Yall, po$Pi, e, quad, bnd); py <- exp(po$logp)
     return(list(K = crossprod(cc * py, cc), xo = 0,
                 check = c(max(abs(colSums(cc * py))), abs(sum(py) - 1))))
   }
   ny <- length(sim$g)
-  Ys <- (sim$U[, seq_len(T), drop = FALSE] < t(e$P[, sim$g, drop = FALSE])) + 0
+  Ys <- (sim$U[, seq_len(n_task), drop = FALSE] < t(e$P[, sim$g, drop = FALSE])) + 0
   po <- .rum_cond_post(Ys, e, lw); cc <- .rum_cond_c(Ys, po$Pi, e, quad, bnd)
   if (method == "mc") return(list(K = crossprod(cc) / ny, xo = 0, check = c(NA_real_, NA_real_)))
   # louis: E_y[c c'] = H3 - E_y Var_post(c_g | y); posterior second moments of c_g over
@@ -199,31 +199,31 @@
   if (louis_rb) return(list(K = .rum_cond_H3(e, quad) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
   # posterior mean of the complete-data negative Hessian, sequence by sequence
   pq <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
-  H3p <- matrix(0, 3L * T, 3L * T); t1 <- seq_len(T)
+  H3p <- matrix(0, 3L * n_task, 3L * n_task); t1 <- seq_len(n_task)
   for (r in 0:2) for (c2 in 0:2) {
     wrc <- colSums(pq * (if (r == 1) quad$u[gg] else if (r == 2) quad$v[gg] else 1) *
                        (if (c2 == 1) quad$u[gg] else if (c2 == 2) quad$v[gg] else 1))
-    H3p[cbind(r * T + t1, c2 * T + t1)] <- wrc / ny
+    H3p[cbind(r * n_task + t1, c2 * n_task + t1)] <- wrc / ny
   }
-  xo <- sum(cc[, 2L * T + t1]) / ny / (4 * s^3)                 # posterior mean of (y-p) v/(4 s^3)
+  xo <- sum(cc[, 2L * n_task + t1]) / ny / (4 * s^3)                 # posterior mean of (y-p) v/(4 s^3)
   list(K = H3p - Vpost, xo = xo, check = c(NA_real_, NA_real_))
 }
 # The Louis variant with q > 1 factors: complete-data c_g = e z_g over z = (1, u_1..u_q, v),
 # posterior variance over the stacked (sequence, node) rows; louis_rb = FALSE takes the posterior
 # mean of the complete-data negative Hessian over the q + 2 blocks, sequence by sequence.
 .rum_cond_K_louis_q <- function(Ys, e, quad, po, cc, er, pw, gg, ny, s, louis_rb, bnd = FALSE) {
-  T <- ncol(Ys); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(T)
+  n_task <- ncol(Ys); Zq <- .rum_cond_z(quad); nz <- ncol(Zq); t1 <- seq_len(n_task)
   Cr <- do.call(cbind, lapply(seq_len(nz), function(k) er * Zq[gg, k]))
-  if (bnd) Cr[, (nz - 1L) * T + t1] <- (er * rowSums(er) - t(e$P * (1 - e$P))[gg, , drop = FALSE]) * quad$v[gg]^2
+  if (bnd) Cr[, (nz - 1L) * n_task + t1] <- (er * rowSums(er) - t(e$P * (1 - e$P))[gg, , drop = FALSE]) * quad$v[gg]^2
   Vpost <- (crossprod(Cr * pw, Cr) - crossprod(cc)) / ny
   if (louis_rb || bnd) return(list(K = .rum_cond_H3(e, quad, bnd) - Vpost, xo = 0, check = c(NA_real_, NA_real_)))
   pq <- t(e$P * (1 - e$P))[gg, , drop = FALSE] * pw
-  H3p <- matrix(0, nz * T, nz * T)
+  H3p <- matrix(0, nz * n_task, nz * n_task)
   for (r in seq_len(nz)) for (c2 in seq_len(nz)) {
     wrc <- colSums(pq * (Zq[gg, r] * Zq[gg, c2]))
-    H3p[cbind((r - 1L) * T + t1, (c2 - 1L) * T + t1)] <- wrc / ny
+    H3p[cbind((r - 1L) * n_task + t1, (c2 - 1L) * n_task + t1)] <- wrc / ny
   }
-  xo <- sum(cc[, (nz - 1L) * T + t1]) / ny / (4 * s^3)        # posterior mean of (y-p) v/(4 s^3)
+  xo <- sum(cc[, (nz - 1L) * n_task + t1]) / ny / (4 * s^3)        # posterior mean of (y-p) v/(4 s^3)
   list(K = H3p - Vpost, xo = xo, check = c(NA_real_, NA_real_))
 }
 
@@ -272,12 +272,12 @@
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); nA <- ceiling(M / 2)
   for (grp in split(seq_len(n), paste(crn$key, Tj))) {
-    T <- Tj[grp[1L]]; dk <- crn$designs[[crn$key[grp[1L]]]]; ng <- length(grp); J <- (nf + 2L) * T
-    if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
-    Yall <- Ys[[as.character(T)]]; MUg <- mu[grp, , drop = FALSE]
+    n_task <- Tj[grp[1L]]; dk <- crn$designs[[crn$key[grp[1L]]]]; ng <- length(grp); J <- (nf + 2L) * n_task
+    if (method == "exact" && is.null(Ys[[as.character(n_task)]])) Ys[[as.character(n_task)]] <- .rum_cond_Y(n_task)
+    Yall <- Ys[[as.character(n_task)]]; MUg <- mu[grp, , drop = FALSE]
     acc <- accA <- array(0, c(D, ng, D))             # (b, respondent, a): I_j[b, a], summed over designs
     for (m in seq_len(M)) {
-      Dm <- matrix(dk[m, seq_len(T), ], T, p)
+      Dm <- matrix(dk[m, seq_len(n_task), ], n_task, p)
       Am <- if (bnd) .rum_cond_A(Dm, s, nf, TRUE) else .rum_cond_A(Dm, s, nf); amat <- th$kappa + MUg %*% t(Dm)
       b <- if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading      # T x q at q > 1
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
@@ -316,18 +316,18 @@
   I <- array(0, c(n, D, D)); IA <- IB <- if (halves) array(0, c(n, D, D)) else NULL
   chk <- c(0, 0); Ys <- list(); odd <- seq_len(M) %% 2L == 1L
   for (i in seq_len(n)) {
-    T <- Tj[i]; J <- (nf + 2L) * T; dk <- crn$designs_of(i)
-    if (method == "exact" && is.null(Ys[[as.character(T)]])) Ys[[as.character(T)]] <- .rum_cond_Y(T)
+    n_task <- Tj[i]; J <- (nf + 2L) * n_task; dk <- crn$designs_of(i)
+    if (method == "exact" && is.null(Ys[[as.character(n_task)]])) Ys[[as.character(n_task)]] <- .rum_cond_Y(n_task)
     sims <- if (method != "exact") .rum_with_seed(seed + i, list(
       g = matrix(sample.int(G, M * ny, replace = TRUE, prob = quad$weight), M, ny),
-      U = array(stats::runif(M * ny * T), c(M, ny, T)))) else NULL
+      U = array(stats::runif(M * ny * n_task), c(M, ny, n_task)))) else NULL
     X <- A <- matrix(0, D, J * M); xo <- numeric(M)
     for (m in seq_len(M)) {
-      Dm <- matrix(dk[m, seq_len(T), ], T, p); Am <- if (bnd) .rum_cond_A(Dm, s, nf, TRUE) else .rum_cond_A(Dm, s, nf)
+      Dm <- matrix(dk[m, seq_len(n_task), ], n_task, p); Am <- if (bnd) .rum_cond_A(Dm, s, nf, TRUE) else .rum_cond_A(Dm, s, nf)
       sim <- if (is.null(sims)) NULL else list(g = sims$g[m, ], U = matrix(sims$U[m, , ], ny))
       r <- .rum_cond_K(th$kappa + drop(Dm %*% mu[i, ]),
                        if (nf == 1L) drop(Dm %*% th$loading) else Dm %*% th$loading, s, quad, method,
-                       Ys[[as.character(T)]], sim, louis_rb, bnd)
+                       Ys[[as.character(n_task)]], sim, louis_rb, bnd)
       if (method == "exact") chk <- pmax(chk, r$check)
       cols <- (m - 1L) * J + seq_len(J); A[, cols] <- Am; X[, cols] <- Am %*% r$K; xo[m] <- r$xo
     }

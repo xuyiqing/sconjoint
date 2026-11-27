@@ -1,7 +1,7 @@
 Package: sconjoint
 Title: Structural Random-Utility Estimation for Conjoint Experiments
 Version: 0.4.1
-Date: 2026-11-25
+Date: 2026-11-26
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
     person("Jens", "Hainmueller", role = "aut"),
@@ -34,8 +34,7 @@ Imports:
 LinkingTo:
     Rcpp
 Suggests:
-    testthat (>= 3.0.0),
-    quarto
+    testthat (>= 3.0.0)
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)

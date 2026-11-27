@@ -99,7 +99,7 @@
                              scale = 1) {
   context <- match.arg(context)
   a <- raw[[attr]]; if (length(dim(a)) != 3L) stop("attribute ", attr, " is not a profile attribute")
-  M <- dim(a)[1L]; T <- dim(a)[2L]; MT <- M * T
+  M <- dim(a)[1L]; n_task <- dim(a)[2L]; MT <- M * n_task
   flat <- function(d) matrix(d, MT, dim(d)[3L])
   if (context == "switch") {
     D <- NULL; side <- NULL; coef <- NULL

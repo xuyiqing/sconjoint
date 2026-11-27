@@ -94,7 +94,7 @@
 # truth shares u1, u2, v, U and the straight-liner draws with the two-factor one.
 # data: a rum_data template (ids, T, basis, metadata are kept; d, a, y are replaced); or give
 # n and T. resp: GS respondent party input (pid7 or D/R/I, one per respondent).
-.rum_ms_simulate <- function(truth, spec, data = NULL, resp = NULL, T = NULL, seed) {
+.rum_ms_simulate <- function(truth, spec, data = NULL, resp = NULL, n_task = NULL, seed) {
   if (!inherits(truth, "rum_ms_truth")) stop("truth must come from .rum_ms_truth().")
   spec <- .rum_spec_arg(spec)
   n <- nrow(truth$mu); p <- ncol(truth$mu)
@@ -102,15 +102,15 @@
   if (!is.null(data)) {
     .rum_check_data(data)
     if (data$n != n || data$p != p) stop("data and truth disagree in n or p.")
-    T <- data$T
+    n_task <- data$T
   }
-  if (is.null(T)) T <- rep(spec$T, n)
-  T <- as.integer(T)
-  if (length(T) != n || any(T < 1L | T > spec$T)) stop("T must give 1..", spec$T, " tasks per respondent.")
+  if (is.null(n_task)) n_task <- rep(spec$T, n)
+  n_task <- as.integer(n_task)
+  if (length(n_task) != n || any(n_task < 1L | n_task > spec$T)) stop("T must give 1..", spec$T, " tasks per respondent.")
   if (!is.numeric(seed) || length(seed) != 1L || !is.finite(seed)) stop("seed must be one number.")
   crn <- .rum_draw_designs_crn(spec, resp, M = n, seed = seed, n = n)
   if (length(crn$key) != n) stop("resp must have one entry per respondent.")
-  off <- as.integer(c(0L, cumsum(T))); nt <- off[n + 1L]
+  off <- as.integer(c(0L, cumsum(n_task))); nt <- off[n + 1L]
   dr <- .rum_with_seed(seed + 1000003L, {
     u <- stats::rnorm(n); v <- stats::rnorm(n); U <- stats::runif(nt)
     u2 <- stats::rnorm(n); S <- stats::runif(n); side <- stats::runif(n); flip <- stats::runif(nt)
@@ -120,11 +120,11 @@
   D <- matrix(0, nt, p)
   for (k in seq_along(crn$designs)) {
     who <- which(crn$key == k); arr <- crn$designs[[k]]
-    for (t in seq_len(max(T[who]))) {
-      w2 <- who[T[who] >= t]; D[off[w2] + t, ] <- arr[w2, t, ]
+    for (t in seq_len(max(n_task[who]))) {
+      w2 <- who[n_task[who] >= t]; D[off[w2] + t, ] <- arr[w2, t, ]
     }
   }
-  ri <- rep(seq_len(n), T)
+  ri <- rep(seq_len(n), n_task)
   L <- truth$L
   B <- truth$mu[ri, , drop = FALSE] + outer(dr$u[ri], L[, 1L])
   if (any(L[, 2L] != 0)) B <- B + outer(dr$u2[ri], L[, 2L])
@@ -147,7 +147,7 @@
   } else {
     data$d <- unname(D); data$y <- y
     data$a <- if (data$r == p && all(vapply(data$basis, function(b) isTRUE(all.equal(b, diag(p), check.attributes = FALSE)), TRUE)))
-      unname(D) else do.call(rbind, lapply(seq_len(n), function(i) D[off[i] + seq_len(T[i]), , drop = FALSE] %*% data$basis[[i]]))
+      unname(D) else do.call(rbind, lapply(seq_len(n), function(i) D[off[i] + seq_len(n_task[i]), , drop = FALSE] %*% data$basis[[i]]))
   }
   data$metadata$simulation <- list(seed = seed, truth = truth$label, type = truth$type,
     kappa = truth$kappa, L = truth$L, omega = truth$omega, pi_sl = truth$pi_sl,
