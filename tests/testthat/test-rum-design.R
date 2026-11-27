@@ -60,7 +60,7 @@ test_that("seeds reproduce and the array, list and CRN paths agree", {
     expect_equal(unname(l[[5]]), unname(a[5, , ]))
     crn <- .rum_draw_designs_crn(sp, resp = data.frame(pid7 = c(2, -3, 0)), M = 20, seed = 7)
     expect_identical(.rum_crn_designs(crn, 1), a)
-    expect_identical(dim(.rum_draw_designs(sp, "R", M = 4, seed = 1, T = 2)), c(4L, 2L, sp$p))
+    expect_identical(dim(.rum_draw_designs(sp, "R", M = 4, seed = 1, n_task = 2)), c(4L, 2L, sp$p))
   }
   # the global RNG stream is left untouched
   set.seed(1); u1 <- stats::runif(1)
@@ -117,7 +117,7 @@ test_that("GS: the negative candidate's side is a balanced 8/8 block over scenar
   pl <- colSums(negL) / colSums(negL | negR)
   expect_lt(max(abs(pl - 0.5)), 4.5 * sqrt(0.25 / (M * 9 / 13)))
   # truncation keeps the block's law for the first T scenarios
-  r5 <- .rum_design_draw_raw(sp, 4000L, seed = 101, T = 5)
+  r5 <- .rum_design_draw_raw(sp, 4000L, seed = 101, n_task = 5)
   expect_identical(dim(r5$dem), c(4000L, 5L, 2L))
 })
 

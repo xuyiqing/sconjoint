@@ -151,7 +151,7 @@ sc_code <- function(design, A, B) {
 .sc_design_spec <- function(design) {
   at <- design$attributes; pr <- design$probs; cd <- design$coding; an <- names(at); S <- design$tasks
   uni <- vapply(an, function(a) isTRUE(all.equal(pr[[a]], rep(1 / length(at[[a]]), length(at[[a]])))), TRUE)
-  draw <- function(M, T = S) {
+  draw <- function(M, n_task = S) {
     n2 <- M * S * 2L
     raw <- lapply(an, function(a) {
       L <- length(at[[a]])
@@ -159,14 +159,14 @@ sc_code <- function(design, A, B) {
             c(M, S, 2L))
     })
     names(raw) <- an
-    .rum_raw_head(raw, T)
+    .rum_raw_head(raw, n_task)
   }
   x_side <- function(raw, side)
     do.call(cbind, lapply(an, function(a) cd[[a]][as.vector(raw[[a]][, , side]), , drop = FALSE]))
   code <- function(raw, key = NULL) {
-    M <- dim(raw[[1L]])[1L]; T <- dim(raw[[1L]])[2L]
+    M <- dim(raw[[1L]])[1L]; n_task <- dim(raw[[1L]])[2L]
     d <- x_side(raw, 1L) - x_side(raw, 2L)
-    array(d, c(M, T, length(design$features)), dimnames = list(NULL, NULL, design$features))
+    array(d, c(M, n_task, length(design$features)), dimnames = list(NULL, NULL, design$features))
   }
   to_raw <- function(profA, profB) {
     n <- nrow(profA)
@@ -184,9 +184,9 @@ sc_code <- function(design, A, B) {
     out
   }
   to_profiles <- function(raw) {
-    M <- dim(raw[[1L]])[1L]; T <- dim(raw[[1L]])[2L]
+    M <- dim(raw[[1L]])[1L]; n_task <- dim(raw[[1L]])[2L]
     one <- function(side) {
-      out <- data.frame(draw = rep(seq_len(M), each = T), task = rep(seq_len(T), M))
+      out <- data.frame(draw = rep(seq_len(M), each = n_task), task = rep(seq_len(n_task), M))
       for (a in an) out[[a]] <- at[[a]][as.vector(t(raw[[a]][, , side]))]
       out
     }

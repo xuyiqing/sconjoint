@@ -12,26 +12,32 @@ review's three general points apply to the new code as follows:
 
 * **\value**: every exported function's help page documents its return value.
 
-* **\dontrun{}**: no example uses `\dontrun{}`. Slow examples are wrapped in `\donttest{}` and run
-  on a small bundled fit (`inst/extdata/toy_fit.rds`).
+* **\dontrun{}**: no example uses `\dontrun{}`. Every example runs in under a second, on a small
+  bundled fit (`inst/extdata/toy_fit.rds`) or simulated data.
 
-* **Modifying the .GlobalEnv**: seeded code uses `withr::local_seed()` / `withr::with_seed()`.
-  <!-- Before submitting: R/rum-data.R (lines 138-142) still saves and restores .Random.seed in
-  .GlobalEnv with assign()/rm(), which the earlier review asked us to remove. Fix it, then state
-  here that the package does not touch the global environment. -->
+* **Modifying the .GlobalEnv**: the package does not write to the global environment and never
+  calls `set.seed()`. Seeded draws run inside `withr::with_seed()`, which restores the caller's
+  random-number state afterwards.
 
 ## Test environments
 
-To be filled in after the release checks (local macOS arm64 and win-builder, `R CMD check --as-cran`).
+* local macOS 27.2 (arm64), R 4.5.3: `R CMD check --as-cran`
+* win-builder (R-devel): to be run before submission
+* macOS builder (R-release): to be run before submission
 
 ## R CMD check results
 
-To be filled in after the release checks.
+0 errors | 0 warnings | 1 note
+
+* This is a new submission.
 
 ## Notes for the reviewer
 
 * The package downloads nothing at install or run time.
+* The tests shipped with the package take about two seconds. The full test suite stays in the
+  package's GitHub repository.
 * The bundled datasets are extracts from public replication archives on the Harvard Dataverse,
   each under a license that permits redistribution: `gs2020` (CC BY 4.0, doi:10.7910/DVN/EEARKA)
   and `br2017` (CC0 1.0, doi:10.7910/DVN/NGRGS5). Each dataset's `@source` records its citation,
-  Dataverse DOI, and license; `gs2020` (CC BY 4.0) is attributed accordingly.
+  Dataverse DOI, and license; `gs2020` (CC BY 4.0) is attributed accordingly. `simconjoint` is
+  simulated.

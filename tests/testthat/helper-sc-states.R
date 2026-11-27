@@ -2,9 +2,9 @@
 # evaluator, and random positive-definite held-out information (moved from test-sc-engine.R).
 sc_test_states <- function(n = 30L, p = 3L, q = 1L, K = 2L, seed = 11L) {
   withr::with_seed(seed, {
-    T <- 4L
-    X <- matrix(sample(c(-1, 0, 1), n * T * p, TRUE), n * T, p, dimnames = list(NULL, paste0("f", seq_len(p))))
-    y <- stats::rbinom(n * T, 1, .5); id <- rep(sprintf("i%02d", seq_len(n)), each = T)
+    n_task <- 4L
+    X <- matrix(sample(c(-1, 0, 1), n * n_task * p, TRUE), n * n_task, p, dimnames = list(NULL, paste0("f", seq_len(p))))
+    y <- stats::rbinom(n * n_task, 1, .5); id <- rep(sprintf("i%02d", seq_len(n)), each = n_task)
     Z <- matrix(stats::rnorm(n * 2), n, 2)
     x <- sc_data(y, X, id, Z = Z, groups = data.frame(g = stats::rbinom(n, 1, .5)), fold = rep(seq_len(K), length.out = n))
     d <- x$data; n_th <- .rum_th_len(p, q); D <- p + n_th
