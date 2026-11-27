@@ -49,14 +49,25 @@ sc_save(st, "gs_q3.rds")
 
 st <- sc_load("gs_q3.rds")
 sc_estimate(st, list(
-  sc_mean("co-partisan", "diff_respParty", w = "PL"),
-  sc_share("co-partisan", "diff_respParty", w = "PL"),
+  sc_mean("co-partisan.mean", "diff_respParty", w = "PL"),
+  sc_share("co-partisan.share", "diff_respParty", w = "PL"),
   sc_contest("co-partisan vs other", "diff_respParty", w = "PL")))
 ```
 
 Fitting at the paper’s settings takes hours. The paper’s saved fold
-states for both applications are a separate download (to be published),
-so the estimates can be computed in seconds.
+states for both applications, `gs_q3.rds` and `br_q4.rds`, are a
+separate download from the release
+[`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11),
+so the estimates take about a minute instead of hours:
+
+``` r
+url <- "https://github.com/xuyiqing/sconjoint/releases/download/fits-2026-11/gs_q3.rds"
+download.file(url, "gs_q3.rds", mode = "wb")
+st <- sc_load("gs_q3.rds")                   # checks the file's checksum
+```
+
+The installation chapter of the book gives each file’s checksum and how
+it was made.
 
 ## Documentation
 

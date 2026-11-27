@@ -1,6 +1,6 @@
 Package: sconjoint
 Title: Structural Random-Utility Estimation for Conjoint Experiments
-Version: 0.4.1
+Version: 0.4.2
 Date: 2026-11-26
 Authors@R: c(
     person("Avidit", "Acharya", role = "aut"),
@@ -11,12 +11,13 @@ Description: Estimates a structural random-utility model for forced-choice
     persistent tastes from task-level shocks and a respondent-specific
     position (side) preference. Tastes follow a normal law with a low-rank
     covariance (q taste factors); a neural network links mean tastes to
-    respondent characteristics. Estimation is cross-fitted, with one-step
-    corrected standard errors for population quantities: preference
-    distributions and shares, compensating differentials, choice and win
-    probabilities in hypothetical matchups, average marginal effects,
-    attribute importance, the decisiveness of named attribute swaps, and
-    respondent-level posterior summaries.
+    respondent characteristics. Estimation uses respondent-level
+    cross-fitting and score correction for specified population means,
+    preference shares, contrasts, average marginal effects, expected support
+    in hypothetical matchups, and the decisiveness of named attribute swaps.
+    Inference rests on the model and stated regularity conditions. Attribute
+    importance is descriptive. Individual posterior summaries condition on
+    fitted population parameters.
 License: MIT + file LICENSE
 URL: https://yiqingxu.org/packages/sconjoint/
 BugReports: https://github.com/xuyiqing/sconjoint/issues

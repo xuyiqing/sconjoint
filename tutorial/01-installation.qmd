@@ -17,9 +17,22 @@ The package needs R 4.1 or later and four packages: `Rcpp`, `withr`, `digest`, a
 
 ```{r}
 #| label: load
+#| cache: false
 library(sconjoint)
 packageVersion("sconjoint")
 ```
+
+```{r}
+#| label: render-revision
+#| cache: false
+#| echo: false
+rev <- tryCatch(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE, stderr = FALSE),
+                error = function(e) character(0), warning = function(e) character(0))
+rev <- if (length(rev)) rev[1] else "unknown"
+```
+
+This book was rendered with sconjoint `r packageVersion("sconjoint")`, from source revision
+`r rev` of the package repository.
 
 Two datasets ship with the package, `gs2020` [@graham2020democracy] and `br2017`
 [@ballard2017structure]. `sc_example_data()` turns each into the paper's model inputs.
@@ -37,13 +50,46 @@ are saved in two files:
 
 | File | Application | Taste factors | Size |
 |---|---|---|---|
-| `gs_q3.rds` | Graham and Svolik (2020) | 3 | about 43 MB |
-| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | about 21 MB |
+| `gs_q3.rds` | Graham and Svolik (2020) | 3 | 42,951,896 bytes |
+| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | 20,506,732 bytes |
 
-The files are too large for the package. They are a separate download, to be published with the
-package release. For each of the five folds, a file holds what `sc_estimate()` needs and the fold's
-network and covariate scaling. It also holds the respondent ids, groups, folds, the validation
-respondents (used to stop training early), and a checksum that `sc_load()` verifies.
+Their checksums:
+
+- `gs_q3.rds`: MD5 `17d0f2efa2ecf7c4b2ce3b01991a893b`; SHA-256
+  `82ec4e8005d2979f8352d65d3104ea6d503542be005ed1c352658819af845731`.
+- `br_q4.rds`: MD5 `6293fd6938d20477369b4f583c986a43`; SHA-256
+  `0aa879eadc4ed744ec508dd26fc7a85521326c3f8f8d107c03dd56e8fd245faa`.
+
+The files are too large for the package. They are published with the GitHub release
+[`fits-2026-11`](https://github.com/xuyiqing/sconjoint/releases/tag/fits-2026-11). For each of the
+five folds, a file holds what `sc_estimate()` needs and the fold's network and covariate scaling. It
+also holds the respondent ids, groups, folds, the validation respondents (used to stop training
+early), and a checksum of its contents that `sc_load()` verifies.
+
+To download both files into a folder `fits` and check them:
+
+```{r}
+#| label: fits-download
+#| eval: false
+base <- "https://github.com/xuyiqing/sconjoint/releases/download/fits-2026-11"
+files <- c("gs_q3.rds", "br_q4.rds")
+md5 <- c("17d0f2efa2ecf7c4b2ce3b01991a893b", "6293fd6938d20477369b4f583c986a43")
+dir.create("fits", showWarnings = FALSE)
+options(timeout = max(600, getOption("timeout")))
+for (f in files) download.file(file.path(base, f), file.path("fits", f), mode = "wb")
+unname(tools::md5sum(file.path("fits", files))) == md5   # both TRUE
+```
+
+**Provenance.** The fits are the paper's selected-rank fits. They were trained on 14 November 2026
+at package revision `1f7567a` (in the repository's history), on the paper's inputs, which
+`sc_example_data()` rebuilds exactly from the bundled data. The folds and validation respondents are
+stored in the files. On 25
+November 2026 each application's fold states and fit files were packed into one file with
+`sc_save()`, under package version 0.4.0.9000. The packing was checked: `sc_load()` gives back fold
+states identical to the originals, and each fold's stored network reproduces its stored mean tastes
+exactly. The files keep these records (`package_version` and `fit_sha` inside each file). They
+describe the archived fits, so they stay as they are; later package versions read the files
+unchanged.
 
 @sec-gs, @sec-br, @sec-inference and @sec-respondents read the files from the folder in the option
 `sconjoint.fits`. The default is `fits` in the working directory. For another folder, set the
