@@ -1,89 +1,71 @@
-# Get Started {#sec-start}
+# Installation {#sec-install}
 
-## Installation
+## Package
 
-`sconjoint` runs on the `torch` deep-learning backend, which bundles its
-own copy of `libtorch` (downloaded on first use). Install `torch` first
-and confirm its native library loads:
+Install `sconjoint` from GitHub. It contains C++ code, so it needs a compiler: Xcode command-line
+tools on macOS, Rtools on Windows, or a standard build toolchain on Linux.
 
-```{r install-torch, eval=FALSE}
-install.packages("torch")
-torch::install_torch()        # downloads libtorch the first time
-torch::torch_is_installed()   # should return TRUE
+```{r}
+#| label: install
+#| eval: false
+install.packages("remotes")
+remotes::install_github("xuyiqing/sconjoint")
 ```
 
-Then install `sconjoint` from CRAN. It has been submitted; until it is
-accepted this line stays commented out --- install a development version
-instead (see @sec-versions):
+The package needs R 4.1 or later and four packages: `Rcpp`, `withr`, `digest`, and `spacefillr`
+(scrambled Sobol points for numerical integration). The book's figures use base R graphics.
 
-```{r install-cran, eval=FALSE}
-# install.packages("sconjoint")
-```
-
-On CPU-only machines this is all you need. On a CUDA-enabled GPU, follow
-<https://torch.mlverse.org> to install the CUDA build of `libtorch`;
-`scfit(device = "cuda")` then uses it automatically. (The bit-exact
-determinism guarantee --- identical `sc_fit` output regardless of
-`n_cores` --- holds only on CPU.)
-
-## Versions {#sec-versions}
-
-Until the CRAN release, install from GitHub:
-
-| Source | Version | What it adds |
-|:--------------------|:------------|:------------------------------------------------------------|
-| CRAN | 0.2.2 | The released version (default), pending acceptance |
-| GitHub `@dev` | 0.2.2 | Development version; currently matches the CRAN submission, including the `torch_threads` Windows-stability control and the attribute-interaction extension |
-
-Install the development version with the `@branch` suffix:
-
-```{r install-github, eval=FALSE}
-# install.packages("remotes")
-remotes::install_github("xuyiqing/sconjoint@dev")   # development version
-```
-
-Check which version is installed on this computer:
-
-```{r check-version}
+```{r}
+#| label: load
+library(sconjoint)
 packageVersion("sconjoint")
 ```
 
-Once `sconjoint` is on CRAN, `install.packages("sconjoint")` gives the
-latest release and `remotes::install_version("sconjoint", "0.2.2")` pins a
-specific one. Installing `sconjoint` pulls in `ggplot2`, `ggridges`, and
-related plotting packages automatically; no extra setup is needed for the
-visualization methods in the Plot Options chapter.
+Two datasets ship with the package, `gs2020` [@graham2020democracy] and `br2017`
+[@ballard2017structure]. `sc_example_data()` turns each into the paper's model inputs.
 
-::: {.callout-warning}
-## Troubleshooting: the R session aborts when calling `scfit()`
+```{r}
+#| label: data-list
+data(package = "sconjoint")$results[, c("Item", "Title")]
+```
 
-A session *abort* (the R process exits, rather than throwing an R error)
-almost always comes from the native `libtorch` backend, not from
-`sconjoint` itself. It has been reported on some Windows systems while the
-same code runs fine on macOS. Things to try, in order:
+## Saved fits
 
-1. **Confirm `torch` works in isolation.** In a fresh session, run
-   `library(torch); x <- torch_randn(3, 3); x %*% x`. If *that* aborts, the
-   problem is the `torch` / `libtorch` installation or your environment, not
-   `sconjoint`: reinstall with `torch::install_torch()`, and check whether
-   security or endpoint-protection software is blocking the `libtorch` DLLs
-   (a common cause on managed corporate Windows machines).
+Fitting the model at the paper's settings takes hours. Most of the time goes to each held-out
+respondent's information (@sec-inference), not to training the network. The paper's fold states
+are saved in two files:
 
-2. **Cap torch's threads with `torch_threads = 1`.** torch's default
-   multi-threaded CPU backend aborts the session on some Windows
-   configurations, and running it single-threaded often avoids it. The
-   `torch_threads` argument to `scfit()` is the targeted fix for this
-   ([issue #7](https://github.com/xuyiqing/sconjoint/issues/7)); it is
-   available in v0.2.2 (any install source in @sec-versions):
+| File | Application | Taste factors | Size |
+|---|---|---|---|
+| `gs_q3.rds` | Graham and Svolik (2020) | 3 | about 43 MB |
+| `br_q4.rds` | Ballard-Rosa, Martin and Scheve (2017) | 4 | about 21 MB |
 
-   ```r
-   fit <- scfit(formula, data, ..., torch_threads = 1)
-   ```
+The files are too large for the package. They are a separate download, to be published with the
+package release. For each of the five folds, a file holds what `sc_estimate()` needs and the fold's
+network and covariate scaling. It also holds the respondent ids, groups, folds, the validation
+respondents (used to stop training early), and a checksum that `sc_load()` verifies.
 
-   `torch_threads = 1` changes only the threading, not the results, and
-   torch honors the thread count only on the *first* such call of a
-   session --- so set it before running any other torch work.
+@sec-gs, @sec-br, @sec-inference and @sec-respondents read the files from the folder in the option
+`sconjoint.fits`. The default is `fits` in the working directory. For another folder, set the
+option first:
 
-3. **Try plain `R`** (`Rterm` or the console) rather than an IDE, to rule
-   out an IDE-specific interaction.
-:::
+```{r}
+#| label: fits-option
+#| eval: false
+options(sconjoint.fits = "~/Downloads/sconjoint-fits")
+```
+
+Each chapter runs in its own R session. To render the book with the fits elsewhere, put that line
+in an `.Rprofile` file in the book's folder.
+
+```{r}
+#| label: fits-check
+fits <- getOption("sconjoint.fits", "fits")
+file.exists(file.path(fits, c("gs_q3.rds", "br_q4.rds")))
+gs <- sc_load(file.path(fits, "gs_q3.rds"))
+gs
+```
+
+The printout gives the rank $q$, the number of folds, respondents and coded features, and the
+integration settings used for the information and the scores. `sc_load()` returns `NULL` with a message when the
+file is missing. It stops when the checksum does not match.

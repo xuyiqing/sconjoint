@@ -1,0 +1,119 @@
+# Quantities {#sec-quantities}
+
+This chapter lists every target constructor, what it estimates, and its interval rule. The examples
+use the package's toy fit: 40 simulated respondents under the tax-plan design, one taste factor and
+two folds. Its estimates mean nothing.
+
+`sc_ame_switch()` averages over the experiment's randomization, and so does the information
+behind every standard error. Both need the design. The package knows the two applications' designs
+(`"gs"`, `"br"`) and, through `sc_design()`, designs that draw each attribute on its own, as in
+@sec-quickstart.
+
+```{r}
+#| label: q-setup
+library(sconjoint)
+toy <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
+toy
+```
+
+## Contrasts and weights
+
+Most constructors take a contrast `c`, a vector with one coefficient per coded feature, so that a
+respondent's utility difference is $c^\top \beta_i$. It can be written three ways:
+
+- feature names, whose unit vectors are added: `"tax6_linear"`, or `c("tax6_linear",
+  "revenue_helmert1")` for the sum,
+- a named numeric vector, matched by name (missing features get 0): `c(tax6_linear = 1, tax1_linear
+  = -1)`,
+- a full numeric vector in feature order, such as the output of `sc_br_revenue_contrast()`.
+
+The optional weights `w` define a subgroup: the name of a 0/1 column of the data's groups (`"PL"`),
+a vector with one weight per respondent, or a function of the groups that returns such a vector
+(`function(g) g$party == "Dem"`). A target averages over respondents with positive weight, and the
+output column `n` counts them.
+
+## Constructors
+
+| Constructor | What it estimates | Kind | Interval |
+|---|---|---|---|
+| `sc_mean(name, c, w)` | The average utility difference $c^\top\beta_i$ in the population or a subgroup | mean | Wald |
+| `sc_share(name, c, w)` | The share of respondents whose utility difference is positive. With `c` the sum of a cost and a benefit, it is the compensation share | share | log-odds, after a bounded update |
+| `sc_ratio(name, num, den, sign = -1)` | `sign` times the ratio of two means, such as a cost in units of a benefit | derived | Wald, delta method |
+| `sc_difference(name, a, b)` | The difference of two means, such as the same contrast in two subgroups | derived | Wald, delta method |
+| `sc_contest(name, D, coef, w)` | The expected share choosing profile A over profile B in a specified matchup, with position effects set to zero | choice | log-odds |
+| `sc_ame_switch(name, attr, level, ref, ...)` | The average change in a profile's choice probability when one attribute switches from `ref` to `level`, over the design's contexts | ame | Wald |
+| `sc_ame_rows(name, D, coef, side, w)` | A weighted sum of choice probabilities over explicit contest rows. With $\pm 1/R$ coefficients, it is an AME over a given set of contexts | ame | Wald |
+| `sc_importance(groups, menus, ...)` | Each attribute's share of a respondent's utility variation over its menu of levels, averaged over respondents | importance | none (point estimates) |
+| `sc_decisiveness(groups, pairs, ...)` | How often exchanging two levels of one attribute between the profiles of a recorded task would reverse the choice | decisiveness | log-odds |
+| `sc_br_revenue_contrast(bracket, high, low, profiles)` | Not a target: the contrast for a tax-rate change in the BR design, with displayed revenue following the experiment's rule | | |
+| `sc_br_plan_contest(name, plan, opponent, w)` | The expected share choosing one complete BR tax plan over another, averaging over the revenue categories both can display | choice | log-odds |
+| `sc_br_endpoint_ame(name, bracket, profiles, w)` | The AME of moving one BR bracket from the bottom to the top of its menu, with revenue following the rule | ame | Wald |
+
+Two functions describe the fit without a correction. `sc_fitted_law(object, c, w)` returns each
+held-out respondent's fitted normal law of $c^\top\beta_i$. Its `"summary"` attribute gives the
+mixture's mean, standard deviation and share above zero. `sc_posterior()` summarizes individual
+respondents (@sec-respondents).
+
+A constructor only describes the quantity. `sc_estimate()` computes it:
+
+```{r}
+#| label: q-target
+top <- sc_mean("top rate", "tax6_linear")
+top
+est <- sc_estimate(toy, list(top, sc_share("top rate, share", "tax6_linear"),
+                             sc_contest("raise the top rate", "tax6_linear")))
+est
+```
+
+## Interval rules
+
+All intervals use the standard error of @sec-inference and `z = 1.96` by default.
+
+- **Wald** for means, AMEs, ratios and differences: the estimate plus or minus $z$ times the
+  standard error.
+- **Log-odds** for probabilities and shares, so the interval stays inside $[0, 1]$. For an estimate
+  $p$ with standard error $s$, the interval is $G\{\log(p / (1 - p)) \pm z s / (p (1 - p))\}$, with $G$
+  the logistic function. It is missing when $p$ is exactly 0 or 1.
+- **None** for importance shares (point estimates only).
+
+For shares near 0 or 1, an interval can span almost all of $[0, 1]$ and carry no information, as for
+the share favoring a candidate who prosecutes journalists (@sec-gs).
+
+## Bounded updates
+
+The one-step correction (@sec-inference) can push a share below 0 or above 1. `sc_estimate()`
+therefore refines each share by a *bounded update*: it moves the fitted tastes along the directions
+the correction points to and recomputes the share, until the remaining correction is negligible. The
+estimate is then a share of a fitted law, so it stays in $[0, 1]$, and `status` says `converged`. A
+share whose update does not converge keeps its one-step estimate and standard error, with no
+interval, and `status` says why. Importance shares get one joint update that keeps them summing to
+one.
+
+`bounded = FALSE` skips these updates and reports the one-step values, which is much faster:
+
+```{r}
+#| label: q-bounded
+sc_estimate(toy, sc_share("top rate, share", "tax6_linear"), bounded = FALSE)
+```
+
+## Ratios and differences
+
+`sc_ratio()` and `sc_difference()` combine two means by the delta method: a respondent's influence
+value for the ratio is a linear combination of their values for the two means, weighted by the
+ratio's derivatives. Both means come from the same call, so their correlation enters the standard
+error.
+
+## Output
+
+`sc_estimate()` returns a data frame with one row per target: `name`, `kind`, `estimate`,
+`plug_in` (the cross-fitted value before correction), `se`, `lower`, `upper`, `interval`,
+`n`, `status` and `method`. The attribute `"influence"` holds the respondent-level influence
+values, one column per target. The standard error is their standard deviation divided by
+$\sqrt{n}$:
+
+```{r}
+#| label: q-influence
+phi <- attr(est, "influence")
+dim(phi)
+c(se = est$se[1], from_influence = sd(phi[, 1]) / sqrt(nrow(phi)))
+```

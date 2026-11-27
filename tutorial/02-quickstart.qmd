@@ -1,0 +1,341 @@
+# Simulated example {#sec-quickstart}
+
+```{r}
+#| label: sim-setup
+library(sconjoint)
+house <- "#004a8c"
+truth <- simconjoint_truth$population
+tv <- function(name) truth$value[truth$name == name]
+t_start <- proc.time()[["elapsed"]]
+```
+
+The package's `simconjoint` data hold 800 simulated respondents who each choose between two
+candidates ten times. Their tastes are known. For example,
+`r round(100 * tv("share: prefer Republican"), 1)`% of the population prefers a Republican
+candidate to an otherwise identical Democrat, and long experience raises a candidate's chance of
+being chosen by `r round(100 * tv("AME: long vs no experience"), 1)` percentage points on average.
+This chapter runs the whole workflow on these data and compares the estimates with the truth.
+
+The chapter runs live, in about five minutes on a recent laptop. It uses a small network and
+fewer integration nodes than the paper. The paper's larger settings would give somewhat tighter answers.
+
+## Experiment
+
+Each candidate has four attributes, each drawn at random and independently: party, experience,
+policy position and gender. The data hold one row per candidate, two rows per task.
+
+```{r}
+#| label: sim-data
+head(simconjoint, 4)
+```
+
+Each respondent has three characteristics: age, ideology on a seven-point scale from $-3$ (very
+liberal) to 3 (very conservative), and gender.
+
+`sc_design()` describes how the candidates were drawn and codes each attribute as one 0/1
+indicator per level other than the first, six coded features in all. `sc_code()` turns the two
+candidates of each task into their difference, first minus second.
+
+```{r}
+#| label: sim-design
+des <- sc_design(list(party = c("Democrat", "Republican"),
+                      experience = c("none", "some", "long"),
+                      position = c("liberal", "moderate", "conservative"),
+                      gender = c("male", "female")), tasks = 10)
+des
+A <- simconjoint[simconjoint$profile == 1, ]          # first (left) candidate of each task
+B <- simconjoint[simconjoint$profile == 2, ]
+X <- sc_code(des, A, B)
+head(X, 3)
+```
+
+`sc_data()` collects the choices (1 when the first candidate was chosen), the coded differences,
+the respondent ids, and the characteristics that predict mean tastes. With the design attached,
+`sc_states()` later averages over the comparisons each respondent could have seen.
+
+```{r}
+#| label: sim-scdata
+Z <- as.matrix(A[!duplicated(A$id), c("age", "ideology", "female")])
+rownames(Z) <- unique(A$id)
+x <- sc_data(A$chosen, X, A$id, Z = Z, groups = data.frame(female = Z[, "female"]), design = des,
+             orientation = "y = 1 selects the first (left) candidate; X = first minus second")
+x
+```
+
+## Truth
+
+The choices follow the package's model (@sec-intro): tastes $\beta_i = \mu(Z_i) + \Lambda u_i$
+with two taste factors, and a pull $a_i = \sqrt{\omega}\, v_i$ toward the left candidate on top of
+the average pull $\kappa$. Here $\kappa = 0.2$ and $\omega = 0.3$. The taste for a Republican
+rises with ideology and flattens out for strong partisans. Older respondents value experience
+more. Policy tastes follow a quadratic loss around the respondent's own position: a candidate loses
+utility the farther its position is from the respondent's. The first taste factor
+moves party and policy, the second experience and gender. `?simconjoint` gives every formula.
+
+```{r}
+#| label: sim-truth
+simconjoint_truth$parameters[c("kappa", "omega")]
+simconjoint_truth$parameters$loading
+```
+
+`simconjoint_truth$population` holds the population values. Each is an exact sum over the finite
+set of characteristic values. The integrals inside the sum are computed by quadrature, accurate to
+about $10^{-6}$ or better.
+
+## Fits
+
+`sc_fit()` fits the model once per fold, each time on the other four of five folds. The code fits
+one, two and three taste factors with one hidden layer of 8 units, one start, at most 100 epochs,
+and Sobol rules of 128 to 256 nodes.
+
+```{r}
+#| label: sim-fit
+small <- list(hidden = 8L, seeds = 1L, control = list(max_epochs = 100L, patience = 5L),
+              nodes = 128L, check_nodes = 256L, heldout_nodes = 256L, verbose = FALSE)
+t0 <- proc.time()[["elapsed"]]
+fits <- lapply(1:3, function(q) do.call(sc_fit, c(list(x, q = q), small)))
+t_fit <- proc.time()[["elapsed"]] - t0
+```
+
+## Number of factors
+
+`sc_select_rank()` scores each fit on the respondents it did not train on. It moves from $q - 1$
+to $q$ factors only when the held-out log score gains more than two standard errors.
+
+```{r}
+#| label: sim-rank
+rank <- sc_select_rank(fits)
+rank
+fit <- fits[[which(rank$selected)]]
+```
+
+```{r}
+#| label: sim-rank-text
+#| echo: false
+q_sel <- rank$q[rank$selected]
+```
+
+The rule picks $q = `r q_sel`$`r if (q_sel == 2) ", the true number" else ", not the true number, 2"`. The second
+factor improves the held-out score by `r round(rank$z[2], 1)` standard errors. The third changes it
+by `r round(rank$z[3], 1)`, which is noise. Two factors are needed because respondents with the
+same characteristics still differ in two ways: how strongly partisan they are, and how much they
+care about experience and gender.
+
+## Fold states
+
+`sc_states()` computes what the estimator needs from each fold's fit. The slow part is each
+held-out respondent's information, an average over task sets drawn from `des`, which `x` carries.
+The code uses 40 draws per respondent, the paper 250 to 300.
+
+```{r}
+#| label: sim-states
+t0 <- proc.time()[["elapsed"]]
+st <- sc_states(fit, M = 40L, ny = 4L, info_nodes = 256L, score_nodes = 512L)
+t_states <- proc.time()[["elapsed"]] - t0
+st
+```
+
+## Estimates
+
+Each target names one population quantity (@sec-quantities). The compensating share is the share
+for whom party outweighs experience: they would take a Republican with no experience over a
+Democrat with long experience. The contest compares a moderate Republican woman with long
+experience to a liberal Democrat man with some experience, with position effects set to zero.
+`sc_ame_switch()` and `sc_importance(des)` take their contexts and attributes from the design.
+
+```{r}
+#| label: sim-estimate
+contest <- sc_code(des, data.frame(party = "Republican", experience = "long", position = "moderate", gender = "female"),
+                   data.frame(party = "Democrat", experience = "some", position = "liberal", gender = "male"))
+targets <- list(
+  sc_mean("mean: Republican", "party_Republican"),
+  sc_mean("mean: long experience", "experience_long"),
+  sc_mean("mean: conservative position", "position_conservative"),
+  sc_mean("mean: female candidate", "gender_female"),
+  sc_share("share: prefer Republican", "party_Republican"),
+  sc_share("share: prefer long experience", "experience_long"),
+  sc_share("share: prefer female candidate", "gender_female"),
+  sc_share("share: Republican without experience over Democrat with long",
+           c(party_Republican = 1, experience_long = -1)),
+  sc_contest("contest: A beats B", drop(contest)),
+  sc_ame_switch("AME: long vs no experience", "experience", level = "long", ref = "none"),
+  sc_importance(des, names = paste("importance:", names(des$attributes))))
+t0 <- proc.time()[["elapsed"]]
+est <- sc_estimate(st, targets)
+t_est <- proc.time()[["elapsed"]] - t0
+est$truth <- truth$value[match(est$name, truth$name)]
+est$covered <- est$truth >= est$lower & est$truth <= est$upper
+knitr::kable(est[, c("name", "truth", "estimate", "lower", "upper", "covered")], digits = 3,
+             col.names = c("Quantity", "Truth", "Estimate", "95% lower", "95% upper", "Covered"))
+```
+
+```{r}
+#| label: sim-cover
+#| echo: false
+n_int <- sum(!is.na(est$covered)); n_cov <- sum(est$covered, na.rm = TRUE)
+miss <- est$name[which(!est$covered)]
+imp <- which(est$kind == "importance"); imp_worst <- imp[which.max(abs(est$estimate[imp] - est$truth[imp]))]
+imp_err <- abs(est$estimate[imp_worst] - est$truth[imp_worst])
+resp <- simconjoint_truth$respondents; law <- simconjoint_truth$covariate_law
+cons_sample <- mean(resp$ideology > 0); cons_pop <- sum(law$ideology_probs[law$ideology > 0])
+party_sample <- mean(simconjoint_truth$beta[, "party_Republican"])
+r_party <- est[est$name == "mean: Republican", ]
+```
+
+`r n_cov` of the `r n_int` intervals cover the truth`r if (length(miss)) paste0("; the miss", if (length(miss) > 1) "es are " else " is ", paste0("\"", miss, "\"", collapse = ", ")) else ""`.
+With 95% intervals, about one miss in twenty is expected, so one run cannot show that coverage
+is exact. The intervals are for the population, and this sample of 800 leans right. It holds more
+conservatives than the population (`r round(100 * cons_sample)`% against
+`r round(100 * cons_pop)`%), and its true average taste for a Republican is
+`r round(party_sample, 2)`, against `r round(r_party$truth, 2)` in the population. The interval for
+that mean, from `r round(r_party$lower, 2)` to `r round(r_party$upper, 2)`,
+`r if (isTRUE(r_party$covered)) "covers the population value" else "covers the sample's value but not the population's"`.
+
+```{r}
+#| label: fig-sim-estimates
+#| fig-cap: "Estimates and 95% intervals (blue) against the truth (open circles)"
+#| fig-width: 8
+#| fig-height: 4.6
+short <- c("Republican", "Long experience", "Conservative position", "Female candidate",
+           "Prefer Republican", "Prefer long experience", "Prefer female candidate",
+           "Rep., no exp., over Dem., long exp.", "Contest: A beats B", "AME: long experience",
+           paste("Importance:", names(des$attributes)))
+lab <- setNames(short, est$name)
+truth_of <- setNames(est$truth, est$name)
+layout(matrix(c(1, 2, 3, 3), 2, byrow = TRUE), widths = c(1, 1.3), heights = c(4, .45))
+sc_plot_estimates(est[1:4, ], labels = lab, reference = truth_of, reference_style = "circle",
+                  xlim = c(-.3, .9), xlab = "Mean taste (logit scale)", legend = FALSE)
+sc_plot_estimates(est[5:14, ], labels = lab, reference = truth_of, reference_style = "circle",
+                  xlim = c(0, .85), xlab = "Share or probability", legend = FALSE)
+par(mar = rep(0, 4)); plot.new()
+keys <- c("Estimate and 95% interval", "Truth", "No interval")
+legend("center", keys, horiz = TRUE, bty = "n", pch = c(16, 1, 1), lty = c(1, NA, NA),
+       col = c(house, "black", house), pt.cex = c(.8, 1.2, .8), cex = .85,
+       text.width = strwidth(paste0(keys, "mm"), cex = .85))
+```
+
+The left panel shows mean tastes, the right panel shares, probabilities, the AME and importance
+shares. Importance shares have no intervals. In this run their largest miss is `r round(100 * imp_err, 1)` points, for
+`r sub("importance: ", "", est$name[imp_worst])`, so read them as rough.
+
+Two population mean tastes, for party and policy, are close to zero. That does not mean
+respondents do not care (@fig-sim-laws).
+
+## Taste distributions
+
+`sc_fitted_law()` gives each held-out respondent's fitted normal law of a taste, with mean
+$c^\top\mu(Z_i)$ and standard deviation $\lVert\Lambda^\top c\rVert$. Their mixture is the fitted
+distribution. The true one uses the true $\mu$ and $\Lambda$.
+
+```{r}
+#| label: fig-sim-laws
+#| fig-cap: "Fitted (blue) and true (black) distributions of two tastes"
+#| fig-width: 8
+#| fig-height: 3.8
+L0 <- simconjoint_truth$parameters$loading; mu0 <- simconjoint_truth$mu
+sf <- c("party_Republican", "experience_long")
+true_law <- function(f) function(v)          # the true density: a mixture over respondents
+  rowMeans(outer(v, mu0[, f], function(g, m) dnorm(g, m, sqrt(sum(L0[f, ]^2)))))
+sc_plot_laws(lapply(sf, function(f) sc_fitted_law(st, f)),
+             labels = c("Taste for a Republican", "Taste for long experience"),
+             truth = lapply(sf, true_law), layout = "panels", ncol = 2, xlim = c(-3.5, 3.5),
+             xlab = "Taste (logit scale)")
+```
+
+The true taste for a Republican has two humps, liberals below zero and conservatives above. The
+fitted distribution has the right width, from about $-3$ to $3$, but blurs the humps into a
+plateau. The 8-unit network learns a mean taste almost linear in ideology, while the truth,
+$2 \tanh(3s)$ with $s$ the ideology divided by 3, levels off away from the center. The fit makes
+up for this with a larger spread (the table below). A network with two hidden layers (16 and 8
+units) found the humps in our trials but predicted held-out choices worse, so the held-out score
+prefers the smoother fit. The shares and means are still right, because they depend only on the
+mass above zero and the center. The taste for long
+experience has one hump, with about three quarters of it above zero, and the fit recovers it almost
+exactly.
+
+The loading $\Lambda$ itself is not identified: any rotation of its columns gives the same model.
+The spread of tastes among respondents with the same characteristics, $\Lambda\Lambda^\top$, is
+identified. Its diagonal gives each taste's standard deviation among such respondents. Averaged
+over the five folds:
+
+```{r}
+#| label: sim-spread
+sd_fit <- rowMeans(sapply(st$folds, function(f) sqrt(rowSums(as.matrix(f$th$loading)^2))))
+spread <- data.frame(feature = des$features, true_sd = round(sqrt(rowSums(L0^2)), 2),
+                     fitted_sd = round(sd_fit, 2), row.names = NULL)
+spread
+```
+
+```{r}
+#| label: sim-spread-text
+#| echo: false
+gap <- abs(spread$fitted_sd - spread$true_sd); j <- which.max(gap)
+```
+
+The fitted spread is within `r round(max(gap[-j]), 2)` of the truth for five of the six features.
+The exception is `r spread$feature[j]` (`r spread$fitted_sd[j]` against `r spread$true_sd[j]`),
+where the spread absorbs the part of the mean taste the network did not learn.
+
+## Individual respondents
+
+`sc_posterior()` combines the fitted law with a respondent's own choices, at the fold that did not
+train on that respondent (@sec-respondents). `history` sets how many of the first tasks to use.
+
+```{r}
+#| label: sim-posterior
+b_true <- simconjoint_truth$beta[, "party_Republican"]
+post <- lapply(c(0, 2, 5, 10), function(h)
+  sc_posterior(st, contrasts = c(party_Republican = 1), history = h, nodes = 1024)$contrasts)
+data.frame(tasks_used = c(0, 2, 5, 10),
+           correlation = round(sapply(post, function(p) cor(p$mean, b_true)), 3),
+           rmse = round(sapply(post, function(p) sqrt(mean((p$mean - b_true)^2))), 3))
+```
+
+```{r}
+#| label: fig-sim-posterior
+#| fig-cap: "Posterior mean against true taste for a Republican"
+#| fig-width: 8
+#| fig-height: 3.6
+op <- par(mfrow = c(1, 2))
+for (j in c(1, 4))
+  sc_plot_posterior(post[[j]], truth = b_true, xlab = "True taste for a Republican",
+                    main = c("No tasks used", "", "", "All 10 tasks")[j])
+par(op)
+```
+
+With no tasks, the posterior mean is the fitted $\mu(Z_i)$, which already tracks the true taste
+because ideology explains much of party taste. With all ten tasks, the correlation rises from `r round(cor(post[[1]]$mean, b_true), 2)`
+to `r round(cor(post[[4]]$mean, b_true), 2)`. The points still scatter widely: ten choices
+carry limited information, and the posterior pulls each respondent toward $\mu(Z_i)$. The
+posterior is therefore a prediction of a respondent's taste, not a measurement of it. For
+population questions, such as how many prefer a Republican, use the population targets above
+rather than counts of posterior means.
+
+## What is recovered
+
+- **Recovered:** the number of taste factors; mean tastes, shares, the compensating share, the
+  contest probability and the AME, with `r n_cov` of `r n_int` intervals covering the population
+  value; the distribution of the taste for experience; the spread of most tastes; the position
+  effects $\kappa$ and $\omega$ (each fold's values are in `summary(fit)`).
+- **Recovered roughly:** importance shares, which have no intervals and miss here by up to
+  `r round(100 * imp_err, 1)` points; the distribution of the taste for a Republican, with the
+  right width but its two humps blurred into a plateau.
+- **Not recovered:** the loading $\Lambda$ itself, identified only up to rotation; individual
+  tastes, which ten tasks pin down only partly.
+
+```{r}
+#| label: sim-time
+#| echo: false
+t_total <- proc.time()[["elapsed"]] - t_start
+```
+
+This chapter took `r round(t_total / 60, 1)` minutes to run: `r round(t_fit / 60, 1)` for the
+three fits, `r round(t_states / 60, 1)` for the fold states and `r round(t_est / 60, 1)` for the
+estimates.
+
+## Next steps
+
+@sec-gs and @sec-br apply the same steps to the paper's data, starting from saved fits.
+@sec-quantities lists every target. For another experiment with independently drawn attributes,
+describe it with `sc_design()` and code its profiles with `sc_code()`. Every step above then works
+unchanged.

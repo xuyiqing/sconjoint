@@ -5,36 +5,39 @@ project:
     - Rscript _pre-render.R
 
 book:
-  title: "sconjoint: Structural Deep Learning for Conjoint Experiments"
+  title: "sconjoint: Structural Random-Utility Estimation for Conjoint Experiments"
+  author:
+    - Avidit Acharya
+    - Jens Hainmueller
+    - Yiqing Xu
   chapters:
     - index.qmd
     - 01-installation.qmd
-    - 02-sanity-check.qmd
-    - 03-example-gs.qmd
-    - 04-example-br.qmd
-    - 05-example-sw.qmd
-    - 06-example-bs.qmd
-    - 07-estimands.qmd
-    - 08-plot-options.qmd
-    - 09-advanced-options.qmd
+    - 02-quickstart.qmd
+    - 03-gs.qmd
+    - 04-br.qmd
+    - 05-quantities.qmd
+    - 05b-plots.qmd
+    - 06-inference.qmd
+    - 07-respondents.qmd
     - references.qmd
     - changelog.qmd
 
 bibliography: references.bib
 link-citations: true
 
-nocite: |
-  @*
-
 format:
   html:
     theme: cosmo
     toc: true
+    code-overflow: wrap
+    fig-format: png
+    fig-dpi: 150
 
 execute:
   freeze: false
   cache: true
   eval: true
   echo: true
-  warning: false
+  warning: true
   message: false

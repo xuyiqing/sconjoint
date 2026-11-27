@@ -3,13 +3,18 @@
 \docType{data}
 \name{gs2020}
 \alias{gs2020}
-\title{Graham-Svolik (2020) candidate-choice conjoint on democratic norms}
+\title{Graham and Svolik (2020) candidate-choice conjoint on democratic norms}
 \format{
-A data frame with 41,314 rows (1,605 respondents, ~20,657
-matchups x 2 profiles) and 59 columns:
+A data frame with 41,314 rows (20,657 matchups x 2 profiles) and 60
+columns:
 \describe{
-\item{respondent, task, profile}{Identifiers.}
-\item{choice}{Binary outcome (1 = chosen, 0 = not chosen).}
+\item{respondent, task, profile}{Identifiers. \code{task} numbers a
+respondent's matchups 1, 2, ... in file order.}
+\item{choice}{1 if this profile was chosen, 0 if not.}
+\item{on_left}{1 if this row's candidate was displayed on the left of
+the screen, 0 if on the right (raw \code{c_onLeft} on profile 1 rows,
+\code{o_onLeft} on profile 2 rows). The two rows of a matchup always sum
+to 1.}
 \item{diff_respParty, diff_p1_num, diff_p2_num,
 diff_dem_code_g_committee, diff_dem_code_g_officestructure,
 diff_dem_code_g_procedure, diff_dem_code_g_progEval,
@@ -23,31 +28,30 @@ diff_race_Black, diff_race_Hispanic, diff_pro_Farmer,
 diff_pro_Lawyer, diff_pro_Legislative_staffer,
 diff_pro_Police_officer, diff_pro_Served_in_the_army,
 diff_pro_Served_in_the_navy, diff_pro_Small_business_owner,
-diff_pro_Teacher}{Attribute contrasts differenced across the two
-profiles: co-partisan, economic / social policy (1-4 conservative),
-six good-governance codes (\verb{g_*}), seven undemocratic codes
-(\verb{u_*}), two valence codes (\verb{v_*}), candidate sex, race (3), and
-profession (8).  Reference levels (good governance vs. "elect
-oversight board", etc.) are absorbed by the differencing, so no
-re-leveling is needed.}
-\item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth,
-z_knowl, z_female, z_race_black, z_race_asian, z_race_other,
-E_ideal, I_ideal, M_ideal, T_ideal, dem_better, dem_satisfied,
-dem_treat_journalists, dem_treat_banProtest, dem_treat_execRule,
-dem_treat_ignoreCourt}{The paper's respondent covariate set
-\eqn{\mathbf Z} (22): ideology, party, Trump approval,
-demographics, authoritarianism, knowledge, and race; the four
-issue ideal points (\verb{*_ideal}); and six direct democracy-attitude
-items (\verb{dem_*}).  The paper's main specification holds out the six
-direct items and fits on the remaining 16.}
-\item{ideo7, pid7, weight}{Convenience columns (raw 1-7 ideology, raw
--3..3 party ID, survey weight) for subgroup and weighting analyses;
-not part of \eqn{\mathbf Z}.}
+diff_pro_Teacher}{Attribute contrasts, candidate 1 minus candidate 2:
+co-partisan, economic and social policy (1-4, conservative high), six
+good-governance codes (\verb{g_*}, reference "elect oversight board"),
+seven undemocratic codes (\verb{u_*}), two valence codes (\verb{v_*}), candidate
+sex, race (3) and profession (8).}
+\item{z_ideo, z_pid7, z_trump, z_age, z_educ, z_hhi, z_auth, z_knowl,
+z_female, z_race_black, z_race_asian, z_race_other, E_ideal, I_ideal,
+M_ideal, T_ideal}{The 16 respondent covariates of the paper's main fit:
+ideology, party, Trump approval, age, education, income,
+authoritarianism, political knowledge (standardized), sex and race
+(0/1), and four issue ideal points (standardized).}
+\item{dem_better, dem_satisfied, dem_treat_journalists,
+dem_treat_banProtest, dem_treat_execRule, dem_treat_ignoreCourt}{Six
+direct democracy-attitude items. The paper holds them out of the main
+fit.}
+\item{ideo7, pid7, weight}{Raw seven-point ideology (1 = extremely
+liberal), raw party ID (-3 = strong Democrat to 3 = strong Republican,
+0 = pure independent) and the survey weight. Used for subgroups, not
+as model inputs.}
 }
 }
 \source{
 Graham, Matthew H. and Milan W. Svolik. 2020. "Democracy
-in America?  Partisanship, Polarization, and the Robustness of
+in America? Partisanship, Polarization, and the Robustness of
 Support for Democracy in the United States." \emph{American Political
 Science Review} 114(2):392-409.
 Data from the published replication materials, Harvard Dataverse
@@ -57,24 +61,36 @@ Data from the published replication materials, Harvard Dataverse
 gs2020
 }
 \description{
-A long-format forced-choice candidate-conjoint dataset from the
-replication materials of Graham and Svolik (2020).  Respondents see
-up to 13 matchups, each showing a pair of hypothetical candidates
-described by party, democracy behavior, policy positions, sex, race,
-and profession.  The original study measures the extent to which U.S.
-voters tolerate democratic backsliding by co-partisan candidates.
+A long-format forced-choice candidate conjoint from the replication
+materials of Graham and Svolik (2020). Respondents see up to 13 matchups.
+Each matchup shows two hypothetical candidates described by party,
+democracy behavior, economic and social policy positions, sex, race and
+profession. The original study asks how far U.S. voters tolerate
+undemocratic behavior by candidates of their own party.
 }
 \details{
-The data is cleaned from the original experiment file: respondents
-with incomplete matchups or missing moderator variables are dropped.
+The sample is the paper's analysis frame: 1,605 respondents with complete
+base covariates and 20,657 matchups with an observed choice. Each matchup
+takes two rows. Profile 1 holds the 30 attribute contrasts (candidate 1
+minus candidate 2) and \code{choice} = 1 if candidate 1 won. Profile 2 is a row
+of zeros with the opposite choice, so the contrast of the two rows is the
+profile 1 row itself.
 
-This is the paper's full analysis frame in its two-profile differenced
-parameterization; fitting the held-out 16-covariate specification with
-the paper's configuration reproduces the published democratic-norms
-results.
+Candidate 1 is not always the one shown on the left of the screen: in 10,275
+of the 20,657 matchups it was shown on the right. Because the model's
+position effect is defined by screen side, the paper's fits put the
+left-displayed candidate first: y = 1 means the left candidate was chosen
+and d = left minus right. Use \code{on_left} to rebuild that orientation, or call
+\code{\link[=sc_example_data]{sc_example_data()}}, which does it for you.
 }
 \examples{
 data(gs2020)
-head(gs2020)
+head(gs2020[, 1:8])
+# Share of matchups whose candidate 1 was shown on the right
+mean(gs2020$on_left[gs2020$profile == 1] == 0)
+}
+\seealso{
+\code{\link[=sc_example_data]{sc_example_data()}} for the paper's model inputs built from these
+data.
 }
 \keyword{datasets}
