@@ -16,53 +16,15 @@ factors.
 - **Data:** `gs2020` and `br2017` as used in the paper, and `simconjoint`, a simulated experiment
   with a known truth.
 - **Removed:** the earlier estimators `scfit()` and `scmix()` with their functions, the datasets
-  `sw2022`, `bs2013` and `simdata`, and the dependence on `torch`.
+  `sw2022`, `bs2013` and `simdata`, and the dependence on `torch`. The last version with them is
+  tagged `pre-rum-only-2026-11-25`.
 
 From the paper's saved fits, `sc_estimate()` reproduces the paper's estimates, standard errors and
 intervals for both applications.
 
 ## Earlier versions
 
-Versions before 0.4.1 implemented the paper's earlier estimators. The code is tagged
-`pre-rum-only-2026-11-25` in the repository.
-
-### 0.3 series (August to November 2026, development only)
-
-- Added `scmix()`: a mixed logit with a deep-network mean and a low-dimensional normal taste
-  factor, fitted by the marginal likelihood. Its `scmix_*` functions gave debiased estimates of population
-  means, sign shares, vote shares and importance.
-- Added a mixed logit with a random preference for the screen side (September), then its version
-  with $q$ taste factors (November), which became the model of 0.4.1.
-- `scfit()` stayed available alongside.
-
-### 0.2.2 (July 2026)
-
-- Fixes from the CRAN review of 0.2.1: complete examples on five reference pages, and no writes
-  to the global environment.
-- `scfit()` gained `torch_threads`, a workaround for a crash some Windows users hit, and
-  `interactions` for terms that combine attributes.
-
-### 0.2.1 (June 2026)
-
-- `gs2020`, `br2017` and `sw2022` became the paper's full analysis data, with all respondent
-  covariates. `br2017` was corrected: one tax rate had been stored wrongly in 20% of rows.
-- `scfit(learner = )` chose the first stage: a deep network, an elastic-net logit or a
-  generalized random forest.
-- Debiased estimates for more quantities: average marginal effects (new `sc_ame()`), vote shares,
-  marginal rates of substitution and importance.
-- `scfit(respondent_weights = )` for survey weights.
-
-### 0.2.0 (May 2026)
-
-- `scfit()` added a second stage by default: an empirical-Bayes update of each respondent's
-  tastes. Population estimates and their standard errors were unchanged.
-- New `sc_design_diagnostic()` suggested which quantities a design can recover.
-
-### 0.1.0 (April 2026)
-
-- First release. `scfit()`: a deep network for each respondent's tastes, trained with `torch`,
-  with cross-fitted debiased inference for the average tastes.
-- 21 `sc_*` functions for derived quantities (rates of substitution, counterfactual vote shares,
-  importance, polarization and others), two baselines (logit and linear probability), and plot
-  functions built on `ggplot2`.
-- Five datasets: `sw2022`, `gs2020`, `br2017`, `bs2013` and the simulated `simdata`.
+Versions 0.2.0 to 0.2.2 (May to July 2026) implemented the paper's earlier estimator, `scfit()`: a
+deep network for each respondent's tastes, trained with `torch`, followed by debiased quantities
+such as importance, vote shares and marginal rates of substitution. They bundled five datasets.
+The 0.3 development series added a mixed-logit estimator, `scmix()`.
