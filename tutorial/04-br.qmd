@@ -1,7 +1,7 @@
 # Tax-plan experiment {#sec-br}
 
-@ballard2017structure ask how Americans evaluate federal income-tax schedules. In each of eight
-tasks, respondents chose between two tax plans. A plan sets the marginal rate in six income
+@ballard2017structure ask how Americans evaluate federal income-tax schedules by having respondents
+choose between two tax plans in each of eight tasks. Each plan sets the marginal rate in six income
 brackets and states, in five categories, how much revenue it raises compared with current policy.
 This chapter reproduces the paper's results from the saved fit.
 
@@ -12,11 +12,6 @@ library(sconjoint)
 fits <- getOption("sconjoint.fits", "fits")
 br <- sc_load(file.path(fits, "br_q4.rds"))
 if (is.null(br)) stop("This chapter needs the saved fit br_q4.rds; see the installation chapter.")
-tab <- function(e, digits = 3) {
-  out <- e[, c("name", "estimate", "plug_in", "se", "lower", "upper", "n")]
-  out[2:6] <- lapply(out[2:6], round, digits)
-  out
-}
 ```
 
 ```{r}
@@ -26,7 +21,8 @@ tab <- function(e, digits = 3) {
 knitr::opts_chunk$set(dev.args = list(pointsize = 11))
 ```
 
-The chapter uses the helpers of @sec-gs in `_figs-helpers.R`, such as `estimate_each()`.
+As in @sec-gs, the chapter loads `_figs-helpers.R`, which sets `cores` for `sc_estimate()` and
+defines `pick()`.
 
 ```{r}
 #| label: br-helpers
@@ -36,12 +32,14 @@ The chapter uses the helpers of @sec-gs in `_figs-helpers.R`, such as `estimate_
 
 ## Data and fit
 
-`sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data: the 1,991
-respondents who answered the income question, 15,928 tasks, and 16 coded features. Plan A is the
-first profile. Each rate enters utility through a linear and a quadratic term, and the revenue category
-through four contrasts. The network uses age, sex, education, race, income and party ID, coded in
-sixteen columns. Covariates were collected after the experiment; their reporting and inclusion in
-the valid-income sample are assumed unaffected by assignment.
+Calling `sc_example_data("br")` builds the paper's inputs from the bundled `br2017` data. It keeps
+the 1,991 respondents who answered the income question, giving 15,928 tasks with Plan A as the first
+profile. Each plan is represented by 16 coded features: each of the six rates enters utility through a
+linear and a quadratic term, and the revenue category enters through four contrasts.
+
+The network takes sixteen columns coding age, sex, education, race, income, and party ID. These
+covariates were collected after the experiment; using them assumes that assignment affects neither
+how they are reported nor inclusion in the valid-income sample.
 
 ```{r}
 #| label: br-data
@@ -50,11 +48,13 @@ x
 table(x$groups$party, useNA = "ifany")
 ```
 
-The party groups are Democrats (`party == "Dem"`, 885), Republicans (`party == "Rep"`, 643) and
-independents (`pid7 == 4`, 389). `party == "Ind"` also holds the 74 respondents who answered "not
-sure". They belong to no party group, so the book selects independents by `pid7`.
+The party groups consist of Democrats (`party == "Dem"`, 885), Republicans (`party == "Rep"`, 643),
+and independents (`pid7 == 4`, 389). The `party == "Ind"` category also includes the 74 respondents
+who answered "not sure"; because those respondents belong to no party group, the book selects
+independents by `pid7`.
 
-The fit selected four taste factors. Reproducing it takes several hours:
+The fit selected four taste factors, as summarized in the table below; reproducing it takes several
+hours:
 
 ```{r}
 #| label: br-fit
@@ -75,9 +75,9 @@ sc_save(br, file.path(fits, "br_q4.rds"))
 
 ## Recorded plans
 
-The displayed revenue category was generated from the six rates, with noise, so raising a rate also
-changes the revenue a plan is likely to show. The BR helpers therefore need the plans respondents
-saw, which the function below takes from `br2017` in the order of the fitted data.
+Because the displayed revenue category was generated from the six rates with noise, raising a rate
+also changes the revenue a plan is likely to show. The BR helpers therefore need the plans
+respondents saw, which the function below extracts from `br2017` in the order of the fitted data.
 
 ```{r}
 #| label: br-profiles
@@ -99,10 +99,11 @@ sapply(prof, nrow)
 
 ## Rate changes
 
-`sc_br_revenue_contrast()` raises one bracket's rate from the bottom to the top of its menu (for
-example from 5% to 55% for incomes above \$375,000). The other five rates average over the contexts
-respondents saw, and the displayed revenue follows the revenue rule. The result is a vector of 16
-coefficients. `per_point = TRUE` divides it by the change in the rate, so the mean is utility per
+To evaluate a rate increase in a single bracket, `sc_br_revenue_contrast()` moves that bracket's
+rate from the bottom to the top of its menu --- for example, from 5% to 55% for incomes above
+\$375,000. It averages the other five rates over the contexts respondents saw and lets the displayed
+revenue follow the revenue rule. The result is a vector of 16 coefficients, and setting
+`per_point = TRUE` divides it by the change in the rate so that the mean measures utility per
 percentage point.
 
 ```{r}
@@ -111,54 +112,60 @@ top <- sc_br_revenue_contrast(6, profiles = prof, per_point = TRUE)
 round(top, 4)
 ```
 
-The rate part sits in `tax6_linear`. The quadratic term cancels because the menu's endpoints are
-symmetric. The revenue part is the average change in the revenue codes caused by the raise.
+In this vector, the rate part sits in `tax6_linear` --- the quadratic term cancels because the
+menu's endpoints are symmetric --- while the revenue part captures the average change in the revenue
+codes caused by the rate increase. Applying the same contrast to each bracket estimates the mean
+utility change per percentage point across all six brackets:
 
 ```{r}
 #| label: br-means
 brackets <- c("under $10k", "$10-35k", "$35-85k", "$85-175k", "$175-375k", "over $375k")
 contrast <- lapply(1:6, function(j) sc_br_revenue_contrast(j, profiles = prof, per_point = TRUE))
 means <- sc_estimate(br, lapply(1:6, function(j) sc_mean(brackets[j], contrast[[j]])))
-tab(means, 4)
+print(means, digits = 4)
 ```
 
-Higher rates lower utility on average in the bottom three brackets and raise it in the top two. Per
-rate point, the penalty below \$10,000 is -0.0577 and the gain above \$375,000 is 0.0221.
-`sc_ratio()` compares the two, with a delta-method interval:
+On average, higher rates lower utility in the bottom three brackets and raise it in the top two: per
+rate point, the penalty below \$10,000 is -0.0577, whereas the gain above \$375,000 is 0.0221.
+`sc_ratio()` compares the two and attaches a delta-method interval:
 
 ```{r}
 #| label: br-ratio
 ratio <- sc_ratio("bottom penalty / top gain", sc_mean("bottom", contrast[[1]]),
                   sc_mean("top", contrast[[6]]))
-tab(sc_estimate(br, ratio))
+sc_estimate(br, ratio)
 ```
 
-The bottom-bracket penalty is 2.61 times the top-bracket gain.
+In relative terms, the bottom-bracket penalty is 2.61 times the top-bracket gain.
 
 ## Preference shares
 
-The share is the fraction of respondents whose utility change, averaged over contexts, is positive.
-Each bracket needs a bounded update, so they run in parallel.
+A preference share measures the fraction of respondents whose utility change, averaged over
+contexts, is positive. Because each share requires a bounded update, the targets below run in
+parallel.
 
 ```{r}
 #| label: br-shares
 top_55_35 <- sc_br_revenue_contrast(6, high = 55, low = 35, profiles = prof)
-shares <- estimate_each(br, c(
+shares <- sc_estimate(br, c(
   lapply(1:6, function(j) sc_share(brackets[j], contrast[[j]])),
   list(sc_share("top rate 35% to 55%", top_55_35),
-       sc_mean("top rate 35% to 55%: mean", top_55_35))))
-tab(shares, 4)
+       sc_mean("top rate 35% to 55%: mean", top_55_35))), cores = cores)
+print(shares, digits = 4)
 ```
 
-An estimated 69.1% favor raising the top rate from 5% to 55%. In the \$10,000--\$35,000 bracket,
-29.2% favor the higher rate despite its negative mean, and in \$85,000--\$175,000, 54.7%. Raising
-the top rate from 35% to 55% splits respondents evenly: a share of 49.7% and a mean of -0.013, whose
-interval includes zero. Because utility is quadratic in each rate, the direction of a taste can
-depend on where a change starts.
+Across the full menu range, an estimated 69.1% favor raising the top rate from 5% to 55%, and 54.7%
+favor the higher rate in the \$85,000--\$175,000 bracket. Even in the \$10,000--\$35,000 bracket,
+where the mean utility change is negative, 29.2% favor the higher rate.
+
+Raising the top rate from 35% to 55%, however, splits respondents evenly, with a share of 49.7% and
+a mean of -0.013 whose interval includes zero. Because utility is quadratic in each rate, the
+direction of a taste can depend on where a change starts.
 
 ## By party
 
-A function of the groups returns the subgroup weights.
+Subgroup estimates are defined by passing a function of the respondent groups that returns the
+subgroup weights:
 
 ```{r}
 #| label: br-party
@@ -168,12 +175,13 @@ party_targets <- list()
 for (j in c(1, 6)) for (p in names(party_w))
   party_targets[[length(party_targets) + 1]] <-
     sc_share(paste(brackets[j], p, sep = ", "), contrast[[j]], w = party_w[[p]])
-party_shares <- estimate_each(br, party_targets)
-tab(party_shares)
+party_shares <- sc_estimate(br, party_targets, cores = cores)
+party_shares
 ```
 
-Among Democrats, 83.5% favor the higher top rate, and among Republicans 52.8%, with an interval that
-includes 50%. All three groups are far below 50% on raising the bottom rate.
+On raising the top rate, 83.5% of Democrats favor the increase compared with 52.8% of Republicans,
+whose interval includes 50%. On raising the bottom rate, by contrast, all three groups sit far below
+50%.
 
 ```{r}
 #| label: fig-br-party-shares
@@ -189,23 +197,26 @@ sc_plot_estimates(Democrat = by_party("Democrats"), Independent = by_party("inde
                   xlab = "Share favoring the higher rate (%)")
 ```
 
-Bars are 95% log-odds intervals. Party groups include leaners.
+The plotted bars show 95% log-odds intervals, and the party groups include leaners.
 
-Before the one-step correction (`plug_in`), the top-rate shares of Democrats and Republicans are
-76.8% and 63.8%, a smaller gap.
-The difference between the two party means has its own interval:
+The one-step correction widens the party gap on the top rate: before correction (`plug_in`), the
+shares are 76.8% for Democrats and 63.8% for Republicans, a smaller gap than in the corrected shares
+above.
+
+The difference between the two party means can also be estimated with its own interval:
 
 ```{r}
 #| label: br-gap
 gap <- sc_difference("top rate: Democrats minus Republicans",
                      sc_mean("Democrats", contrast[[6]], w = party_w$Democrats),
                      sc_mean("Republicans", contrast[[6]], w = party_w$Republicans))
-tab(sc_estimate(br, gap), 4)
+print(sc_estimate(br, gap), digits = 4)
 ```
 
 ## Fitted distributions
 
-`sc_fitted_law()` gives the fitted law of the utility change per rate point for each bracket.
+To examine the full distribution of tastes across respondents, `sc_fitted_law()` computes the fitted
+law of the utility change per rate point for each bracket.
 
 ```{r}
 #| label: br-laws
@@ -213,23 +224,24 @@ laws <- lapply(contrast, function(cc) sc_fitted_law(br, cc))
 bn <- c("Below $10k", "$10-35k", "$35-85k", "$85-175k", "$175-375k", "Above $375k")
 ```
 
-The top bracket's law is narrower than the bottom one's, with about 30% of its mass below zero. As
-in @sec-gs, the curves come before the one-step correction, so the red corrected mean and interval need
-not sit at a curve's center.
+The top bracket's law is narrower than the bottom bracket's, with about 30% of its mass
+below zero. As in @sec-gs, the curves come before the one-step correction, so the vertical line at
+each corrected mean need not sit at a curve's center.
 
 ```{r}
 #| label: fig-br-distributions
 #| fig-cap: "Fitted preferences over tax-rate changes"
-#| fig-width: 8
-#| fig-height: 6.3
-sc_plot_laws(laws, labels = bn, means = pick(means, brackets), layout = "panels", ncol = 2,
-             xlab = "Utility per percentage point of tax rate")
+#| fig-width: 7
+#| fig-height: 5.8
+sc_plot_laws(laws, labels = bn, means = pick(means, brackets), height = 1.3, bins = 300,
+             outline = "line", xlab = "Utility per percentage point of tax rate")
 ```
 
-Tastes for the displayed revenue hold the rates fixed. The revenue category (`taxrev`: 1 = much more
-revenue, 3 = about the same, 5 = much less) enters through four Helmert columns, each scaled to mean
-square one. Row `k` of `H` below codes category `k`. A contrast compares a category with "about the
-same", with zero rate coefficients.
+To isolate tastes for the displayed revenue alone, each contrast holds the tax rates fixed and
+compares a revenue category with "about the same" revenue. The revenue category (`taxrev`: 1 = much
+more revenue, 3 = about the same, 5 = much less) enters through four Helmert columns, each scaled to
+mean square one. In the code below, row `k` of `H` codes category `k`; subtracting row 3 from row
+`k`, with zero rate coefficients, gives its contrast relative to "about the same".
 
 ```{r}
 #| label: br-revenue-laws
@@ -238,22 +250,26 @@ revenue_contrast <- function(k) setNames(c(rep(0, 12), H[k, ] - H[3, ]), br$data
 revenue_laws <- lapply(c(5, 4, 2, 1), function(k) sc_fitted_law(br, revenue_contrast(k)))
 ```
 
-These panels have no corrected means.
+Unlike the rate figure above, the figure below plots the fitted distributions without corrected
+means.
 
 ```{r}
 #| label: fig-br-revenue-distributions
 #| fig-cap: "Fitted preferences over displayed revenue"
-#| fig-width: 8
-#| fig-height: 4.6
+#| fig-width: 7
+#| fig-height: 4.4
 sc_plot_laws(revenue_laws, labels = c("Much less revenue", "Less revenue", "More revenue",
                                       "Much more revenue"),
-             layout = "panels", ncol = 2, xlab = "Utility relative to about the same revenue")
+             height = 1.3, bins = 300, outline = "line",
+             xlab = "Utility relative to about the same revenue")
 ```
 
 ## Complete tax plans
 
-`sc_br_plan_contest()` compares two complete plans. Each plan's revenue category is drawn from the
-rule, so the contest averages over the categories both plans could show. The paper uses four plans:
+Rather than changing one bracket at a time, `sc_br_plan_contest()` compares two complete plans,
+setting position effects to zero and keeping task shocks. Because each plan's revenue category is
+drawn from the revenue rule, the contest averages over the categories both plans could show. The
+paper uses four plans:
 
 | Plan | Under \$10k | \$10--35k | \$35--85k | \$85--175k | \$175--375k | Over \$375k |
 |---|---|---|---|---|---|---|
@@ -262,8 +278,9 @@ rule, so the contest averages over the categories both plans could show. The pap
 | Status-quo analogue | 5 | 15 | 25 | 25 | 35 | 35 |
 | Regressive | 25 | 25 | 15 | 15 | 5 | 5 |
 
-The paper reports all six pairs, for all respondents and each party group. Support for the second
-plan is one minus that of the first, so the chunk adds the reversed rows.
+The paper reports all six pairs, both for all respondents and for each party group. Because support
+for the second plan is one minus that of the first, the chunk below estimates each pair once and
+adds the reversed rows.
 
 ```{r}
 #| label: br-contests
@@ -287,14 +304,13 @@ wide <- round(100 * tapply(progressive$estimate, progressive[c("opponent", "grou
 wide[rownames(rates)[2:4], names(groups)]
 ```
 
-The progressive plan receives an estimated 69.5% of expected support against the flat plan, 59.6%
-against the status-quo analogue, and 81.0% against the regressive plan. Against the flat plan, it
-draws 79.3% among Democrats and 58.3% among Republicans. The status-quo analogue draws 65.1% against
-the flat plan, and the flat plan 82.6% against the regressive plan. Position effects are set to zero
-and task shocks kept.
+The progressive plan has an estimated expected support of 69.5% against the flat plan, 59.6% against
+the status-quo analogue, and 81.0% against the regressive plan. Against the flat plan, it draws
+79.3% among Democrats and 58.3% among Republicans. Among the other pairings, the status-quo analogue
+draws 65.1% against the flat plan, and the flat plan draws 82.6% against the regressive plan.
 
-Panel A shows the schedules, and Panels B to E each plan's support against the other three. Whiskers
-are 95% log-odds intervals, and the dashed line marks 50%.
+In the figure below, Panel A shows the four schedules, while Panels B to E show each plan's support
+against the other three, with whiskers marking 95% log-odds intervals and a dashed line at 50%.
 
 ```{r}
 #| label: fig-br-contests
@@ -343,23 +359,24 @@ legend("center", c("All respondents", "Democrat", "Independent", "Republican"),
 
 ## Effects on choices
 
-`sc_br_endpoint_ame()` gives the AME of moving one bracket's rate from the bottom to the top of its
-menu. The focal plan's revenue category is redrawn from the rule, and the opponent is as recorded.
-It covers both sides of all 15,928 recorded tasks, about 90,000 contest rows, so each bracket takes
+To measure how single-bracket rate changes affect choices, `sc_br_endpoint_ame()` gives the AME of
+moving one bracket's rate from the bottom to the top of its menu, redrawing the focal plan's revenue
+category from the revenue rule while leaving the opponent as recorded. Because the calculation
+covers both sides of all 15,928 recorded tasks --- about 90,000 contest rows --- each bracket takes
 about 20 minutes.
 
 ```{r}
 #| label: br-ames
-ames <- estimate_each(br, lapply(1:6, function(j) sc_br_endpoint_ame(brackets[j], j, profiles = prof)),
+ames <- sc_estimate(br, lapply(1:6, function(j) sc_br_endpoint_ame(brackets[j], j, profiles = prof)),
                       cores = min(6L, parallel::detectCores()))
-tab(ames)
+ames
 ```
 
 Raising the bottom rate from 0% to 25% lowers a plan's expected support by 18.8 percentage points,
-and raising the top rate from 5% to 55% raises it by 14.1.
+whereas raising the top rate from 5% to 55% raises it by 14.1.
 
-The main figure shows each bracket's mean utility per rate point (A), fitted law (B), share favoring
-the higher rate (C), and AME of the endpoint switch (D).
+The main figure brings all four summaries together for each bracket: mean utility per rate point
+(A), fitted law (B), share favoring the higher rate (C), and AME of the endpoint switch (D).
 
 ```{r}
 #| label: fig-br-preferences
@@ -375,9 +392,9 @@ sc_plot_preferences(means, laws, shares, ames, labels = bn, order = brackets, hi
                     widths = c(1.85, 1.6, 1.7, 1.6, 1.8))
 ```
 
-Intervals are 95%, Wald for means and AMEs and log-odds for shares.
+All intervals are 95%: Wald intervals for means and AMEs, and log-odds intervals for shares.
 
-As a table:
+The same bracket-level estimates can also be displayed as a table:
 
 ```{r}
 #| label: br-table
@@ -388,11 +405,15 @@ sc_table("Mean per point" = means, "Share favoring" = shares, "Choice effect" = 
 
 ## Decisiveness
 
-`sc_decisiveness()` gives how often exchanging two plans' rates in one bracket would reverse the
-choice, with the other rates, the displayed revenue and the task shock as recorded. It takes each
-bracket's two coded columns and a menu with one row per rate. Each row is the rate part of
-`sc_br_revenue_contrast()` (`follow_revenue = FALSE`) for a move from the lowest rate to that rate.
-Adding the same vector to every row does not change the swaps.
+A bracket's decisiveness is how often exchanging two plans' rates in that bracket would reverse the
+choice, keeping the other rates, the displayed revenue, and the task shock as recorded. To compute
+it, `sc_decisiveness()` takes each bracket's two coded columns together with a menu containing one
+row per rate.
+
+In the code below, each menu row takes the rate part of `sc_br_revenue_contrast()`
+(`follow_revenue = FALSE`) for a move from the bracket's lowest rate to that rate. Anchoring every
+row at the lowest rate does not affect the result, because adding the same vector to every row
+leaves every pairwise swap unchanged.
 
 ```{r}
 #| label: br-decisiveness
@@ -406,18 +427,20 @@ dec <- sc_estimate(br, sc_decisiveness(
   menus = list(top = menu(6, c(5, 15, 25, 35, 45, 55)), bottom = menu(1, c(0, 5, 15, 25))),
   pairs = list(top = rbind(c(6L, 1L), c(6L, 4L)), bottom = rbind(c(4L, 1L))),
   names = c("top rate: 55 vs 5", "top rate: 55 vs 35", "bottom rate: 25 vs 0")))
-tab(dec)
+dec
 ```
 
 Exchanging top rates of 55% and 5% between two plans would reverse an estimated 45.4% of choices,
-55% and 35% only 15.7%, and bottom rates of 25% and 0% 50.5%. This took about eight minutes.
+whereas exchanging 55% and 35% would reverse only 15.7%. For the bottom bracket, exchanging rates of
+25% and 0% would reverse 50.5%. This calculation took about eight minutes.
 
 ## All paper targets
 
-The paper's main results file for this experiment has 43 rows: a mean and a share for each bracket
-contrast, the bracket 1 and 6 contrasts by party, the 35% to 55% top-rate change (with revenue
-following the rule and with revenue fixed), the 5% to 25% bottom-rate change, the twelve plan
-contests, the ratio and the party difference. `br_targets()` writes them:
+The paper's main results file for this experiment has 43 rows, which `br_targets()` assembles in a
+single list. The list includes a mean and a share for each bracket contrast, the bracket 1 and 6
+contrasts by party, the 35% to 55% top-rate change (both with revenue following the rule and with
+revenue fixed), the 5% to 25% bottom-rate change, the twelve plan contests, the ratio, and the party
+difference.
 
 ```{r}
 #| label: br-full
@@ -452,5 +475,5 @@ br_targets <- function(st, prof) {
 }
 ```
 
-`sc_estimate(br, br_targets(br, prof))` takes about eight minutes, mostly for the bounded updates
-of the 16 shares.
+Evaluating the full list with `sc_estimate(br, br_targets(br, prof))` takes about eight minutes,
+with most of that time spent on the bounded updates for the 16 shares.

@@ -18,7 +18,8 @@ sc_plot_estimates(
   reference_style = c("diamond", "circle"),
   hide_wide = FALSE,
   legend = TRUE,
-  main = NULL
+  main = NULL,
+  groups = NULL
 )
 
 \method{plot}{sc_estimates}(x, ...)
@@ -47,7 +48,8 @@ only later tables have.}
 
 \item{reference}{Optional named numeric vector (names = target names) of
 reference values on the unscaled scale, for example true values in a
-simulation or regression AMCEs; multiplied by \code{scale}.}
+simulation or regression AMCEs; multiplied by \code{scale}. A table from
+\code{\link[=sc_compare]{sc_compare()}} gives its true values or the other model's estimates.}
 
 \item{reference_label}{Legend label of the reference values (default
 "Reference").}
@@ -64,13 +66,19 @@ groups, a reference or hollow points.}
 
 \item{main}{Optional title.}
 
+\item{groups}{Optional groups of rows (for example attributes), named in
+grey to the left of the row labels with a small gap between groups: one
+group per row in order, or a character vector named by target name. The
+rows of a group must be adjacent.}
+
 \item{x}{An estimate table from \code{\link[=sc_estimate]{sc_estimate()}}.}
 }
 \value{
 Invisibly, the plotting data: a data frame with one row per group
 and target that the group's table has (\code{group}, \code{name}, \code{label}, \code{y},
 scaled \code{estimate}, \code{lower},
-\code{upper}, \code{shown} (whether the interval is drawn) and \code{reference}).
+\code{upper}, \code{shown} (whether the interval is drawn) and \code{reference}), and
+\code{row_group} when \code{groups} is given.
 }
 \description{
 A dot-and-interval plot of estimate tables from \code{\link[=sc_estimate]{sc_estimate()}}: one row per

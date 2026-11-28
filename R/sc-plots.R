@@ -9,6 +9,7 @@
 .scp_dark <- "#333333"
 .scp_grid <- "#E8E8E8"
 .scp_zero <- "#888888"
+.scp_muted <- "#6E7378"   # group labels
 .scp_palette <- c("#004a8c", "#27805A", "#BD4C39", "#333333", "#777777", "#8C6D31")
 
 # ---------------------------------------------------------------------------------------------
@@ -193,6 +194,8 @@
 # Named numeric reference values aligned to `rows` (NA where absent).
 .scp_reference <- function(reference, rows, fun) {
   if (is.null(reference)) return(NULL)
+  if (inherits(reference, "sc_compare"))
+    reference <- stats::setNames(if (is.null(reference$truth)) reference$reference else reference$truth, reference$name)
   if (!is.numeric(reference) || is.null(names(reference)))
     stop(sprintf("%s(): reference must be a named numeric vector (names = target names)", fun), call. = FALSE)
   out <- unname(reference[match(rows, names(reference))])
@@ -282,23 +285,94 @@
   graphics::mtext(title, 3, .7, cex = .92, font = 2)
 }
 
-# A fitted law as a ridge (a step outline of its mass in 150 bins) centred on row y.
-.scp_ridge <- function(law, y, limits, height = .63, color = .scp_blue, truth = NULL) {
-  edges <- seq(limits[1L], limits[2L], length.out = 151L); bw <- edges[2L] - edges[1L]
+# `color` mixed with white: an opaque tint that looks like `color` at opacity `alpha` on white.
+.scp_tint <- function(color, alpha) {
+  rgb <- grDevices::col2rgb(color) / 255
+  grDevices::rgb(t(alpha * rgb + (1 - alpha) * 1))
+}
+
+# A fitted law as a ridge centred on row y: the outline of its mass in `bins` bins, as steps or
+# (`line`) as a line through the bin midpoints, its baseline at y - 0.3 and its peak `height`
+# rows above that. The fill is an opaque tint, so with a height above about 1 the lower ridges
+# (drawn later) cover the tails of the ridges above them. `trim` draws the ridge and its
+# baseline only between the outermost bins holding at least 1% of the peak bin's mass. `mark`
+# adds a vertical line from the baseline up to the outline at that value (an estimated mean).
+.scp_ridge <- function(law, y, limits, height = .63, color = .scp_blue, truth = NULL, bins = 150L,
+                       fill_alpha = .20, mark = NULL, trim = FALSE, line = FALSE) {
+  edges <- seq(limits[1L], limits[2L], length.out = bins + 1L); bw <- edges[2L] - edges[1L]
   h <- .scp_law_mass(law, edges)
   tm <- if (is.function(truth)) .scp_truth_mass(truth, edges) else NULL
   top <- max(h, tm, na.rm = TRUE)
   s <- if (is.finite(top) && top > 0) height / top else 0   # no mass inside the limits: a flat ridge
-  x <- .scp_step_x(edges)
+  keep <- seq_len(bins)
+  if (trim && s > 0) {
+    big <- which(pmax(h, if (is.null(tm)) 0 else tm) >= .01 * top)
+    keep <- seq(min(big), max(big))
+  }
+  lo <- edges[min(keep)]; hi <- edges[max(keep) + 1L]
+  ek <- edges[c(keep, max(keep) + 1L)]
+  if (line) {
+    mids <- (utils::head(ek, -1L) + utils::tail(ek, -1L)) / 2
+    x <- c(lo, mids, hi); yh <- c(0, s * h[keep], 0)
+    yt <- if (is.null(tm)) NULL else c(0, s * tm[keep], 0)
+  } else {
+    x <- .scp_step_x(ek); yh <- rep(s * h[keep], each = 2L)
+    yt <- if (is.null(tm)) NULL else rep(s * tm[keep], each = 2L)
+  }
   # Fill without a border, then one outline and one baseline, so the baseline has the same weight
   # along its whole length (a polygon border doubles it only where the mass is exactly zero).
-  graphics::polygon(c(limits[1L], x, limits[2L]), c(y - .3, y - .3 + rep(s * h, each = 2L), y - .3),
-                    col = grDevices::adjustcolor(color, .20), border = NA)
-  graphics::lines(x, y - .3 + rep(s * h, each = 2L), col = color, lwd = .7)
-  graphics::segments(limits[1L], y - .3, limits[2L], y - .3, col = color, lwd = .7)
-  if (!is.null(tm)) graphics::lines(x, y - .3 + rep(s * tm, each = 2L), col = "black", lwd = 1)
+  graphics::polygon(c(lo, x, hi), c(y - .3, y - .3 + yh, y - .3), col = .scp_tint(color, fill_alpha), border = NA)
+  graphics::lines(x, y - .3 + yh, col = color, lwd = .7)
+  graphics::segments(lo, y - .3, hi, y - .3, col = color, lwd = .7)
+  if (!is.null(yt)) graphics::lines(x, y - .3 + yt, col = "black", lwd = 1)
+  if (!is.null(mark) && is.finite(mark) && mark >= lo && mark <= hi) {
+    top_at <- stats::approx(x, yh, xout = mark, ties = max)$y
+    graphics::segments(mark, y - .3, mark, y - .3 + top_at, col = color, lwd = 1.6, lend = 1)
+  }
   data.frame(x = (utils::head(edges, -1L) + utils::tail(edges, -1L)) / 2,
              density = h / bw, truth = if (is.null(tm)) NA_real_ else tm / bw)
+}
+
+# Groups of rows. `groups` gives each row's group like `labels` gives its label: one entry per
+# row in order, or named by row key. Rows of a group must be adjacent. Returns NULL without
+# groups, else the group of each row and the runs (label, first and last row).
+.scp_groups <- function(groups, keys, fun) {
+  if (is.null(groups)) return(NULL)
+  if (is.list(groups)) {
+    stop(sprintf("%s(): groups must be a character vector (one group per row, or named by row)", fun), call. = FALSE)
+  }
+  if (!is.null(names(groups)) && any(nzchar(names(groups))) && !all(keys %in% names(groups)))
+    stop(sprintf("%s(): groups names no group for %s; name every row or give one group per row in order", fun,
+                 paste(utils::head(setdiff(keys, names(groups)), 3L), collapse = ", ")), call. = FALSE)
+  g <- as.character(.scp_labels(groups, keys, fun))
+  if (anyNA(g) || any(!nzchar(g))) stop(sprintf("%s(): every row needs a non-empty group", fun), call. = FALSE)
+  r <- rle(g)
+  if (anyDuplicated(r$values))
+    stop(sprintf("%s(): the rows of group \"%s\" are not adjacent; order the rows so each group's rows follow one another",
+                 fun, r$values[duplicated(r$values)][1L]), call. = FALSE)
+  last <- cumsum(r$lengths)
+  list(group = g, runs = data.frame(label = r$values, first = last - r$lengths + 1L, last = last,
+                                    stringsAsFactors = FALSE))
+}
+
+# Vertical positions of nr rows, first at the top: one unit apart, with an extra `gap` between
+# groups. Returns y and the top of the highest row (y[1] + 0.5).
+.scp_row_y <- function(nr, grp = NULL, gap = .6) {
+  if (is.null(grp)) return(list(y = rev(seq_len(nr)), top = nr + .5))
+  run <- rep(seq_len(nrow(grp$runs)), grp$runs$last - grp$runs$first + 1L)
+  t <- (seq_len(nr) - 1L) + gap * (run - 1L)
+  y <- max(t) + 1 - t
+  list(y = y, top = y[1L] + .5)
+}
+
+# Group labels in the left margin, left-aligned `inset` inches from the figure's left edge and
+# centred on each group's rows, in grey.
+.scp_group_labels <- function(grp, y, inset = .08, cex = .88) {
+  x <- graphics::grconvertX(inset / graphics::par("fin")[1L], "nfc", "user")
+  for (i in seq_len(nrow(grp$runs))) {
+    yy <- mean(y[c(grp$runs$first[i], grp$runs$last[i])])
+    graphics::text(x, yy, grp$runs$label[i], adj = c(0, .5), xpd = NA, cex = cex, col = .scp_muted)
+  }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -330,7 +404,8 @@
 #' @param colors Colors of the groups (default house blue, green, red, ...).
 #' @param reference Optional named numeric vector (names = target names) of
 #'   reference values on the unscaled scale, for example true values in a
-#'   simulation or regression AMCEs; multiplied by `scale`.
+#'   simulation or regression AMCEs; multiplied by `scale`. A table from
+#'   [sc_compare()] gives its true values or the other model's estimates.
 #' @param reference_label Legend label of the reference values (default
 #'   "Reference").
 #' @param reference_style `"diamond"` (a grey diamond just below the row's
@@ -341,10 +416,15 @@
 #' @param legend If `TRUE`, a legend at the bottom when there are several
 #'   groups, a reference or hollow points.
 #' @param main Optional title.
+#' @param groups Optional groups of rows (for example attributes), named in
+#'   grey to the left of the row labels with a small gap between groups: one
+#'   group per row in order, or a character vector named by target name. The
+#'   rows of a group must be adjacent.
 #' @return Invisibly, the plotting data: a data frame with one row per group
 #'   and target that the group's table has (`group`, `name`, `label`, `y`,
 #'   scaled `estimate`, `lower`,
-#'   `upper`, `shown` (whether the interval is drawn) and `reference`).
+#'   `upper`, `shown` (whether the interval is drawn) and `reference`), and
+#'   `row_group` when `groups` is given.
 #' @examples
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
 #' if (!is.null(fit)) {
@@ -356,7 +436,7 @@
 #' @export
 sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab, xlim = NULL, colors = NULL,
                               reference = NULL, reference_label = NULL, reference_style = c("diamond", "circle"),
-                              hide_wide = FALSE, legend = TRUE, main = NULL) {
+                              hide_wide = FALSE, legend = TRUE, main = NULL, groups = NULL) {
   fun <- "sc_plot_estimates"
   tabs <- .scp_tables(list(...), fun); k <- length(tabs); gn <- names(tabs)
   if (k > 1L && any(!nzchar(gn)))
@@ -370,7 +450,8 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
   ref <- .scp_reference(reference, rows, fun)
   if (is.null(reference_label)) reference_label <- "Reference"
   if (missing(xlab)) xlab <- .scp_default_label(unlist(lapply(tabs, function(x) x$kind[x$name %in% rows])), scale)
-  nr <- length(rows); yy <- rev(seq_len(nr))
+  nr <- length(rows)
+  grp <- .scp_groups(groups, rows, fun); ry <- .scp_row_y(nr, grp); yy <- ry$y
   diamond <- !is.null(ref) && reference_style == "diamond"
   off <- .scp_offsets(k + diamond)
   # one data frame per group, kept apart by position (group names are only labels and may repeat)
@@ -380,6 +461,7 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
                     estimate = scale * x$estimate[i], lower = scale * x$lower[i], upper = scale * x$upper[i],
                     shown = .scp_shown(x$lower[i], x$upper[i], hide_wide),
                     reference = if (is.null(ref)) NA_real_ else scale * ref, stringsAsFactors = FALSE)
+    if (!is.null(grp)) z$row_group <- grp$group
     z[!is.na(z$estimate), , drop = FALSE]
   })
   pd <- do.call(rbind, pdl)
@@ -393,12 +475,14 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
   .scp_paper_par()
   lab_cex <- .9
   left <- max(graphics::strwidth(labs, "inches", cex = lab_cex)) + .2
+  if (!is.null(grp)) left <- left + max(graphics::strwidth(grp$runs$label, "inches", cex = .88)) + .3
   .scp_set_margins(3 + 1.8 * show_leg, left, if (is.null(main)) .8 else 2.4, .8)
-  graphics::plot(NA, xlim = xlim, ylim = c(.5, nr + .5), axes = FALSE, xlab = xlab, ylab = "")
+  graphics::plot(NA, xlim = xlim, ylim = c(.5, ry$top), axes = FALSE, xlab = xlab, ylab = "")
   graphics::abline(v = ticks, col = .scp_grid, lwd = .6)
   if (xlim[1L] <= 0 && xlim[2L] >= 0) graphics::abline(v = 0, col = .scp_zero, lty = 2, lwd = .7)
   graphics::axis(1, at = ticks, cex.axis = .9)
   graphics::axis(2, at = yy, labels = labs, tick = FALSE, cex.axis = lab_cex)
+  if (!is.null(grp)) .scp_group_labels(grp, yy)
   if (!is.null(main)) graphics::mtext(main, 3, .7, cex = .95, font = 2)
   for (g in seq_len(k)) {
     z <- pdl[[g]]
@@ -427,18 +511,125 @@ sc_plot_estimates <- function(..., labels = NULL, order = NULL, scale = 1, xlab,
 plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 
 # ---------------------------------------------------------------------------------------------
+# Shares favoring and opposing
+
+#' Plot preference shares as favoring and opposing bars
+#'
+#' One row per target of an estimate table of [sc_share()] targets: a blue bar
+#' to the right of the centre line for the percent of respondents whose taste
+#' for the contrast is positive (favoring), and a red bar to the left for the
+#' rest (opposing). The 95% interval of the share is drawn as a dark line at
+#' the end of the blue bar; with `hide_wide`, an interval spanning at least 95
+#' points is left out. Both bars come from the same estimate, so the red bar
+#' is 100 minus the blue one; a respondent with a zero taste (possible only
+#' for a contrast whose law has a point mass at zero) counts as opposing.
+#'
+#' @param shares Estimate table of preference shares ([sc_share()] targets).
+#' @param labels Row labels: a character vector named by target name, or one
+#'   label per row in order. Default the target names.
+#' @param order Optional character vector of target names: the rows shown, in
+#'   order (first at the top).
+#' @param groups Optional groups of rows, named in grey at the left with a
+#'   small gap between groups: one group per row in order, or a character
+#'   vector named by target name. The rows of a group must be adjacent.
+#' @param intervals If `TRUE`, draw each share's 95% interval.
+#' @param hide_wide If `TRUE`, leave out intervals spanning at least 95
+#'   points.
+#' @param colors Colors of the favoring and opposing bars.
+#' @param xlab Label of the horizontal axis.
+#' @param legend If `TRUE`, a legend at the bottom.
+#' @param main Optional title.
+#' @param reference Optional named numeric vector (names = target names) of
+#'   reference shares between 0 and 1, for example true values in a
+#'   simulation, drawn as open black circles; or a table from [sc_compare()].
+#' @param reference_label Legend label of the reference values (default
+#'   "Reference").
+#' @return Invisibly, the plotting data: a data frame with one row per target
+#'   (`name`, `label`, `y`, `favor` and `oppose` in percent, the interval
+#'   `lower` and `upper` in percent, `shown`, `reference` in percent, and
+#'   `group` when `groups` is given).
+#' @examples
+#' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
+#' if (!is.null(fit)) {
+#'   f <- paste0("tax", 1:6, "_linear")
+#'   sh <- sc_estimate(fit, lapply(1:6, function(j) sc_share(paste("Bracket", j), f[j])))
+#'   sc_plot_shares(sh, groups = rep(c("Lower", "Upper"), each = 3))
+#' }
+#' @export
+sc_plot_shares <- function(shares, labels = NULL, order = NULL, groups = NULL, intervals = TRUE, hide_wide = TRUE,
+                           colors = c(.scp_blue, .scp_red), xlab = "Respondents (%)", legend = TRUE, main = NULL,
+                           reference = NULL, reference_label = NULL) {
+  fun <- "sc_plot_shares"
+  sh <- .scp_tables(list(shares), fun)[[1L]]
+  kinds <- sh$kind[!is.na(sh$kind)]
+  if (length(kinds) && !all(kinds == "share"))
+    stop(sprintf("sc_plot_shares(): shares must hold sc_share() targets only; found kind %s",
+                 paste(unique(kinds[kinds != "share"]), collapse = ", ")), call. = FALSE)
+  if (any(is.finite(sh$estimate) & (sh$estimate < 0 | sh$estimate > 1)))
+    stop(paste0("sc_plot_shares(): share estimates must lie between 0 and 1; estimate the shares with ",
+                "sc_estimate(bounded = TRUE), the default, whose update keeps them there"), call. = FALSE)
+  if (length(colors) != 2L) stop("sc_plot_shares(): colors needs two colors (favoring, opposing)", call. = FALSE)
+  rows <- .scp_rows(list(sh), order, fun); nr <- length(rows)
+  labs <- .scp_labels(labels, rows, fun)
+  grp <- .scp_groups(groups, rows, fun); ry <- .scp_row_y(nr, grp); yy <- ry$y
+  x <- sh[match(rows, sh$name), , drop = FALSE]
+  favor <- 100 * x$estimate
+  shown <- isTRUE(intervals) & .scp_shown(x$lower, x$upper, hide_wide)
+  ref <- .scp_reference(reference, rows, fun)
+  if (!is.null(ref) && any(is.finite(ref) & (ref < 0 | ref > 1)))
+    stop("sc_plot_shares(): reference shares must lie between 0 and 1", call. = FALSE)
+  if (is.null(reference_label)) reference_label <- "Reference"
+  pd <- data.frame(name = rows, label = if (is.character(labs)) labs else rows, y = yy,
+                   favor = favor, oppose = 100 - favor, lower = 100 * x$lower, upper = 100 * x$upper,
+                   shown = shown, reference = if (is.null(ref)) NA_real_ else 100 * ref, stringsAsFactors = FALSE)
+  if (!is.null(grp)) pd$group <- grp$group
+  op <- .scp_par_keep(); on.exit(graphics::par(op))
+  .scp_paper_par()
+  left <- max(graphics::strwidth(labs, "inches", cex = .9)) + .2
+  if (!is.null(grp)) left <- left + max(graphics::strwidth(grp$runs$label, "inches", cex = .88)) + .3
+  show_leg <- isTRUE(legend)
+  .scp_set_margins(3 + 1.8 * show_leg, left, if (is.null(main)) .8 else 2.4, .8)
+  ticks <- c(-100, -50, 0, 50, 100)
+  graphics::plot(NA, xlim = c(-104, 104), ylim = c(.5, ry$top), axes = FALSE, xlab = xlab, ylab = "")
+  graphics::abline(v = ticks, col = .scp_grid, lwd = .6)
+  graphics::axis(1, at = ticks, labels = abs(ticks), cex.axis = .9)
+  graphics::axis(2, at = yy, labels = labs, tick = FALSE, cex.axis = .9)
+  if (!is.null(grp)) .scp_group_labels(grp, yy)
+  if (!is.null(main)) graphics::mtext(main, 3, .7, cex = .95, font = 2)
+  ok <- is.finite(favor)
+  graphics::rect(0, yy[ok] - .3, favor[ok], yy[ok] + .3, col = .scp_tint(colors[1L], .75), border = NA)
+  graphics::rect(-(100 - favor[ok]), yy[ok] - .3, 0, yy[ok] + .3, col = .scp_tint(colors[2L], .75), border = NA)
+  graphics::abline(v = 0, col = .scp_dark, lwd = .8)
+  if (any(shown)) graphics::segments(pd$lower[shown], yy[shown], pd$upper[shown], yy[shown], col = .scp_dark, lwd = 1.3)
+  if (!is.null(ref)) graphics::points(100 * ref, yy, pch = 21, bg = "white", col = "black", cex = 1.2)
+  if (show_leg) {
+    lg <- c("Favoring", "Opposing"); fl <- c(.scp_tint(colors[1L], .75), .scp_tint(colors[2L], .75))
+    bd <- c(NA, NA); lc <- c(NA, NA); lt <- c(NA, NA); lp <- c(NA, NA)
+    if (any(shown)) { lg <- c(lg, "95% interval of the share"); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, .scp_dark); lt <- c(lt, 1); lp <- c(lp, NA) }
+    if (!is.null(ref)) { lg <- c(lg, reference_label); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, "black"); lt <- c(lt, NA); lp <- c(lp, 1) }
+    .scp_bottom_legend(legend = lg, fill = fl, border = bd, col = lc, lty = lt, lwd = 1.3, pch = lp, pt.cex = 1.2)
+  }
+  invisible(pd)
+}
+
+# ---------------------------------------------------------------------------------------------
 # Fitted laws
 
 #' Plot fitted distributions of tastes
 #'
 #' Draws one or more fitted laws from [sc_fitted_law()]: the population
 #' distribution of a taste contrast, a mixture of each held-out respondent's
-#' normal law. `"ridges"` stacks the laws in one panel, one row each, as the
-#' step outline of their mass in 150 bins, scaled to the same height (the
-#' paper's Panel B). `"panels"` gives each law its own panel over its means
-#' plus or minus three standard deviations (and zero), with its density on the
-#' vertical axis; `means` adds the estimated mean taste as a red line with its
-#' 95% interval as a red bar.
+#' normal law. `"ridges"` stacks the laws in one panel on one horizontal
+#' axis, one row each, as the outline of their mass in `bins` bins, scaled to
+#' the same height and drawn only where a bin holds at least 1% of the peak
+#' bin's mass (the paper's Panel B draws the whole baseline); `groups` names groups of
+#' rows (for example attributes) in grey to the left of the labels, with a gap
+#' and alternating fills between groups, and a `height` above about 1 lets
+#' each ridge rise over the row above it. `"panels"` gives each law its own
+#' panel over its means plus or minus three standard deviations (and zero),
+#' with its density on the vertical axis. `means` adds the estimated mean
+#' taste: in `"ridges"` a vertical line from the baseline to the outline, in
+#' `"panels"` a red line with its 95% interval as a red bar.
 #'
 #' The curves are fitted values before the score correction, so a corrected
 #' mean need not sit at the curve's centre.
@@ -457,7 +648,7 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #' @param labels Labels of the laws: one per law in order, or named by the
 #'   names of `laws`. Default the names of `laws`, else "Law 1", ...
 #' @param means Optional estimate table from [sc_estimate()] with one mean per
-#'   law, in the order of `laws` (`"panels"` only).
+#'   law, in the order of `laws`.
 #' @param layout `"ridges"` or `"panels"`.
 #' @param truth Optional true densities, for simulations: a function (one law)
 #'   or a list of functions (or `NULL`s), one per law, each taking a vector of
@@ -466,21 +657,41 @@ plot.sc_estimates <- function(x, ...) sc_plot_estimates(x, ...)
 #' @param xlab Label of the horizontal axis.
 #' @param ncol Number of panel columns (`"panels"`).
 #' @param main Optional title (`"ridges"`).
+#' @param groups Optional groups of laws (`"ridges"` only): one group per law
+#'   in order, or a character vector named by the names of `laws`. The laws of
+#'   a group must be adjacent.
+#' @param height Height of each ridge's peak, in rows (`"ridges"`). The
+#'   default 0.63 keeps rows apart; about 1.3 gives overlapping ridges.
+#' @param bins Number of bins of the outline (at least 20).
+#' @param outline `"step"` draws each bin's mass as a step (a point mass shows
+#'   as a narrow bar); `"line"` joins the bin midpoints, which reads more
+#'   smoothly with many bins (`"ridges"`).
 #' @return Invisibly, the plotting data: a data frame with one row per law and
 #'   bin (`law`, `label`, bin midpoint `x`, fitted `density`, true density
-#'   `truth`).
+#'   `truth`, and `group` when `groups` is given).
 #' @examples
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
 #' if (!is.null(fit)) {
 #'   laws <- list(sc_fitted_law(fit, "tax1_linear"), sc_fitted_law(fit, "tax6_linear"))
 #'   sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"))
 #'   sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"), layout = "panels", ncol = 2)
+#'   means <- sc_estimate(fit, list(sc_mean("bottom", "tax1_linear"), sc_mean("top", "tax6_linear")))
+#'   sc_plot_laws(laws, labels = c("Bottom bracket", "Top bracket"), means = means,
+#'                groups = c("Tax rates", "Tax rates"), height = 1.3)
 #' }
 #' @export
 sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges", "panels"), truth = NULL,
-                         xlim = NULL, xlab = "Utility contrast (logit units)", ncol = 3, main = NULL) {
+                         xlim = NULL, xlab = "Utility contrast (logit units)", ncol = 3, main = NULL,
+                         groups = NULL, height = .63, bins = 150, outline = c("step", "line")) {
   fun <- "sc_plot_laws"
-  layout <- match.arg(layout)
+  layout <- match.arg(layout); outline <- match.arg(outline)
+  if (!is.numeric(height) || length(height) != 1L || !is.finite(height) || height <= 0)
+    stop("sc_plot_laws(): height must be one positive number (rows)", call. = FALSE)
+  if (!is.numeric(bins) || length(bins) != 1L || !is.finite(bins) || bins < 20)
+    stop("sc_plot_laws(): bins must be one number of at least 20", call. = FALSE)
+  bins <- as.integer(round(bins))
+  if (!is.null(groups) && layout != "ridges")
+    stop("sc_plot_laws(): groups are drawn with layout = \"ridges\"", call. = FALSE)
   keys <- if (is.data.frame(laws)) "Law 1" else names(laws)
   laws <- .scp_laws(laws, fun); k <- length(laws)
   if (is.null(keys) || any(!nzchar(keys))) keys <- paste("Law", seq_len(k))
@@ -492,7 +703,6 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
       stop(sprintf("sc_plot_laws(): truth must be a list of %d density functions (or NULLs), one per law", k), call. = FALSE)
   } else truth <- vector("list", k)
   if (!is.null(means)) {
-    if (layout != "panels") stop("sc_plot_laws(): means are drawn with layout = \"panels\"", call. = FALSE)
     means <- .scp_tables(list(means), fun)[[1L]]
     if (nrow(means) != k)
       stop(sprintf("sc_plot_laws(): means has %d rows for %d laws; give one mean per law, in order", nrow(means), k),
@@ -501,26 +711,42 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
   if (!is.numeric(ncol) || length(ncol) != 1L || ncol < 1) stop("sc_plot_laws(): ncol must be a positive number", call. = FALSE)
   has_truth <- any(!vapply(truth, is.null, TRUE))
   if (layout == "ridges") {
+    grp <- .scp_groups(groups, keys, fun)
     if (is.null(xlim)) xlim <- range(pretty(.scp_laws_range(laws), n = 4))
     ticks <- .scp_ticks(xlim)
+    ry <- .scp_row_y(k, grp); yy <- ry$y
+    top <- max(ry$top, yy[1L] - .3 + height + .12)
+    # fills alternate between two tints from group to group
+    run <- if (is.null(grp)) rep(1L, k) else rep(seq_len(nrow(grp$runs)), grp$runs$last - grp$runs$first + 1L)
+    alpha <- ifelse(run %% 2L == 1L, .18, .32)
+    has_leg <- has_truth || !is.null(means)
     op <- .scp_par_keep(); on.exit(graphics::par(op))
     .scp_paper_par()
     left <- max(graphics::strwidth(labs, "inches", cex = .9)) + .2
-    .scp_set_margins(3 + 1.8 * has_truth, left, if (is.null(main)) .8 else 2.4, .8)
-    yy <- rev(seq_len(k))
-    graphics::plot(NA, xlim = xlim, ylim = c(.5, k + .5), axes = FALSE, xlab = xlab, ylab = "")
+    if (!is.null(grp)) left <- left + max(graphics::strwidth(grp$runs$label, "inches", cex = .88)) + .3
+    .scp_set_margins(3 + 1.8 * has_leg, left, if (is.null(main)) .8 else 2.4, .8)
+    graphics::plot(NA, xlim = xlim, ylim = c(.5, top), axes = FALSE, xlab = xlab, ylab = "")
     graphics::abline(v = ticks, col = .scp_grid, lwd = .6)
-    if (xlim[1L] <= 0 && xlim[2L] >= 0) graphics::abline(v = 0, col = .scp_zero, lty = 2, lwd = .7)
     graphics::axis(1, at = ticks, cex.axis = .9)
     graphics::axis(2, at = yy, labels = labs, tick = FALSE, cex.axis = .9)
+    if (!is.null(grp)) .scp_group_labels(grp, yy)
     if (!is.null(main)) graphics::mtext(main, 3, .7, cex = .95, font = 2)
     out <- lapply(seq_len(k), function(j) {
-      d <- .scp_ridge(laws[[j]], yy[j], xlim, truth = truth[[j]])
-      cbind(law = j, label = if (is.character(labs)) labs[j] else keys[j], d, stringsAsFactors = FALSE)
+      d <- .scp_ridge(laws[[j]], yy[j], xlim, height = height, truth = truth[[j]], bins = bins,
+                      fill_alpha = alpha[j], mark = if (is.null(means)) NULL else means$estimate[j],
+                      trim = TRUE, line = outline == "line")
+      d <- cbind(law = j, label = if (is.character(labs)) labs[j] else keys[j], d, stringsAsFactors = FALSE)
+      if (!is.null(grp)) d$group <- grp$group[j]
+      d
     })
-    if (has_truth)
-      .scp_bottom_legend(legend = c("Fitted distribution", "True distribution"), fill = c(grDevices::adjustcolor(.scp_blue, .2), NA),
-                         border = c(.scp_blue, NA), col = c(NA, "black"), lty = c(NA, 1), lwd = c(NA, 1))
+    # the zero line goes over the ridges, which cover each other's tails
+    if (xlim[1L] <= 0 && xlim[2L] >= 0) graphics::abline(v = 0, col = .scp_zero, lty = 2, lwd = .7)
+    if (has_leg) {
+      lg <- "Fitted distribution"; fl <- .scp_tint(.scp_blue, .2); bd <- .scp_blue; lc <- NA; lt <- NA; lw <- NA
+      if (has_truth) { lg <- c(lg, "True distribution"); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, "black"); lt <- c(lt, 1); lw <- c(lw, 1) }
+      if (!is.null(means)) { lg <- c(lg, "Estimated mean"); fl <- c(fl, NA); bd <- c(bd, NA); lc <- c(lc, .scp_blue); lt <- c(lt, 1); lw <- c(lw, 1.6) }
+      .scp_bottom_legend(legend = lg, fill = fl, border = bd, col = lc, lty = lt, lwd = lw)
+    }
     return(invisible(do.call(rbind, out)))
   }
   # panels
@@ -541,7 +767,7 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
         lim <- range(lim, min(mv) - pad, max(mv) + pad)
       }
     }
-    edges <- seq(lim[1L], lim[2L], length.out = 151L); bw <- diff(edges)[1L]
+    edges <- seq(lim[1L], lim[2L], length.out = bins + 1L); bw <- diff(edges)[1L]
     dens <- .scp_law_mass(l, edges) / bw
     td <- if (is.function(truth[[j]])) .scp_truth_mass(truth[[j]], edges) / bw else NULL
     top <- 1.12 * max(dens, td, na.rm = TRUE)
@@ -625,9 +851,13 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
 #' @param titles Optional panel titles by panel, like `xlim`.
 #' @param hide_wide Hide intervals spanning at least 95 points in Panel C.
 #' @param widths Optional relative widths of the label column and the panels.
+#' @param groups Optional groups of rows (for example attributes), named in
+#'   grey at the left of the label column, with a small gap and alternating
+#'   ridge fills between groups: one group per row in order, or a character
+#'   vector named by target name. The rows of a group must be adjacent.
 #' @return Invisibly, a list: `rows` (a data frame with each row's name,
-#'   label, position and the scaled estimates and intervals drawn), `xlim` and
-#'   `ticks` (lists by panel).
+#'   label, position, group when `groups` is given, and the scaled estimates
+#'   and intervals drawn), `xlim` and `ticks` (lists by panel).
 #' @examples
 #' fit <- sc_load(system.file("extdata", "toy_fit.rds", package = "sconjoint"))
 #' if (!is.null(fit)) {
@@ -639,13 +869,15 @@ sc_plot_laws <- function(laws, labels = NULL, means = NULL, layout = c("ridges",
 #' }
 #' @export
 sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL, reference = NULL, order = NULL,
-                                xlim = NULL, ticks = NULL, titles = NULL, hide_wide = TRUE, widths = NULL) {
+                                xlim = NULL, ticks = NULL, titles = NULL, hide_wide = TRUE, widths = NULL,
+                                groups = NULL) {
   fun <- "sc_plot_preferences"
   means <- .scp_tables(list(means), fun)[[1L]]
   shares <- .scp_tables(list(shares), fun)[[1L]]
   if (!is.null(ames)) ames <- .scp_tables(list(ames), fun)[[1L]]
   rows <- .scp_rows(list(means), order, fun); nr <- length(rows)
   labs <- .scp_labels(labels, rows, fun)
+  grp <- .scp_groups(groups, rows, fun); ry <- .scp_row_y(nr, grp); nrt <- ry$top - .5
   # laws, matched to rows
   lnames <- if (is.data.frame(laws)) NULL else names(laws)
   laws <- .scp_laws(laws, fun)
@@ -691,34 +923,44 @@ sc_plot_preferences <- function(means, laws, shares, ames = NULL, labels = NULL,
                  length(panels) + 1L, length(panels)), call. = FALSE)
   op <- .scp_page_keep(); on.exit(.scp_page_restore(op))
   .scp_paper_par()
-  need <-max(graphics::strwidth(labs, "inches", cex = .93)) + .25
+  need <- max(graphics::strwidth(labs, "inches", cex = .93)) + .25
+  if (!is.null(grp)) need <- need + max(graphics::strwidth(grp$runs$label, "inches", cex = .88)) + .25
   have <- rel[1L] / sum(rel) * graphics::par("din")[1L]
   if (is.null(widths) && need > have) {
     lw <- graphics::lcm(2.54 * need); graphics::layout(matrix(seq_len(length(panels) + 1L), 1), widths = c(lw, rel[-1L]))
   } else graphics::layout(matrix(seq_len(length(panels) + 1L), 1), widths = rel)
-  yy <- rev(seq_len(nr))
+  yy <- ry$y
   # labels
   graphics::par(mar = c(2.8, 0, 4, 0))
-  graphics::plot(NA, xlim = c(0, 1), ylim = c(.5, nr + .5), axes = FALSE, xlab = "", ylab = "")
+  graphics::plot(NA, xlim = c(0, 1), ylim = c(.5, nrt + .5), axes = FALSE, xlab = "", ylab = "")
   graphics::text(.97, yy, labs, adj = 1, cex = .93)
+  if (!is.null(grp)) {   # left-aligned in a column just left of the longest row label
+    per_in <- diff(graphics::par("usr")[1:2]) / graphics::par("pin")[1L]
+    xg <- .97 - max(graphics::strwidth(labs, "user", cex = .93)) - .25 * per_in -
+      max(graphics::strwidth(grp$runs$label, "user", cex = .88))
+    .scp_group_labels(grp, yy, inset = max(.02, xg) * graphics::par("fin")[1L])
+  }
   # A
-  .scp_panel(lim$A, nr, ttl[["A"]], tk$A)
+  .scp_panel(lim$A, nrt, ttl[["A"]], tk$A)
   shownA <- .scp_shown(m$lower, m$upper, FALSE)
   .scp_ci(m$estimate, m$lower, m$upper, yy, shownA, .scp_blue)
   # B
-  .scp_panel(lim$B, nr, ttl[["B"]], tk$B)
-  for (j in seq_len(nr)) .scp_ridge(laws[[j]], yy[j], lim$B)
+  .scp_panel(lim$B, nrt, ttl[["B"]], tk$B)
+  run <- if (is.null(grp)) rep(1L, nr) else rep(seq_len(nrow(grp$runs)), grp$runs$last - grp$runs$first + 1L)
+  for (j in seq_len(nr)) .scp_ridge(laws[[j]], yy[j], lim$B, fill_alpha = if (run[j] %% 2L == 1L) .20 else .32)
+  if (lim$B[1L] <= 0 && lim$B[2L] >= 0) graphics::abline(v = 0, col = .scp_zero, lty = 2, lwd = .7)   # over the fills
   # C
-  .scp_panel(lim$C, nr, ttl[["C"]], tk$C)
+  .scp_panel(lim$C, nrt, ttl[["C"]], tk$C)
   shownC <- .scp_shown(s$lower, s$upper, hide_wide)
   .scp_ci(100 * s$estimate, 100 * s$lower, 100 * s$upper, yy, shownC, .scp_blue)
   out <- data.frame(name = rows, label = if (is.character(labs)) labs else rows, y = yy,
                     mean = m$estimate, mean_lower = m$lower, mean_upper = m$upper,
                     share = 100 * s$estimate, share_lower = 100 * s$lower, share_upper = 100 * s$upper,
                     share_shown = shownC, stringsAsFactors = FALSE)
+  if (!is.null(grp)) out <- cbind(out[1:3], group = grp$group, out[-(1:3)], stringsAsFactors = FALSE)
   # D
   if (!is.null(a)) {
-    .scp_panel(lim$D, nr, ttl[["D"]], tk$D)
+    .scp_panel(lim$D, nrt, ttl[["D"]], tk$D)
     shownD <- .scp_shown(a$lower, a$upper, FALSE)
     ya <- if (is.null(ref)) yy else yy + .09
     .scp_ci(100 * a$estimate, 100 * a$lower, 100 * a$upper, ya, shownD, .scp_blue)
